@@ -838,6 +838,60 @@ fn only_a_blocked_transition_without_a_clause_records_a_need_for_a_person() {
     }
 }
 
+/// The notification is emitted at the store write itself, so a `blocked`
+/// transition hands the OS exactly one, and a repeat of it none.
+#[test]
+fn a_blocked_transition_hands_the_os_one_notification_and_a_repeat_none() {
+    struct Spy(std::cell::RefCell<Vec<crate::notify::Text>>);
+    impl crate::notify::Notifier for Spy {
+        fn available(&self, _: &crate::notify::Text) -> bool {
+            true
+        }
+        fn send(&self, text: &crate::notify::Text) -> crate::notify::Outcome {
+            self.0.borrow_mut().push(text.clone());
+            crate::notify::Outcome::Handed
+        }
+    }
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    let path = directory.path().join("state.db");
+    let mut context = context_at(directory.path());
+    context.config.push((
+        "Notifications".to_owned(),
+        "os".to_owned(),
+        crate::transport::Source::Written,
+    ));
+    let bin = crate::test_env::scripted_gh();
+    let script = blocked_script(12, &["status:in-progress"], "Plain.");
+    let spy = std::rc::Rc::new(Spy(Default::default()));
+
+    crate::notify::with_notifier(spy.clone(), || {
+        crate::transport::store::with_store_at(&path, || {
+            crate::test_env::with_scripted_gh(bin.path(), &script, || {
+                for _ in 0..2 {
+                    super::super::commands::transition(
+                        &context,
+                        12,
+                        "blocked",
+                        Some("in-progress"),
+                        RECLAIM_NOW,
+                    )
+                    .expect("the transition lands");
+                }
+            });
+        });
+    });
+
+    let sent = spy.0.borrow();
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(sent[0].body.starts_with("blocked "), "{}", sent[0].body);
+    assert!(sent[0].body.contains("#12"), "{}", sent[0].body);
+    let rows = crate::transport::store::Store::open(&path)
+        .expect("the store opens")
+        .needs_person(10)
+        .expect("the needs read");
+    assert_eq!(rows[0].delivery, crate::notify::HANDED);
+}
+
 #[test]
 fn after_the_first_touch_a_verify_and_a_heartbeat_read_no_issue_and_no_label_and_post_nothing() {
     let (root, context) = context_with_no_repository();

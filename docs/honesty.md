@@ -2771,7 +2771,7 @@ pointer that leaves it names the document it points at.
     started and a stage name matching no check look the same; an advisory check never holds them. Held
     against a fake `gh` by `src/transport/stages/tests.rs`.
 - **No other setting is read by nobody.**
-  An operator sets thirty rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets thirty-one rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
   `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. The four rows that
   had exactly one answer (`Delivery route`, `Review delegation`, `Merge strategy`, `Review protocol`) were
@@ -4135,15 +4135,27 @@ measure:
 without a clause, a gate `ask`), measured by one unit test each and a store test for the dedup. What it does
 not establish:
 
-- **Nothing notifies anyone.** Every row reads `not delivered: no notifier`. A row is a record that a person
-  was needed, never that one was told, and never an approval.
+- **A notification is best effort and no guarantee.** With `Notifications` at `os` the binary hands the text to
+  `osascript` (macOS), `notify-send` (Linux, when on `PATH`) or a PowerShell toast (Windows) and records
+  `handed to the OS` on exit 0. That is not "seen": a focus mode, a missing notification daemon or a
+  session with no display all exit 0 and show nothing. The argv of all three is measured against a
+  stand-in, not a desktop: no real notification was shown while writing it. The default is `off`, and
+  the record is written either way. The quiet hours read this machine's clock and, when it cannot say, hold the
+  notification back; the hourly cap counts `handed to the OS` rows in the store, so a notification that
+  failed frees its slot.
 - **Three moments of the six named are not written yet.** `handoff_review`, a verified `done` and the delivery
   halt write nothing: the first has no behavioural fixture to measure it against, and the halt is a pure read
   that must not write.
 - **`blocked` is judged at the transition.** A clause recorded afterwards does not retract the row, and an
   unreadable clause read records nothing.
-- **A failed write is silent.** Recording is best effort and never fails the decision it describes, so a store
-  that cannot be written leaves no row and no error.
+- **A failed write is reported where the answer has room for it.** Recording never fails the decision it
+  describes. `escalate_review` and a transition say `needs_person_unrecorded`; a gate `ask` leaves a decision
+  with the verdict `unrecorded`, which is itself lost if the same store cannot be written. A host that hides
+  the gate's decisions hides this too.
+- **An `ask` from a sub-agent is recorded and notified.** The record path does not see `agent_type`, and in
+  Claude Code a sub-agent's `ask` does reach the person, so skipping it would hide a real wait.
+- **An `ask` repeats after thirty minutes.** The key carries a thirty-minute bucket: a wait that outlives it is
+  recorded again, and one that straddles a bucket edge can be recorded twice in a minute.
 - **`ask` is only as real as the gate's `ask`.** A `Delivery authorisation` of `ask` may not reach the gate at
   all, and hosts other than Claude Code convert `ask` into a deny before it is recorded.
 - **No runtime was run live.** The tests drive the functions, not a session of any host.

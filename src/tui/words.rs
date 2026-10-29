@@ -523,6 +523,15 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Irreversible commands", "Órdenes irreversibles"),
     ("Summary language", "Idioma del resumen"),
     ("Issue body language", "Idioma del cuerpo del issue"),
+    ("Notifications", "Notificaciones"),
+    (
+        "`off`, `os`, or `os quiet 22:00-07:00 cap 6`",
+        "`off`, `os`, o `os quiet 22:00-07:00 cap 6`",
+    ),
+    (
+        "how this machine tells you a run needs a person: `off`, or `os` with optional quiet hours and an hourly cap. A notification is never an approval",
+        "cómo este equipo te avisa de que una ejecución necesita a una persona: `off`, u `os` con horas de silencio y un límite por hora opcionales. Una notificación nunca es una aprobación",
+    ),
     ("Loop plugin", "Plugin de bucle"),
     (
         "whether this agent gets the loop that continues a session while the run still holds its issue or another is claimable",

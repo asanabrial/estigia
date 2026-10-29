@@ -720,8 +720,8 @@ pub const TOOLS: &[Tool] = &[
         description: "Record or revise one row of the claimed issue's task checklist in the \
                       local store: a stable id, its acceptance, the route used and, once done, \
                       the commit identity or, when the work is not a commit, an `evidence` note \
-                      naming where it is recorded. Needs the live claim; nothing reaches the tracker. The answer carries the whole checklist, or with `compact` the \
-                      changed row.",
+                      naming where it is recorded. Needs the live claim; nothing reaches the tracker. The answer carries the changed row and the checklist as `tasks` \
+                      summarises it, or with `compact` the changed row alone.",
         operation: "task",
         arguments: &[
             ISSUE,
@@ -778,10 +778,18 @@ pub const TOOLS: &[Tool] = &[
         name: "tasks",
         contract_name: "tasks",
         description: "The task checklist the local store holds for an issue, in the order \
-                      the tasks were first recorded. Read-only, and needs no claim: a run \
-                      resuming an issue reads it first.",
+                      the tasks were first recorded: id, a first-line title, route and done. \
+                      Read-only, and needs no claim: a run resuming an issue reads it first.",
         operation: "tasks",
-        arguments: &[ISSUE],
+        arguments: &[
+            ISSUE,
+            Argument::optional(
+                "full",
+                "boolean",
+                "Every row whole: text, commit and evidence.",
+            ),
+            Argument::optional("id", "string", "Only this row, whole."),
+        ],
         effect: PointerEffect::None,
         writes: false,
     },
