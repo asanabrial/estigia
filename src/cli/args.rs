@@ -831,6 +831,71 @@ pub enum SessionsAction {
         #[arg(long, value_parser = runtime)]
         runtime: Option<String>,
     },
+
+    /// Put a question to another session and wait for its `answer`. Prints the
+    /// answer, or the outcome (timed out, ended, recipient cannot be woken).
+    /// Another session's answer is not your user's and decides no gate.
+    Ask {
+        /// The recipient, as `estigia sessions send` takes it.
+        #[arg(value_parser = present)]
+        session: String,
+
+        /// The question.
+        #[arg(value_parser = present)]
+        text: String,
+
+        /// An answer on offer; repeat for several. The reply must be exactly one.
+        #[arg(long = "choice", value_name = "ANSWER")]
+        choices: Vec<String>,
+
+        /// Seconds to wait; 120 by default, 900 at most.
+        #[arg(long, value_name = "SECONDS", value_parser = clap::value_parser!(u64).range(1..=900))]
+        timeout: Option<u64>,
+
+        /// The asking run's id; the ambient `ESTIGIA_RUN_ID` when omitted.
+        #[arg(long, value_parser = present)]
+        run_id: Option<String>,
+
+        /// The asking session's id, from which its run id is derived.
+        #[arg(long, value_parser = session)]
+        session_id: Option<String>,
+
+        /// The runtime whose run ids `--session-id` derives.
+        #[arg(long, value_parser = runtime)]
+        runtime: Option<String>,
+    },
+
+    /// Wait for the first unread message to this run matching the filters and
+    /// print exactly that one as delivered, or the timeout.
+    Wait {
+        /// Only messages of this type.
+        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(crate::harness::inbox::KINDS))]
+        kind: Option<String>,
+
+        /// Only messages in this thread.
+        #[arg(long, value_name = "ID", value_parser = clap::value_parser!(i64).range(1..))]
+        thread: Option<i64>,
+
+        /// Only messages from this sender's run id.
+        #[arg(long, value_name = "RUN-ID")]
+        from: Option<String>,
+
+        /// Seconds to wait; 60 by default, 900 at most.
+        #[arg(long, value_name = "SECONDS", value_parser = clap::value_parser!(u64).range(1..=900))]
+        timeout: Option<u64>,
+
+        /// The waiting run's id; the ambient `ESTIGIA_RUN_ID` when omitted.
+        #[arg(long, value_parser = present)]
+        run_id: Option<String>,
+
+        /// The waiting session's id, from which its run id is derived.
+        #[arg(long, value_parser = session)]
+        session_id: Option<String>,
+
+        /// The runtime whose run ids `--session-id` derives.
+        #[arg(long, value_parser = runtime)]
+        runtime: Option<String>,
+    },
 }
 
 /// What `estigia session` does.

@@ -123,9 +123,30 @@ struct Wire<'a, W: Write> {
     pending: &'a mut VecDeque<String>,
     wait: Duration,
     asked: &'a mut u64,
+    token: Option<Value>,
 }
 
 impl<W: Write> messaging::Elicit for Wire<'_, W> {
+    fn announce(&mut self, token: Option<Value>) {
+        self.token = token;
+    }
+
+    fn bound(&mut self, limit: Duration) {
+        self.wait = self.wait.min(limit);
+    }
+
+    fn beat(&mut self, count: u64, message: &str) {
+        let Some(token) = &self.token else {
+            return;
+        };
+        let notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": { "progressToken": token, "progress": count, "message": message },
+        });
+        let _ = writeln!(self.output, "{notification}").and_then(|()| self.output.flush());
+    }
+
     fn elicit(&mut self, message: &str, schema: Value) -> Result<Value, messaging::Unasked> {
         *self.asked += 1;
         let id = format!("estigia-elicit-{}", self.asked);
@@ -220,6 +241,7 @@ fn serve_lines(
                 pending: &mut pending,
                 wait,
                 asked: &mut asked,
+                token: None,
             };
             handle(&line, context.as_ref(), &mut server, &mut wire)
         };
@@ -277,10 +299,13 @@ fn handle(
     Some(match method {
         "initialize" => success(id, server.initialize(&params)),
         "tools/list" => success(id, json!({ "tools": tool_schemas(context) })),
-        "tools/call" => match call(&params, context, Some(&mut server.consent(client))) {
-            Ok(result) => success(id, result),
-            Err(message) => error_response(id, code::INVALID_PARAMS, &message),
-        },
+        "tools/call" => {
+            client.announce(params.pointer("/_meta/progressToken").cloned());
+            match call(&params, context, Some(&mut server.consent(client))) {
+                Ok(result) => success(id, result),
+                Err(message) => error_response(id, code::INVALID_PARAMS, &message),
+            }
+        }
         "ping" => success(id, json!({})),
         other => error_response(
             id,
@@ -857,6 +882,8 @@ fn run_tool_asking(
         "send_message" => {
             return messaging::send_message(arguments, context, named.as_ref(), consent);
         }
+        "ask" => return messaging::ask(arguments, context, named.as_ref(), consent),
+        "wait" => return messaging::wait(arguments, context, named.as_ref(), consent),
         "inbox" => return messaging::inbox(arguments, context, named.as_ref()),
         "list_sessions" => return messaging::list_sessions(arguments, context),
         "feed" => return messaging::feed(arguments, context),

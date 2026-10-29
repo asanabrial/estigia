@@ -6305,6 +6305,53 @@ fn sessions_command(
 ) -> Result<(), Refusal> {
     match action {
         None => sessions::sessions(json, all, limit, cursor, fields),
+        Some(SessionsAction::Ask {
+            session,
+            text,
+            choices,
+            timeout,
+            run_id,
+            session_id,
+            runtime,
+        }) => {
+            let ambient = std::env::var("ESTIGIA_RUN_ID").ok();
+            let asker = gate_identity(
+                "estigia sessions ask <session> \"<text>\"",
+                run_id.as_deref(),
+                session_id.as_deref(),
+                runtime.as_deref(),
+                ambient.as_deref(),
+            )?;
+            sessions::ask(session, text, choices, *timeout, asker.as_deref(), json)
+        }
+        Some(SessionsAction::Wait {
+            kind,
+            thread,
+            from,
+            timeout,
+            run_id,
+            session_id,
+            runtime,
+        }) => {
+            let ambient = std::env::var("ESTIGIA_RUN_ID").ok();
+            let waiter = gate_identity(
+                "estigia sessions wait",
+                run_id.as_deref(),
+                session_id.as_deref(),
+                runtime.as_deref(),
+                ambient.as_deref(),
+            )?;
+            sessions::wait(
+                &harness::exchange::Filter {
+                    kind: kind.as_deref(),
+                    thread: *thread,
+                    from: from.as_deref(),
+                },
+                *timeout,
+                waiter.as_deref(),
+                json,
+            )
+        }
         Some(SessionsAction::Send {
             session,
             text,

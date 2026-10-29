@@ -9,6 +9,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
 
 use super::{Failure, ownership};
 
+mod asks;
 mod calls;
 mod decisions;
 mod feed;
@@ -31,6 +32,7 @@ mod taken_decisions;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use asks::MessageTake;
 #[cfg(test)]
 pub(crate) use calls::count_into as with_store_at;
 pub(crate) use calls::counting;

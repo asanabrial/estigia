@@ -601,33 +601,44 @@ evidence. Treat it as a hint about where to look, not as a fact about the work.
 
 ## What does not exist yet
 
-- A blocking `ask`, a `wait` for a matching message, a broadcast to a group and a completion contract on a
-  handoff are not built: the types and threads above are the schema they will use, and today a `question`
-  is answered only when the recipient reads it and sends an `answer`.
-- Nothing refreshes `last_seen` on a gated write, so a session that runs longer than six hours without a
-  `SessionStart` reads `stale` while it is alive, and no row is ever archived: the full registry grows
-  without bound. A heartbeat from the gate, a configured retention horizon, and a default view that hides
-  what it archived are the next slice of the session-registry work.
-- No pid is recorded, and no host API is asked whether a session is alive. `wake` is what the adapter named
-  when it registered the session; nothing here asks the host whether that is still true.
-- There is no Claude Code `UserPromptSubmit` or `PostToolUse` hook, since setup registers neither. A Codex or
-  OpenCode session that makes no tool call receives nothing until it makes one, and a Codex session also at the end of
-  a turn when the loop is on. A Claude Code session is woken while idle for up to 3600 seconds after its last turn
-  ended (the waiter's `timeout`); after that, and in a session set up before the waiter existed, mail waits for the next
-  turn's `PreToolUse`.
-- Only Claude Code, Pi and OpenCode 2 wake an idle session. The wake each one recorded is in its row; a row
-  with no wake says so rather than claiming one. Codex's `Stop` hook runs synchronously and continues the turn that is
-  ending; it cannot start one. OpenCode 2 is woken by a poll, not by a notice that a row was written, and
-  OpenCode 1 is not woken; OpenCode's `generate` is not used. Codex `turn/steer` needs the daemon and is not built.
-- A handoff is never consumed or expired. Every later session of that runtime in that repository sees
-  it at `SessionStart`, whether or not anybody took the issue; nothing records that it was read or
-  declined. A store that grows one row per `(repository, issue, runtime)` is the whole cost until a
-  retention rule exists.
-- `handoff` records a reachability hint and does not deliver through it. There is no `herdr` prompt,
-  no terminal injection and no read receipt: delivering the instruction is `send_message`, and the
-  host-specific path stays outside Estigia because it bypasses consent and stamping.
-- No adapter records an OpenCode service URL. The session id and the pane are what the adapter can
-  observe; the service's own API answered 401 to an unauthenticated caller on 2026-10-21, so a URL
-  without the adapter's credential would not be a way in even if it were recorded.
+### Ask and wait
+
+`ask` (MCP tool, `estigia sessions ask <session> "<text>" [--choice A --choice B] [--timeout S]`) puts a
+`question` to any addressable session and returns the answer as its result. `wait` (MCP tool,
+`estigia sessions wait [--type T] [--thread N] [--from RUN] [--timeout S]`) returns the first message to the
+calling run that matches and has not been delivered, or a timeout. Defaults are 120 seconds for an `ask`, the
+query timeout [the Pi channel](#the-pi-parent-child-channel) measured, and 60 for a `wait`; both stop at 900.
+
+An `ask` ends in exactly one outcome, recorded in the `asks` table beside the question:
+
+| Outcome | When | What the caller is told |
+|---|---|---|
+| `answered` | the addressed session sent an `answer` replying to the question | its text, `from_person: false` |
+| `timed_out` | no answer before the timeout | that the ask is closed |
+| `ended` | the recipient's session ended, or already had | that it ended without answering |
+| `not_woken` | the recipient's row records no idle wake (Codex, OpenCode 1) | that it was not waited on, below |
+
+- **A late answer is refused.** Once an ask has ended in any outcome, an `answer` replying to it is refused
+  `message-answer-late` and nothing is recorded, so no answer is reported as given that the asker never
+  took. An answer outside the offered `choices` is refused `message-answer-not-a-choice`, and one from a
+  session the question was not put to `message-answer-not-addressed`; the ask stays open for a valid one.
+  The answer is taken by the asker as delivered, not read or acked: that stays its own act.
+- **Consent is `send_message`'s.** An agent's `ask` is put to the person unless allowed for the session, and
+  that prompt is capped at the `ask`'s own timeout, so a blocking call never outlives it waiting for a
+  person; a denial or silence records nothing. The timeout counts from the call, prompt included.
+- **A recipient that cannot be woken is told, not waited on.** Codex's `Stop` hook cannot start a turn in an
+  idle session and its row records no wake, so `ask` records and delivers the question, returns `not_woken`
+  at once, and leaves the ask open: the answer, if it comes, is mail for `wait` or `inbox`. A `wait` run by a
+  Codex session holds its turn open and works, and says that it covers only that turn.
+- **Heartbeat.** While blocked, MCP calls carrying a `progressToken` get a `notifications/progress` every
+  10 seconds, so a host that kills silent calls does not. A client sending no token gets none.
+- **An answer from another agent is not the person's.** The result says so, and nothing reads an `answer` as
+  a decision: no gate, claim or permission consults the mailbox.
+
+What was generalised from the Pi parent-child query is its rules, not its channel: one outcome per query, an
+honest distinct result for a timeout or an end, a late reply refused rather than reported as answered, and the
+120 second default. The Pi runner's IPC channel is in-process JavaScript, at-most-once and unrecorded; it was
+not rewritten onto the mailbox, so a Pi child still asks its parent through `estigia_parent_message`, and
+peer `ask` and the Pi channel are still two mechanisms.
 
 [`honesty.md`](honesty.md) records what this does not measure.

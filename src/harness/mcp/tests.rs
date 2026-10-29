@@ -5242,6 +5242,8 @@ const LOCAL_WRITER_TOOLS: &[&str] = &[
     "blocked_until",
     "task",
     "send_message",
+    "ask",
+    "wait",
     "inbox",
     "status",
     "run_checks",
@@ -5977,7 +5979,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 58_380;
+const TOOLS_LIST_CEILING: usize = 60_083;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7973,6 +7975,261 @@ mod send_message {
             run_ids(&second).contains(&"pi-c0000003".to_owned()),
             "a row registered in the second of `taken_at` was not admitted: {:?}",
             run_ids(&second)
+        );
+    }
+
+    const PEER: &str = "opencode-peer0a1b2c3d";
+
+    fn woken(rig: &Rig, run_id: &str, runtime: &str, wake: Option<&str>) {
+        rig.store()
+            .session_seen(
+                &SessionSeen {
+                    run_id,
+                    runtime,
+                    session_id: "host-session",
+                    repo_dir: None,
+                    wake,
+                    pane: None,
+                },
+                crate::harness::session::now_seconds().expect("a clock"),
+            )
+            .expect("a session registers");
+    }
+
+    fn ask_call(id: u64, to: &str, extra: Value) -> Value {
+        let mut arguments = json!({ "run_id": SENDER, "to": to, "text": "A or B?" });
+        for (key, value) in extra.as_object().expect("an object") {
+            arguments[key] = value.clone();
+        }
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "ask", "arguments": arguments },
+        })
+    }
+
+    fn answering(rig: &Rig, body: &'static str) -> std::thread::JoinHandle<()> {
+        let root = rig.context().state_root;
+        std::thread::spawn(move || {
+            let opened = Store::open(&store::beside(&root)).expect("the store opens");
+            let question = loop {
+                let waiting = opened
+                    .messages_listed(&store::MessageListing {
+                        recipient: Some(PEER),
+                        kind: Some("question"),
+                        limit: 1,
+                        ..store::MessageListing::default()
+                    })
+                    .expect("the mailbox reads");
+                if let Some(question) = waiting.first() {
+                    break question.id;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            };
+            crate::harness::mailbox::send_shaped(
+                &root,
+                Some(PEER),
+                SENDER,
+                body,
+                &crate::harness::mailbox::Shape {
+                    kind: Some("answer"),
+                    in_reply_to: Some(question),
+                    ..Default::default()
+                },
+            )
+            .expect("the answer is sent");
+        })
+    }
+
+    fn outcome_of(output: &[Value], id: u64) -> Value {
+        serde_json::from_str(&text_of(reply(output, id))).expect("json")
+    }
+
+    #[test]
+    fn an_ask_returns_the_answer_of_the_run_it_was_put_to_as_its_tool_result() {
+        let rig = Rig::new();
+        woken(&rig, PEER, "opencode", Some("poll"));
+        let answered = answering(&rig, "B");
+        let output = rig.serve(&[
+            initialize(asks()),
+            ask_call(
+                2,
+                PEER,
+                json!({ "choices": ["A", "B"], "timeout_seconds": 30 }),
+            ),
+            choose(1, "allow_once"),
+        ]);
+        answered.join().expect("the answerer finishes");
+        let result = outcome_of(&output, 2);
+        assert_eq!(result["outcome"], "answered", "{output:?}");
+        assert_eq!(result["answer"], "B");
+        assert_eq!(result["from"], PEER);
+        assert_eq!(result["from_person"], false);
+        assert_eq!(questions(&output).len(), 1);
+    }
+
+    #[test]
+    fn an_ask_nobody_answers_reports_the_timeout_and_refuses_the_answer_that_comes_late() {
+        let rig = Rig::new();
+        woken(&rig, PEER, "opencode", Some("poll"));
+        let output = rig.serve(&[
+            initialize(asks()),
+            ask_call(
+                2,
+                PEER,
+                json!({ "choices": ["A", "B"], "timeout_seconds": 1 }),
+            ),
+            choose(1, "allow_once"),
+        ]);
+        let result = outcome_of(&output, 2);
+        assert_eq!(result["outcome"], "timed_out", "{output:?}");
+        assert!(result.get("answer").is_none());
+        let Err(ToolFailure::Refused(refusal)) = run_tool(
+            "send_message",
+            &json!({ "run_id": PEER, "reply_to": result["question"], "text": "A", "type": "answer" }),
+            Ok(&rig.context()),
+        ) else {
+            panic!("a late answer was not refused");
+        };
+        assert_eq!(refusal.code, "message-answer-late");
+    }
+
+    #[test]
+    fn an_ask_to_a_session_that_cannot_be_woken_says_so_instead_of_hanging() {
+        let rig = Rig::new();
+        woken(&rig, PEER, "codex", None);
+        let started = std::time::Instant::now();
+        let output = rig.serve(&[
+            initialize(asks()),
+            ask_call(2, PEER, json!({ "timeout_seconds": 600 })),
+            choose(1, "allow_once"),
+        ]);
+        assert!(started.elapsed() < std::time::Duration::from_secs(10));
+        let result = outcome_of(&output, 2);
+        assert_eq!(result["outcome"], "not_woken", "{output:?}");
+        assert!(
+            result["note"]
+                .as_str()
+                .expect("a note")
+                .contains("cannot be woken")
+        );
+        assert_eq!(rig.rows_to(PEER), 1);
+    }
+
+    #[test]
+    fn an_ask_the_person_denies_is_refused_and_records_no_question() {
+        let rig = Rig::new();
+        woken(&rig, PEER, "opencode", Some("poll"));
+        let output = rig.serve(&[
+            initialize(asks()),
+            ask_call(2, PEER, json!({ "timeout_seconds": 30 })),
+            choose(1, "deny"),
+        ]);
+        assert!(
+            text_of(reply(&output, 2)).contains("message-not-allowed"),
+            "{output:?}"
+        );
+        assert_eq!(rig.rows_to(PEER), 0);
+        assert!(rig.store().ask(1).expect("reads").is_none());
+    }
+
+    #[test]
+    fn a_consent_prompt_never_outlasts_the_ask_that_raised_it() {
+        let (_sender, lines) = std::sync::mpsc::channel();
+        let mut output = Vec::new();
+        let mut pending = VecDeque::new();
+        let mut asked = 0;
+        let mut wire = Wire {
+            lines: &lines,
+            output: &mut output,
+            pending: &mut pending,
+            wait: std::time::Duration::from_secs(3600),
+            asked: &mut asked,
+            token: None,
+        };
+        messaging::Elicit::bound(&mut wire, std::time::Duration::from_millis(100));
+        let started = std::time::Instant::now();
+        let answer = messaging::Elicit::elicit(&mut wire, "send?", json!({}));
+        assert!(matches!(answer, Err(messaging::Unasked::Unanswered)));
+        assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_heartbeat_is_a_progress_notification_on_the_token_the_call_carried() {
+        let (_sender, lines) = std::sync::mpsc::channel();
+        let mut output = Vec::new();
+        let mut pending = VecDeque::new();
+        let mut asked = 0;
+        {
+            let mut wire = Wire {
+                lines: &lines,
+                output: &mut output,
+                pending: &mut pending,
+                wait: std::time::Duration::from_secs(1),
+                asked: &mut asked,
+                token: Some(json!("tok-1")),
+            };
+            messaging::Elicit::beat(&mut wire, 3, "still waiting");
+        }
+        let written: Value = serde_json::from_slice(&output).expect("one JSON line");
+        assert_eq!(written["method"], "notifications/progress");
+        assert_eq!(written["params"]["progressToken"], "tok-1");
+        assert_eq!(written["params"]["progress"], 3);
+        assert_eq!(written["params"]["message"], "still waiting");
+    }
+
+    #[test]
+    fn a_wait_returns_one_message_matching_type_and_thread_or_a_timeout() {
+        let rig = Rig::new();
+        woken(&rig, PEER, "opencode", Some("poll"));
+        let context = rig.context();
+        let first = crate::harness::mailbox::send(&context.state_root, Some(PEER), SENDER, "start")
+            .expect("sent")
+            .id;
+        let done = crate::harness::mailbox::send_shaped(
+            &context.state_root,
+            Some(PEER),
+            SENDER,
+            "finished",
+            &crate::harness::mailbox::Shape {
+                kind: Some("done"),
+                thread: Some(first),
+                ..Default::default()
+            },
+        )
+        .expect("sent")
+        .id;
+        let call = |timeout: u64| {
+            let answer = run_tool(
+                "wait",
+                &json!({ "run_id": SENDER, "type": "done", "thread": first, "timeout_seconds": timeout }),
+                Ok(&context),
+            )
+            .expect("the wait answers");
+            inbox_answer(&answer)
+        };
+        let got = call(5);
+        assert_eq!(got["outcome"], "message");
+        assert_eq!(got["message"]["id"], done);
+        assert_eq!(got["message"]["body"], "finished");
+        assert_eq!(call(1)["outcome"], "timed_out");
+    }
+
+    #[test]
+    fn a_wait_on_codex_states_that_an_idle_codex_session_is_not_woken() {
+        let rig = Rig::new();
+        let answer = run_tool(
+            "wait",
+            &json!({ "run_id": RECIPIENT, "timeout_seconds": 1 }),
+            Ok(&rig.context()),
+        )
+        .expect("the wait answers");
+        let answer = inbox_answer(&answer);
+        assert_eq!(answer["outcome"], "timed_out");
+        assert!(
+            answer["wake"]
+                .as_str()
+                .expect("a wake note")
+                .contains("cannot be woken")
         );
     }
 }

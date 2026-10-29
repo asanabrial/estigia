@@ -1009,6 +1009,105 @@ pub(super) fn send(
     Ok(())
 }
 
+pub(super) fn ask(
+    recipient: &str,
+    text: &str,
+    choices: &[String],
+    timeout: Option<u64>,
+    asker: Option<&str>,
+    json: bool,
+) -> Result<(), Refusal> {
+    let asker = asker.ok_or_else(crate::harness::exchange::needs_a_run_to_ask)?;
+    let root = session::state_root(None)?;
+    let said = crate::harness::mcp::address::spoken(recipient);
+    let narrowed = crate::harness::mcp::address::resolve(&root, &said)?;
+    let row = crate::harness::mcp::address::one(narrowed, &said)?;
+    if let Some(conflict) = crate::harness::mcp::messaging::flow_conflict(&row, text) {
+        return Err(conflict);
+    }
+    let timeout = std::time::Duration::from_secs(
+        timeout.unwrap_or(crate::harness::exchange::DEFAULT_ASK_SECONDS),
+    );
+    let started = std::time::Instant::now();
+    let question = crate::harness::exchange::Question {
+        asker,
+        recipient: &row.run_id,
+        text,
+        choices,
+    };
+    let posed = crate::harness::exchange::pose(&root, &question, timeout)?;
+    let outcome = crate::harness::exchange::awaiting(
+        &root,
+        &question,
+        &posed,
+        started + timeout,
+        &mut crate::harness::exchange::Heartbeat::every_ten_seconds(|_| {}),
+    )?;
+    let mut answer = serde_json::json!({
+        "question": posed.question,
+        "thread": posed.thread,
+        "to": row.run_id,
+        "waited_seconds": started.elapsed().as_secs(),
+    });
+    crate::harness::exchange::describe(&mut answer, &outcome);
+    if json {
+        super::print_json(&answer);
+        return Ok(());
+    }
+    match &outcome {
+        crate::harness::exchange::Outcome::Answered(message) => say!("{}", message.body),
+        _ => say!(
+            "{}: {}",
+            answer["outcome"].as_str().unwrap_or_default(),
+            answer["note"].as_str().unwrap_or_default()
+        ),
+    }
+    Ok(())
+}
+
+pub(super) fn wait(
+    filter: &crate::harness::exchange::Filter<'_>,
+    timeout: Option<u64>,
+    waiter: Option<&str>,
+    json: bool,
+) -> Result<(), Refusal> {
+    let waiter = waiter.ok_or_else(crate::harness::exchange::needs_a_run_to_wait)?;
+    let root = session::state_root(None)?;
+    let timeout = std::time::Duration::from_secs(
+        timeout.unwrap_or(crate::harness::exchange::DEFAULT_WAIT_SECONDS),
+    );
+    let found = crate::harness::exchange::wait(
+        &root,
+        waiter,
+        filter,
+        std::time::Instant::now() + timeout,
+        &mut crate::harness::exchange::Heartbeat::every_ten_seconds(|_| {}),
+    )?;
+    let answer = match &found {
+        Some(message) => serde_json::json!({
+            "outcome": "message",
+            "message": crate::harness::inbox::shown(message),
+        }),
+        None => serde_json::json!({ "outcome": "timed_out" }),
+    };
+    if json {
+        super::print_json(&answer);
+        return Ok(());
+    }
+    match found {
+        Some(message) => say!(
+            "{} {} thread {} from {}: {}",
+            message.id,
+            message.kind,
+            message.thread,
+            message.sender_run_id.as_deref().unwrap_or("a person"),
+            message.body
+        ),
+        None => say!("timed_out: no matching message arrived"),
+    }
+    Ok(())
+}
+
 pub(super) fn print_inbox(answer: &serde_json::Value) {
     let messages = answer["messages"].as_array().map_or(&[][..], Vec::as_slice);
     if messages.is_empty() {

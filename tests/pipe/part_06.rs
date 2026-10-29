@@ -3965,3 +3965,95 @@ fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
         "the checkout that failed undid the claim before it"
     );
 }
+
+#[test]
+fn the_ask_and_wait_verbs_return_one_message_or_an_honest_outcome_and_refuse_a_late_answer() {
+    let rig = tracker_rig();
+    let sender = pi_start(&rig, "asker");
+    let (said, _, ok) = pi_session_run(
+        &rig,
+        &[
+            "session",
+            "start",
+            "--session-id",
+            "answerer",
+            "--runtime",
+            "pi",
+            "--wake",
+            "poll",
+        ],
+    );
+    assert!(ok, "{said}");
+    let recipient = estigia::harness::session::run_id("pi", "answerer");
+    let run = |arguments: &[&str]| -> (serde_json::Value, String, bool) {
+        let (said, stderr, ok) = pi_session_run(&rig, arguments);
+        let parsed = serde_json::from_str(said.trim()).unwrap_or(serde_json::Value::Null);
+        (parsed, stderr, ok)
+    };
+
+    let (_, stderr, ok) = run(&[
+        "sessions", "send", &recipient, "finished", "--type", "done", "--run-id", &sender,
+    ]);
+    assert!(ok, "{stderr}");
+    let (waited, stderr, ok) = run(&[
+        "sessions",
+        "wait",
+        "--type",
+        "done",
+        "--timeout",
+        "5",
+        "--run-id",
+        &recipient,
+        "--json",
+    ]);
+    assert!(ok, "{stderr}");
+    assert_eq!(waited["outcome"], "message", "{waited}");
+    assert_eq!(waited["message"]["body"], "finished", "{waited}");
+    let (again, _, _) = run(&[
+        "sessions",
+        "wait",
+        "--type",
+        "done",
+        "--timeout",
+        "1",
+        "--run-id",
+        &recipient,
+        "--json",
+    ]);
+    assert_eq!(again["outcome"], "timed_out", "{again}");
+
+    let (asked, stderr, ok) = run(&[
+        "sessions",
+        "ask",
+        &recipient,
+        "A or B?",
+        "--choice",
+        "A",
+        "--choice",
+        "B",
+        "--timeout",
+        "1",
+        "--run-id",
+        &sender,
+        "--json",
+    ]);
+    assert!(ok, "{stderr}");
+    assert_eq!(asked["outcome"], "timed_out", "{asked}");
+    let question = asked["question"].to_string();
+    let (_, stderr, ok) = run(&[
+        "sessions",
+        "send",
+        &sender,
+        "A",
+        "--type",
+        "answer",
+        "--in-reply-to",
+        &question,
+        "--run-id",
+        &recipient,
+    ]);
+    assert!(
+        !ok && stderr.contains("message-answer-late"),
+        "a late answer was not refused: {stderr}"
+    );
+}
