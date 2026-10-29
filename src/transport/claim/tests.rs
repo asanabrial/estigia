@@ -5353,6 +5353,7 @@ fn a_base_that_advanced_past_the_branchs_own_rebase_is_refused_before_the_payloa
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        integrate_reason: None,
         focus: None,
         declaration: Default::default(),
         expected_epoch: None,
@@ -5521,6 +5522,7 @@ fn a_branch_link_publication_keeps_the_follow_up_out_of_its_answer() {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        integrate_reason: None,
         focus: None,
         declaration: Default::default(),
         expected_epoch: None,
@@ -6100,6 +6102,7 @@ fn a_blank_topology_is_refused_before_anything_is_written() {
         inline_payload: false,
         topology: Some(""),
         topology_reason: None,
+        integrate_reason: None,
         focus: None,
         declaration: Default::default(),
         expected_epoch: None,
@@ -6346,6 +6349,8 @@ struct RepublishWorld {
     work: std::path::PathBuf,
     base: String,
     limit: Option<&'static str>,
+    protection: Option<(i32, &'static str, &'static str)>,
+    integrate_reason: Option<&'static str>,
 }
 
 const REPUBLISH_BRANCH: &str = "fix/123-lineage";
@@ -6362,6 +6367,8 @@ fn republish_world() -> RepublishWorld {
         work,
         base,
         limit: None,
+        protection: None,
+        integrate_reason: None,
     }
 }
 
@@ -6460,7 +6467,16 @@ impl RepublishWorld {
             value
         };
         let bin = crate::test_env::scripted_gh();
-        let script = crate::test_env::answers(&[
+        let mut answers = Vec::new();
+        if let Some((status, stdout, stderr)) = self.protection {
+            answers.push(serde_json::json!({
+                "matches": "branches/main/protection",
+                "stdout": stdout,
+                "stderr": stderr,
+                "status": status,
+            }));
+        }
+        answers.extend([
             crate::test_env::issue_view_answer(
                 123,
                 serde_json::json!({
@@ -6493,6 +6509,7 @@ impl RepublishWorld {
             }),
             serde_json::json!({ "matches": "issue comment", "stdout": "", "status": 0 }),
         ]);
+        let script = crate::test_env::answers(&answers);
         let context = Context {
             skill_dir: self.work.clone(),
             repo_dir: self.work.clone(),
@@ -6511,6 +6528,7 @@ impl RepublishWorld {
             inline_payload: false,
             topology: None,
             topology_reason: None,
+            integrate_reason: self.integrate_reason,
             focus: None,
             declaration: Default::default(),
             expected_epoch,
@@ -6537,6 +6555,9 @@ impl RepublishWorld {
             if let Some(expected) = expected_epoch {
                 flags.extend(["--expected-epoch".to_owned(), expected.to_owned()]);
             }
+            if let Some(reason) = self.integrate_reason {
+                flags.extend(["--integrate-reason".to_owned(), reason.to_owned()]);
+            }
             let result = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
                 crate::transport::dispatch::dispatch(&context, operation, &flags, what.now)
             });
@@ -6555,6 +6576,277 @@ impl RepublishWorld {
                 + &crate::transport::store::local_bodies(123),
         )
     }
+}
+
+const NON_STRICT: (i32, &str, &str) = (
+    0,
+    r#"{"required_status_checks":{"strict":false,"contexts":[]}}"#,
+    "",
+);
+const STRICT: (i32, &str, &str) = (
+    0,
+    r#"{"required_status_checks":{"strict":true,"contexts":[]}}"#,
+    "",
+);
+
+impl RepublishWorld {
+    fn protected(mut self, protection: (i32, &'static str, &'static str)) -> Self {
+        self.protection = Some(protection);
+        self
+    }
+
+    fn integrating_for(mut self, reason: &'static str) -> Self {
+        self.integrate_reason = Some(reason);
+        self
+    }
+
+    fn advance_base(&self, name: &str, contents: &str) {
+        git(&self.work, &["checkout", "-q", "main"]);
+        std::fs::write(self.work.join(name), contents).expect("content");
+        git(&self.work, &["add", name]);
+        git(
+            &self.work,
+            &["commit", "--quiet", "-m", "the base advances"],
+        );
+        git(&self.work, &["push", "-q", "origin", "main"]);
+        git(&self.work, &["checkout", "-q", REPUBLISH_BRANCH]);
+    }
+
+    fn approved_parent_with_integrated_base(&self, name: &str) -> (ReviewTransaction, String) {
+        let parent_head = self.commit("two.txt", 1);
+        self.advance_base(name, "base\n");
+        git(&self.work, &["merge", "--no-edit", "-X", "ours", "main"]);
+        (self.receipt('1', &parent_head), parent_head)
+    }
+
+    fn approved(&self, parent: &ReviewTransaction) -> [ownership::Comment; 2] {
+        [
+            published(parent),
+            computed_by(REPUBLISH_RUN, parent, "approved"),
+        ]
+    }
+}
+
+#[test]
+fn an_unneeded_base_integration_over_an_approved_parent_is_refused_and_pushes_nothing() {
+    let world = republish_world().protected(NON_STRICT);
+    let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+    let (result, bodies) = world.publish_logging(&world.approved(&parent), &parent_head);
+
+    let envelope = refusal_of(result);
+    assert_eq!(
+        envelope["reason"], "base-integration-not-required",
+        "{envelope}"
+    );
+    assert_eq!(envelope["epoch"], parent.epoch);
+    let action = envelope["action"].as_str().expect("action");
+    assert!(
+        action.contains("`deliver`") && action.contains("`integrate_reason`"),
+        "{action}"
+    );
+    assert!(!remote_has_branch(&world), "a refused publication pushed");
+    assert!(
+        !bodies.contains("published"),
+        "an epoch was minted: {bodies}"
+    );
+}
+
+#[test]
+fn an_unneeded_base_integration_is_refused_when_there_is_no_protection_at_all() {
+    let world = republish_world().protected((
+        1,
+        r#"{"message":"Branch not protected"}"#,
+        "gh: Branch not protected (HTTP 404)",
+    ));
+    let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+    let envelope = refusal_of(world.publish(&world.approved(&parent), &parent_head));
+
+    assert_eq!(
+        envelope["reason"], "base-integration-not-required",
+        "{envelope}"
+    );
+}
+
+#[test]
+fn an_unneeded_base_integration_over_a_rejected_parent_is_refused_without_naming_deliver() {
+    let world = republish_world().protected(NON_STRICT);
+    let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+    let envelope = refusal_of(world.publish(
+        &[
+            published(&parent),
+            computed_by(REPUBLISH_RUN, &parent, "rejected"),
+        ],
+        &parent_head,
+    ));
+
+    assert_eq!(
+        envelope["reason"], "base-integration-not-required",
+        "{envelope}"
+    );
+    assert!(
+        !envelope["action"]
+            .as_str()
+            .expect("action")
+            .contains("`deliver`"),
+        "{envelope}"
+    );
+}
+
+#[test]
+fn an_integrate_reason_overrides_the_refusal_and_is_recorded_on_the_marker() {
+    let world = republish_world()
+        .protected(NON_STRICT)
+        .integrating_for("schema-moved-with-the-base");
+    let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+    let (result, bodies) = world.publish_logging(&world.approved(&parent), &parent_head);
+
+    result.unwrap_or_else(|failure| panic!("{}", failure.envelope()));
+    assert!(
+        bodies.contains("integrate-reason=schema-moved-with-the-base"),
+        "{bodies}"
+    );
+}
+
+#[test]
+fn a_filler_integrate_reason_does_not_override_the_refusal() {
+    let world = republish_world()
+        .protected(NON_STRICT)
+        .integrating_for("n/a");
+    let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+    let envelope = refusal_of(world.publish(&world.approved(&parent), &parent_head));
+
+    assert_eq!(
+        envelope["reason"], "base-integration-not-required",
+        "{envelope}"
+    );
+}
+
+#[test]
+fn under_strict_protection_the_integration_is_published_without_a_reason() {
+    let world = republish_world().protected(STRICT);
+    let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+    let (result, bodies) = world.publish_logging(&world.approved(&parent), &parent_head);
+
+    result.unwrap_or_else(|failure| panic!("{}", failure.envelope()));
+    assert!(!bodies.contains("integrate-reason"), "{bodies}");
+}
+
+#[test]
+fn a_base_advance_that_conflicts_with_the_parent_head_is_not_refused() {
+    let world = republish_world().protected(NON_STRICT);
+    let (parent, parent_head) = world.approved_parent_with_integrated_base("two.txt");
+
+    let result = world.publish(&world.approved(&parent), &parent_head);
+
+    if let Err(failure) = result {
+        assert_ne!(
+            failure.envelope()["reason"],
+            "base-integration-not-required"
+        );
+    }
+}
+
+#[test]
+fn a_base_advance_touching_the_deliverys_own_paths_is_not_refused() {
+    let world = republish_world().protected(NON_STRICT);
+    let parent_head = world.commit("two.txt", 1);
+    world.advance_base("two.txt", "line\n");
+    git(&world.work, &["merge", "--no-edit", "main"]);
+    let parent = world.receipt('1', &parent_head);
+
+    world
+        .publish(&world.approved(&parent), &parent_head)
+        .expect("a clean merge over the delivery's own path is not disjoint");
+}
+
+#[test]
+fn an_unreadable_protection_is_not_refused_and_the_answer_names_the_failed_read() {
+    for protection in [
+        (
+            1,
+            "",
+            "gh: Resource not accessible by integration (HTTP 403)",
+        ),
+        (0, "", ""),
+        (0, "not json", ""),
+    ] {
+        let world = republish_world().protected(protection);
+        let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+        let answer = world
+            .publish(&world.approved(&parent), &parent_head)
+            .unwrap_or_else(|failure| panic!("{protection:?}: {}", failure.envelope()));
+
+        assert!(
+            answer["integration_unread"]
+                .as_str()
+                .is_some_and(|read| read.starts_with("branch-protection")),
+            "{protection:?}: {answer}"
+        );
+    }
+}
+
+#[test]
+fn an_unreadable_merge_is_a_failed_read_and_not_a_disjoint_clean_one() {
+    let world = republish_world();
+    let (_, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");
+
+    let head = "0".repeat(40);
+    assert!(
+        super::integration::disjoint_and_clean(&world.work, &head, &world.base, &parent_head)
+            .is_err()
+    );
+}
+
+#[test]
+fn a_rebase_onto_an_unneeded_base_advance_reaches_the_refusal_through_republish() {
+    let world = republish_world().protected(NON_STRICT);
+    let parent_head = world.commit("two.txt", 1);
+    git(
+        &world.work,
+        &[
+            "push",
+            "-q",
+            "origin",
+            &format!("{parent_head}:refs/heads/{REPUBLISH_BRANCH}"),
+        ],
+    );
+    world.advance_base("base-only.txt", "base\n");
+    git(&world.work, &["rebase", "-q", "main"]);
+    let parent = world.receipt('1', &parent_head);
+
+    let (result, _) = world.drive(
+        &world.approved(&parent),
+        &parent_head,
+        None,
+        Some("republish-review"),
+    );
+
+    let envelope = refusal_of(result);
+    assert_eq!(
+        envelope["reason"], "base-integration-not-required",
+        "{envelope}"
+    );
+    let remote = crate::transport::run(
+        &[
+            "git",
+            "rev-parse",
+            &format!("refs/heads/{REPUBLISH_BRANCH}"),
+        ],
+        Some(&world.remote),
+        crate::transport::How::read(),
+    )
+    .expect("the remote branch")
+    .stdout
+    .trim()
+    .to_owned();
+    assert_eq!(remote, parent_head, "the lease push moved the remote");
 }
 
 fn refusal_of(result: Result<serde_json::Value, Failure>) -> serde_json::Value {
@@ -7155,6 +7447,7 @@ fn a_push_whose_readback_disagrees_leaves_a_republishable_lease_target() {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        integrate_reason: None,
         focus: None,
         declaration: Default::default(),
         expected_epoch: None,
@@ -7484,6 +7777,7 @@ fn a_readback_that_settles_elsewhere_says_the_head_moved() {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        integrate_reason: None,
         focus: None,
         declaration: Default::default(),
         expected_epoch: None,
@@ -15466,6 +15760,7 @@ fn publish_what() -> Publication<'static> {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        integrate_reason: None,
         focus: None,
         declaration: Default::default(),
         expected_epoch: None,

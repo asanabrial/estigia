@@ -17,6 +17,7 @@ mod capture;
 mod checks;
 mod close;
 mod computed;
+mod integration;
 mod recover;
 mod status;
 mod validator;
@@ -8127,6 +8128,10 @@ pub struct Publication<'a> {
     /// Why this delivery declared the topology it did. Recorded beside
     /// `topology`; given without a topology it is refused. Nothing reads it back to decide.
     pub topology_reason: Option<&'a str>,
+    /// Why this publication integrates a base advance that did not need integrating. Without it
+    /// such a publication is refused `base-integration-not-required`; with it the reason is
+    /// recorded on the marker. A blank or filler reason counts as none.
+    pub integrate_reason: Option<&'a str>,
     /// The lens focus this delivery asks for; recorded with `declaration`, and
     /// refused when it is not one of [`crate::transport::tier::REVIEW_FOCUSES`].
     pub focus: Option<&'a str>,
@@ -8487,6 +8492,16 @@ fn lane_comment_bytes(context: &Context) -> usize {
         .saturating_add(LANE_SENTENCE_CEILING)
 }
 
+fn with_integrate_reason(
+    mut fields: Vec<(&'static str, String)>,
+    reason: Option<&str>,
+) -> Vec<(&'static str, String)> {
+    if let Some(reason) = reason {
+        fields.push(("integrate-reason", reason.to_owned()));
+    }
+    fields
+}
+
 /// The bytes the caller's own fields — `run-id`, `topology`,
 /// `topology-reason` and the declared risk and focus — add to the published comment. None is bounded by a
 /// constant: `run-id` is **not** bounded by the run-pointer filename, since
@@ -8589,6 +8604,7 @@ fn publish_with_sleep(
         inline_payload,
         topology,
         topology_reason,
+        integrate_reason,
         focus,
         declaration,
         expected_epoch,
@@ -8608,11 +8624,17 @@ fn publish_with_sleep(
     // reserves the manifest's ceiling and the lane's measured width, or no single
     // bound bounds the comment. The enumeration is in `docs/honesty.md`.
     let declared = declaration.resolve(focus)?;
+    let integrate_reason = integrate_reason
+        .map(str::trim)
+        .filter(|reason| !says_nothing(reason));
     let caller_bytes = caller_comment_bytes(
         run_id,
         topology,
         topology_reason,
-        &declared.marker_fields(Some(super::tier::RiskLevel::Medium)),
+        &with_integrate_reason(
+            declared.marker_fields(Some(super::tier::RiskLevel::Medium)),
+            integrate_reason,
+        ),
     );
     let lane_bytes = lane_comment_bytes(context);
     let budget = COMMENT_BODY_CEILING
@@ -8869,8 +8891,8 @@ fn publish_with_sleep(
                                pull request's correction budget and scope, and nothing gives \
                                this one a reason to be. Record a \
                                review_finding against that receipt naming the defect the \
-                               verdict did not weigh, or merge the base's advance in. Nothing \
-                               has been pushed and no pull request was opened",
+                               verdict did not weigh, or deliver the approved receipt as it \
+                               stands. Nothing has been pushed and no pull request was opened",
                 })));
             }
             Standing::Approved => {}
@@ -8887,6 +8909,28 @@ fn publish_with_sleep(
                 )? {
                     return Err(Failure::Stop(refusal));
                 }
+            }
+        }
+    }
+
+    let mut integration_unread = None;
+    if let (Some(parent), Some(verdict), false, None) =
+        (&parent_here, &parent_judged, successor, integrate_reason)
+    {
+        match integration::assess(&integration::Inputs {
+            context,
+            at,
+            base,
+            parent,
+            standing: verdict.standing,
+            payload_base,
+            payload_head,
+            issue,
+        }) {
+            integration::Integration::Allowed => {}
+            integration::Integration::Unread(read) => integration_unread = Some(read),
+            integration::Integration::NotRequired(refusal) => {
+                return Err(Failure::Stop(refusal));
             }
         }
     }
@@ -9051,7 +9095,7 @@ fn publish_with_sleep(
     } else {
         None
     };
-    let declared_fields = declared.marker_fields(computed);
+    let declared_fields = with_integrate_reason(declared.marker_fields(computed), integrate_reason);
     let answer = published(
         context,
         &ledger,
@@ -9104,6 +9148,9 @@ fn publish_with_sleep(
         let (state, _note, _workflows) = lane_report(&lane);
         if let Some(answer) = answer.as_object_mut() {
             answer.insert("publication_lane".to_owned(), serde_json::json!(state));
+            if let Some(read) = &integration_unread {
+                answer.insert("integration_unread".to_owned(), serde_json::json!(read));
+            }
         }
         answer
     });

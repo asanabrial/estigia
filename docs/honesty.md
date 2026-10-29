@@ -2454,6 +2454,19 @@ pointer that leaves it names the document it points at.
   the finding the verdict did not weigh with `record_review_finding` or closes the pull request and
   publishes afresh. Whether such an approval should be re-reviewable without a finding is open. A base
   advance is not read, so a stale approval whose base advanced still answers the stop.
+- **`base-integration-not-required` proves a textual fact, not a semantic one.** The refusal needs the
+  parent head to merge cleanly with the current base, the paths the base touched to be disjoint from
+  the delivery's, and `required_status_checks.strict` to read `false` or the branch to be unprotected.
+  None of that says the change still means what it did on the advanced base; `integrate_reason` is the
+  run's recorded judgement that it does not, and nothing reads it back to decide. The protection is
+  read through the branch-protection endpoint only: a repository that requires an up-to-date branch
+  through a ruleset can answer `Branch not protected` there, which is read as non-strict, and the
+  integration it requires is refused until `integrate_reason` is given. A protection read that fails
+  any other way, or answers something unreadable, is not a refusal; the answer carries
+  `integration_unread` and the integration goes through. The same holds for a failed ancestry or
+  `git merge-tree` read. The check runs only over a parent receipt on the same pull request that is
+  not the root of a recovered successor lineage. `integrate_reason` is recorded on the marker and,
+  unlike `delta-range-reason`, is not echoed by `review_transaction`.
 
 ## The seams, and the gates that never see a call
 

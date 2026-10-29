@@ -136,7 +136,7 @@ CI are already bound to. What is required instead is to CLASSIFY later movement:
 | The base moved and… | Then |
 |---|---|
 | it did not move | nothing to decide |
-| every path it touched is disjoint from this delivery, and a read-only merge reports no conflict | leave the candidate branch alone when the repository lets you; under `required_status_checks.strict: true` the platform does not, so integrate by merging the base and republish over the parent receipt — a repair-shaped round whose panel reads the whole change, since a moved base is read whole however it was integrated, and re-reads the findings recorded against the parent receipt |
+| every path it touched is disjoint from this delivery, and a read-only merge reports no conflict | leave the candidate branch alone; publication refuses an integration of it as `base-integration-not-required` unless `integrate_reason` is given. Under `required_status_checks.strict: true` the platform does not let you, so integrate by merging the base and republish over the parent receipt with no reason — a repair-shaped round whose panel reads the whole change, since a moved base is read whole however it was integrated, and re-reads the findings recorded against the parent receipt |
 | it touched paths this delivery also touches, or the merge conflicts | integrate before final review and re-review the whole change |
 | the merge result could not be established | integrate; an unanswered merge is never "compatible", and the whole change is re-reviewed |
 
