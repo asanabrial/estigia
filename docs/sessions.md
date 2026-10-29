@@ -20,8 +20,11 @@ nothing off, and it never types into another terminal. `--json` prints the same 
 | `claude` | `claude --resume <session_id>` | the session id is not a UUID |
 | `codex` | `codex resume <session_id>` | the session id is not a UUID |
 | `opencode` | `opencode --session <session_id>` | the session id does not start `ses_` |
-| `pi` | none: Pi resumes from a session file whose path the registry does not record | always |
-| anything else | none | always |
+| `pi` | `pi --session <session file>`, the file the extension registered | the row holds no absolute `.jsonl` path |
+| `cursor`, anything else | none | always |
+
+The program is the bare command name unless the row stored the agent's own program and it is an absolute path to
+a file named exactly that command; then `resume` prints that path instead (`/opt/bin/opencode --session ses_…`).
 
 - **The directory** is the worktree the run pointer names, else the directory the session started in. An ended
   session has no pointer, so it gets the second.
@@ -31,8 +34,9 @@ nothing off, and it never types into another terminal. `--json` prints the same 
   not get its claim back by itself; it calls `claim` again.
 - **The worktree** is the uncommitted file count and the commits not on the branch's upstream. A branch with no
   upstream reports its push state as unknown, never as pushed.
-- **A refusal is not a guess.** Cursor registers as `claude`, so the runtime word cannot tell the two apart; a
-  session id that is not the shape the runtime mints is refused `resume-runtime-misattributed`. A runtime with no
+- **A refusal is not a guess.** Cursor registers as `cursor` and gets no command. A Cursor row registered before
+  that was recorded as `claude`, so a session id that is not the shape the runtime mints is still refused
+  `resume-runtime-misattributed`. A runtime with no
   command is refused `resume-no-native-command`. Both name the alternatives, and perform none: keep the row,
   `estigia release --run-id`, or `handoff`.
 - **Liveness** is read from the process the registry recorded: the parent of the `SessionStart` hook or
@@ -55,7 +59,8 @@ nothing off, and it never types into another terminal. `--json` prints the same 
 directory the session started in, when it started, when Estigia last saw it, when and why it ended, the
 short name the registry minted for it, the build that registered it, how its adapter says an idle
 session is woken, the host pane the registering process was started in, and the process and machine the
-session ran as (read by `resume`, never shown by `sessions`).
+session ran as, the agent's program and, for Pi, the session file (all read by `resume`, never shown by
+`sessions`).
 
 The **short name** is `<repository>-<n>` (`estigia-1`), minted when the row is first written from a
 per-repository ordinal in the store. It is kept for the life of the run id and never reused, so it is what

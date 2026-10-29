@@ -28,6 +28,8 @@ pub(crate) struct SessionRow {
     pub(crate) pane: Option<String>,
     pub(crate) host_pid: Option<u64>,
     pub(crate) host_name: Option<String>,
+    pub(crate) binary: Option<String>,
+    pub(crate) session_file: Option<String>,
 }
 
 fn seconds(value: i64) -> u64 {
@@ -114,6 +116,26 @@ impl Store {
         Ok(())
     }
 
+    pub(crate) fn session_binary(&self, run_id: &str, binary: Option<&str>) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "UPDATE sessions SET binary = ?2 WHERE run_id = ?1",
+                rusqlite::params![run_id, binary],
+            )
+            .map_err(unreadable("record the program of a session"))?;
+        Ok(())
+    }
+
+    pub(crate) fn session_file(&self, run_id: &str, file: &str) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "UPDATE sessions SET session_file = ?2 WHERE run_id = ?1",
+                rusqlite::params![run_id, file],
+            )
+            .map_err(unreadable("record the file of a session"))?;
+        Ok(())
+    }
+
     pub(crate) fn session_wake(&self, run_id: &str, wake: &str) -> Result<(), Failure> {
         self.connection()
             .execute(
@@ -170,7 +192,8 @@ impl Store {
             .connection()
             .prepare(
                 "SELECT run_id, runtime, session_id, repo_dir, started_at, last_seen, ended_at,
-                        end_reason, name, build, wake, pane, host_pid, host_name FROM sessions
+                        end_reason, name, build, wake, pane, host_pid, host_name, binary,
+                        session_file FROM sessions
                  ORDER BY last_seen DESC, run_id",
             )
             .map_err(unreadable("read the sessions"))?;
@@ -191,6 +214,8 @@ impl Store {
                     pane: row.get(11)?,
                     host_pid: row.get::<_, Option<i64>>(12)?.map(seconds),
                     host_name: row.get(13)?,
+                    binary: row.get(14)?,
+                    session_file: row.get(15)?,
                 })
             })
             .map_err(unreadable("read the sessions"))?

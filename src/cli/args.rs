@@ -796,6 +796,11 @@ pub enum SessionAction {
         /// row then says so rather than guessing.
         #[arg(long, value_parser = ["poll", "stop-waiter"])]
         wake: Option<String>,
+
+        /// The file the host keeps this session in, recorded so `resume` can
+        /// name it. Pi resumes from a file and from nothing else.
+        #[arg(long, value_parser = present)]
+        session_file: Option<String>,
     },
     /// Print the messages other sessions left for this one, and record them as
     /// delivered. Prints nothing when none wait.

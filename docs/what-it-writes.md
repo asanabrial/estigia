@@ -1320,6 +1320,7 @@ skill's `<runtime>-<session-prefix>` rule derive the same string only when the t
 | `--agent claude-code` | `claude` |
 | none: Pi's extension calls `estigia gate --runtime pi` itself and registers no hook | `pi` |
 | no `--agent` (settings written by an older build) | `claude` |
+| `--agent cursor` | `cursor` |
 | every other adapter | `claude`, unchanged — see [`honesty.md`](honesty.md) |
 
 ## What setup installs besides the skill, and what the host's permission mode does not change

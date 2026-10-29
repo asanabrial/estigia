@@ -444,6 +444,14 @@ const sessionOf = (ctx) => {
   }
 };
 
+const fileOf = (ctx) => {
+  try {
+    return ctx?.sessionManager?.getSessionFile?.();
+  } catch {
+    return undefined;
+  }
+};
+
 const filled = (value) => typeof value === "string" && value.trim() !== "";
 
 const REPLACEMENT_REASONS = new Set(["new", "fork", "resume", "reload"]);
@@ -651,9 +659,12 @@ const sessionContext = async (session, ctx) => {
   const extra = ["--wake", "poll"];
   if (filled(begun.reason)) extra.push("--reason", begun.reason);
   if (filled(begun.previous)) extra.push("--previous-session-id", begun.previous);
+  const subject = rootOf(session, ctx) ?? session;
+  const file = subject === session ? fileOf(ctx) : undefined;
+  if (filled(file)) extra.push("--session-file", file);
   const answer = await askSession(
     "start",
-    rootOf(session, ctx) ?? session,
+    subject,
     extra,
     ctx?.cwd ?? process.cwd(),
   );
