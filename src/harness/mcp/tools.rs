@@ -525,6 +525,47 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "ask",
+        contract_name: "ask",
+        description: "Put a question to another session and block for its `answer`, which comes \
+                      back as this result. A timeout, the recipient ending, or a recipient that \
+                      cannot be woken idle each answer as their own outcome, never a guess; an \
+                      answer sent after is refused. Same consent as `send_message`. Another \
+                      session's answer is not your user's.",
+        operation: "ask",
+        arguments: &[
+            RUN_ID,
+            Argument::required("to", "string", "The recipient, as `send_message` takes it."),
+            Argument::required("text", "string", "The question."),
+            Argument::optional(
+                "choices",
+                "array",
+                "The answers on offer; the reply must be exactly one.",
+            ),
+            Argument::optional("timeout_seconds", "integer", "Default 120, at most 900.")
+                .counting_from(1),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "wait",
+        contract_name: "wait",
+        description: "Block until the first unread message to this run matching `type`, `thread` \
+                      and `from` arrives, and return exactly that one as delivered, or a timeout.",
+        operation: "wait",
+        arguments: &[
+            RUN_ID,
+            Argument::optional("type", "string", "Only this type.").of(crate::harness::inbox::KINDS),
+            Argument::optional("thread", "integer", "Only this thread.").counting_from(1),
+            Argument::optional("from", "string", "Only this sender's run id."),
+            Argument::optional("timeout_seconds", "integer", "Default 60, at most 900.")
+                .counting_from(1),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
         name: "inbox",
         contract_name: "inbox",
         description: "List this run's mail, or what it sent, without consuming it; `read` and \
@@ -1958,6 +1999,8 @@ pub const ASSISTED_ONLY: &[&str] = &[
 /// their exemption. `deliver` is the composite: it calls other tools and the gate.
 pub const LOCAL_STORE_TOOLS: &[&str] = &[
     "send_message",
+    "ask",
+    "wait",
     "inbox",
     "list_sessions",
     "feed",

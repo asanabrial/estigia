@@ -59,7 +59,7 @@ impl Message {
     }
 }
 
-const COLUMNS: &str = "id, sender_run_id, body, created_at, recipient_run_id, kind,
+pub(super) const COLUMNS: &str = "id, sender_run_id, body, created_at, recipient_run_id, kind,
     COALESCE(thread, id), in_reply_to, delivered_at, read_at, acked_at, expires_at";
 
 const STATE: &str =
@@ -74,7 +74,7 @@ fn seconds(value: i64) -> u64 {
     u64::try_from(value).unwrap_or_default()
 }
 
-fn message_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
+pub(super) fn message_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
     Ok(Message {
         id: row.get(0)?,
         sender_run_id: row.get(1)?,

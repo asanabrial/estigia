@@ -4124,7 +4124,18 @@ measure:
   driven on no live host. A thread is the id of its first message and is not scoped to the parties: any run
   that knows a message id can join its thread. `expires_in` is recorded and shown and decides nothing, so an
   expired message is still delivered. Types, threads and acks are text and rows in a local file; no gate,
-  permission or claim reads them. Not built: a blocking `ask`, `wait`, broadcast and the completion contract.
+  permission or claim reads them. Not built: broadcast and the completion contract.
+- **`ask` and `wait` wake only what can be woken, and were driven on no live host.** A question reaches a
+  session at its next hook point or idle wake. Claude Code (`Stop` waiter), Pi and OpenCode 2 (polling)
+  record a wake; Codex and OpenCode 1 record none, so an `ask` to them returns `not_woken` after delivering
+  the question and does not wait, and a model on Codex can answer only on a turn it is already running. The
+  heartbeat is an MCP `notifications/progress` sent only to a call that carried a `progressToken`; a host
+  that sends none and kills silent calls will still kill a long `wait`, and no host was run to measure
+  which does. The ask and its answer are separate writes: an answer admitted a moment before the asker's
+  timeout is recorded can sit in the mailbox as mail for a question already reported `timed_out`, never as
+  the answer to it. A session that dies without ending its row is not seen as `ended` and the ask times out.
+  The Pi parent-child channel was not moved onto the mailbox: it shares the rules (one outcome, refused
+  late answers) and nothing else.
 - **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from
   acting on it. **The `flow dev` conflict rule reads the words of the message**: `send_message` and
   `estigia sessions send` refuse text carrying `flow dev <n>` while the recipient's pointer names another

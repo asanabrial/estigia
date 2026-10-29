@@ -290,4 +290,15 @@ pub(super) const MIGRATIONS: &[&str] = &[
     ALTER TABLE messages ADD COLUMN acked_at INTEGER;
     ALTER TABLE messages ADD COLUMN expires_at INTEGER;
     ",
+    "
+    CREATE TABLE asks (
+        question_id INTEGER PRIMARY KEY,
+        asker TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        choices TEXT NOT NULL,
+        outcome TEXT,
+        settled_at INTEGER,
+        answer_id INTEGER
+    );
+    ",
 ];

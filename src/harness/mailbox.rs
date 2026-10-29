@@ -76,6 +76,75 @@ pub(crate) fn thread_unknown(detail: String) -> Refusal {
     )
 }
 
+pub(crate) fn answer_late(question: i64, outcome: &str) -> Refusal {
+    Refusal::not_started(
+        "message-answer-late",
+        format!(
+            "question {question} already ended as `{outcome}`, so an answer to it would be \
+             reported to nobody; nothing was recorded"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "a `note` to the asker, who decides whether the answer still matters",
+        ),
+    )
+}
+
+pub(crate) fn answer_not_a_choice(question: i64, choices: &[String]) -> Refusal {
+    Refusal::not_started(
+        "message-answer-not-a-choice",
+        format!(
+            "question {question} offered {} and the answer is none of them; nothing was recorded",
+            choices.join(", ")
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "an answer whose text is exactly one of the choices",
+        ),
+    )
+}
+
+pub(crate) fn answer_not_addressed(question: i64, addressed: &str) -> Refusal {
+    Refusal::not_started(
+        "message-answer-not-addressed",
+        format!(
+            "question {question} was put to `{addressed}`, and only that session's answer ends \
+             it; nothing was recorded"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "the addressed session answering, or a `note` to the asker",
+        ),
+    )
+}
+
+fn answer_checked(
+    opened: &store::Store,
+    sender: Option<&str>,
+    body: &str,
+    shape: &Shape<'_>,
+) -> Result<(), Refusal> {
+    let (Some("answer"), Some(question)) = (shape.kind, shape.in_reply_to) else {
+        return Ok(());
+    };
+    let ask = opened
+        .ask(question)
+        .map_err(|failure| unavailable(&failure.detail()))?;
+    let Some(ask) = ask else {
+        return Ok(());
+    };
+    if let Some(outcome) = &ask.outcome {
+        return Err(answer_late(question, outcome));
+    }
+    if sender != Some(ask.recipient.as_str()) {
+        return Err(answer_not_addressed(question, &ask.recipient));
+    }
+    if !ask.choices.is_empty() && !ask.choices.iter().any(|choice| choice == body.trim()) {
+        return Err(answer_not_a_choice(question, &ask.choices));
+    }
+    Ok(())
+}
+
 fn thread_checked(opened: &store::Store, shape: &Shape<'_>) -> Result<(), Refusal> {
     let read = |id: i64| {
         opened
@@ -105,6 +174,7 @@ fn thread_checked(opened: &store::Store, shape: &Shape<'_>) -> Result<(), Refusa
 
 fn admitted(
     state_root: &Path,
+    sender: Option<&str>,
     recipient: &str,
     body: &str,
     shape: &Shape<'_>,
@@ -129,17 +199,19 @@ fn admitted(
         return Err(recipient_unknown(recipient));
     };
     thread_checked(&opened, shape)?;
+    answer_checked(&opened, sender, body, shape)?;
     Ok((opened, registered))
 }
 
 /// Refuses what [`send`] would refuse, writing nothing.
 pub(crate) fn admissible(
     state_root: &Path,
+    sender: Option<&str>,
     recipient: &str,
     body: &str,
     shape: &Shape<'_>,
 ) -> Result<(), Refusal> {
-    admitted(state_root, recipient, body, shape).map(|_| ())
+    admitted(state_root, sender, recipient, body, shape).map(|_| ())
 }
 
 #[derive(Default)]
@@ -167,7 +239,7 @@ pub(crate) fn send_shaped(
     body: &str,
     shape: &Shape<'_>,
 ) -> Result<Receipt, Refusal> {
-    let (opened, registered) = admitted(state_root, recipient, body, shape)?;
+    let (opened, registered) = admitted(state_root, sender, recipient, body, shape)?;
     let now = session::now_seconds().ok_or_else(|| unavailable("the clock could not be read"))?;
     let (id, thread) = opened
         .message_sent_shaped(
