@@ -3741,3 +3741,174 @@ fn a_session_started_in_a_herdr_pane_records_it_and_one_started_outside_carries_
         "a session started outside a pane invented one: {plain}"
     );
 }
+
+/// `claim` with `branch` and `base` is the claim and the checkout in one call.
+///
+/// The pointer must name the checkout afterwards, exactly as `start_branch`
+/// alone leaves it, or the next write from the new worktree is measured against
+/// a run that does not cover it.
+#[test]
+fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let trees = tempfile::tempdir().expect("a directory for worktrees");
+    let run_id = "claude-abcd1234";
+    let branch = "fix-12-claimed-checkout";
+
+    let git = |arguments: &[&str]| -> bool { checked_git(repo, arguments) };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success()),
+        "the bare origin was not created"
+    );
+    git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string(),
+    ]);
+    git(&["branch", "-M", "main"]);
+    assert!(
+        git(&["push", "-q", "origin", "main"]),
+        "the base did not push"
+    );
+
+    let unprojected = serde_json::json!({
+        "state": "OPEN",
+        "labels": [{"name": "status:in-progress"}],
+        "assignees": [],
+        "comments": [],
+    });
+    let projected = serde_json::json!({
+        "state": "OPEN",
+        "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+        "assignees": [{"login": "fixture"}],
+        "comments": [],
+    });
+    let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "nth": 1, "stdout": unprojected.to_string(), "status": 0 },
+        { "matches": "issue view", "nth": 2, "stdout": unprojected.to_string(), "status": 0 },
+        { "matches": "issue view", "stdout": projected.to_string(), "status": 0 },
+        { "matches": "issue develop", "stdout": "", "status": 1 },
+        {
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        },
+        {
+            "matches": "api graphql",
+            "stdout": serde_json::json!({
+                "data": { "repository": { "issue": { "linkedBranches": {
+                    "nodes": [],
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                } } } },
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+        { "matches": "issue edit", "stdout": "", "status": 0 },
+        { "matches": "label", "stdout": "[]", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let counts = tempfile::tempdir().expect("a directory for the call counter");
+    let claim = |claimant: &str, branch: &str, base: &str| -> (bool, serde_json::Value) {
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": "claim", "arguments": {
+                "issue": 12,
+                "run_id": claimant,
+                "horizon": "2099-01-01T00:00Z",
+                "branch": branch,
+                "base": base,
+                "worktree_root": trees.path().display().to_string(),
+            } },
+        });
+        let output = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", counts.path().join("count"))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                use std::io::Write;
+                writeln!(child.stdin.take().expect("stdin is piped"), "{request}")?;
+                child.wait_with_output()
+            })
+            .expect("the MCP server runs");
+        let line = String::from_utf8_lossy(&output.stdout);
+        let response: serde_json::Value =
+            serde_json::from_str(line.trim()).unwrap_or_else(|_| panic!("not JSON-RPC: {line:?}"));
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default();
+        let answer = serde_json::from_str(text).unwrap_or(serde_json::json!({ "text": text }));
+        (response["result"]["isError"] != false, answer)
+    };
+    let (refused, answer) = claim(run_id, branch, "main");
+    assert!(!refused, "the claim was refused: {answer}");
+    assert_eq!(
+        answer["start_branch"]["ok"], true,
+        "the claim did not create the checkout: {answer}"
+    );
+    let created = answer["start_branch"]["worktree"]
+        .as_str()
+        .expect("the checkout is named");
+    assert!(
+        worktree_registered(repo, std::path::Path::new(created)),
+        "{created} is not a registered worktree"
+    );
+
+    let runs = home.join(".estigia").join("runs");
+    let pointer = estigia::harness::session::load(&runs, run_id);
+    assert_eq!(
+        pointer.worktree.as_deref(),
+        Some(std::path::Path::new(created)),
+        "the pointer does not name the checkout the claim created"
+    );
+    assert!(
+        pointer
+            .covered()
+            .any(|covered| estigia::paths::covers(covered, repo)),
+        "the claim stopped covering the checkout it was sworn from"
+    );
+
+    let worktrees = || checked_git_stdout(repo, &["worktree", "list", "--porcelain"]);
+    let before = worktrees();
+    let (refused, answer) = claim("claude-0abc1234", "fix-12-loser", "main");
+    assert!(refused, "a claim another run holds was granted: {answer}");
+    assert_eq!(
+        worktrees(),
+        before,
+        "the refused claim created a checkout: {answer}"
+    );
+    let loser = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["rev-parse", "--verify", "-q", "refs/heads/fix-12-loser"])
+        .output()
+        .expect("git runs");
+    assert!(
+        !loser.status.success(),
+        "the refused claim created its branch"
+    );
+
+    let (refused, answer) = claim(run_id, "fix-12-no-base", "no-such-base");
+    assert!(
+        !refused,
+        "a failed checkout refused the whole claim: {answer}"
+    );
+    assert_eq!(answer["start_branch"]["ok"], false, "{answer}");
+    assert_eq!(
+        estigia::harness::session::load(&runs, run_id).issue_number(),
+        Some(12),
+        "the checkout that failed undid the claim before it"
+    );
+}

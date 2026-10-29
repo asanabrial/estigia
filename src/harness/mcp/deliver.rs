@@ -347,10 +347,9 @@ impl<H: Hands> Deliver<'_, H> {
                 ));
             }
             let next = status["next"].clone();
-            let operation = next["operation"].as_str().unwrap_or_default();
             let reason = next["reason_code"].as_str().unwrap_or_default();
             match next["kind"].as_str().unwrap_or_default() {
-                "execute" if operation == "record_computed_verdict" && !recorded => {
+                "execute" if reason == "verdict-computable" && !recorded => {
                     let mut arguments = self.receipt_arguments(receipt);
                     if let Some(worktree) = self.hands.worktree() {
                         arguments["worktree"] = json!(worktree);
@@ -359,7 +358,7 @@ impl<H: Hands> Deliver<'_, H> {
                     self.done.push("record_computed_verdict");
                     recorded = true;
                 }
-                "execute" if operation == "release_ci" => return Ok(Position::Open),
+                "execute" if reason == "approved" => return Ok(Position::Open),
                 "stop" if reason == "released" => return Ok(Position::Open),
                 "stop" if reason == "delivered" => return Ok(Position::Delivered),
                 "collect" if all_running(&next) => {

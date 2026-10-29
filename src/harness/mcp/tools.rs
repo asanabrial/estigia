@@ -333,6 +333,27 @@ pub const TOOLS: &[Tool] = &[
             )
             .of(crate::config::STATES),
             Argument::optional(
+                "branch",
+                "string",
+                "Also create this branch's checkout in this call, as `start_branch` does; \
+                 needs `base`.",
+            ),
+            Argument::optional(
+                "base",
+                "string",
+                "The checkout's base branch; with `branch`.",
+            ),
+            Argument::optional(
+                "worktree_root",
+                "string",
+                "As `start_branch`'s; with `branch`.",
+            ),
+            Argument::optional(
+                "no_link",
+                "boolean",
+                "As `start_branch`'s; with `branch`.",
+            ),
+            Argument::optional(
                 "takeover",
                 "boolean",
                 "Displace an abandoned holder instead of swearing a new claim. Discovery \
@@ -1048,7 +1069,7 @@ pub const TOOLS: &[Tool] = &[
                 "record_verdict",
                 "boolean",
                 "Also record the computed verdict when no slot is running and `review_status` \
-                 then names `record_computed_verdict`; otherwise records nothing.",
+                 then reads `verdict-computable`; otherwise records nothing.",
             ),
         ],
         effect: PointerEffect::Renew,

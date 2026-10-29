@@ -251,7 +251,7 @@ fn verdict_arguments(rig: &TrackerRig, world: &World) -> serde_json::Value {
         "review_status",
         serde_json::json!({"issue": 12}),
     ));
-    let bound = &status["next"]["arguments"];
+    let bound = &status["receipt"];
     serde_json::json!({
         "issue": 12, "run_id": RUN_ID, "epoch": bound["epoch"], "pr": bound["pr"],
         "head": bound["head"], "base": bound["base"], "digest": bound["digest"],

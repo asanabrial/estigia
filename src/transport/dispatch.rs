@@ -432,12 +432,11 @@ fn with_recorded_verdict(
             return answer;
         }
     };
-    let next = &status["next"];
-    if next["operation"] != "record_computed_verdict" {
+    if status["next"]["reason_code"] != "verdict-computable" {
         answer["review_status"] = status;
         return answer;
     }
-    let arguments = &next["arguments"];
+    let arguments = &status["receipt"];
     let field = |name: &str| arguments[name].as_str().unwrap_or_default();
     let pr = arguments["pr"].as_u64().unwrap_or_default();
     let (epoch, head, base, digest) = (
@@ -1049,7 +1048,25 @@ fn run_operation(
                 // The `claim` then `transition` pair as one call: the claim is
                 // adjudicated first, so its refusal is what a caller meets before
                 // anything moves, and the transition's own refusals follow it.
-                match f.get("transition-to") {
+                let checkout = match (f.get("branch"), f.get("base")) {
+                    (Some(branch), Some(base)) => Some((branch, base)),
+                    (None, None) => None,
+                    (named, _) => {
+                        let (given, absent) = if named.is_some() {
+                            ("branch", "--base")
+                        } else {
+                            ("base", "--branch")
+                        };
+                        return Err(flag_without_its_mode(
+                            operation,
+                            given,
+                            &format!(
+                                "a checkout in the claim needs --branch and --base; {absent} was not given"
+                            ),
+                        ));
+                    }
+                };
+                let answer = match f.get("transition-to") {
                     Some(to) => {
                         super::claim::claim_checks(&acquisition)?;
                         let ledger = super::store::Ledger::open(context, issue, now)?;
@@ -1057,10 +1074,35 @@ fn run_operation(
                         super::commands::require_state(to)?;
                         let moved =
                             super::commands::transition_on(context, &ledger, issue, to, None, now)?;
-                        Ok(merged_step(answer, "transition", moved))
+                        merged_step(answer, "transition", moved)
                     }
-                    None => super::claim::claim(context, &acquisition),
-                }
+                    None => super::claim::claim(context, &acquisition)?,
+                };
+                let Some((branch, base)) = checkout else {
+                    return Ok(answer);
+                };
+                let started = super::closing::repo_identity(context).and_then(|(_, repo_name)| {
+                    super::branch::start_branch(
+                        context,
+                        &super::branch::Start {
+                            issue: crate::identity::Identity::Number(issue),
+                            branch,
+                            base,
+                            run_id: acquisition.run_id,
+                            worktree_root: f.get("worktree-root"),
+                            repo_name: &repo_name,
+                            expect_state: f.get("transition-to").unwrap_or("in-progress"),
+                            link: !f.on("no-link"),
+                            now,
+                        },
+                        context.get("worktree location"),
+                    )
+                });
+                Ok(merged_step(
+                    answer,
+                    "start_branch",
+                    started.unwrap_or_else(|failure| failure.envelope()),
+                ))
             }
         }
         "unassign" => {

@@ -109,7 +109,7 @@ authority nor independence.
 
 1. Resume the held issue first (Hard Rules); otherwise drain unassigned `review` before `ready`, rechecking the delivery blocker before claiming published work. The review queue is requester-aware (`list_state` excludes an unresolved handoff's publishing and requesting runs); a failed candidate-timeline read makes it unreadable rather than eligible. An item in `blocked` whose every recorded clause already holds is discharged before the queue reads as empty — the analyst's drain rule, applied here: move it to the state its preserved evidence supports, then select and claim it under this run's own id.
 2. For `ready`, partition valid candidates by stable domain and declared scale, rank only within each partition, and choose the oldest partition head; a selected domain limits selection to its highest-ranked oldest item. Use oldest-first only when no candidate has a valid scale contract.
-3. `claim` with the run-id and horizon, which the store adjudicates; the earliest live claim wins, and a loser releases and selects again. Pass `transition_to` to move the issue in the same call — `claim` then `transition` as one, which is what every ready item needs — or omit it to claim without moving. Keep claimed review work in `review` unless a code change requires `in-progress` and a fresh publish/review/CI cycle; for ready work, move once to `in-progress` with `dev:<runtime>` and no second claim event. Move a task between states on your own only when `Transition authorisation` authorises this run; otherwise ask first and say which move you are asking for.
+3. `claim` with the run-id and horizon, which the store adjudicates; the earliest live claim wins, and a loser releases and selects again. Pass `transition_to` to move the issue, and `branch` and `base` to create its checkout, in that call, as every ready item needs, or omit them to claim alone. Keep claimed review work in `review` unless a code change requires `in-progress` and a fresh publish/review/CI cycle; for ready work, move once to `in-progress` with `dev:<runtime>` and no second claim event. Move a task between states on your own only when `Transition authorisation` authorises this run; otherwise ask first and say which move you are asking for.
 4. Load the route's right-hand implementation rule book before planning; if absent, state that none applies and build to written acceptance criteria. Follow repository rules, use the repository-delivery fallback for missing isolation, integration, or review-unit sizing policy, and implement in the isolated checkout; the gate re-verifies the claim against the first branch/worktree/file write it observes.
 5. **Renew before publishing.** Publish or reuse the shared PR as a confirmed draft, record its
    epoch, PR, head, base and clean-target digest, then transition to `review`; read the publication
@@ -120,8 +120,8 @@ authority nor independence.
    the lane is red; `with_review` brings the tier and status alone. Then follow `review_status`'s
    `next` until it stops: `launch_review_input` and `collect_review_input` for every slot it offers
    (`names` batches either; `record_verdict` on the collect records the verdict once
-   `review_status` names it); `record_computed_verdict` for the receipt; `release_ci`, its own
-   call. Call `escalate_review` when a spent correction leaves the decision
+   `review_status` names it); then `deliver`, or `record_computed_verdict` and `release_ci` where
+   it names those. Call `escalate_review` when a spent correction leaves the decision
    to a person, and `handoff_review` when this run cannot obtain the required distinct context.
    [Blind judges](policies/blind-judges.md) owns the settlement order, the refutation batch, the
    targeted validator, the one-correction rule, the classification of findings and the release
