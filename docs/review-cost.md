@@ -172,12 +172,19 @@ name still dispatches and refuses with its own typed reason.
 - **Payload threshold.** Answers carrying 73,272 and 145,756 payload bytes were refused by the MCP
   surface and one carrying 36,288 was not, so the threshold sits inside the ordinary range; that is
   why `inline_payload` defaults to false.
-- **`ALWAYS_LOADED`** (eleven tools in `src/harness/mcp/tools.rs`) carry
+- **`ALWAYS_LOADED`** (eight tools in `src/harness/mcp/tools.rs`) carry
   `"_meta": {"anthropic/alwaysLoad": true}`, which Claude Code reads to load a schema at session
   start instead of spending one to three `ToolSearch` turns before the first `claim`. In the lever
   bench below, 16 of 18 publishing runs spent a `ToolSearch` turn on `record_spend` or `review_read`
   to learn the receipt fields, and 6 had a first `release` refused `missing-argument`; one turn costs
   about 50,000 tokens of context and the hundred bytes are paid once.
+  The other side of the trade is that a marked schema is paid on every turn of every session. A tool
+  stays marked only while most deliveries call it. Over the operator's sessions from 2026-10-24 to
+  2026-10-28 (15 sessions, 7,033 turns), `launch_review_input` was called twice, because
+  `publish_review`'s `start_review` launches the slots. Over MCP, `review_status` now names `deliver`
+  in place of `record_computed_verdict` and `release_ci` wherever `deliver` carries an approval to the
+  merge. Those three schemas, about 4 KB together, were unmarked; the run that needs one of them loads
+  it with one `ToolSearch`.
 - **`compact: true`** omits `build` from an answer and drops from `review_status`'s `next.arguments`
   the fields `receipt` already holds. Without it every answer is byte-identical to before.
 - **`ensure_states`** says that while the git operation window is closed it answers `deferred` and
