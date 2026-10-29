@@ -874,19 +874,21 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
         ("remote keyword", head_sha, "Closes #12", LISTED_SEVEN, true),
         ("unconfirmed", "f".repeat(40), "names nothing", "[]", false),
     ] {
+        let issue_comments = vec![serde_json::json!({
+            "id": "IC_1",
+            "createdAt": "2026-01-01T00:00Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("Claimed.\n\n{claim}\n"),
+        })];
+        record_cause_over_latest_receipt(home, 12);
         let answers = serde_json::to_string(&serde_json::json!([
         {
             "matches": "issue view",
             "stdout": serde_json::json!({
                 "state": "OPEN",
                 "labels": [{"name": "status:in-progress"}],
-                "comments": [{
-                    "id": "IC_1",
-                    "createdAt": "2026-01-01T00:00Z",
-                    "viewerDidAuthor": true,
-                    "includesCreatedEdit": false,
-                    "body": format!("Claimed.\n\n{claim}\n"),
-                }],
+                "comments": issue_comments,
             }).to_string(),
             "status": 0,
         },
@@ -1804,6 +1806,13 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
                 "includesCreatedEdit": false,
                 "body": format!("Published draft for review.\n\n{receipt}\n"),
             }));
+            comments.extend(republish_cause(
+                run_id,
+                &published_head,
+                &base_sha,
+                &"c".repeat(64),
+                &"a".repeat(32),
+            ));
         }
         serde_json::json!({
             "state": "OPEN",
@@ -2552,9 +2561,16 @@ fn a_rebased_republish_records_history_rewritten_instead_of_the_parent_range() {
              epoch={parent_epoch} -->\n"
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &parent_digest,
+        &parent_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
     let pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",

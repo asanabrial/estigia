@@ -3639,6 +3639,9 @@ struct ReceiptStanding {
     /// finding is what answered its verdict — the finding that licensed a
     /// repair. `None` when no finding answered it.
     clearing_finding: Option<String>,
+    /// The class of the newest finding recorded against the receipt after its
+    /// newest lens report, whether or not a verdict exists.
+    finding_since_reports: Option<String>,
 }
 
 /// A `rejected` aggregate verdict and a local `escalated` receipt stand over any later marker.
@@ -3652,6 +3655,7 @@ fn receipt_standing(
     let mut aggregate_rejected = false;
     let mut finding_at: Option<usize> = None;
     let mut finding_class: Option<String> = None;
+    let mut report_at: Option<usize> = None;
     for (position, comment) in comments.iter().enumerate() {
         if !comment.viewer_did_author || comment.includes_created_edit {
             continue;
@@ -3671,6 +3675,11 @@ fn receipt_standing(
                     {
                         aggregate_rejected |= recorded.outcome == "rejected";
                         aggregate_verdict = Some((position, recorded.outcome == "accepted"));
+                    }
+                }
+                Some("review-lens-report") => {
+                    if computed::report_receipt(&marker).is_some_and(|found| found == *receipt) {
+                        report_at = Some(position);
                     }
                 }
                 Some("review-finding") => {
@@ -3712,8 +3721,72 @@ fn receipt_standing(
         standing,
         escalated: escalated || computed_escalated,
         answered,
+        finding_since_reports: match (report_at, finding_at) {
+            (Some(report), Some(finding)) if finding > report => finding_class.clone(),
+            (None, Some(_)) => finding_class.clone(),
+            _ => None,
+        },
         clearing_finding: if answered { finding_class } else { None },
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn unjudged_republish_refusal(
+    context: &Context,
+    at: &std::path::Path,
+    comments: &[ownership::Comment],
+    parent: &LatestPublication,
+    standing: &ReceiptStanding,
+    payload_base: &str,
+    worktree: Option<&std::path::Path>,
+    issue: u64,
+) -> Result<Option<serde_json::Value>, Failure> {
+    let Ok((_, ledger)) = computed::computed_for(context, comments, &parent.receipt, worktree)
+    else {
+        return Ok(None);
+    };
+    let approved = match ledger.outcome {
+        computed::ComputedOutcome::Approved if standing.finding_since_reports.is_none() => true,
+        computed::ComputedOutcome::Incomplete => false,
+        _ => return Ok(None),
+    };
+    if base_advanced_past(at, &parent.receipt.base, payload_base)? {
+        return Ok(None);
+    }
+    let refusal = if approved {
+        serde_json::json!({
+            "ok": false,
+            "reason": "approved-republish-without-cause",
+            "issue": issue,
+            "pr": parent.receipt.pr,
+            "epoch": parent.receipt.epoch,
+            "head": parent.receipt.head,
+            "action": "this pull request's last publication has every lens reported and its \
+                       ledger computes approved, no finding has been recorded against that exact \
+                       receipt since its newest lens report, and the base has not advanced past \
+                       the one it recorded. Republishing now would pay a new review for a \
+                       warning or suggestion the policy elects nothing on. Run \
+                       record_computed_verdict first and deliver; or record a review_finding \
+                       against that receipt naming the defect the panel did not weigh, which \
+                       licenses the narrow repair. Nothing has been pushed and no pull request \
+                       was opened",
+        })
+    } else {
+        serde_json::json!({
+            "ok": false,
+            "reason": "republish-before-panel-reported",
+            "issue": issue,
+            "pr": parent.receipt.pr,
+            "epoch": parent.receipt.epoch,
+            "head": parent.receipt.head,
+            "missing_roles": ledger.missing_roles,
+            "action": "a lens this receipt's tier licenses has not reported yet, and a republish \
+                       now abandons lenses that are already running or paid for. Collect them \
+                       and record their reports, then decide. Nothing has been pushed and no \
+                       pull request was opened",
+        })
+    };
+    Ok(Some(refusal))
 }
 
 /// A first publication, or one over an approved parent, begins a new lineage and zeroes the count;
@@ -8796,7 +8869,21 @@ fn publish_with_sleep(
                                has been pushed and no pull request was opened",
                 })));
             }
-            Standing::Approved | Standing::Unjudged => {}
+            Standing::Approved => {}
+            Standing::Unjudged => {
+                if let Some(refusal) = unjudged_republish_refusal(
+                    context,
+                    at,
+                    &comments,
+                    parent,
+                    verdict,
+                    payload_base,
+                    worktree,
+                    issue,
+                )? {
+                    return Err(Failure::Stop(refusal));
+                }
+            }
         }
     }
 

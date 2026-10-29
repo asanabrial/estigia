@@ -112,7 +112,7 @@ fn world(
             "includesCreatedEdit": false, "body": body,
         })
     };
-    let comments = vec![
+    let mut comments = vec![
         comment(
             "IC_claim",
             "2026-08-14T09:00:00Z",
@@ -143,6 +143,22 @@ fn world(
             ),
         ),
     ];
+    if publishing {
+        comments.extend(republish_cause_roles(
+            7,
+            RUN_ID,
+            &head,
+            &base,
+            &"2".repeat(64),
+            &"2".repeat(32),
+            &[
+                "review-reliability",
+                "review-risk",
+                "review-readback",
+                "review-readability",
+            ],
+        ));
+    }
     let pr = serde_json::json!({
         "number": 7,
         "url": "https://github.com/o/r/pull/7",
