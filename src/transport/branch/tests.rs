@@ -2333,6 +2333,36 @@ fn an_earlier_slice_this_run_delivered_is_put_down_beside_the_pointer() {
 }
 
 #[test]
+fn a_sibling_sweep_launched_from_the_removed_checkout_runs_from_the_main_working_tree() {
+    let (root, repo, checkout, head) = delivered_checkout();
+    let earlier = sibling_checkout(&repo, root.path(), "slice-one", "run-a");
+    let inside = retire_context(&checkout);
+    let surviving = retire_context(&super::outliving(&checkout, &inside.repo_dir));
+    let retired = super::retire_checkout(&inside, &checkout, &head);
+    assert!(retired.worktree_removed, "{retired:?}");
+
+    let siblings = super::retire_sibling_checkouts(
+        &surviving,
+        "run-a",
+        &["slice-one".to_owned(), "work".to_owned()],
+        &checkout,
+        &head,
+    )
+    .expect("the registry is read from a directory that still exists");
+    assert!(
+        !earlier.exists(),
+        "the delivered slice stayed: {siblings:?}"
+    );
+    assert_eq!(siblings.len(), 1, "{siblings:?}");
+}
+
+#[test]
+fn a_directory_outside_the_checkout_outlives_it_unchanged() {
+    let (_root, repo, checkout, _head) = delivered_checkout();
+    assert_eq!(super::outliving(&checkout, &repo), repo);
+}
+
+#[test]
 fn a_slice_whose_head_the_delivery_does_not_contain_is_kept() {
     let (root, repo, checkout, head) = delivered_checkout();
     let ahead = sibling_checkout(&repo, root.path(), "slice-ahead", "run-a");

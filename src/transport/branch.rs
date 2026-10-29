@@ -2344,6 +2344,19 @@ pub fn retire_checkout(
     })
 }
 
+/// The directory a command can still run in once `worktree` is put down: the
+/// main working tree when `directory` lies inside `worktree`, `directory`
+/// itself otherwise. Read before the removal, since git cannot answer from a
+/// directory that is gone.
+pub fn outliving(worktree: &std::path::Path, directory: &std::path::Path) -> std::path::PathBuf {
+    if crate::paths::covers(worktree, directory)
+        && let Some(main) = retirement_cwd(worktree)
+    {
+        return main;
+    }
+    directory.to_path_buf()
+}
+
 /// Puts down every other checkout `run_id` created on one of `branches`, once
 /// the delivery at `delivering_sha` contains its head.
 ///

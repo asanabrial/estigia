@@ -7,7 +7,7 @@
 //! tests script them. The steps and their hand-backs are in the binding's
 //! *CI, merge and delivery* section.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -1016,9 +1016,31 @@ struct Live<'a> {
     context: &'a GateContext,
     run_id: &'a str,
     transport: transport::Context,
+    outliving: PathBuf,
 }
 
-impl Live<'_> {
+fn exec_directory<'a>(directory: &'a Path, outliving: &'a Path) -> &'a Path {
+    if directory.is_dir() {
+        directory
+    } else {
+        outliving
+    }
+}
+
+impl<'a> Live<'a> {
+    fn new(context: &'a GateContext, run_id: &'a str, repo: Option<String>) -> Self {
+        Live {
+            context,
+            run_id,
+            outliving: transport::branch::outliving(&context.repo_dir, &context.repo_dir),
+            transport: transport::Context::live(
+                context.skill_root.clone(),
+                context.repo_dir.clone(),
+                repo,
+            ),
+        }
+    }
+
     fn pinned<T>(&self, body: impl FnOnce() -> T) -> T {
         let _pin = crate::harness::gh_repo_pin();
         crate::harness::apply_gh_repo_locked(self.transport.repo.as_deref());
@@ -1045,7 +1067,8 @@ impl Hands for Live<'_> {
     }
 
     fn exec(&self, args: &[&str], how: How) -> Result<Output, Failure> {
-        self.pinned(|| transport::run(args, Some(&self.transport.repo_dir), how))
+        let directory = exec_directory(&self.transport.repo_dir, &self.outliving);
+        self.pinned(|| transport::run(args, Some(directory), how))
     }
 
     fn merge_decision(&self, pr: u64) -> Result<(), Value> {
@@ -1202,15 +1225,7 @@ pub(super) fn deliver(
             .map(ToOwned::to_owned),
         appendix,
     };
-    let live = Live {
-        context,
-        run_id: named.id,
-        transport: transport::Context::live(
-            context.skill_root.clone(),
-            context.repo_dir.clone(),
-            context.repository_host.named_repo(),
-        ),
-    };
+    let live = Live::new(context, named.id, context.repository_host.named_repo());
     Ok(result_of(run(&live, &request), compact))
 }
 

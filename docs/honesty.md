@@ -3916,7 +3916,10 @@ and a merge whose answer was lost). What it does not measure:
 - **The lens roles in the evidence follow the tier and focus recorded on the receipt**, not each lens's
   report. **The summary line has two languages** (`English`, `Español`); any other `Summary language` is
   written in English. **The GitHub issue is closed after the release**: a failure of that last close
-  leaves the issue `done` and released but open, reported as `delivery_incomplete`.
+  leaves the issue `done` and released but open, reported as `delivery_incomplete`. A `deliver` started
+  in the checkout its release removes runs every later read from the main working tree
+  (`a_delivery_run_from_the_checkout_its_release_removes_still_reads_the_close`); when git cannot name
+  that tree, the read still fails closed.
 
 ## What `estigia changes` does not do
 
