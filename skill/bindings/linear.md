@@ -54,7 +54,8 @@ pull request merged. Each move reads the issue's state and its team's states
 the state back. An issue already there is not moved again (`moved: false`).
 
 The move is reported under `linear_state` beside the tool's own answer, never folded into it: the
-checkout, the ready pull request or the merge happened whatever Linear answered. Its refusals are
+checkout, the ready pull request or the merge happened whatever Linear answered. The answer's
+`tracker_written` reads `true` when the state moved and `null` when the move's outcome is unknown. Its refusals are
 `linear-state-unknown` (the team has no state of that name; nothing is sent), `linear-move-refused`
 (Linear did not accept the mutation — a read-only credential is the common cause) and
 `linear-move-unconfirmed` (the mutation was sent and no answer could be read) and
