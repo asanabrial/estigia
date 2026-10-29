@@ -195,6 +195,8 @@ fn inventory() -> Vec<Refusal> {
                 pane: None,
                 host_pid: None,
                 host_name: None,
+                binary: None,
+                session_file: None,
                 handoffs: Vec::new(),
                 reported: None,
             };

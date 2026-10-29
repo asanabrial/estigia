@@ -61,8 +61,26 @@ macro_rules! line {
     }};
 }
 
-/// Parses the command line and runs it.
+/// Parses the command line and runs it. On Windows it runs on a thread with
+/// Unix's 8 MiB stack: a debug build overflows MSVC's 1 MiB main stack.
 pub fn run() -> ProcessExitCode {
+    if cfg!(windows) {
+        let spawned = std::thread::Builder::new()
+            .name("main".to_owned())
+            .stack_size(UNIX_MAIN_STACK_BYTES)
+            .spawn(run_here);
+        if let Ok(thread) = spawned {
+            return thread
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+        }
+    }
+    run_here()
+}
+
+const UNIX_MAIN_STACK_BYTES: usize = 8 * 1024 * 1024;
+
+fn run_here() -> ProcessExitCode {
     // `try_parse`, not `parse`: clap exits 2 on a usage error, and 2 must only ever
     // mean *interrupted* here — every hook reads 1 and 2 as decisions.
     let cli = match Cli::try_parse() {
@@ -6298,6 +6316,7 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
             reason,
             previous_session_id,
             wake,
+            session_file,
         } => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let context = gate_context(&cwd.to_string_lossy())?;
@@ -6309,6 +6328,14 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
                 &cwd,
                 wake.as_deref(),
             );
+            if let Some(file) = session_file {
+                harness::registry::record_session_file(
+                    &context.state_root,
+                    runtime,
+                    session_id,
+                    file,
+                );
+            }
             let run = harness::session::load(
                 &context.state_root,
                 &harness::session::run_id(runtime, session_id),

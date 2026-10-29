@@ -24,7 +24,7 @@ pub const DEFAULT_RUNTIME: &str = "claude";
 
 /// The agents whose run ids begin with a runtime word other than
 /// [`DEFAULT_RUNTIME`], keyed by the slug their hook is registered under.
-pub const AGENT_RUNTIMES: &[(&str, &str)] = &[("codex", "codex")];
+pub const AGENT_RUNTIMES: &[(&str, &str)] = &[("codex", "codex"), ("cursor", "cursor")];
 
 /// The runtime word a hook registered by `agent` derives its run id with:
 /// [`DEFAULT_RUNTIME`] for an agent not in [`AGENT_RUNTIMES`] and for a hook

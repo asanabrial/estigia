@@ -278,4 +278,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
     ALTER TABLE sessions ADD COLUMN host_pid INTEGER;
     ALTER TABLE sessions ADD COLUMN host_name TEXT;
     ",
+    "
+    ALTER TABLE sessions ADD COLUMN binary TEXT;
+    ALTER TABLE sessions ADD COLUMN session_file TEXT;
+    ",
 ];

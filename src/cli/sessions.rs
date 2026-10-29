@@ -63,6 +63,10 @@ pub(crate) struct Listed {
     pub(crate) host_pid: Option<u64>,
     #[serde(skip)]
     pub(crate) host_name: Option<String>,
+    #[serde(skip)]
+    pub(crate) binary: Option<String>,
+    #[serde(skip)]
+    pub(crate) session_file: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) handoffs: Vec<Handoff>,
     #[serde(flatten)]
@@ -481,6 +485,8 @@ fn registry_and_pointers(
                 pane: row.pane,
                 host_pid: row.host_pid,
                 host_name: row.host_name,
+                binary: row.binary,
+                session_file: row.session_file,
                 handoffs: Vec::new(),
                 reported: None,
             },
@@ -518,6 +524,8 @@ fn registry_and_pointers(
             pane: None,
             host_pid: None,
             host_name: None,
+            binary: None,
+            session_file: None,
             handoffs: Vec::new(),
             reported: None,
         });

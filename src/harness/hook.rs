@@ -3409,6 +3409,7 @@ mod tests {
     fn each_agent_derives_the_runtime_its_run_id_begins_with() {
         assert_eq!(session::runtime_of_agent(Some("codex")), "codex");
         assert_eq!(session::runtime_of_agent(Some("claude-code")), "claude");
+        assert_eq!(session::runtime_of_agent(Some("cursor")), "cursor");
         assert_eq!(session::runtime_of_agent(Some("gemini-cli")), "claude");
         assert_eq!(session::runtime_of_agent(None), session::DEFAULT_RUNTIME);
         for (slug, runtime) in session::AGENT_RUNTIMES {
