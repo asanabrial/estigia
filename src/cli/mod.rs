@@ -5527,6 +5527,9 @@ fn release(run_id: &str, json: bool) -> Result<(), Refusal> {
             Resolution::run("estigia status"),
         ));
     };
+    if run.assisted {
+        return release_assisted(&context, &run, run_id, &issue, json);
+    }
     let answer = match tool(
         "release",
         &serde_json::json!({ "issue": issue, "run_id": run_id }),
@@ -5610,6 +5613,68 @@ fn forget_since_nothing_to_release(
     issue: &crate::identity::Identity,
     json: bool,
 ) -> Result<(), Refusal> {
+    refuse_another_repository(context, run, run_id)?;
+    harness::session::forget(&context.state_root, run_id);
+    if json {
+        print_json(&serde_json::json!({
+            "released": false,
+            "forgotten": true,
+            "issue": issue,
+            "run_id": run_id,
+        }));
+        return Ok(());
+    }
+    say!("{run_id} holds no epoch of #{issue} on the tracker; its local pointer is forgotten");
+    Ok(())
+}
+
+/// Puts down an assisted run: its pointer is the whole claim, so nothing is
+/// written to the tracker, and its checkout is kept because nothing here can
+/// read whether a person delivered it.
+fn release_assisted(
+    context: &harness::GateContext,
+    run: &harness::session::Run,
+    run_id: &str,
+    issue: &crate::identity::Identity,
+    json: bool,
+) -> Result<(), Refusal> {
+    refuse_another_repository(context, run, run_id)?;
+    harness::session::forget(&context.state_root, run_id);
+    let kept = run
+        .worktree
+        .as_ref()
+        .map(|worktree| worktree.display().to_string());
+    if json {
+        let mut answer = serde_json::json!({
+            "released": true,
+            "forgotten": true,
+            "issue": issue,
+            "run_id": run_id,
+            "tracker_written": false,
+        });
+        if let Some(worktree) = &kept {
+            answer["checkout"] = serde_json::json!({
+                "removed": false,
+                "outcome": "kept",
+                "worktree": worktree,
+                "detail": "an assisted run cannot read whether its branch was delivered",
+            });
+        }
+        print_json(&answer);
+        return Ok(());
+    }
+    say!("released: {run_id} no longer holds #{issue}; nothing was written to the tracker");
+    if let Some(worktree) = kept {
+        say!("kept {worktree}: an assisted run cannot read whether its branch was delivered");
+    }
+    Ok(())
+}
+
+fn refuse_another_repository(
+    context: &harness::GateContext,
+    run: &harness::session::Run,
+    run_id: &str,
+) -> Result<(), Refusal> {
     let same_repository = run
         .repo_dir
         .as_deref()
@@ -5637,17 +5702,6 @@ fn forget_since_nothing_to_release(
             ),
         ));
     }
-    harness::session::forget(&context.state_root, run_id);
-    if json {
-        print_json(&serde_json::json!({
-            "released": false,
-            "forgotten": true,
-            "issue": issue,
-            "run_id": run_id,
-        }));
-        return Ok(());
-    }
-    say!("{run_id} holds no epoch of #{issue} on the tracker; its local pointer is forgotten");
     Ok(())
 }
 

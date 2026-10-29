@@ -3128,7 +3128,11 @@ pointer that leaves it names the document it points at.
   where the call runs (`harness::assisted`,
   `a_shell_write_from_the_base_checkout_is_still_placed_by_where_it_runs`). A write tool whose paths live in its body and a shell command
   whose destination cannot be placed (`patch -p1 < x.diff`) are refused `assisted-write-unplaced`; delivery
-  and `gh pr create` from a shell are refused with `draft_pr` named. What it does not hold:
+  and `gh pr create` from a shell are refused with `draft_pr` named. `estigia release --run-id <run>` puts an
+  assisted run down whether its issue is a number or a key: it forgets the pointer, writes no tracker and keeps
+  the worktree, because nothing local reads whether a person delivered the branch
+  (`releasing_an_assisted_run_forgets_its_pointer_whatever_names_the_issue`); `already-holding` from an
+  assisted holder and the refused `release` tool name that command. What it does not hold:
   - **`git push origin HEAD` is refused**: the hook reads `HEAD` as the local ref
     (`git_hands_the_hook_head_and_not_the_branch_for_a_push_of_head`). A push is admitted only when every
     line has the run's branch as both refs; `branch:main`, a tag and a deletion are refused

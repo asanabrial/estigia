@@ -775,7 +775,14 @@ fn run_tool_asking(
                  repository's own file: the team coordinates who takes an issue, and Estigia \
                  writes nothing to it"
             ),
-            Resolution::run("estigia config set Workflow autonomous --repo"),
+            match arguments.get("run_id").and_then(Value::as_str) {
+                Some(run_id)
+                    if name == "release" && session::load(&context.state_root, run_id).assisted =>
+                {
+                    Resolution::run(format!("estigia release --run-id {run_id}"))
+                }
+                _ => Resolution::run("estigia config set Workflow autonomous --repo"),
+            },
         ))));
     }
 
@@ -976,7 +983,7 @@ fn run_tool_asking(
         if let (Some(held), Some(wanted)) = (held, wanted)
             && held != wanted
         {
-            let way_out = if tool.effect == PointerEffect::Assisted {
+            let way_out = if tool.effect == PointerEffect::Assisted && !holding.assisted {
                 Resolution::no_command(
                     crate::outcome::NoCommandReason::OperatorKnowledge,
                     format!(

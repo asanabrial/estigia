@@ -10944,3 +10944,59 @@ fn status_set_parses_beside_the_bare_status_and_takes_only_a_listed_phase() {
         "blocked is a workflow state and not a phase"
     );
 }
+
+#[test]
+fn releasing_an_assisted_run_forgets_its_pointer_whatever_names_the_issue() {
+    for issue in [
+        crate::identity::Identity::Key("ABC-102".to_owned()),
+        crate::identity::Identity::Number(12),
+    ] {
+        let repo = release_repo();
+        let state = tempfile::tempdir().expect("a temporary state root");
+        let mut run = harness::session::Run::new("claude-assisted0".to_owned());
+        run.issue = Some(issue.clone());
+        run.repo_dir = Some(repo.path().to_path_buf());
+        run.worktree = Some(repo.path().join("worktree"));
+        run.assisted = true;
+        assert!(
+            harness::session::store(state.path(), &run).expect("the pointer writes"),
+            "the fixture pointer was not stored"
+        );
+
+        let mut context = release_context(repo.path(), state.path());
+        context.workflow = Some(crate::config::Workflow::Assisted);
+        release_assisted(&context, &run, "claude-assisted0", &issue, true)
+            .expect("an assisted run is released without the tracker");
+
+        let after = harness::session::load(state.path(), "claude-assisted0");
+        assert_eq!(
+            after.issue, None,
+            "{issue}: the pointer is still on disk: {after:?}"
+        );
+    }
+}
+
+#[test]
+fn releasing_an_assisted_run_from_another_repository_forgets_nothing() {
+    let claimed_in = release_repo();
+    let run_from = release_repo();
+    let state = tempfile::tempdir().expect("a temporary state root");
+    let issue = crate::identity::Identity::Key("ABC-102".to_owned());
+    let mut run = harness::session::Run::new("claude-assisted1".to_owned());
+    run.issue = Some(issue.clone());
+    run.repo_dir = Some(claimed_in.path().to_path_buf());
+    run.assisted = true;
+    assert!(
+        harness::session::store(state.path(), &run).expect("the pointer writes"),
+        "the fixture pointer was not stored"
+    );
+
+    let context = release_context(run_from.path(), state.path());
+    let refusal = release_assisted(&context, &run, "claude-assisted1", &issue, true)
+        .expect_err("a release from another repository was not refused");
+    assert_eq!(refusal.code, "release-repository-mismatch");
+    assert_eq!(
+        harness::session::load(state.path(), "claude-assisted1").issue,
+        Some(issue)
+    );
+}

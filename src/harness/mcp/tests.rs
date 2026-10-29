@@ -8860,3 +8860,46 @@ fn a_computable_verdict_and_an_approval_are_routed_through_deliver_only_where_it
     super::route_through_deliver("review_status", &mut other, || true);
     assert_eq!(other, status("correction-due", "publish_review"));
 }
+
+#[test]
+fn assist_from_an_assisted_run_holding_another_issue_names_its_release() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = assisted_context(&root);
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Key("ABC-99".to_owned()));
+    run.assisted = true;
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let ToolFailure::Refused(refusal) = run_tool("assist", &assist_arguments(12), Ok(&context))
+        .expect_err("a run holding ABC-99 took #12")
+    else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "already-holding");
+    assert_eq!(
+        refusal.resolution,
+        Resolution::run("estigia release --run-id claude-abcd1234")
+    );
+}
+
+#[test]
+fn the_release_tool_under_assisted_names_the_local_release_for_an_assisted_pointer() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = assisted_context(&root);
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.assisted = true;
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let ToolFailure::Refused(refusal) = run_tool(
+        "release",
+        &json!({ "issue": 12, "run_id": "claude-abcd1234" }),
+        Ok(&context),
+    )
+    .expect_err("the tracker release ran under assisted") else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "workflow-assisted-writes-no-tracker");
+    assert_eq!(
+        refusal.resolution,
+        Resolution::run("estigia release --run-id claude-abcd1234")
+    );
+}
