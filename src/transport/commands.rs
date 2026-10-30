@@ -1159,6 +1159,9 @@ pub enum TasksView<'a> {
     One(&'a str),
 }
 
+/// The shape of the compact `task` answer, so a consumer can tell it from a later one.
+pub const COMPACT_TASK_VERSION: u64 = 1;
+
 /// `task` — record or update one row of the claimed issue's task checklist.
 ///
 /// The checklist lives in the local store, never on the tracker: a write is
@@ -1239,6 +1242,7 @@ pub fn task(context: &Context, call: &TaskCall<'_>) -> Result<serde_json::Value,
     if call.compact {
         return Ok(serde_json::json!({
             "ok": true,
+            "version": COMPACT_TASK_VERSION,
             "issue": call.issue,
             "task": task_json(&row),
         }));

@@ -1322,6 +1322,7 @@ fn the_task_arm_reads_the_compact_switch_and_answers_the_changed_row_alone() {
         compact,
         serde_json::json!({
             "ok": true,
+            "version": crate::transport::commands::COMPACT_TASK_VERSION,
             "issue": 5,
             "task": {
                 "id": "T1",
