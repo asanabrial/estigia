@@ -2032,7 +2032,13 @@ pointer that leaves it names the document it points at.
   **grammar checked byte by byte** in `data_view`, an allowlist (the denylist it replaced lost seven review
   rounds, each to one more spelling bash reads differently): a bare first word from a bounded list of
   read-only commands, a restricted byte set outside quotes, quotes opened at a word start and plain
-  here-documents. `rg`, `sort`, `printf` and `test` are absent because they run what they are handed
+  here-documents. A **compound line** is read one top-level simple command at a time by the same grammar,
+  which there also accepts a plain `$name`: a single-quoted `--jq` program inside a `for` loop is data. The
+  whole line keeps the whole-text scan when data could reach execution through it — a pipe into anything
+  outside the list, a redirect, a here-document, `<(`, `${`, `$'`, a comment, a backslash, or a name
+  (`PATH`, `alias`, `function`, `hash`, `case`) that could change what a command resolves to or hide a
+  boundary — and nothing inside `$(…)` or backticks is blanked. `gh api` has no verb, so a quoted endpoint
+  after it is data. `rg`, `sort`, `printf` and `test` are absent because they run what they are handed
   (`rg --pre`, `sort --compress-program`, array subscripts), and `gh repo`/`gist` because `clone`, `fork` and
   `create` forward words after `--` to `git`. **Not closed:** an unquoted argument, so `echo git push` still
   reads as a boundary; what a user's shell profile or an alias changes about the allowlisted names is
@@ -3315,7 +3321,8 @@ pointer that leaves it names the document it points at.
   those as boundaries (no renewal window, a fresh read every time). It **only adds**: no value removes a
   built-in, because a setting that can make the gate looser is not a guard rail. Nobody can express a rule
   the classifier has no shape for; matching is substring, on a normalised command line whose
-  provably-data spans are blanked only when the whole line is one read-only simple command.
+  provably-data spans are blanked only in read-only simple commands, alone or as the top-level commands of
+  a compound line through which no data reaches execution.
 - **Decisions are written down; the reasoning behind them is not.** Every allow and deny is appended to the
   local store's `decisions` table with the run, the tool, **what the decision was about**, the verdict and the
   refusal code. `Outside` is not recorded (a record per tool call of every session that never swore would bury
