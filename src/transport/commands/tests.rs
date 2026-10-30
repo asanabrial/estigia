@@ -1172,6 +1172,7 @@ fn the_compact_task_acknowledgment_carries_only_the_changed_row() {
         "twenty compact inserts emitted {copies} row copies, where only twenty rows changed"
     );
     let last = &last;
+    assert_eq!(last["version"], super::COMPACT_TASK_VERSION, "{last}");
     assert_eq!(last["task"]["id"], "T20", "{last}");
     assert_eq!(last["task"]["text"], "a task", "{last}");
     assert_eq!(last["task"]["route"], "inline", "{last}");
@@ -1187,6 +1188,73 @@ fn the_compact_task_acknowledgment_carries_only_the_changed_row() {
         "task reached GitHub for a write: {:?}",
         gh_writes(&log)
     );
+}
+
+/// A compact acknowledgment lost on the way back is safe to send again: the retry
+/// answers the same row, and the checklist keeps one row per id in first-recorded
+/// order. A reopen keeps the commit the row was closed with.
+#[test]
+fn a_lost_compact_acknowledgment_retried_answers_the_same_row_in_the_same_place() {
+    fn record(
+        context: &crate::transport::Context,
+        id: &str,
+        status: Option<&str>,
+        commit: Option<&str>,
+    ) -> serde_json::Value {
+        super::task(
+            context,
+            &super::TaskCall {
+                issue: 5,
+                run_id: "claude-abcd1234",
+                expect_state: "in-progress",
+                id,
+                text: Some("a task"),
+                route: Some("inline"),
+                status,
+                commit,
+                evidence: None,
+                compact: true,
+                now: "2026-01-02T00:00Z",
+            },
+        )
+        .expect("the task records")
+    }
+
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let store_path = root.path().join("state.db");
+    let mut context = local_context(root.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+
+    let (first, retried, reopened, read) =
+        crate::transport::store::with_store_at(&store_path, || {
+            crate::test_env::with_logging_gh(bin.path(), &held, &log, || {
+                for id in ["T1", "T2", "T3"] {
+                    record(&context, id, None, None);
+                }
+                let first = record(&context, "T2", Some("done"), Some("abc1234"));
+                let retried = record(&context, "T2", Some("done"), Some("abc1234"));
+                let reopened = record(&context, "T2", Some("open"), None);
+                let read =
+                    super::tasks(&context, 5, super::TasksView::Full).expect("the checklist reads");
+                (first, retried, reopened, read)
+            })
+        });
+
+    assert_eq!(
+        retried, first,
+        "a retried acknowledgment answered another row"
+    );
+    assert_eq!(reopened["task"]["done"], false, "{reopened}");
+    assert_eq!(reopened["task"]["commit"], "abc1234", "{reopened}");
+    assert_eq!(read["count"], 3, "{read}");
+    assert_eq!(ids(&read["tasks"]), ["T1", "T2", "T3"]);
 }
 
 /// A compact revision answers with the revised row alone and leaves the legacy
@@ -1276,6 +1344,7 @@ fn a_compact_revision_answers_the_revised_row_and_leaves_the_checklist_alone() {
         revised,
         serde_json::json!({
             "ok": true,
+            "version": super::COMPACT_TASK_VERSION,
             "issue": 5,
             "task": {
                 "id": "T1",
