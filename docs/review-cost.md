@@ -192,7 +192,8 @@ name still dispatches and refuses with its own typed reason.
   the receipt fields but `epoch`. A receipt-taking call that sends `epoch` and leaves out `pr`, `head`,
   `base` or `digest` has them filled by the server from this run's pointer when it holds that epoch's
   review transaction for the issue (`expanded_receipt`), and is refused for another epoch, so the model
-  never rebuilds a receipt. Without it every answer is byte-identical to before.
+  never rebuilds a receipt; a compact `review_status` answer names its shape in `compact_version`. Without
+  it every answer is byte-identical to before.
 - **`ensure_states`** says that while the git operation window is closed it answers `deferred` and
   writes nothing, and that a queued create, claim or transition creates the labels at the flush: a caller
   that reads `deferred` as the whole answer has no reason to wait for the flush.

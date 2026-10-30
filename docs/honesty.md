@@ -2959,8 +2959,10 @@ pointer that leaves it names the document it points at.
   `src/harness/mcp/mod.rs` fills `pr`, `head`, `base` and `digest` for a call that names only `epoch`
   when the calling run's pointer holds that epoch's review transaction for the issue
   (`a_receipt_named_by_its_epoch_is_filled_from_the_pointer_holding_it`). Another run, or a pointer that
-  lost its transaction, gets the old missing-argument answer. The compact view carries no version, and
-  only the `execute` shape is covered; a round trip through `collect` and `stop` answers is not tested.
+  lost its transaction, gets the old missing-argument answer. The compact view carries `compact_version`;
+  `collect`, `stop` and an unpublished answer keep what they cannot rebuild, and a compacted `execute`
+  expands back to its arguments (`a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped`).
+  The CLI has no compact `review_status` view.
 
 - **A phantom holder is reconciled against the tracker only where the ambiguity is real.**
   `guard::adjudicate_action` asks the tracker about each named holder before refusing

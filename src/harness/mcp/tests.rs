@@ -8836,6 +8836,7 @@ fn a_compact_review_status_names_the_receipt_once() {
     });
     let mut compacted = status.clone();
     super::without_repeated_receipt(&mut compacted);
+    assert_eq!(compacted["compact_version"], super::COMPACT_REVIEW_VERSION);
     assert_eq!(compacted["receipt"], receipt);
     assert_eq!(
         compacted["next"]["arguments"],
@@ -8849,6 +8850,76 @@ fn a_compact_review_status_names_the_receipt_once() {
     super::without_repeated_receipt(&mut kept);
     assert_eq!(kept["next"]["arguments"]["head"], "other");
     assert_eq!(kept["next"]["arguments"]["epoch"], "e1");
+}
+
+#[test]
+fn a_compact_collect_or_stop_answer_keeps_what_it_cannot_rebuild() {
+    let receipt = json!({"epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"});
+    let inputs = json!([{"name": "review-risk", "capture": "launch_review_input"}]);
+    let mut collect = json!({
+        "ok": true,
+        "receipt": receipt,
+        "next": {
+            "kind": "collect",
+            "arguments": {"issue": 5, "epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"},
+            "inputs": inputs,
+        },
+        "forecast": {"horizon": "partial"},
+    });
+    super::without_repeated_receipt(&mut collect);
+    assert_eq!(
+        collect["next"]["arguments"],
+        json!({"issue": 5, "epoch": "e1"})
+    );
+    assert_eq!(collect["next"]["inputs"], inputs);
+    assert_eq!(collect["forecast"], json!({"horizon": "partial"}));
+
+    let stop = json!({
+        "ok": true,
+        "receipt": receipt,
+        "next": {"kind": "stop", "reason_code": "publication-lane-unfinished", "operation": null, "arguments": null, "continuation": "c"},
+    });
+    let mut compacted = stop.clone();
+    super::without_repeated_receipt(&mut compacted);
+    compacted
+        .as_object_mut()
+        .expect("an object")
+        .remove("compact_version");
+    assert_eq!(compacted, stop, "a stop answer lost a field");
+
+    let unpublished = json!({
+        "ok": true,
+        "receipt": null,
+        "next": {"kind": "execute", "operation": "publish_review", "arguments": {"issue": 5, "expected_epoch": "none"}},
+    });
+    let mut compacted = unpublished.clone();
+    super::without_repeated_receipt(&mut compacted);
+    assert_eq!(compacted["next"], unpublished["next"]);
+}
+
+#[test]
+fn a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped() {
+    let (_root, context) = pointer_with_receipt("claude-expand0a1b2c3d");
+    let full =
+        json!({"issue": 12, "epoch": "e1", "pr": 7, "head": "h1", "base": "b1", "digest": "d1"});
+    let mut status = json!({
+        "ok": true,
+        "receipt": {"epoch": "e1", "pr": 7, "head": "h1", "base": "b1", "digest": "d1"},
+        "next": {"kind": "execute", "operation": "release_ci", "arguments": full},
+    });
+    super::without_repeated_receipt(&mut status);
+    let mut sent = status["next"]["arguments"].clone();
+    sent["run_id"] = json!("claude-expand0a1b2c3d");
+    let tool = tools::find("release_ci").expect("release_ci");
+
+    let mut expanded = super::expanded_receipt(tool, &sent, &context)
+        .expect("not refused")
+        .expect("expanded");
+    expanded
+        .as_object_mut()
+        .expect("an object")
+        .remove("run_id");
+    assert_eq!(expanded, full);
 }
 
 fn pointer_with_receipt(name: &str) -> (tempfile::TempDir, GateContext) {
