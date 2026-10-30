@@ -1879,6 +1879,89 @@ fn an_issue_imported_as_recorded_keeps_the_identity_and_clauses_it_was_given() {
 }
 
 #[test]
+fn two_writers_on_one_checklist_lose_no_row_and_keep_each_writers_order() {
+    let (directory, mut store) = open();
+    store
+        .import(&repo(), 7, &issue(Vec::new()), NOW)
+        .expect("imports");
+    let shared = super::TaskChange {
+        id: "T0",
+        text: Some("shared"),
+        route: Some("inline"),
+        done: None,
+        commit: None,
+        evidence: None,
+    };
+    store
+        .change_task(&repo(), 7, &shared, NOW)
+        .expect("the shared row records");
+    let path = directory.path().join("state.db");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+
+    let writers: Vec<_> = [("A", "aaaaaaa"), ("B", "bbbbbbb")]
+        .into_iter()
+        .map(|(prefix, commit)| {
+            let (path, barrier) = (path.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                let mut store = Store::open(&path).expect("a second connection opens");
+                barrier.wait();
+                for n in 1..=25 {
+                    let id = format!("{prefix}{n}");
+                    let change = super::TaskChange {
+                        id: &id,
+                        text: Some("a row"),
+                        route: Some("inline"),
+                        done: None,
+                        commit: None,
+                        evidence: None,
+                    };
+                    store
+                        .change_task(&repo(), 7, &change, NOW)
+                        .expect("a concurrent row records");
+                }
+                let close = super::TaskChange {
+                    id: "T0",
+                    text: None,
+                    route: None,
+                    done: Some(true),
+                    commit: Some(commit),
+                    evidence: None,
+                };
+                store
+                    .change_task(&repo(), 7, &close, NOW)
+                    .expect("the shared row revises")
+            })
+        })
+        .collect();
+    for writer in writers {
+        let revised = writer.join().expect("joins");
+        assert_eq!(revised.id, "T0");
+        assert!(revised.done);
+    }
+
+    let rows = store.tasks(&repo(), 7).expect("reads");
+    let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(ids.len(), 51, "{ids:?}");
+    assert_eq!(ids[0], "T0", "the first-recorded row moved");
+    for prefix in ["A", "B"] {
+        let own: Vec<&str> = ids
+            .iter()
+            .copied()
+            .filter(|id| id.starts_with(prefix))
+            .collect();
+        let expected: Vec<String> = (1..=25).map(|n| format!("{prefix}{n}")).collect();
+        assert_eq!(own, expected, "{prefix}'s rows are out of their own order");
+    }
+    let shared = &rows[0];
+    assert!(shared.done);
+    assert!(
+        matches!(shared.commit.as_deref(), Some("aaaaaaa" | "bbbbbbb")),
+        "{:?}",
+        shared.commit
+    );
+}
+
+#[test]
 fn a_task_is_revised_in_place_and_keeps_its_place() {
     let (_directory, mut store) = open();
     store

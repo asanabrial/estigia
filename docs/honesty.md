@@ -2953,8 +2953,10 @@ pointer that leaves it names the document it points at.
 - **The compact `task` answer is chosen by skill prose, not by adapter code.** It carries `version`
   (`COMPACT_TASK_VERSION`) and the changed row; a retried acknowledgment answers the same row and a
   reopen keeps the closing commit (`a_lost_compact_acknowledgment_retried_answers_the_same_row_in_the_same_place`).
-  No adapter sends `compact` on `task` by itself, and two processes writing one checklist at once are not
-  tested.
+  No adapter sends `compact` on `task` by itself. Two connections writing one checklist at once lose no
+  row and keep each writer's order, and a row both revise keeps one writer's whole revision
+  (`two_writers_on_one_checklist_lose_no_row_and_keep_each_writers_order`); that is two threads on one
+  SQLite file, not two operating-system processes.
 - **A compact receipt is expanded from this run's pointer, not from the store.** `expanded_receipt` in
   `src/harness/mcp/mod.rs` fills `pr`, `head`, `base` and `digest` for a call that names only `epoch`
   when the calling run's pointer holds that epoch's review transaction for the issue
