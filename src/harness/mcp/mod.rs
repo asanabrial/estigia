@@ -2006,7 +2006,13 @@ fn delivers(context: &GateContext) -> bool {
     layered.merge_by() == crate::config::Party::Agent && layered.delivery.is_autonomous()
 }
 
+/// The shape of a compact `review_status` answer, which [`expanded_receipt`] reads back.
+const COMPACT_REVIEW_VERSION: u64 = 1;
+
 fn without_repeated_receipt(status: &mut Value) {
+    if let Some(object) = status.as_object_mut() {
+        object.insert("compact_version".to_owned(), json!(COMPACT_REVIEW_VERSION));
+    }
     let receipt = status["receipt"].clone();
     let Some(arguments) = status["next"]["arguments"].as_object_mut() else {
         return;
