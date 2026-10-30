@@ -226,6 +226,8 @@ pub(crate) struct Cursor {
     pub(crate) last_started_at: u64,
     pub(crate) last_run_id: String,
     pub(crate) store: String,
+    #[serde(default)]
+    pub(crate) snapshot_matched: Option<usize>,
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -665,6 +667,7 @@ pub(super) struct Page {
     limit: u64,
     returned: usize,
     matched: usize,
+    snapshot_matched: usize,
     more: bool,
     next_cursor: Option<String>,
     sessions: Vec<Listed>,
@@ -679,6 +682,7 @@ impl Page {
             "limit": self.limit,
             "returned": self.returned,
             "matched": self.matched,
+            "snapshot_matched": self.snapshot_matched,
             "more": self.more,
             "next_cursor": self.next_cursor,
             "sessions": self.sessions,
@@ -720,7 +724,7 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
         None => DEFAULT_LIMIT,
     };
     let store_id = store::store_identity(&store::beside(root));
-    let (taken_at, after) = match arguments.get("cursor").and_then(Value::as_str) {
+    let (taken_at, after, carried) = match arguments.get("cursor").and_then(Value::as_str) {
         Some(token) => {
             let cursor: Cursor = cursor_of(token)?;
             if cursor.version != PAGE_VERSION {
@@ -738,9 +742,10 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
             (
                 cursor.taken_at,
                 Some((cursor.last_started_at, cursor.last_run_id)),
+                cursor.snapshot_matched,
             )
         }
-        None => (now, None),
+        None => (now, None, None),
     };
 
     let (rows, waiting, undelivered, handoffs) = read(root)?;
@@ -767,6 +772,7 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
         .copied()
         .collect();
     let returned = page.len();
+    let snapshot_matched = carried.unwrap_or(matching.len());
     let more = matching.len() > start + returned;
     let next_cursor = if more {
         page.last().map(|last| {
@@ -777,6 +783,7 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
                 last_started_at: last.0,
                 last_run_id: last.1.run_id.clone(),
                 store: store_id.clone(),
+                snapshot_matched: Some(snapshot_matched),
             })
         })
     } else {
@@ -792,6 +799,7 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
         limit,
         returned,
         matched: matching.len(),
+        snapshot_matched,
         more,
         next_cursor,
         sessions,
