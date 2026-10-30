@@ -3193,6 +3193,91 @@ fn pending_messages_are_read_without_being_stamped_and_taken_only_up_to_the_id_r
 }
 
 #[test]
+fn a_handover_that_dies_before_its_stamp_leaves_the_mail_for_the_next_poll_after_a_restart() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let peeked = {
+        let store = Store::open(&path).expect("the store opens");
+        mail(&store, None, "pi-bbbb", "first", 100);
+        mail(&store, None, "pi-bbbb", "second", 110);
+        store.messages_pending("pi-bbbb").expect("peeks")
+    };
+
+    let store = Store::open(&path).expect("the store reopens");
+    let again = store.messages_pending("pi-bbbb").expect("peeks again");
+    assert_eq!(
+        again.iter().map(|m| m.id).collect::<Vec<_>>(),
+        peeked.iter().map(|m| m.id).collect::<Vec<_>>(),
+        "a peek the host never acknowledged lost or stamped mail"
+    );
+    let taken = store
+        .messages_taken_through("pi-bbbb", 200, again[1].id)
+        .expect("taken");
+    assert_eq!(taken.len(), 2);
+    assert!(store.messages_pending("pi-bbbb").expect("peeks").is_empty());
+}
+
+#[test]
+fn a_stamp_whose_answer_was_lost_is_not_taken_twice_on_retry() {
+    let (_directory, store) = open();
+    let id = mail(&store, None, "pi-bbbb", "only", 100);
+
+    let _lost = store
+        .messages_taken_through("pi-bbbb", 200, id)
+        .expect("taken");
+    let retried = store
+        .messages_taken_through("pi-bbbb", 300, id)
+        .expect("retried");
+    assert!(retried.is_empty(), "a retried stamp delivered a row twice");
+    let row = store.message(id).expect("reads").expect("the row");
+    assert_eq!(
+        row.delivered_at,
+        Some(200),
+        "the retry moved the first stamp"
+    );
+}
+
+#[test]
+fn two_pollers_stamping_one_peek_at_once_deliver_each_row_once() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let through = {
+        let store = Store::open(&path).expect("the store opens");
+        (0..40)
+            .map(|n| mail(&store, None, "pi-bbbb", &format!("m{n}"), 100 + n))
+            .last()
+            .expect("forty messages")
+    };
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+
+    let pollers: Vec<_> = [200, 300]
+        .into_iter()
+        .map(|now| {
+            let (path, barrier) = (path.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                let store = Store::open(&path).expect("a second connection opens");
+                barrier.wait();
+                store
+                    .messages_taken_through("pi-bbbb", now, through)
+                    .expect("taken")
+                    .into_iter()
+                    .map(|m| m.id)
+                    .collect::<Vec<_>>()
+            })
+        })
+        .collect();
+    let mut ids: Vec<i64> = Vec::new();
+    for poller in pollers {
+        ids.extend(poller.join().expect("joins"));
+    }
+    ids.sort_unstable();
+    let unique = ids.len();
+    ids.dedup();
+    assert_eq!(unique, ids.len(), "a row reached both pollers");
+    assert_eq!(ids.len(), 40, "a row reached neither poller");
+}
+
+#[test]
 fn the_counts_name_what_waits_for_a_recipient_and_what_a_sender_still_has_undelivered() {
     let (_directory, store) = open();
     mail(&store, Some("claude-aaaa"), "pi-bbbb", "one", 100);

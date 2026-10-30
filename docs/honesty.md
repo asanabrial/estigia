@@ -4139,6 +4139,15 @@ measure:
   killed hook process loses the message as delivered; delivery never records "read", which is the recipient's
   own act, below). OpenCode costs one extra
   process per tool call.
+- **The peek-then-stamp handover (Pi and OpenCode 2 idle wakes) is at-least-once, not exactly-once.** Store
+  tests inject the failures: a poll that peeked and died before `--through` leaves every row pending for the
+  next poll after a restart, so a host that accepted the mail before the crash is handed it again; a
+  `--through` retried after its answer was lost stamps nothing twice and keeps the first stamp; two pollers
+  stamping one peek at once deliver each of 40 rows to exactly one
+  (`a_handover_that_dies_before_its_stamp_leaves_the_mail_for_the_next_poll_after_a_restart`,
+  `a_stamp_whose_answer_was_lost_is_not_taken_twice_on_retry`,
+  `two_pollers_stamping_one_peek_at_once_deliver_each_row_once`). No host gives a durable acknowledgment or
+  a delivery key, so the duplicate window between host acceptance and the stamp stays.
 - **Waking an idle session was measured live once, by hand, per host, and not under load.** Claude Code 2.1.300
   woke an idle interactive session within 15 seconds when an `asyncRewake` `Stop` hook exited 2 (a new waiter
   was running afterwards, none after the session was killed;
