@@ -438,7 +438,10 @@ impl Dialect {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "ask",
-                    "permissionDecisionReason": reason_text("estigia asks before this write.", refusal),
+                    "permissionDecisionReason": format!(
+                        "estigia asks before this write.\n\n{}\n({})\n\n{}",
+                        refusal.message, refusal.code, refusal.resolution
+                    ),
                 }
             }),
             Self::GeminiCli | Self::Cursor | Self::ExitCode | Self::Cline => self.deny(refusal),
@@ -817,19 +820,19 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                     };
                     match scope {
                         super::issue_requirement::Scope::Repository(_) => format!(
-                            "This run holds no issue, and `Issue requirement` is `{}` in this \
+                            "This run holds no issue, and `Unclaimed write policy` is `{}` in this \
                              repository: {held}. {way_in} Reads are not gated.",
                             requirement.as_value()
                         ),
                         super::issue_requirement::Scope::Outside => format!(
                             "This run holds no issue. This directory is not inside a repository Estigia \
                              can place, so no issue requirement applies to a write that lands here: \
-                             `Issue requirement` is `{}` for a write that lands in a repository Estigia \
+                             `Unclaimed write policy` is `{}` for a write that lands in a repository Estigia \
                              can place, and there {held}. Reads are not gated.",
                             requirement.as_value()
                         ),
                         super::issue_requirement::Scope::Unknown => format!(
-                            "This run holds no issue. `Issue requirement` is `{}` here, but whether \
+                            "This run holds no issue. `Unclaimed write policy` is `{}` here, but whether \
                              this directory is inside a repository could not be established, so every \
                              write from it is held rather than exempted: {held}. Reads are not gated.",
                             requirement.as_value()
@@ -929,7 +932,7 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                 "additionalContext": format!(
                     "## Estigia
 
-This session carries no identity Estigia can derive a run id from, so nothing can be sworn here: a claim needs one run to bind to, and every session in this state would share the same name. Reads go through untouched, and a write is held to `Issue requirement` where the repository sets one.{}{}{}{}",
+This session carries no identity Estigia can derive a run id from, so nothing can be sworn here: a claim needs one run to bind to, and every session in this state would share the same name. Reads go through untouched, and a write is held to `Unclaimed write policy` where the repository sets one.{}{}{}{}",
                     drift_note(context),
                     build_note(context),
                     queue_paragraph(context, with_count),
@@ -1941,6 +1944,20 @@ mod tests {
         };
         assert!(reason(&ask).starts_with("estigia asks before this write."));
         assert!(reason(&deny).starts_with("estigia refused this write."));
+        for refusal_only in ["Class:", "What happened to the world", "Replay:"] {
+            assert!(!reason(&ask).contains(refusal_only), "{}", reason(&ask));
+            assert!(reason(&deny).contains(refusal_only), "{}", reason(&deny));
+        }
+        assert!(
+            reason(&ask).contains("a message\n(a-code)"),
+            "{}",
+            reason(&ask)
+        );
+        assert!(
+            reason(&ask).contains("run: estigia status"),
+            "{}",
+            reason(&ask)
+        );
     }
 
     #[test]

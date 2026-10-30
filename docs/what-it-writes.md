@@ -762,7 +762,7 @@ bound) and sets `systemPromptOptions.sections.estigia` to the
 binary's text, which Pi renders as an `<estigia>` section appended to the prompt; it returns nothing,
 so it never replaces the prompt. The text is
 `harness::hook::session_start_text`, which wraps `session_start_response`, the function the Claude
-Code hook uses, so the run id, what the run holds, the `Issue requirement` note, the build note (absent in a repository that does not hold the
+Code hook uses, so the run id, what the run holds, the `Unclaimed write policy` note, the build note (absent in a repository that does not hold the
 build's commit, `docs/honesty.md`) and the
 queue note are one text for both apart from the queue count. The queue note says GitHub writes are queued without
 counting them: a growing count would rewrite the leading prompt on every turn. It asks on every run rather than caching, since the answer depends on a

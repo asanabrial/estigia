@@ -921,7 +921,7 @@ fn held_or_watched(requirement: IssueRequirement, decision: &Decision) -> bool {
         Decision::Ask(refusal) | Decision::Deny(refusal) => refusal.code == CODE,
         Decision::Allow(note) => {
             requirement == IssueRequirement::Watch
-                && note.contains("`Issue requirement` is `watch`")
+                && note.contains("`Unclaimed write policy` is `watch`")
         }
         _ => false,
     }

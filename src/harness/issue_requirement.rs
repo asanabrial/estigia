@@ -286,7 +286,7 @@ fn held(
 
 fn watching(target: &str) -> String {
     format!(
-        "this run holds no issue and `Issue requirement` is `watch`; this call's write ({target}) \
+        "this run holds no issue and `Unclaimed write policy` is `watch`; this call's write ({target}) \
          cannot be placed without running it, so it runs and this checkout's status is compared \
          on the next call, which is put to the person only if the checkout changed"
     )
@@ -314,7 +314,7 @@ pub(super) fn watched_change(context: &GateContext) -> Option<Decision> {
     Some(Decision::Ask(Box::new(Refusal::not_started(
         CODE,
         format!(
-            "this run holds no issue, and `Issue requirement` is `watch`: since a write the gate \
+            "this run holds no issue, and `Unclaimed write policy` is `watch`: since a write the gate \
              could not place ran, this checkout changed: {named}. Nothing was reverted"
         ),
         Resolution::no_command(
@@ -437,7 +437,7 @@ fn status_of(root: &Path) -> Option<std::collections::BTreeSet<StatusEntry>> {
 fn allowed(requirement: IssueRequirement, target: &str) -> String {
     let requirement = requirement.as_value();
     format!(
-        "this run holds no issue and `Issue requirement` is `{requirement}`; this call's write ({target}) \
+        "this run holds no issue and `Unclaimed write policy` is `{requirement}`; this call's write ({target}) \
          cannot be placed inside or outside a repository without running it, and this directory \
          is outside every repository, so it is allowed, and a checkout it dirties is named when \
          the next session starts"
@@ -639,11 +639,13 @@ pub(crate) fn refusal(
 ) -> Refusal {
     let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
-         write in"
+         write in; or `Unclaimed write policy` set to `off` for this repository, when its writes \
+         need no claim"
     } else {
         "an issue claimed with `claim`, filed first with `create` when none covers this \
          change, then a branch started with `start_branch`, which gives the isolated \
-         checkout to write in"
+         checkout to write in; or `Unclaimed write policy` set to `off` for this repository, \
+         when its writes need no claim"
     };
     let here = match (scope, reach) {
         (Scope::Repository(_), Reach::Placed) => " in this repository",
@@ -662,7 +664,7 @@ pub(crate) fn refusal(
     Refusal::not_started(
         CODE,
         format!(
-            "this run holds no issue, and `Issue requirement` is `{}`{here}: a write \
+            "this run holds no issue, and `Unclaimed write policy` is `{}`{here}: a write \
              without a claim skips the claim, the review receipt and the delivery gate",
             requirement.as_value()
         ),
