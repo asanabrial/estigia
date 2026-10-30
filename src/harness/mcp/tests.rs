@@ -8898,6 +8898,46 @@ fn a_compact_collect_or_stop_answer_keeps_what_it_cannot_rebuild() {
 }
 
 #[test]
+fn a_compact_answer_keeps_an_expected_epoch_and_every_slot_of_a_mixed_collect() {
+    let receipt = json!({"epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"});
+    let correction = json!({
+        "ok": true,
+        "receipt": receipt,
+        "next": {
+            "kind": "execute",
+            "reason_code": "correction-due",
+            "operation": "publish_review",
+            "arguments": {"issue": 5, "expected_epoch": "e1"},
+            "why": "the validator failed",
+        },
+    });
+    let mut compacted = correction.clone();
+    super::without_repeated_receipt(&mut compacted);
+    assert_eq!(
+        compacted["next"], correction["next"],
+        "an expected_epoch is not a receipt field"
+    );
+
+    let inputs = json!([
+        {"name": "review-risk", "capture": "launch_review_input"},
+        {"name": "review-readback", "capture": "collect_review_input", "job": "j1", "deadline_at": 1_800_000_000u64},
+    ]);
+    let mut mixed = json!({
+        "ok": true,
+        "receipt": receipt,
+        "next": {
+            "kind": "collect",
+            "reason_code": "lens-report-missing",
+            "arguments": {"issue": 5, "epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"},
+            "inputs": inputs,
+        },
+    });
+    super::without_repeated_receipt(&mut mixed);
+    assert_eq!(mixed["next"]["inputs"], inputs);
+    assert_eq!(mixed["next"]["reason_code"], "lens-report-missing");
+}
+
+#[test]
 fn a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped() {
     let (_root, context) = pointer_with_receipt("claude-expand0a1b2c3d");
     let full =
