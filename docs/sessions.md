@@ -525,8 +525,9 @@ Codex and OpenCode.
 `list_sessions` with any option, or `estigia sessions` with `--limit` and/or `--cursor`, answers a **page**
 of the registry rather than the whole list. Both are adapters of one bounded read, so the accounting and the
 cursors are the same from either. The answer is a versioned object: `version`, the page's `sessions`, its own
-accounting (`limit`, `returned`, `matched` — the rows the selectors matched as this page was taken — and
-`more`), a `next_cursor` that is `null` once the snapshot is exhausted, and the snapshot's identity
+accounting (`limit`, `returned`, `matched` — the rows the selectors matched as this page was taken —,
+`snapshot_matched` — that count as the first page took it, carried in the cursor and the same on every page of
+the walk — and `more`), a `next_cursor` that is `null` once the snapshot is exhausted, and the snapshot's identity
 (`taken_at`, and `stale_after` as before). The page reads the clock once, for `taken_at` and a cursor's age; a
 clock that will not answer is refused `clock-unreadable`, never read as no time. A call with no page option on
 either door is unbounded, and a caller that asks for nothing still gets every row.
@@ -575,8 +576,9 @@ bounded, and the no-omissions property is a property of the registry.
 **What a selector reads is not frozen.** `taken_at` freezes the set of rows and their order, and that part is
 sound; the value a selector compares is not in the snapshot, so it cannot be. `status` and `last_seen` are derived
 from the row as each page reads it, which is the only place they exist, so a row whose status changes between
-pages can leave a `status`-filtered traversal, and `matched` is the count as that page was taken rather than a
-count held constant across the walk. A caller that needs every row matching a `status` — a complete set rather
+pages can leave a `status`-filtered traversal, and `matched` is the count as that page was taken; the count
+held constant across the walk is `snapshot_matched`, which says how many rows matched when the walk began, not
+how many it will return. A caller that needs every row matching a `status` — a complete set rather
 than a walk — should read the whole list (no page flag, on either door) and filter it itself: that is one
 read of the registry against one clock, so the statuses in one answer agree with each other. A bounded traversal
 is for walking a large registry a page at a time; a selector on it is a convenience that reads the row as each

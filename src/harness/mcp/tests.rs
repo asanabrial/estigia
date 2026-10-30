@@ -7892,6 +7892,7 @@ mod send_message {
             last_started_at: 0,
             last_run_id: "claude-send0a1b2c3d".to_owned(),
             store: store::store_identity(&store::beside(&context.state_root)),
+            snapshot_matched: None,
         });
         let code = refusal_code(rig.list(json!({"cursor": token})).expect_err("a refusal"));
         assert_eq!(code, "sessions-cursor-expired");
@@ -7907,6 +7908,7 @@ mod send_message {
             last_started_at: 0,
             last_run_id: "claude-send0a1b2c3d".to_owned(),
             store: "replaced".to_owned(),
+            snapshot_matched: None,
         });
         let code = refusal_code(rig.list(json!({"cursor": token})).expect_err("a refusal"));
         assert_eq!(code, "sessions-cursor-store-replaced");
@@ -8041,6 +8043,14 @@ mod send_message {
             Some(2),
             "`matched` is the page's own count, not one held across the walk"
         );
+        assert_eq!(
+            (
+                first["snapshot_matched"].as_u64(),
+                second["snapshot_matched"].as_u64()
+            ),
+            (Some(3), Some(3)),
+            "`snapshot_matched` is the count the walk was taken against, held across it"
+        );
         assert_eq!(second["next_cursor"], Value::Null);
     }
 
@@ -8055,6 +8065,7 @@ mod send_message {
             last_started_at: 0,
             last_run_id: "claude-send0a1b2c3d".to_owned(),
             store: store::store_identity(&store::beside(&context.state_root)),
+            snapshot_matched: None,
         });
         let code = refusal_code(rig.list(json!({"cursor": token})).expect_err("a refusal"));
         assert_eq!(code, "sessions-cursor-mismatch");
