@@ -463,12 +463,26 @@ fn redirects_into_a_file(command: &str) -> bool {
     let mut hid_an_arrow = false;
     let mut comment = false;
     let mut pending: Vec<(String, bool, bool)> = Vec::new();
+    // The open parentheses of each `$(` entered from inside double quotes, where quoting restarts.
+    let mut substitutions: Vec<usize> = Vec::new();
+    let nests = !command.contains("case");
     let mut index = 0;
 
     while index < bytes.len() {
         let byte = bytes[index];
         if let Some(open) = quote {
             if byte == b'\\' && (ansi || open == b'"') {
+                index += 2;
+                continue;
+            }
+            if nests
+                && open == b'"'
+                && byte == b'$'
+                && bytes.get(index + 1) == Some(&b'(')
+                && bytes.get(index + 2) != Some(&b'(')
+            {
+                substitutions.push(0);
+                quote = None;
                 index += 2;
                 continue;
             }
@@ -493,6 +507,21 @@ fn redirects_into_a_file(command: &str) -> bool {
             }
         }
         match byte {
+            b'(' if !substitutions.is_empty() => {
+                if let Some(open) = substitutions.last_mut() {
+                    *open += 1;
+                }
+                index += 1;
+            }
+            b')' if !substitutions.is_empty() => {
+                if substitutions.last() == Some(&0) {
+                    substitutions.pop();
+                    quote = Some(b'"');
+                } else if let Some(open) = substitutions.last_mut() {
+                    *open -= 1;
+                }
+                index += 1;
+            }
             b'\\' => index += 2,
             b'\'' | b'"' => {
                 quote = Some(byte);

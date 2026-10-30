@@ -455,6 +455,16 @@ fn the_redirect_scan_reads_the_character_after_the_arrow() {
 }
 
 #[test]
+fn quoting_restarts_inside_a_substitution_in_double_quotes() {
+    assert_eq!(
+        writes_a_file("echo \"x $(gh pr view 1 --jq '\"\\(.a) -> \\(.b)\"') y\""),
+        None
+    );
+    assert!(writes_a_file("echo \"$(echo x > f)\"").is_some());
+    assert!(writes_a_file("echo \"$(echo \"$(echo x > f)\")\"").is_some());
+}
+
+#[test]
 fn an_interpreter_handed_code_is_a_write_and_one_handed_a_script_is_not() {
     // The boundary the declaration draws, held from both sides. `python -c` is
     // opaque and unusual; `python manage.py` is opaque and ordinary, and gating
