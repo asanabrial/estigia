@@ -508,11 +508,21 @@ It waits for mail addressed to the session and wakes it by exiting 2; what it do
 duplicate, and uninstall removes it with the other Estigia hooks because it has Estigia's shape (below) while another
 tool's `Stop` entries, the loop's included, stay. Only Claude Code gets it; Codex's `Stop` is the loop's.
 
+## The Claude Code `PostToolUse` entry
+
+`estigia setup claude-code` registers `PostToolUse` with the matcher `Bash` and
+`"<estigia>" hook post-tool-use`, 10 s. It decides nothing. For a run holding no claim under
+`Unclaimed write policy: watch`, after a shell call the gate let run unplaced, it compares the
+checkout's `git status` with the record taken before the call and, when it differs, answers a
+`systemMessage` for the person and the same text as `additionalContext` for the agent, naming the
+changed paths. The record stays, so the run's next call is still put to the person. Every other
+call answers `{}`. Only Claude Code gets it.
+
 ## Which hook commands setup treats as its own
 
 `setup` and `uninstall` take out, and `status` counts as the gate, a settings-file hook command only
 when it has Estigia's shape: a program, then `hook` as its own word, then an event slug
-(`pre-tool-use`, `session-start`, `session-end`, `stop`), read by `runs_estigia_hook` in
+(`pre-tool-use`, `post-tool-use`, `session-start`, `session-end`, `stop`), read by `runs_estigia_hook` in
 `src/setup/render.rs` over the words `src/setup/wiring.rs` splits a command line into. The program may
 be quoted, contain spaces, be a Windows path or be a renamed copy. A command that merely contains the
 text, such as `/home/me/bin/slack-webhook stop`, is another tool's and is written back byte for byte.
@@ -1437,6 +1447,8 @@ agent (Claude Code)
   ├─ tool: Edit / Write / Bash
   │    └─ PreToolUse → estigia hook pre-tool-use
   │         └─ verify_claim against the tracker → deny
+  │    └─ PostToolUse (Bash) → estigia hook post-tool-use
+  │         └─ a watched checkout that changed → said to the person and the agent at once
   │
   ├─ turn about to end
   │    └─ Stop → estigia hook stop

@@ -3094,10 +3094,13 @@ pointer that leaves it names the document it points at.
   two calls is reported as the watched write's; ignored files and writes outside the checkout are not
   in `git status`; a call issued in parallel with the watched one can compare before it finished, so
   the change is reported on a later call, or not at all when a write the gate can place is asked in
-  between, which drops the record; and the last call of a session is compared by nobody until the
-  `Stop` note and the next session start name the dirty checkout. Held by
-  `an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_the_checkout_changed`
-  and `a_write_placed_inside_the_checkout_is_still_asked_under_watch`. What it does not hold:
+  between, which drops the record; and on a host other than Claude Code the last call of a session is
+  compared by nobody until the next session start names the dirty checkout; Claude Code's `PostToolUse`
+  entry compares right after each `Bash` call and says what changed at once, a note the person sees but
+  is not asked about until the next call. Held by
+  `an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_the_checkout_changed`,
+  `a_write_placed_inside_the_checkout_is_still_asked_under_watch` and
+  `the_shell_call_that_changed_a_watched_checkout_is_reported_as_soon_as_it_ran`. What it does not hold:
   - **A GitHub tracker that names no repository infers one from the remote, so zero remotes is a tracker
     that cannot name an issue.** A write landing only in such repositories is not held (no ask, no deny) and
     the SessionStart text says there is nothing to claim. The read is `git remote` in the repository each

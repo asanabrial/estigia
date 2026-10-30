@@ -309,6 +309,35 @@ fn watch(context: &GateContext, root: &Path) -> Option<()> {
 /// The question owed when the checkout a watched write ran in has changed since, which also
 /// stops the watch; `None` when nothing is watched, the status is unchanged or unreadable.
 pub(super) fn watched_change(context: &GateContext) -> Option<Decision> {
+    let (path, named) = change_since_watch(context)?;
+    let _ = std::fs::remove_file(&path);
+    Some(Decision::Ask(Box::new(Refusal::not_started(
+        CODE,
+        format!(
+            "this run holds no issue, and `Issue requirement` is `watch`: since a write the gate \
+             could not place ran, this checkout changed: {named}. Nothing was reverted"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "whether these changes stay: `git diff` and `git status` show them, and a claimed \
+             issue is the way to keep them",
+        ),
+    ))))
+}
+
+/// What a shell call that just ran changed in the watched checkout, said at once; the record
+/// stays, so the run's next call is still put to the person.
+pub(super) fn watched_note(context: &GateContext) -> Option<String> {
+    let (_, named) = change_since_watch(context)?;
+    Some(format!(
+        "estigia: this run holds no issue and the command that just ran changed this checkout: \
+         {named}. Nothing was reverted; the next call is put to the person"
+    ))
+}
+
+/// The watch record of the launch checkout and the paths changed since it was taken, or `None`
+/// when `watch` is not in force, nothing is watched, or the status is unchanged or unreadable.
+fn change_since_watch(context: &GateContext) -> Option<(PathBuf, String)> {
     if in_force(context) != Some(IssueRequirement::Watch) {
         return None;
     }
@@ -326,7 +355,6 @@ pub(super) fn watched_change(context: &GateContext) -> Option<Decision> {
     if changed.is_empty() {
         return None;
     }
-    let _ = std::fs::remove_file(&path);
     let shown = changed.len().min(8);
     let named = changed[..shown]
         .iter()
@@ -338,18 +366,7 @@ pub(super) fn watched_change(context: &GateContext) -> Option<Decision> {
     } else {
         String::new()
     };
-    Some(Decision::Ask(Box::new(Refusal::not_started(
-        CODE,
-        format!(
-            "this run holds no issue, and `Issue requirement` is `watch`: since a write the gate \
-             could not place ran, this checkout changed: {named}{more}. Nothing was reverted"
-        ),
-        Resolution::no_command(
-            NoCommandReason::OperatorKnowledge,
-            "whether these changes stay: `git diff` and `git status` show them, and a claimed \
-             issue is the way to keep them",
-        ),
-    ))))
+    Some((path, format!("{named}{more}")))
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

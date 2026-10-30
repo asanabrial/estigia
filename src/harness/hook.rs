@@ -27,6 +27,8 @@ use crate::transport::store;
 pub enum Event {
     /// Before a tool runs. The one that can say no.
     PreToolUse,
+    /// After a shell tool ran. Reports a watched checkout that changed; decides nothing.
+    PostToolUse,
     /// A session begins or resumes. Mints the run identity.
     SessionStart,
     /// A session ends. Forgets the pointer; the claim on the tracker stays.
@@ -45,6 +47,7 @@ impl Event {
     pub fn slug(self) -> &'static str {
         match self {
             Self::PreToolUse => "pre-tool-use",
+            Self::PostToolUse => "post-tool-use",
             Self::SessionStart => "session-start",
             Self::SessionEnd => "session-end",
             Self::Stop => "stop",
@@ -56,6 +59,7 @@ impl Event {
     pub fn agent_name(self) -> &'static str {
         match self {
             Self::PreToolUse => "PreToolUse",
+            Self::PostToolUse => "PostToolUse",
             Self::SessionStart => "SessionStart",
             Self::SessionEnd => "SessionEnd",
             Self::Stop => "Stop",
@@ -70,9 +74,10 @@ impl Event {
     }
 
     /// Every event, checked by the compiler.
-    pub fn all() -> [Self; 5] {
+    pub fn all() -> [Self; 6] {
         [
             Self::PreToolUse,
+            Self::PostToolUse,
             Self::SessionStart,
             Self::SessionEnd,
             Self::Stop,
@@ -121,6 +126,7 @@ fn spelling(name: &str) -> String {
 /// paid thousands of times to answer "not mine".
 pub const EVENTS: &[(Event, Option<&str>, u64)] = &[
     (Event::PreToolUse, None, 10),
+    (Event::PostToolUse, Some("Bash"), 10),
     (Event::SessionStart, None, 5),
     (Event::SessionEnd, None, 5),
     (Event::Stop, None, 5),
@@ -1237,6 +1243,25 @@ pub fn run_as(
         // Git's, not an agent's: the caller runs the gate itself and turns the
         // decision into an exit code. Reaching here would mean it did not.
         Event::PrePush => json!({}),
+        Event::PostToolUse => {
+            if input.unreadable || input.absent {
+                return json!({});
+            }
+            let run = session::load(&context.state_root, &run_id);
+            if run.issue.is_some() || run.assisted {
+                return json!({});
+            }
+            match super::issue_requirement::watched_note(context) {
+                Some(note) => json!({
+                    "systemMessage": note,
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "additionalContext": note,
+                    },
+                }),
+                None => json!({}),
+            }
+        }
         Event::SessionStart => {
             session::maintain(&context.state_root);
             if !input.session_id.trim().is_empty() {

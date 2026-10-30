@@ -821,7 +821,44 @@ fn an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_
 }
 
 #[test]
-fn an_unplaceable_shell_write_launched_outside_every_repository_is_still_allowed_under_ask() {
+fn the_shell_call_that_changed_a_watched_checkout_is_reported_as_soon_as_it_ran() {
+    let (repo, _root, watching) = rig(IssueRequirement::Watch);
+    let after = || {
+        let input = Input {
+            session_id: "abcd1234".to_owned(),
+            cwd: repo.path().display().to_string(),
+            tool_name: "Bash".to_owned(),
+            tool_input: serde_json::json!({ "command": UNPLACEABLE_SHELL_WRITES[0] }),
+            ..Input::default()
+        };
+        hook::run_as(
+            Dialect::ClaudeCode,
+            Some("claude-code"),
+            Event::PostToolUse,
+            &input,
+            Some(&watching),
+        )
+    };
+    assert!(matches!(
+        shell_write(&watching, UNPLACEABLE_SHELL_WRITES[0]),
+        Decision::Allow(_)
+    ));
+    assert_eq!(after(), serde_json::json!({}));
+    std::fs::write(repo.path().join("written.txt"), "x").expect("the watched write lands");
+    let answer = after();
+    let note = answer["systemMessage"]
+        .as_str()
+        .expect("a note the person sees");
+    assert!(note.contains("`written.txt`"), "{note}");
+    assert_eq!(answer["hookSpecificOutput"]["additionalContext"], note);
+    assert!(
+        matches!(edit(&watching), Decision::Ask(refusal) if refusal.message.contains("`written.txt`")),
+        "the next call was not put to the person"
+    );
+}
+
+#[test]
+fn an_unplaceable_shell_write_launched_outside_every_repository_is_still_allowed_under_watch() {
     let (_launch, _root, asking) = in_a_non_repository(IssueRequirement::Watch);
     for command in UNPLACEABLE_SHELL_WRITES {
         assert!(
