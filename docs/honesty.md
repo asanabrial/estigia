@@ -2961,8 +2961,9 @@ pointer that leaves it names the document it points at.
   (`a_receipt_named_by_its_epoch_is_filled_from_the_pointer_holding_it`). Another run, or a pointer that
   lost its transaction, gets the old missing-argument answer. The compact view carries `compact_version`;
   `collect`, `stop` and an unpublished answer keep what they cannot rebuild, and a compacted `execute`
-  expands back to its arguments (`a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped`).
-  The CLI has no compact `review_status` view.
+  expands back to its arguments (`a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped`);
+  an `expected_epoch` and a mixed collect's slots, jobs and deadlines pass through unchanged. There is no
+  CLI `review_status` to compact: the view exists over MCP only.
 
 - **A phantom holder is reconciled against the tracker only where the ambiguity is real.**
   `guard::adjudicate_action` asks the tracker about each named holder before refusing
