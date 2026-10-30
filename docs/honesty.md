@@ -2950,6 +2950,12 @@ pointer that leaves it names the document it points at.
   `Broken`; dirty or provenance-free builds report `Skipped` without an action. `Broken` requires both
   reinstall and session restart, so its note names no ineffective in-session command or `Resolution`.
   These are code readings; no test here proves the note stays current during a session.
+- **A compact receipt is expanded from this run's pointer, not from the store.** `expanded_receipt` in
+  `src/harness/mcp/mod.rs` fills `pr`, `head`, `base` and `digest` for a call that names only `epoch`
+  when the calling run's pointer holds that epoch's review transaction for the issue
+  (`a_receipt_named_by_its_epoch_is_filled_from_the_pointer_holding_it`). Another run, or a pointer that
+  lost its transaction, gets the old missing-argument answer. The compact view carries no version, and
+  only the `execute` shape is covered; a round trip through `collect` and `stop` answers is not tested.
 
 - **A phantom holder is reconciled against the tracker only where the ambiguity is real.**
   `guard::adjudicate_action` asks the tracker about each named holder before refusing

@@ -189,7 +189,10 @@ name still dispatches and refuses with its own typed reason.
   merge. Those three schemas, about 4 KB together, were unmarked; the run that needs one of them loads
   it with one `ToolSearch`.
 - **`compact: true`** omits `build` from an answer and drops from `review_status`'s `next.arguments`
-  the fields `receipt` already holds. Without it every answer is byte-identical to before.
+  the receipt fields but `epoch`. A receipt-taking call that sends `epoch` and leaves out `pr`, `head`,
+  `base` or `digest` has them filled by the server from this run's pointer when it holds that epoch's
+  review transaction for the issue (`expanded_receipt`), and is refused for another epoch, so the model
+  never rebuilds a receipt. Without it every answer is byte-identical to before.
 - **`ensure_states`** says that while the git operation window is closed it answers `deferred` and
   writes nothing, and that a queued create, claim or transition creates the labels at the flush: a caller
   that reads `deferred` as the whole answer has no reason to wait for the flush.

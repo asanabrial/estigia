@@ -8837,7 +8837,10 @@ fn a_compact_review_status_names_the_receipt_once() {
     let mut compacted = status.clone();
     super::without_repeated_receipt(&mut compacted);
     assert_eq!(compacted["receipt"], receipt);
-    assert_eq!(compacted["next"]["arguments"], json!({"issue": 5}));
+    assert_eq!(
+        compacted["next"]["arguments"],
+        json!({"issue": 5, "epoch": "e1"})
+    );
     assert_eq!(compacted["next"]["operation"], "release_ci");
 
     let mut stale = status;
@@ -8845,7 +8848,70 @@ fn a_compact_review_status_names_the_receipt_once() {
     let mut kept = stale.clone();
     super::without_repeated_receipt(&mut kept);
     assert_eq!(kept["next"]["arguments"]["head"], "other");
-    assert!(kept["next"]["arguments"].get("epoch").is_none());
+    assert_eq!(kept["next"]["arguments"]["epoch"], "e1");
+}
+
+fn pointer_with_receipt(name: &str) -> (tempfile::TempDir, GateContext) {
+    let root = tempfile::tempdir().expect("a state root");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&repo_dir).expect("a checkout");
+    let context = bare_context(&root, &repo_dir);
+    std::fs::create_dir_all(&context.state_root).expect("the state directory");
+    let mut run = crate::harness::session::Run::new(name.to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.repo_dir = Some(repo_dir);
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "e1".to_owned(),
+        pr: 7,
+        head: "h1".to_owned(),
+        base: "b1".to_owned(),
+        digest: "d1".to_owned(),
+    });
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer is written");
+    (root, context)
+}
+
+#[test]
+fn a_receipt_named_by_its_epoch_is_filled_from_the_pointer_holding_it() {
+    let (_root, context) = pointer_with_receipt("claude-expand0a1b2c3d");
+    let tool = tools::find("release_ci").expect("release_ci");
+    let sent = json!({"issue": 12, "run_id": "claude-expand0a1b2c3d", "epoch": "e1"});
+
+    let filled = super::expanded_receipt(tool, &sent, &context)
+        .expect("not refused")
+        .expect("filled");
+    assert_eq!(
+        filled,
+        json!({"issue": 12, "run_id": "claude-expand0a1b2c3d", "epoch": "e1", "pr": 7, "head": "h1", "base": "b1", "digest": "d1"})
+    );
+    let flags = super::flags_for(tool, &filled).expect("the flags build");
+    assert!(
+        flags.windows(2).any(|pair| pair == ["--digest", "d1"]),
+        "{flags:?}"
+    );
+
+    let other = json!({"issue": 12, "run_id": "claude-expand0a1b2c3d", "epoch": "e2"});
+    assert!(matches!(
+        super::expanded_receipt(tool, &other, &context),
+        Err(super::ToolFailure::Malformed(message)) if message.contains("epoch e1")
+    ));
+
+    let another_issue = json!({"issue": 13, "run_id": "claude-expand0a1b2c3d", "epoch": "e1"});
+    assert_eq!(
+        super::expanded_receipt(tool, &another_issue, &context).expect("not refused"),
+        None
+    );
+}
+
+#[test]
+fn a_receipt_with_no_pointer_behind_it_keeps_the_missing_argument_answer() {
+    let (_root, context) = pointer_with_receipt("claude-expand0a1b2c3d");
+    let sent = json!({"issue": 12, "run_id": "claude-nobody0a1b2c3d", "epoch": "e1"});
+    let answer = super::run_tool("release_ci", &sent, Ok(&context));
+    assert!(
+        matches!(&answer, Err(super::ToolFailure::Malformed(message)) if message.contains("needs `pr`")),
+        "{answer:?}"
+    );
 }
 
 #[test]
