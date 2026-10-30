@@ -874,7 +874,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,675 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,205 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,450 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -3916,7 +3916,12 @@ and a merge whose answer was lost). What it does not measure:
 - **The lens roles in the evidence follow the tier and focus recorded on the receipt**, not each lens's
   report. **The summary line has two languages** (`English`, `Español`); any other `Summary language` is
   written in English. **The GitHub issue is closed after the release**: a failure of that last close
-  leaves the issue `done` and released but open, reported as `delivery_incomplete`. A `deliver` started
+  leaves the issue `done` and released but open, reported as `delivery_incomplete`. A slice whose pull
+  request does not close the issue is not released: `deliver` posts its evidence, moves the issue back to
+  `in-progress` and answers `continues: true`
+  (`a_slice_whose_pull_request_does_not_close_the_issue_continues_it`). It records no spend, since
+  `release` is what records it, and it reads the closing references from GitHub, so a branch that
+  names the issue with a closing keyword still closes it. A `deliver` started
   in the checkout its release removes runs every later read from the main working tree
   (`a_delivery_run_from_the_checkout_its_release_removes_still_reads_the_close`); when git cannot name
   that tree, the read still fails closed.

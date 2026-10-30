@@ -691,6 +691,12 @@ impl<H: Hands> Deliver<'_, H> {
     fn close(&mut self, receipt: &ReviewTransaction, merged: &Merged, ci: &Value) -> Step<Value> {
         let facts = self.facts(receipt, merged, ci);
         let evidence = evidence(&facts);
+        if !self
+            .closes_issue(receipt)
+            .map_err(|halt| with_merged(halt, merged))?
+        {
+            return self.continue_chain(receipt, merged, &evidence);
+        }
         let scratch = self.hands.scratch();
         let file = scratch.join(format!("{}-{}.md", self.request.run_id, receipt.pr));
         let written = std::fs::create_dir_all(&scratch)
@@ -743,6 +749,81 @@ impl<H: Hands> Deliver<'_, H> {
             }
         }
         Ok(answer)
+    }
+
+    fn closes_issue(&self, receipt: &ReviewTransaction) -> Step<bool> {
+        let seen = self.read_pr("close", receipt, "closingIssuesReferences")?;
+        let Some(closing) = seen["closingIssuesReferences"].as_array() else {
+            return Err(stop(
+                "close",
+                "pull-request-unreadable",
+                json!({"detail": "the pull request names no closingIssuesReferences, so whether its merge closes the issue is unknown"}),
+            ));
+        };
+        Ok(closing
+            .iter()
+            .any(|reference| reference["number"].as_u64() == Some(self.request.issue)))
+    }
+
+    fn continue_chain(
+        &mut self,
+        receipt: &ReviewTransaction,
+        merged: &Merged,
+        evidence: &str,
+    ) -> Step<Value> {
+        let scratch = self.hands.scratch();
+        let file = scratch.join(format!("{}-{}-slice.md", self.request.run_id, receipt.pr));
+        let posted = std::fs::create_dir_all(&scratch)
+            .and_then(|()| crate::paths::replace_atomically(&file, evidence))
+            .map_err(|error| {
+                with_merged(
+                    stop(
+                        "continue",
+                        "evidence-unwritable",
+                        json!({"detail": format!("{}: {error}", file.display())}),
+                    ),
+                    merged,
+                )
+            })
+            .and_then(|()| {
+                let posted = self.hands.tool(
+                    "comment",
+                    json!({
+                        "issue": self.request.issue,
+                        "run_id": self.request.run_id,
+                        "kind": "note",
+                        "body_file": file.display().to_string(),
+                        "compact": true,
+                    }),
+                );
+                let _ = std::fs::remove_file(&file);
+                posted.map_err(|refusal| with_merged(refused("continue", refusal), merged))
+            })?;
+        let moved = self
+            .hands
+            .tool(
+                "transition",
+                json!({
+                    "issue": self.request.issue,
+                    "run_id": self.request.run_id,
+                    "from": "review",
+                    "to": "in-progress",
+                    "compact": true,
+                }),
+            )
+            .map_err(|refusal| with_merged(refused("continue", refusal), merged))?;
+        self.done.push("continue");
+        Ok(json!({
+            "ok": true,
+            "delivered": true,
+            "continues": true,
+            "issue": self.request.issue,
+            "pr": receipt.pr,
+            "merged": {"sha": merged.sha, "parents": merged.parents},
+            "evidence": posted,
+            "transition": moved,
+            "detail": "the pull request does not close the issue, so this slice leaves it open and in-progress under the same claim; the closing slice's delivery releases it",
+        }))
     }
 
     fn close_issue(&mut self) -> Result<String, Failure> {

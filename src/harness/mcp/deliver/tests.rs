@@ -188,6 +188,14 @@ fn fake(world: &World) -> Fake {
         "release".into(),
         vec![Ok(json!({"ok": true, "transition": {"to": "done"}}))],
     );
+    scripts.insert(
+        "comment".into(),
+        vec![Ok(json!({"ok": true, "kind": "note"}))],
+    );
+    scripts.insert(
+        "transition".into(),
+        vec![Ok(json!({"ok": true, "to": "in-progress"}))],
+    );
     Fake {
         repo: world.work.path().to_path_buf(),
         outliving: world.work.path().to_path_buf(),
@@ -332,8 +340,18 @@ fn merged_view(world: &World) -> Vec<Value> {
     })]
 }
 
+fn closing(issues: &[u64]) -> Value {
+    let references: Vec<Value> = issues.iter().map(|n| json!({"number": n})).collect();
+    json!({
+        "matches": "closingIssuesReferences",
+        "stdout": json!({"closingIssuesReferences": references}).to_string(),
+        "status": 0,
+    })
+}
+
 fn issue_views() -> Vec<Value> {
     vec![
+        closing(&[218]),
         json!({"matches": "issue view", "nth": 1, "stdout": "{\"state\":\"OPEN\"}", "status": 0}),
         json!({"matches": "issue view", "nth": 2, "stdout": "{\"state\":\"CLOSED\"}", "status": 0}),
     ]
@@ -490,7 +508,7 @@ fn a_delivery_run_from_the_checkout_its_release_removes_still_reads_the_close() 
 fn a_close_that_cannot_be_read_still_fails_closed() {
     let world = world("b.txt", "two\n");
     let mut script = green_script(&world);
-    script.truncate(script.len() - issue_views().len());
+    script.retain(|entry| entry["matches"] != "issue view");
     let fake = fake(&world);
     let ran = drive(&fake, &script, &request());
 
@@ -500,6 +518,49 @@ fn a_close_that_cannot_be_read_still_fails_closed() {
         "{}",
         ran.answer
     );
+}
+
+#[test]
+fn a_slice_whose_pull_request_does_not_close_the_issue_continues_it() {
+    let world = world("b.txt", "two\n");
+    let mut script = green_script(&world);
+    script.retain(|entry| entry["matches"] != "closingIssuesReferences");
+    script.insert(0, closing(&[]));
+    let fake = fake(&world);
+    let ran = drive(&fake, &script, &request());
+
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert_eq!(ran.answer["continues"], true, "{}", ran.answer);
+    assert!(ran.answer.get("github_issue").is_none(), "{}", ran.answer);
+    let calls = called(&fake);
+    assert!(!calls.iter().any(|call| call == "release"), "{calls:?}");
+    assert!(calls.iter().any(|call| call == "comment"), "{calls:?}");
+    assert!(calls.iter().any(|call| call == "transition"), "{calls:?}");
+    assert!(
+        !ran.gh.iter().any(|line| line.starts_with("issue")),
+        "a continuing slice read or closed the issue: {:?}",
+        ran.gh
+    );
+    assert!(
+        fake.evidence.borrow().is_empty(),
+        "release was handed evidence"
+    );
+}
+
+#[test]
+fn a_pull_request_whose_closing_references_cannot_be_read_hands_back_before_release() {
+    let world = world("b.txt", "two\n");
+    let mut script = green_script(&world);
+    script.retain(|entry| entry["matches"] != "closingIssuesReferences");
+    script.insert(
+        0,
+        json!({"matches": "closingIssuesReferences", "stdout": "{}", "status": 0}),
+    );
+    let fake = fake(&world);
+    let ran = drive(&fake, &script, &request());
+
+    assert_eq!(stopped(&ran), ("close", "pull-request-unreadable"));
+    assert!(!called(&fake).iter().any(|call| call == "release"));
 }
 
 #[test]
