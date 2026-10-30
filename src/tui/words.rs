@@ -420,12 +420,12 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("`on`, or `off`", "`on`, o `off`"),
     ("Unclaimed write policy", "Política de escritura sin reclamo"),
     (
-        "whether a run holding no claim may write in this repository: asked each time, allowed, or refused",
-        "si una ejecución sin reclamo puede escribir en este repositorio: se pregunta cada vez, se permite o se rechaza",
+        "whether a run holding no claim may write in this repository: watched, allowed, or refused",
+        "si una ejecución sin reclamo puede escribir en este repositorio: se vigila, se permite o se rechaza",
     ),
     (
-        "`ask`, `off`, or `required`",
-        "`ask`, `off` o `required`",
+        "`watch`, `off`, or `required`",
+        "`watch`, `off` o `required`",
     ),
     ("Claim workflow", "Flujo de reclamación"),
     (

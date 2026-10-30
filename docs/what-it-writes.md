@@ -1506,8 +1506,8 @@ continuation word beside its harness line.
 
 A run that has claimed nothing is not under Estigia's authority, except where the repository's
 `Unclaimed write policy` says otherwise: by default a repository write by such a run that the gate can
-place inside the checkout is put to the person first, a write it cannot place is allowed with a
-dirtied checkout reported at the next session start, and with the row `off` every write it makes goes
+place inside the checkout is put to the person first, a write it cannot place runs and the person is
+asked on the next call only if the checkout changed, and with the row `off` every write it makes goes
 through untouched. Gating every session would be a lock, not workflow authority.
 
 **One exception, and the operator opts into it.** In a checkout where `estigia guard` installed the
@@ -1519,11 +1519,12 @@ ungated, edits and tests are held only by `Unclaimed write policy`, and a checko
 has no commit refusal, as does one with no tracker transport or no installed contract.
 
 **The other exception is a repository setting, and it is on by default.** `Unclaimed write policy`
-(`ask`, `off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`) governs a run
+(`watch`, `off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`) governs a run
 holding no claim in a checkout with a tracker. `required` refuses every repository write it cannot
-place outside the checkout, with `issue-required`; `ask`, the default, asks the person on Claude Code
-for one it can place inside, refuses it on a host that cannot ask, and allows one it cannot place,
-naming the checkout's dirty paths at the next session start; a `git push` is held as a commit is;
+place outside the checkout, with `issue-required`; `watch`, the default, asks the person on Claude Code
+for one it can place inside, refuses it on a host that cannot ask, and lets one it cannot place run,
+recording the checkout's `git status` and asking on the next call, naming the changed paths, only
+if it differs; a `git push` is held as a commit is;
 `off` is the behaviour described above.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.
@@ -1572,6 +1573,7 @@ that additional route and its conservative ownership checks.
 | `lifecycle/` | machine-wide binary provenance records, see [`lifecycle.md`](lifecycle.md) | no |
 | `jobs/` | one directory per review job and per check job: manifest, prompt, lock, logs, `result.json`, `usage.json` | no |
 | `snapshots/` | up to three daily copies of the store, for a person to restore by hand | yes, with the store, when it is taken |
+| `watched/` | one `git status` record per checkout a run holding no claim ran an unplaceable write in under `watch`, removed when a change is put to the person | no |
 
 Whatever the last column says no to stays until a person removes the directory, and
 `<checkout>/.git/estigia/` stays until `estigia config forget` runs in that checkout.

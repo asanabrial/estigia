@@ -648,7 +648,7 @@ fn a_rendered_table_reads_back_identically() {
             .expect("a schedule"),
         evidence: Evidence::Measuring,
         publication_lane: crate::config::PublicationLane::Off,
-        issue_requirement: crate::config::IssueRequirement::Ask,
+        issue_requirement: crate::config::IssueRequirement::Watch,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: crate::config::Workflow::Autonomous,
         state_names: Vec::new(),

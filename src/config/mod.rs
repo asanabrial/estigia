@@ -354,9 +354,10 @@ impl DecisionMode {
 /// Repository-only: it is read from the repository's own file and nowhere else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IssueRequirement {
-    /// The default: the host is asked before an unclaimed write, except inside an isolated
-    /// checkout that a run pointer's `worktree` covers.
-    Ask,
+    /// The default: an unclaimed write the gate can place is put to the host, except inside an
+    /// isolated checkout that a run pointer's `worktree` covers; one it cannot place runs, and the
+    /// host is asked on the next call only if the checkout changed. A stored `ask` reads as this.
+    Watch,
     /// Unclaimed writes are allowed.
     Off,
     /// Unclaimed writes are refused.
@@ -367,7 +368,7 @@ impl IssueRequirement {
     /// The value as written in the table.
     pub fn as_value(self) -> &'static str {
         match self {
-            Self::Ask => "ask",
+            Self::Watch => "watch",
             Self::Off => "off",
             Self::Required => "required",
         }
@@ -375,10 +376,10 @@ impl IssueRequirement {
 
     /// Every answer, under an exhaustive match.
     pub fn all() -> Vec<Self> {
-        let every = vec![Self::Ask, Self::Off, Self::Required];
+        let every = vec![Self::Watch, Self::Off, Self::Required];
         for requirement in &every {
             match requirement {
-                Self::Ask | Self::Off | Self::Required => {}
+                Self::Watch | Self::Off | Self::Required => {}
             }
         }
         every
@@ -1146,7 +1147,7 @@ impl Default for Config {
             // exists to let an operator move it, not to move it for them.
             publication_lane: PublicationLane::On,
             decision_mode: DecisionMode::Ask,
-            issue_requirement: IssueRequirement::Ask,
+            issue_requirement: IssueRequirement::Watch,
             workflow: Workflow::Autonomous,
             state_names: Vec::new(),
             self_review: None,

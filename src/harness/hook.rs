@@ -616,8 +616,10 @@ fn state_clause(state: Option<&str>) -> String {
 /// let the write through. Empty for a claimed run, another requirement, or a clean tree.
 fn unclaimed_dirt_note(context: &GateContext, run: &session::Run) -> String {
     if run.issue.is_some()
-        || super::issue_requirement::in_force_here(context)
-            != Some(crate::config::IssueRequirement::Ask)
+        || !matches!(
+            super::issue_requirement::in_force_here(context),
+            Some(crate::config::IssueRequirement::Watch)
+        )
     {
         return String::new();
     }

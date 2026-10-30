@@ -514,7 +514,7 @@ pointer that leaves it names the document it points at.
 - **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate asks
   where it would not on Unix.** `Path::new("/tmp/y").is_absolute()` is false there, and under Git Bash
   `/tmp` and `/c/…` are mounts the gate cannot place, so such a redirect or heredoc target is read as
-  inside the checkout and held under `ask`: the safe direction, at the cost of extra prompts. Tests
+  inside the checkout and asked under `watch`: the safe direction, at the cost of extra prompts. Tests
   naming an outside target use `test_env::outside_the_checkout`. A POSIX `Worktree location` is refused.
 
 - **The interpreter inventory is prose, and nothing derives it from the suite.** `AGENTS.md` states
@@ -3078,14 +3078,26 @@ pointer that leaves it names the document it points at.
   `the_pre_push_hook_refuses_an_unclaimed_push_where_the_guard_is_installed`; nothing drives the two shell
   entry points (`estigia gate` with no session, the dialect hook with an empty session id) end to end.
 - **`Unclaimed write policy` holds the writes the hook sees, and cannot hold the rest.** With the row
-  `required` or `ask`, a run holding no claim is refused (`issue-required`) or asked before a routine write
+  `required` or `watch`, a run holding no claim is refused (`issue-required`) or asked before a routine write
   the gate can place inside a checkout whose tracker can name an issue there and that has an installed
   contract (a file edit or write, or a shell line carrying a `REPOSITORY_SHELL` fragment such as
-  `git commit`), and before one it **cannot place** when the call was launched in a repository or from a
-  directory whose repository could not be established. Such an unplaceable write is allowed under `ask`
-  only from outside every repository, and the checkout it may have dirtied is named at the next session
-  start (at most eight paths, then a count; it cannot prove they came from an allowed write rather than
-  the operator's own work). What it does not hold:
+  `git commit`), and, under `required`, before one it **cannot place** when the call was launched in a repository or
+  from a directory whose repository could not be established. Under `watch` such an unplaceable write
+  **runs**: launched in a repository, the checkout's `git status` (untracked files included, with each
+  path's time and size, so a second write to a modified file still counts) is recorded first and
+  compared on the run's next call, which is put to the person naming the changed paths only when it
+  differs; launched where the repository could not be established it is asked; launched outside every
+  repository it is allowed, and the checkout it may have dirtied is named at the next session start (at
+  most eight paths, then a count; it cannot prove they came from an allowed write rather than the
+  operator's own work). **What `watch` cannot see:** the write has already landed when the person
+  hears of it, and nothing is reverted; a change made by anyone else in the same checkout between the
+  two calls is reported as the watched write's; ignored files and writes outside the checkout are not
+  in `git status`; a call issued in parallel with the watched one can compare before it finished, so
+  the change is reported on a later call, or not at all when a write the gate can place is asked in
+  between, which drops the record; and the last call of a session is compared by nobody until the
+  `Stop` note and the next session start name the dirty checkout. Held by
+  `an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_the_checkout_changed`
+  and `a_write_placed_inside_the_checkout_is_still_asked_under_watch`. What it does not hold:
   - **A GitHub tracker that names no repository infers one from the remote, so zero remotes is a tracker
     that cannot name an issue.** A write landing only in such repositories is not held (no ask, no deny) and
     the SessionStart text says there is nothing to claim. The read is `git remote` in the repository each
@@ -3098,7 +3110,7 @@ pointer that leaves it names the document it points at.
     `a_named_repository_holds_the_write_where_the_checkout_has_no_remote`,
     `a_write_into_a_nested_checkout_that_has_a_remote_is_still_held`,
     `a_failed_remote_read_is_not_zero_remotes` and `a_guarded_checkout_with_no_remote_refuses_no_commit`.
-  - **`ask` is an ask on Claude Code and on Pi's terminal UI only, and its answer cannot be read back.** Pi
+  - **`watch` asks on Claude Code and on Pi's terminal UI only, and its answer cannot be read back.** Pi
     is asked through `estigia gate --runtime pi --can-ask` (exit `4`; the extension passes the flag only
     when `ctx.mode === "tui"` and shows `ctx.ui.confirm`), **unverified against a live Pi** (the `confirm`
     call is read from Pi 1.1.0's `docs/extensions.md` and `types.d.ts`); `rpc`, `json` and print modes are
@@ -3126,9 +3138,9 @@ pointer that leaves it names the document it points at.
     one plain printing command (`echo`, `printf`, `cat`, `ls`, `grep`, `rg`, `head`, `tail`, `wc`, `date`,
     `pwd`) with no quote, `$`, backtick, backslash, `<`, `|`, `;`, `&`, parenthesis, line break or `..`.
     **Everything else a shell line can write is unplaceable** (a `cd` before a redirect, a variable, `&&`, a
-    second writer, inline interpreter code): refused under `required`; under `ask` put to the person when the
-    call was launched in a repository or from an unestablished directory, and allowed only from outside
-    every repository; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
+    second writer, inline interpreter code): refused under `required`; under `watch` run and compared against the
+    checkout's recorded `git status` on the next call when launched in a repository, put to the person from
+    an unestablished directory, and allowed from outside every repository; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
     (`shell::quoted_heredoc_target`): `cat > TARGET <<'DELIM'`, `cat >> TARGET <<'DELIM'` or `cat <<'DELIM' >
     TARGET`, a literal absolute `TARGET` without `..`, any body (**not read**; how an issue body is drafted in
     the scratchpad) and a closing `DELIM` line. An "any shape" relaxation was abandoned after five review
