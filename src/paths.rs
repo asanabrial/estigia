@@ -384,24 +384,32 @@ pub fn replace_atomically(path: &Path, desired: &str) -> std::io::Result<()> {
 ///
 /// A symlinked destination is resolved to the file it names and that file is replaced, so the link
 /// survives; a link that names nothing is refused. The replacement keeps the mode of the file it
-/// replaces.
+/// replaces. An error after the symlink is resolved names the step that answered it and keeps its
+/// kind.
 pub fn replace_bytes_atomically(path: &Path, desired: &[u8]) -> std::io::Result<()> {
     let target = resolve_symlink(path)?;
     let temporary = staged_path(&target, "");
     let write = write_and_sync(&temporary, desired)
-        .and_then(|()| copy_existing_permissions(&target, &temporary))
+        .map_err(at_step("stage"))
+        .and_then(|()| {
+            copy_existing_permissions(&target, &temporary).map_err(at_step("permissions"))
+        })
         .and_then(|()| {
             if take_silent_swap_noop_for(path) {
                 return Ok(());
             }
-            std::fs::rename(&temporary, &target)
+            std::fs::rename(&temporary, &target).map_err(at_step("rename"))
         })
-        .and_then(|()| sync_parent(&target))
-        .and_then(|()| verify_landed(path, desired, "replace"));
+        .and_then(|()| sync_parent(&target).map_err(at_step("sync")))
+        .and_then(|()| verify_landed(path, desired, "replace").map_err(at_step("verify")));
     if write.is_err() {
         let _ = std::fs::remove_file(&temporary);
     }
     write
+}
+
+fn at_step(step: &'static str) -> impl Fn(std::io::Error) -> std::io::Error {
+    move |error| std::io::Error::new(error.kind(), format!("{step}: {error}"))
 }
 
 fn resolve_symlink(path: &Path) -> std::io::Result<std::path::PathBuf> {
@@ -960,10 +968,33 @@ mod staged_tests {
         });
         assert!(
             lost.is_empty(),
-            "{} writes lost the file they staged, first: {}",
+            "{} writes lost the file they staged: {:?}",
             lost.len(),
-            lost[0]
+            lost.iter().map(ToString::to_string).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn a_replace_that_fails_names_the_step_that_answered_and_keeps_its_kind() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let target = root.path().join("occupied");
+        std::fs::create_dir(&target).expect("a directory holds the name");
+
+        let error = replace_atomically(&target, "ours\n").expect_err("a file replaced a directory");
+        assert!(
+            error.to_string().starts_with("rename: "),
+            "the failing step is not named: {error}"
+        );
+        let leftovers: Vec<_> = std::fs::read_dir(root.path())
+            .expect("reads")
+            .filter_map(Result::ok)
+            .filter(|entry| is_staged_write(&entry.path()))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        let loose = root.path().join("loose");
+        std::fs::write(&loose, "ours\n").expect("a plain file");
+        let renamed = std::fs::rename(&loose, &target).expect_err("a file replaced a directory");
+        assert_eq!(error.kind(), renamed.kind());
     }
 
     #[test]

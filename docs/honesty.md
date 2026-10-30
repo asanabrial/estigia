@@ -111,6 +111,11 @@ pointer that leaves it names the document it points at.
   the store's five second busy wait is the suspect and is unmeasured. The stand-in reviewer in the
   launch tests waits for a release file bounded at thirty seconds, so a launch that wrongly joins its
   runner fails slowly, not instantly.
+  `paths::staged_tests::two_threads_replacing_one_path_never_lose_their_staged_file` answered
+  `NotFound` once in 1,000 contended replaces on `windows-latest` (CI run `41006783911`, both
+  attempts) and in no other run: 0 failures in 40 runs alone and in 8 passes of the whole nextest suite
+  on that runner. Which step answered is unknown; a `replace_bytes_atomically` error now names its
+  step (`stage`, `permissions`, `rename`, `sync`, `verify`), so the next one says.
 
 ## Comments, instructions and the build
 
