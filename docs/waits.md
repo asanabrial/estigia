@@ -97,6 +97,9 @@ from both totals.
   ceiling is now 900 s, the one `collect_review_input` has. After the first 50 s it reads the pull
   request every 20 s instead of every 2 s, and the default stays 20 s. Whether a host holds a call that
   long is the question the 50 s reading left open. This count shows only that Claude Code held 111 s.
+  The `deliver` that `review_status` names carries `wait_seconds: 50` (`ROUTED_DELIVER_WAIT_SECONDS`),
+  the ceiling every host had before, so a caller following the route asks two and a half times less
+  often than at the 20 s default without asking any host to hold a call longer than it already did.
 - **No path is needed for the kept rows.** Each is a decision the model or a person makes, or a wait the
   runtime already holds.
 
