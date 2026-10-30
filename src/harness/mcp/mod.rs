@@ -758,6 +758,11 @@ fn run_tool_asking(
         ))
     })?;
 
+    let expanded = match context {
+        Ok(context) => expanded_receipt(tool, arguments, context)?,
+        Err(_) => None,
+    };
+    let arguments = expanded.as_ref().unwrap_or(arguments);
     let mut flags = flags_for(tool, arguments)?;
 
     let context = match context {
@@ -1630,6 +1635,71 @@ fn default_spend_receipt(run: &session::Run, issue: u64, flags: &mut [String]) {
     }
 }
 
+const RECEIPT_FIELDS: [&str; 5] = ["epoch", "pr", "head", "base", "digest"];
+
+fn receipt_values(receipt: &crate::transport::claim::ReviewTransaction) -> [Value; 5] {
+    [
+        json!(receipt.epoch),
+        json!(receipt.pr),
+        json!(receipt.head),
+        json!(receipt.base),
+        json!(receipt.digest),
+    ]
+}
+
+/// A receipt-taking call that names only `epoch` has the rest filled from this
+/// run's pointer, when the pointer holds a review transaction for the same issue
+/// under that exact epoch; the transport still checks the filled receipt.
+fn expanded_receipt(
+    tool: &Tool,
+    arguments: &Value,
+    context: &GateContext,
+) -> Result<Option<Value>, ToolFailure> {
+    let takes_receipt = RECEIPT_FIELDS.iter().all(|field| {
+        tool.arguments
+            .iter()
+            .any(|argument| argument.name == *field)
+    });
+    let Some(epoch) = arguments.get("epoch").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    if !takes_receipt
+        || RECEIPT_FIELDS
+            .iter()
+            .all(|field| arguments.get(*field).is_some())
+    {
+        return Ok(None);
+    }
+    let (Some(named), Some(issue)) = (
+        named_run(tool, arguments, context)?,
+        arguments.get("issue").and_then(Value::as_u64),
+    ) else {
+        return Ok(None);
+    };
+    let run = session::load(&context.state_root, named.id);
+    let Some(receipt) = run
+        .review_transaction
+        .as_ref()
+        .filter(|_| run.issue_number() == Some(issue))
+    else {
+        return Ok(None);
+    };
+    if receipt.epoch != epoch {
+        return Err(ToolFailure::Malformed(format!(
+            "{} was sent epoch {epoch}, and this run's pointer holds the review transaction of \
+             epoch {}: send every receipt field for another publication",
+            tool.name, receipt.epoch
+        )));
+    }
+    let mut filled = arguments.clone();
+    if let Some(object) = filled.as_object_mut() {
+        for (field, value) in RECEIPT_FIELDS.iter().zip(receipt_values(receipt)) {
+            object.entry(*field).or_insert(value);
+        }
+    }
+    Ok(Some(filled))
+}
+
 fn held_spend_receipt(run: &session::Run, issue: u64, spend: &str) -> Option<String> {
     if run.issue_number() != Some(issue) {
         return None;
@@ -1638,14 +1708,8 @@ fn held_spend_receipt(run: &session::Run, issue: u64, spend: &str) -> Option<Str
     let mut value: Value = serde_json::from_str(spend).ok()?;
     let fill = |record: &mut Value| {
         if let Some(record) = record.as_object_mut() {
-            for (field, default) in [
-                ("epoch", json!(receipt.epoch)),
-                ("pr", json!(receipt.pr)),
-                ("head", json!(receipt.head)),
-                ("base", json!(receipt.base)),
-                ("digest", json!(receipt.digest)),
-            ] {
-                record.entry(field).or_insert(default);
+            for (field, default) in RECEIPT_FIELDS.iter().zip(receipt_values(receipt)) {
+                record.entry(*field).or_insert(default);
             }
         }
     };
@@ -1948,7 +2012,7 @@ fn without_repeated_receipt(status: &mut Value) {
         return;
     };
     if let Some(receipt) = receipt.as_object() {
-        arguments.retain(|name, value| receipt.get(name) != Some(value));
+        arguments.retain(|name, value| name == "epoch" || receipt.get(name) != Some(value));
     }
 }
 

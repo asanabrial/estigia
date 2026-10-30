@@ -1303,8 +1303,8 @@ pub const TOOLS: &[Tool] = &[
         description: "The one next step of this issue's review, so the route is followed rather \
                       than chosen. `next.kind` is `execute` (run `next.operation` with \
                       `next.arguments`, adding your run id, an operation id and the tool's own \
-                      non-receipt arguments; with `compact` those carry only what `receipt` \
-                      does not), `collect` (obtain each of `next.inputs` with its \
+                      non-receipt arguments; with `compact`, `epoch` alone; the server adds \
+                      the rest), `collect` (obtain each of `next.inputs` with its \
                       `capture` operation, then ask again) or `stop` (`next.reason_code` and \
                       `next.continuation`). The answer carries the `receipt` it was read \
                       against and a `forecast` horizon; each named command carries that \
