@@ -1993,8 +1993,16 @@ fn route_through_deliver(tool: &str, body: &mut Value, delivers: impl FnOnce() -
         return;
     }
     next["operation"] = json!("deliver");
-    next["arguments"] = json!({"issue": next["arguments"]["issue"]});
+    next["arguments"] = json!({
+        "issue": next["arguments"]["issue"],
+        "wait_seconds": ROUTED_DELIVER_WAIT_SECONDS,
+    });
 }
+
+/// The wait a routed `deliver` asks for: the per-call ceiling every host was
+/// given before `deliver` took 900 s, under the reading that some hosts drop an
+/// MCP call near 60 s.
+const ROUTED_DELIVER_WAIT_SECONDS: u64 = 50;
 
 fn delivers(context: &GateContext) -> bool {
     let layered = crate::transport::Context::live(

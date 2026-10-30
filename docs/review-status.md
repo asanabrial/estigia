@@ -77,7 +77,7 @@ validator result is refused `recorded-by-capture-only`, so a slot
 | Approved and recorded | `execute` | `approved` | `release_ci` with the receipt |
 
 Over MCP, where `Merge by` is the agent and `Delivery authorisation` is `auto`, the two rows above name
-`deliver` with `{issue}` instead, in `review_status`'s own answer and in the one a publication or a
+`deliver` with `{issue, wait_seconds: 50}` instead, in `review_status`'s own answer and in the one a publication or a
 collect carries: `deliver` records the verdict and releases CI as its own first steps, so naming them
 alone costs a call each. `reason_code` is unchanged, and it is what `deliver` and `record_verdict` read.
 Anywhere `deliver` would hand back before releasing CI, the rows name what the table says.

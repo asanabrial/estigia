@@ -9161,7 +9161,10 @@ fn a_computable_verdict_and_an_approval_are_routed_through_deliver_only_where_it
         let mut routed = status(reason, operation);
         super::route_through_deliver("review_status", &mut routed, || true);
         assert_eq!(routed["next"]["operation"], "deliver", "{routed}");
-        assert_eq!(routed["next"]["arguments"], json!({"issue": 5}));
+        assert_eq!(
+            routed["next"]["arguments"],
+            json!({"issue": 5, "wait_seconds": super::ROUTED_DELIVER_WAIT_SECONDS})
+        );
         assert_eq!(routed["next"]["reason_code"], reason);
 
         let mut embedded = json!({"ok": true, "review_status": status(reason, operation)});
