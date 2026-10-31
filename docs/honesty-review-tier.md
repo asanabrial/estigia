@@ -335,6 +335,12 @@ review tier, the lens and the finding do not establish.
   checkout** (`citation_ls_tree`, `tier::blob_content` under `How::read()`) for **every** class, so a
   run recording a `suggestion` from a checkout that never fetched the receipt's `head` fails with a git
   read error instead of recording.
+  - **A bare file name is read as the one changed file that carries it.** A path with no `/` that
+    neither tree holds is looked up among the paths `base..head` changes. When exactly one of them
+    has that file name, the citation is resolved, line check included, against that path. When none
+    or several do, or the diff cannot be read, it is refused `path-not-in-either-tree` as before.
+    So `mod.rs:12` is credited to the single changed `mod.rs`, and nothing checks that the
+    reviewer meant that one and not an unchanged `mod.rs` elsewhere.
   - **A path that exists and has moved lines still passes.** The line is compared with the larger of
     `base`'s and `head`'s blob line counts, not the diff between them.
   - **A path no tree holds as a blob is admitted at any line.** Where either tree holds a `120000`

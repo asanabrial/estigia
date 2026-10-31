@@ -5634,6 +5634,14 @@ fn cached_citation_resolution(
     Ok(resolution)
 }
 
+fn bare_name_matches<'a>(changed: &'a [String], name: &str) -> Vec<&'a str> {
+    changed
+        .iter()
+        .map(String::as_str)
+        .filter(|path| path.rsplit('/').next() == Some(name))
+        .collect()
+}
+
 /// Scans `evidence`, then `impact`, for every citation either field's prose
 /// makes, and refuses the finding at the first one that cannot be resolved
 /// against `base..head`: a finding's free-text fields were
@@ -5647,6 +5655,7 @@ fn check_finding_citations(
     impact: &str,
 ) -> Result<(), Failure> {
     let mut cache: HashMap<String, CitationResolution> = HashMap::new();
+    let mut changed: Option<Vec<String>> = None;
     for (field, text) in [("evidence", evidence), ("impact", impact)] {
         for token in citation_tokens(text) {
             let Some(reference) = citation_reference(&token) else {
@@ -5655,9 +5664,20 @@ fn check_finding_citations(
             let (path, cause): (String, &str) = match reference {
                 CitationReference::Malformed { path } => (path, "malformed-path"),
                 CitationReference::Candidate { path, end } => {
-                    let resolution = cached_citation_resolution(&mut cache, &path, || {
+                    let mut resolution = cached_citation_resolution(&mut cache, &path, || {
                         resolve_citation_path(context, base, head, &path)
                     })?;
+                    if matches!(resolution, CitationResolution::Absent) && !path.contains('/') {
+                        let changed = changed.get_or_insert_with(|| {
+                            changed_paths_between(context, base, head).unwrap_or_default()
+                        });
+                        if let [only] = bare_name_matches(changed, &path).as_slice() {
+                            let only = (*only).to_owned();
+                            resolution = cached_citation_resolution(&mut cache, &only, || {
+                                resolve_citation_path(context, base, head, &only)
+                            })?;
+                        }
+                    }
                     let cause = match resolution {
                         CitationResolution::Absent => "path-not-in-either-tree",
                         CitationResolution::Directory => "path-is-not-a-file",
