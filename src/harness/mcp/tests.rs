@@ -3021,6 +3021,62 @@ fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
 }
 
 #[test]
+fn a_claim_after_a_release_records_the_new_issues_checkout_not_the_old_one() {
+    let repo = repository_with_commit();
+    let elsewhere = tempfile::tempdir().expect("somewhere for the checkouts");
+    let first = elsewhere.path().join("issue-30");
+    let second = elsewhere.path().join("issue-31");
+    register_adopted_worktree(repo.path(), &first, "issue-30", "claude-twoissues00", 30);
+    register_adopted_worktree(repo.path(), &second, "issue-31", "claude-twoissues00", 31);
+
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, repo.path());
+    let tool = |name: &str| {
+        super::tools::TOOLS
+            .iter()
+            .find(|tool| tool.name == name)
+            .expect("the tool is listed")
+    };
+    assert_eq!(tool("release").effect, super::PointerEffect::Forget);
+    assert_eq!(tool("claim").effect, super::PointerEffect::Swear);
+
+    let mut run = crate::harness::session::Run::new("claude-twoissues00".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(30));
+    run.repo_dir = Some(repo.path().to_path_buf());
+    run.worktree = Some(first);
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+
+    super::apply_effect(
+        tool("release"),
+        &serde_json::json!({"issue": 30, "run_id": "claude-twoissues00"}),
+        Some(&serde_json::json!({"ok": true, "issue": 30})),
+        &mut run,
+        &context,
+    );
+    super::apply_effect(
+        tool("claim"),
+        &serde_json::json!({
+            "issue": 31, "run_id": "claude-twoissues00", "horizon": "2026-01-01T01:00Z",
+        }),
+        Some(&serde_json::json!({"ok": true, "issue": 31})),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, "claude-twoissues00");
+    assert_eq!(after.issue, Some(crate::identity::Identity::Number(31)));
+    assert_eq!(
+        after
+            .worktree
+            .as_deref()
+            .and_then(|path| std::fs::canonicalize(path).ok()),
+        std::fs::canonicalize(&second).ok(),
+        "the claim of issue 31 did not record its own checkout: {:?}",
+        after.worktree
+    );
+}
+
+#[test]
 fn a_renewal_records_the_checkout_a_resumed_run_adopted() {
     let repo = repository_with_commit();
     let elsewhere = tempfile::tempdir().expect("somewhere for the adopted checkout");

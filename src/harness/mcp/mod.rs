@@ -1769,6 +1769,7 @@ pub(crate) fn apply_effect(
         // Removing the file is the record: if it is gone, the run holds
         // nothing, which is what was asked for.
         session::forget(&context.state_root, &run.run_id);
+        *run = session::load(&context.state_root, &run.run_id);
         return true;
     }
     let issue = arguments
