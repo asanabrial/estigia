@@ -1130,6 +1130,57 @@ fn any_other_shell_write_is_still_held() {
 }
 
 #[test]
+fn a_git_write_sent_into_another_checkout_runs_watched_rather_than_asked() {
+    let (repo, _root, watching) = rig(IssueRequirement::Watch);
+    let other = crate::test_env::repository_with_commit();
+    let clone = crate::test_env::shell_path(other.path());
+    for command in [
+        format!("cd {clone} && git stash -q -- lib"),
+        format!("cd {clone} && git stash -q -- lib && cargo test ; git stash pop -q"),
+        format!("git -C {clone} stash"),
+        format!("git -C {clone} stash && git -C {clone} stash pop"),
+        format!(
+            "cd {clone} && python3 - <<'EOF'\nopen('t.dart','w').write('x')\nEOF\n\
+             git stash -q -- lib && fvm flutter test t.dart 2>&1 | grep -E \"Some tests\" | head; \
+             git stash pop -q && git diff --stat"
+        ),
+    ] {
+        let decision = shell_write(&watching, &command);
+        assert!(
+            matches!(&decision, Decision::Allow(note) if note.contains("`watch`")),
+            "{command}: {decision:?}"
+        );
+    }
+    let (_repo, _root, required) = rig(IssueRequirement::Required);
+    let decision = shell_write(&required, &format!("cd {clone} && git stash"));
+    assert!(
+        matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+        "{decision:?}"
+    );
+    let own = crate::test_env::shell_path(repo.path());
+    for command in [
+        format!("cd {own} && git stash"),
+        format!("git -C {own} stash"),
+        "cd \"$DIR\" && git stash".to_owned(),
+        "cd clone && git stash".to_owned(),
+        format!("cd {clone} && git stash ; cd {own} && git stash pop"),
+        format!("git -C {clone} stash && git stash pop"),
+        format!("cd {clone} && git -C {own} stash"),
+        format!("cd {clone} && GIT_DIR={own}/.git git stash"),
+        format!("cd {clone} && git --git-dir={own}/.git stash"),
+        format!("cd {clone} ; git stash"),
+        format!("cd {clone} && (cd {own}; git stash)"),
+        format!("cd {clone} && git stash && sh -c 'cd {own} && git stash'"),
+    ] {
+        let decision = shell_write(&watching, &command);
+        assert!(
+            matches!(&decision, Decision::Ask(refusal) if refusal.code == CODE),
+            "{command}: {decision:?}"
+        );
+    }
+}
+
+#[test]
 fn the_three_unplaceable_shapes_run_watched_under_watch_and_are_refused_under_required() {
     let scratch = "/private/tmp/estigia-719-scratchpad";
     let shapes = [
