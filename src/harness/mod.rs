@@ -3195,6 +3195,12 @@ fn decide_observing(
     how: Sensitivity,
     observed: &Observed,
 ) -> Decision {
+    if run.issue.is_none()
+        && !run.assisted
+        && let Some(changed) = issue_requirement::watched_change(context)
+    {
+        return changed;
+    }
     let verifier = match action {
         Action::Untouched => return Decision::Outside(Aside::NotWatched),
         Action::Remote { command } => {

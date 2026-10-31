@@ -463,12 +463,26 @@ fn redirects_into_a_file(command: &str) -> bool {
     let mut hid_an_arrow = false;
     let mut comment = false;
     let mut pending: Vec<(String, bool, bool)> = Vec::new();
+    // The open parentheses of each `$(` entered from inside double quotes, where quoting restarts.
+    let mut substitutions: Vec<usize> = Vec::new();
+    let nests = !command.contains("case");
     let mut index = 0;
 
     while index < bytes.len() {
         let byte = bytes[index];
         if let Some(open) = quote {
             if byte == b'\\' && (ansi || open == b'"') {
+                index += 2;
+                continue;
+            }
+            if nests
+                && open == b'"'
+                && byte == b'$'
+                && bytes.get(index + 1) == Some(&b'(')
+                && bytes.get(index + 2) != Some(&b'(')
+            {
+                substitutions.push(0);
+                quote = None;
                 index += 2;
                 continue;
             }
@@ -493,6 +507,21 @@ fn redirects_into_a_file(command: &str) -> bool {
             }
         }
         match byte {
+            b'(' if !substitutions.is_empty() => {
+                if let Some(open) = substitutions.last_mut() {
+                    *open += 1;
+                }
+                index += 1;
+            }
+            b')' if !substitutions.is_empty() => {
+                if substitutions.last() == Some(&0) {
+                    substitutions.pop();
+                    quote = Some(b'"');
+                } else if let Some(open) = substitutions.last_mut() {
+                    *open -= 1;
+                }
+                index += 1;
+            }
             b'\\' => index += 2,
             b'\'' | b'"' => {
                 quote = Some(byte);
@@ -985,9 +1014,195 @@ fn unquote(bytes: &[u8], mut index: usize, out: &mut Vec<u8>, scope: Scope) -> O
 /// by its grammar; anything else is returned unchanged, so the whole-text scan
 /// stays the floor and a construct this reader does not model is read as code.
 pub(crate) fn data_view(command: &str) -> String {
-    match read_only_spans(command) {
+    match read_only_spans(command, false).or_else(|| compound_spans(command)) {
         Some(spans) => blank(command, &spans),
         None => command.to_owned(),
+    }
+}
+
+/// Words that let a line redefine what a read-only name runs, choose the program it resolves to,
+/// or hide a `)` the lexer below would take for a boundary.
+const COMPOUND_REFUSED: &[&str] = &[
+    "PATH", "ENV", "alias", "function", "hash", "enable", "case", "esac", "coproc",
+];
+
+/// The spans each top-level simple command of a compound line reads, by the grammar
+/// [`read_only_spans`] applies to a lone command, or `None` when the line holds a construct
+/// through which data could reach execution: a pipe into anything outside [`READS_ONLY`], a
+/// redirect, a here-document, a process substitution, `${`, `$'`, a comment or a backslash.
+/// Nothing inside a command substitution or backticks is blanked.
+fn compound_spans(command: &str) -> Option<Vec<(usize, usize)>> {
+    if COMPOUND_REFUSED.iter().any(|word| command.contains(word)) {
+        return None;
+    }
+    let bytes = command.as_bytes();
+    let mut pieces = Vec::new();
+    let mut piped = false;
+    let mut depth = 0usize;
+    let mut start = 0;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        let separator = match byte {
+            b'\'' => {
+                index = single_quoted_end(bytes, index)?;
+                continue;
+            }
+            b'"' => {
+                index = double_quoted_end(bytes, index)?;
+                continue;
+            }
+            b'`' => {
+                index = backticks_end(bytes, index)?;
+                continue;
+            }
+            b'$' => {
+                index = dollar_end(bytes, index)?;
+                continue;
+            }
+            b'#' if index == 0 || is_blank(bytes[index - 1]) => return None,
+            b'\\' | b'\r' | b'>' => return None,
+            b'<' => {
+                match (bytes.get(index + 1), bytes.get(index + 2)) {
+                    (Some(b'('), _) => return None,
+                    (Some(b'<'), Some(b'<')) => index += 3,
+                    (Some(b'<'), _) => return None,
+                    _ => index += 1,
+                }
+                continue;
+            }
+            b'(' => {
+                if matches!(bytes.get(index + 1), Some(b'(' | b')'))
+                    || (index > 0 && bytes[index - 1] == b'=')
+                {
+                    return None;
+                }
+                depth += 1;
+                1
+            }
+            b')' => {
+                depth = depth.checked_sub(1)?;
+                1
+            }
+            b';' | b'\n' => 1,
+            b'&' | b'|' => {
+                if byte == b'|' && bytes.get(index + 1) != Some(&b'|') {
+                    piped = true;
+                }
+                1 + usize::from(matches!(bytes.get(index + 1), Some(b'&' | b'|')))
+            }
+            _ => {
+                index += 1;
+                continue;
+            }
+        };
+        pieces.push((start, index));
+        index += separator;
+        start = index;
+    }
+    if depth != 0 {
+        return None;
+    }
+    pieces.push((start, bytes.len()));
+    let mut spans = Vec::new();
+    for (start, end) in pieces {
+        let piece = &command[start..end];
+        let body = piece.len() - without_reserved_words(piece).len();
+        let text = &piece[body..];
+        if text.trim().is_empty() {
+            continue;
+        }
+        if piped && !bare_word(text, 0).is_some_and(|(head, _)| READS_ONLY.contains(&head)) {
+            return None;
+        }
+        if let Some(found) = read_only_spans(text.trim_end(), true) {
+            let offset = start + body;
+            spans.extend(
+                found
+                    .into_iter()
+                    .map(|(from, to)| (from + offset, to + offset)),
+            );
+        }
+    }
+    Some(spans)
+}
+
+/// `piece` with the reserved words that may open a simple command taken off its front.
+fn without_reserved_words(piece: &str) -> &str {
+    let mut rest = piece.trim_start();
+    loop {
+        let word = rest.split([' ', '\t']).next().unwrap_or("");
+        if ![
+            "do", "then", "else", "elif", "if", "while", "until", "!", "{", "}",
+        ]
+        .contains(&word)
+        {
+            return rest;
+        }
+        rest = rest[word.len()..].trim_start();
+    }
+}
+
+fn single_quoted_end(bytes: &[u8], open: usize) -> Option<usize> {
+    Some(open + 2 + bytes[open + 1..].iter().position(|byte| *byte == b'\'')?)
+}
+
+fn double_quoted_end(bytes: &[u8], open: usize) -> Option<usize> {
+    let mut index = open + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => return Some(index + 1),
+            b'\\' if bytes.get(index + 1) == Some(&b'\n') => return None,
+            b'\\' => index += 2,
+            b'`' => index = backticks_end(bytes, index)?,
+            b'$' if bytes.get(index + 1) == Some(&b'{') => return None,
+            b'$' if bytes.get(index + 1) == Some(&b'(') => index = dollar_end(bytes, index)?,
+            _ => index += 1,
+        }
+    }
+    None
+}
+
+fn backticks_end(bytes: &[u8], open: usize) -> Option<usize> {
+    let close = open + 1 + bytes[open + 1..].iter().position(|byte| *byte == b'`')?;
+    (!bytes[open + 1..close]
+        .iter()
+        .any(|byte| b"\\'\"".contains(byte)))
+    .then_some(close + 1)
+}
+
+/// The index after a `$` expansion; a command substitution is skipped whole and read nowhere.
+fn dollar_end(bytes: &[u8], at: usize) -> Option<usize> {
+    match bytes.get(at + 1) {
+        Some(b'(') if bytes.get(at + 2) == Some(&b'(') => None,
+        Some(b'(') => {
+            let mut depth = 0usize;
+            let mut index = at + 2;
+            while index < bytes.len() {
+                match bytes[index] {
+                    b'\'' => index = single_quoted_end(bytes, index)?,
+                    b'"' => index = double_quoted_end(bytes, index)?,
+                    b'`' => index = backticks_end(bytes, index)?,
+                    b'$' => index = dollar_end(bytes, index)?,
+                    b'#' if is_blank(bytes[index - 1]) => return None,
+                    b'\\' | b'\r' => return None,
+                    b'<' if bytes.get(index + 1) == Some(&b'<') => return None,
+                    b'(' => {
+                        depth += 1;
+                        index += 1;
+                    }
+                    b')' if depth == 0 => return Some(index + 1),
+                    b')' => {
+                        depth -= 1;
+                        index += 1;
+                    }
+                    _ => index += 1,
+                }
+            }
+            None
+        }
+        Some(b'{' | b'\'' | b'"') => None,
+        _ => Some(at + 1),
     }
 }
 
@@ -996,7 +1211,10 @@ pub(crate) fn data_view(command: &str) -> String {
 ///
 /// It reads the line as bash does, case included: a here-document terminator
 /// is compared byte for byte, so a caller must not hand it a case-folded copy.
-fn read_only_spans(command: &str) -> Option<Vec<(usize, usize)>> {
+///
+/// `piece` reads one command of a compound line: a plain `$name` expansion is accepted, quoted or
+/// not, and a here-document or a line break is refused.
+fn read_only_spans(command: &str, piece: bool) -> Option<Vec<(usize, usize)>> {
     if command.contains('\r') {
         return None;
     }
@@ -1016,7 +1234,7 @@ fn read_only_spans(command: &str) -> Option<Vec<(usize, usize)>> {
                 .iter()
                 .take_while(|byte| is_blank(**byte))
                 .count();
-        if matches!(bytes.get(verb), Some(b'\'' | b'"')) {
+        if subcommand != "api" && matches!(bytes.get(verb), Some(b'\'' | b'"')) {
             return None;
         }
     }
@@ -1032,13 +1250,21 @@ fn read_only_spans(command: &str) -> Option<Vec<(usize, usize)>> {
                 {
                     return None;
                 }
-                let end = quoted_end(bytes, index)?;
+                let end = if piece {
+                    piece_quoted_end(bytes, index)?
+                } else {
+                    quoted_end(bytes, index)?
+                };
                 if bytes.get(end + 1).is_some_and(|next| !is_blank(*next)) {
                     return None;
                 }
                 spans.push((index, end + 1));
                 index = end + 1;
             }
+            b'$' if piece && bytes.get(index + 1).is_some_and(|next| is_name_byte(*next)) => {
+                index += 1;
+            }
+            b'<' | b'\n' if piece => return None,
             b'<' => {
                 if !is_blank(bytes[index - 1]) {
                     return None;
@@ -1063,6 +1289,26 @@ fn read_only_spans(command: &str) -> Option<Vec<(usize, usize)>> {
         }
     }
     pending.is_empty().then_some(spans)
+}
+
+fn is_name_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+/// [`quoted_end`] for one command of a compound line: a double-quoted region may also hold a
+/// plain `$name`, and nothing else the shell would expand.
+fn piece_quoted_end(bytes: &[u8], open: usize) -> Option<usize> {
+    if bytes[open] == b'\'' {
+        return quoted_end(bytes, open);
+    }
+    let end = open + 1 + bytes[open + 1..].iter().position(|byte| *byte == b'"')?;
+    let inside = &bytes[open + 1..end];
+    let plain = inside.iter().enumerate().all(|(at, byte)| match byte {
+        b'`' | b'\\' | b'!' => false,
+        b'$' => inside.get(at + 1).is_some_and(|next| is_name_byte(*next)),
+        _ => true,
+    });
+    plain.then_some(end)
 }
 
 fn is_blank(byte: u8) -> bool {

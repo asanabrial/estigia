@@ -508,11 +508,21 @@ It waits for mail addressed to the session and wakes it by exiting 2; what it do
 duplicate, and uninstall removes it with the other Estigia hooks because it has Estigia's shape (below) while another
 tool's `Stop` entries, the loop's included, stay. Only Claude Code gets it; Codex's `Stop` is the loop's.
 
+## The Claude Code `PostToolUse` entry
+
+`estigia setup claude-code` registers `PostToolUse` with the matcher `Bash` and
+`"<estigia>" hook post-tool-use`, 10 s. It decides nothing. For a run holding no claim under
+`Unclaimed write policy: watch`, after a shell call the gate let run unplaced, it compares the
+checkout's `git status` with the record taken before the call and, when it differs, answers a
+`systemMessage` for the person and the same text as `additionalContext` for the agent, naming the
+changed paths. The record stays, so the run's next call is still put to the person. Every other
+call answers `{}`. Only Claude Code gets it.
+
 ## Which hook commands setup treats as its own
 
 `setup` and `uninstall` take out, and `status` counts as the gate, a settings-file hook command only
 when it has Estigia's shape: a program, then `hook` as its own word, then an event slug
-(`pre-tool-use`, `session-start`, `session-end`, `stop`), read by `runs_estigia_hook` in
+(`pre-tool-use`, `post-tool-use`, `session-start`, `session-end`, `stop`), read by `runs_estigia_hook` in
 `src/setup/render.rs` over the words `src/setup/wiring.rs` splits a command line into. The program may
 be quoted, contain spaces, be a Windows path or be a renamed copy. A command that merely contains the
 text, such as `/home/me/bin/slack-webhook stop`, is another tool's and is written back byte for byte.
@@ -752,7 +762,7 @@ bound) and sets `systemPromptOptions.sections.estigia` to the
 binary's text, which Pi renders as an `<estigia>` section appended to the prompt; it returns nothing,
 so it never replaces the prompt. The text is
 `harness::hook::session_start_text`, which wraps `session_start_response`, the function the Claude
-Code hook uses, so the run id, what the run holds, the `Issue requirement` note, the build note (absent in a repository that does not hold the
+Code hook uses, so the run id, what the run holds, the `Unclaimed write policy` note, the build note (absent in a repository that does not hold the
 build's commit, `docs/honesty.md`) and the
 queue note are one text for both apart from the queue count. The queue note says GitHub writes are queued without
 counting them: a growing count would rewrite the leading prompt on every turn. It asks on every run rather than caching, since the answer depends on a
@@ -1437,6 +1447,8 @@ agent (Claude Code)
   ├─ tool: Edit / Write / Bash
   │    └─ PreToolUse → estigia hook pre-tool-use
   │         └─ verify_claim against the tracker → deny
+  │    └─ PostToolUse (Bash) → estigia hook post-tool-use
+  │         └─ a watched checkout that changed → said to the person and the agent at once
   │
   ├─ turn about to end
   │    └─ Stop → estigia hook stop
@@ -1506,8 +1518,8 @@ continuation word beside its harness line.
 
 A run that has claimed nothing is not under Estigia's authority, except where the repository's
 `Unclaimed write policy` says otherwise: by default a repository write by such a run that the gate can
-place inside the checkout is put to the person first, a write it cannot place is allowed with a
-dirtied checkout reported at the next session start, and with the row `off` every write it makes goes
+place inside the checkout is put to the person first, a write it cannot place runs and the person is
+asked on the next call only if the checkout changed, and with the row `off` every write it makes goes
 through untouched. Gating every session would be a lock, not workflow authority.
 
 **One exception, and the operator opts into it.** In a checkout where `estigia guard` installed the
@@ -1519,11 +1531,12 @@ ungated, edits and tests are held only by `Unclaimed write policy`, and a checko
 has no commit refusal, as does one with no tracker transport or no installed contract.
 
 **The other exception is a repository setting, and it is on by default.** `Unclaimed write policy`
-(`ask`, `off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`) governs a run
+(`watch`, `off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`) governs a run
 holding no claim in a checkout with a tracker. `required` refuses every repository write it cannot
-place outside the checkout, with `issue-required`; `ask`, the default, asks the person on Claude Code
-for one it can place inside, refuses it on a host that cannot ask, and allows one it cannot place,
-naming the checkout's dirty paths at the next session start; a `git push` is held as a commit is;
+place outside the checkout, with `issue-required`; `watch`, the default, asks the person on Claude Code
+for one it can place inside, refuses it on a host that cannot ask, and lets one it cannot place run,
+recording the checkout's `git status` and asking on the next call, naming the changed paths, only
+if it differs; a `git push` is held as a commit is;
 `off` is the behaviour described above.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.
@@ -1572,6 +1585,7 @@ that additional route and its conservative ownership checks.
 | `lifecycle/` | machine-wide binary provenance records, see [`lifecycle.md`](lifecycle.md) | no |
 | `jobs/` | one directory per review job and per check job: manifest, prompt, lock, logs, `result.json`, `usage.json` | no |
 | `snapshots/` | up to three daily copies of the store, for a person to restore by hand | yes, with the store, when it is taken |
+| `watched/` | one `git status` record per checkout a run holding no claim ran an unplaceable write in under `watch`, removed when a change is put to the person | no |
 
 Whatever the last column says no to stays until a person removes the directory, and
 `<checkout>/.git/estigia/` stays until `estigia config forget` runs in that checkout.

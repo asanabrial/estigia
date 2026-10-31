@@ -629,8 +629,8 @@ impl Setting {
                 "how many corrections one review lineage may spend before a person decides"
             }
             Self::IssueRequirement => {
-                "whether a run holding no claim may write in this repository: asked each time, \
-                 allowed, or refused"
+                "whether a run holding no claim may write in this repository: watched, allowed, or \
+                 refused"
             }
             Self::Workflow => {
                 "who witnesses a claim in this repository: Estigia writes the tracker, or the \
@@ -716,7 +716,7 @@ impl Setting {
             Self::ReviewBudget => Answers::some(&["none", "150000"]),
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::CorrectionsPerLineage => Answers::some(&["3", "1"]),
-            Self::IssueRequirement => Answers::all(&["ask", "off", "required"]),
+            Self::IssueRequirement => Answers::all(&["watch", "off", "required"]),
             Self::Workflow => Answers::all(&["autonomous", "assisted"]),
             // `custom` is accepted and not offered, for the reason `Profile`'s is.
             Self::DeliveryPreset => Answers::some(&["autonomous", "assisted", "team"]),
@@ -907,9 +907,9 @@ impl Setting {
             (Self::PublicationLane, "off") => {
                 "accepted verdicts do not read check runs; the answer says the lane was not consulted"
             }
-            (Self::IssueRequirement, "ask") => {
-                "a write by a run holding no claim is put to the person each time, where the host \
-                 can ask, and refused where it cannot"
+            (Self::IssueRequirement, "watch") => {
+                "a write by a run holding no claim that the gate can place is put to the person; one \
+                 it cannot place runs, and the person is asked only if the checkout changed"
             }
             (Self::IssueRequirement, "off") => "a run holding no claim may write here freely",
             (Self::IssueRequirement, "required") => {
@@ -1059,7 +1059,7 @@ impl Setting {
             Self::DecisionMode => "`ask`, or `auto`",
             Self::Evidence => "`reading`, or `measuring`",
             Self::PublicationLane => "`on`, or `off`",
-            Self::IssueRequirement => "`ask`, `off`, or `required`",
+            Self::IssueRequirement => "`watch`, `off`, or `required`",
             Self::Workflow => "`autonomous`, or `assisted`",
             Self::DeliveryPreset => "`autonomous`, `assisted`, `team`, or `custom`",
             Self::StateNames => {
@@ -1315,7 +1315,8 @@ impl Setting {
             }
             Self::IssueRequirement => {
                 config.issue_requirement = match lower(value).trim() {
-                    "ask" => IssueRequirement::Ask,
+                    "watch" => IssueRequirement::Watch,
+                    "ask" => IssueRequirement::Watch,
                     "off" => IssueRequirement::Off,
                     "required" => IssueRequirement::Required,
                     _ => return Err(self.reject(value)),

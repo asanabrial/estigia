@@ -115,7 +115,7 @@ fn required_refuses_an_unclaimed_shell_commit() {
 
 #[test]
 fn ask_puts_an_unclaimed_edit_to_the_person() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let Decision::Ask(refusal) = edit(&context) else {
         panic!("an unclaimed edit was not put to the person");
     };
@@ -124,7 +124,7 @@ fn ask_puts_an_unclaimed_edit_to_the_person() {
 
 #[test]
 fn ask_is_delivered_as_ask_on_claude_code_and_nowhere_else() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let claude = hook_answer(&context, Dialect::ClaudeCode, "claude-code");
     assert_eq!(
         claude["hookSpecificOutput"]["permissionDecision"], "ask",
@@ -150,7 +150,7 @@ fn ask_is_delivered_as_ask_on_claude_code_and_nowhere_else() {
 
 #[test]
 fn an_unclaimed_edit_through_the_gate_command_is_refused_not_asked() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let target = context.repo_dir.join("src.rs");
     let input = serde_json::json!({ "file_path": target.display().to_string() });
     let (action, how, _) = crate::harness::classify_observing("Edit", &input, &[]);
@@ -176,7 +176,7 @@ fn write_to(context: &GateContext, tool: &str, path: &Path) -> Decision {
 
 #[test]
 fn a_checkout_with_no_remote_is_not_held_for_an_issue() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, context) = rig_without_a_remote(requirement);
         for (tool, name) in [("Edit", "src.rs"), ("Write", "new.rs")] {
             let decision = write_to(&context, tool, &context.repo_dir.join(name));
@@ -191,7 +191,7 @@ fn a_checkout_with_no_remote_is_not_held_for_an_issue() {
 
 #[test]
 fn a_no_remote_checkout_answers_the_write_hook_with_nothing() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, context) = rig_without_a_remote(requirement);
         let answer = hook_answer(&context, Dialect::ClaudeCode, "claude-code");
         assert_eq!(answer, serde_json::json!({}), "{requirement:?}: {answer}");
@@ -200,7 +200,7 @@ fn a_no_remote_checkout_answers_the_write_hook_with_nothing() {
 
 #[test]
 fn adding_a_remote_holds_the_same_write_again() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (repo, _root, context) = rig_without_a_remote(requirement);
         assert_eq!(edit(&context), Decision::Outside(Aside::NothingSworn));
         crate::test_env::add_github_remote(repo.path());
@@ -214,7 +214,7 @@ fn adding_a_remote_holds_the_same_write_again() {
 
 #[test]
 fn a_named_repository_holds_the_write_where_the_checkout_has_no_remote() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, mut context) = rig_without_a_remote(requirement);
         context.tracker = crate::config::Tracker::Github {
             repo: Some(crate::config::RepoRef::parse("asanabrial/estigia").expect("a repo ref")),
@@ -229,7 +229,7 @@ fn a_named_repository_holds_the_write_where_the_checkout_has_no_remote() {
 
 #[test]
 fn a_write_into_a_nested_checkout_that_has_a_remote_is_still_held() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (repo, _root, context) = rig_without_a_remote(requirement);
         let nested = repo.path().join("nested");
         std::fs::create_dir(&nested).expect("a directory for the nested checkout");
@@ -245,7 +245,7 @@ fn a_write_into_a_nested_checkout_that_has_a_remote_is_still_held() {
 
 #[test]
 fn a_session_in_a_checkout_with_no_remote_is_told_nothing_is_gated() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, context) = rig_without_a_remote(requirement);
         std::fs::write(context.repo_dir.join("notes.txt"), "x\n").expect("a dirty file");
         let text = session_start_text(&context);
@@ -335,7 +335,7 @@ fn push(context: &GateContext) -> Decision {
 
 #[test]
 fn an_unclaimed_push_is_held_as_an_unclaimed_commit_is() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let decision = push(&context);
     assert!(
         matches!(&decision, Decision::Ask(refusal) if refusal.code == CODE),
@@ -353,7 +353,7 @@ fn an_unclaimed_push_is_held_as_an_unclaimed_commit_is() {
 
 #[test]
 fn an_unclaimed_push_is_asked_under_a_read_only_tracker() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let context = under_linear(context);
     assert!(matches!(push(&context), Decision::Ask(_)));
 }
@@ -428,7 +428,7 @@ fn required_refuses_an_unclaimed_edit_under_a_read_only_tracker() {
 
 #[test]
 fn ask_puts_an_unclaimed_edit_to_the_person_under_a_read_only_tracker() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let context = under_linear(context);
     assert!(matches!(edit(&context), Decision::Ask(_)));
 }
@@ -599,7 +599,7 @@ fn a_claimed_run_is_unaffected_under_every_value() {
 
 #[test]
 fn a_stand_down_lets_an_asked_write_through() {
-    let (_repo, _root, mut context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, mut context) = rig(IssueRequirement::Watch);
     context.stand_down = Some(crate::harness::standdown::StandDown {
         declared_by: "operator".to_owned(),
         reason: "incident".to_owned(),
@@ -611,18 +611,26 @@ fn a_stand_down_lets_an_asked_write_through() {
 }
 
 #[test]
-fn the_row_defaults_to_ask_and_only_the_repository_file_sets_it() {
-    assert_eq!(Config::default().issue_requirement, IssueRequirement::Ask);
+fn the_row_defaults_to_watch_and_only_the_repository_file_sets_it() {
+    assert_eq!(Config::default().issue_requirement, IssueRequirement::Watch);
     let setting = crate::config::Setting::IssueRequirement;
     assert_eq!(setting.scope(), crate::config::Scope::Repository);
     assert!(!crate::config::AGENT_SETTINGS.contains(&setting));
     assert!(!crate::config::EVERYWHERE_SETTINGS.contains(&setting));
     assert!(!crate::config::MACHINE_SETTINGS.contains(&setting));
-    for value in ["ask", "off", "required"] {
+    for value in ["watch", "off", "required"] {
         let mut config = Config::default();
         setting.apply(&mut config, value).expect("an offered value");
         assert_eq!(setting.value_of(&config), value);
     }
+    let mut stored = Config {
+        issue_requirement: IssueRequirement::Required,
+        ..Config::default()
+    };
+    setting
+        .apply(&mut stored, "ask")
+        .expect("a stored `ask` still reads");
+    assert_eq!(stored.issue_requirement, IssueRequirement::Watch);
     assert!(setting.apply(&mut Config::default(), "sometimes").is_err());
 }
 
@@ -644,7 +652,7 @@ fn the_repository_file_sets_it_and_the_contract_and_agent_files_do_not() {
         crate::config::Scope::Agent,
     )
     .expect("a read");
-    assert_eq!(from_contract.issue_requirement, IssueRequirement::Ask);
+    assert_eq!(from_contract.issue_requirement, IssueRequirement::Watch);
     assert!(owned.is_empty());
     let (from_contract, _) = Config::read_scope_over(
         &Config::default(),
@@ -652,7 +660,7 @@ fn the_repository_file_sets_it_and_the_contract_and_agent_files_do_not() {
         crate::config::Scope::Everywhere,
     )
     .expect("a read");
-    assert_eq!(from_contract.issue_requirement, IssueRequirement::Ask);
+    assert_eq!(from_contract.issue_requirement, IssueRequirement::Watch);
 }
 
 #[test]
@@ -664,7 +672,7 @@ fn a_contract_row_for_it_is_read_by_nobody_and_the_repository_file_renders_it() 
     assert!(!config.render_rows().contains("Issue requirement"));
     let rendered = config.render_some_repository_rows(&[crate::config::Setting::IssueRequirement]);
     assert!(
-        rendered.contains("| Unclaimed write policy | required | ask |"),
+        rendered.contains("| Unclaimed write policy | required | watch |"),
         "{rendered}"
     );
     let read = Config::read(
@@ -672,7 +680,7 @@ fn a_contract_row_for_it_is_read_by_nobody_and_the_repository_file_renders_it() 
         Some(&rendered),
     )
     .expect("a table");
-    assert_eq!(read.issue_requirement, IssueRequirement::Ask);
+    assert_eq!(read.issue_requirement, IssueRequirement::Watch);
 }
 
 fn holder_of(context: &GateContext, worktree: &Path) {
@@ -685,7 +693,7 @@ fn holder_of(context: &GateContext, worktree: &Path) {
 
 #[test]
 fn a_session_without_a_claim_may_write_inside_a_checkout_a_claim_names() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, root, mut context) = rig(requirement);
         let worktree = crate::test_env::repository_with_commit();
         crate::test_env::add_github_remote(worktree.path());
@@ -707,7 +715,7 @@ fn a_session_without_a_claim_may_write_inside_a_checkout_a_claim_names() {
 
 #[test]
 fn a_holder_whose_worktree_is_its_repo_dir_grants_no_exemption() {
-    let (_repo, _root, mut context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, mut context) = rig(IssueRequirement::Watch);
     let worktree = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(worktree.path());
     let mut holder = session::Run::new("opencode-aaaa1111".to_owned());
@@ -721,7 +729,7 @@ fn a_holder_whose_worktree_is_its_repo_dir_grants_no_exemption() {
 
 #[test]
 fn the_primary_checkout_stays_asked_while_a_claim_names_another() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let worktree = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(worktree.path());
     holder_of(&context, worktree.path());
@@ -730,7 +738,7 @@ fn the_primary_checkout_stays_asked_while_a_claim_names_another() {
 
 #[test]
 fn an_unreadable_pointer_gives_no_exemption() {
-    let (_repo, _root, mut context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, mut context) = rig(IssueRequirement::Watch);
     let worktree = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(worktree.path());
     holder_of(&context, worktree.path());
@@ -754,19 +762,7 @@ const UNPLACEABLE_SHELL_WRITES: &[&str] = &[
 ];
 
 #[test]
-fn an_unplaceable_shell_write_launched_in_a_repository_is_asked_under_ask() {
-    let (_repo, _root, asking) = rig(IssueRequirement::Ask);
-    for command in UNPLACEABLE_SHELL_WRITES {
-        let Decision::Ask(refusal) = shell_write(&asking, command) else {
-            panic!("{command} was not put to the person");
-        };
-        assert_eq!(refusal.code, CODE);
-        assert!(
-            refusal.message.contains("could not be placed"),
-            "{command}: {}",
-            refusal.message
-        );
-    }
+fn an_unplaceable_shell_write_launched_in_a_repository_is_refused_under_required() {
     let (_repo, _root, required) = rig(IssueRequirement::Required);
     for command in UNPLACEABLE_SHELL_WRITES {
         assert!(
@@ -780,8 +776,90 @@ fn an_unplaceable_shell_write_launched_in_a_repository_is_asked_under_ask() {
 }
 
 #[test]
-fn an_unplaceable_shell_write_launched_outside_every_repository_is_still_allowed_under_ask() {
-    let (_launch, _root, asking) = in_a_non_repository(IssueRequirement::Ask);
+fn an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_the_checkout_changed()
+ {
+    let (repo, _root, watching) = rig(IssueRequirement::Watch);
+    let read = || {
+        unclaimed_edit(
+            &watching,
+            "Read",
+            serde_json::json!({ "file_path": repo.path().join("README.md").display().to_string() }),
+        )
+    };
+    for command in UNPLACEABLE_SHELL_WRITES {
+        assert!(
+            matches!(shell_write(&watching, command), Decision::Allow(_)),
+            "{command} was not let through under `watch`"
+        );
+        assert!(
+            !matches!(read(), Decision::Ask(_)),
+            "{command} changed nothing and the next call was still put to the person"
+        );
+    }
+    assert!(matches!(
+        shell_write(&watching, UNPLACEABLE_SHELL_WRITES[0]),
+        Decision::Allow(_)
+    ));
+    std::fs::write(repo.path().join("written.txt"), "x").expect("the watched write lands");
+    let Decision::Ask(refusal) = read() else {
+        panic!("a changed checkout was not put to the person");
+    };
+    assert_eq!(refusal.code, CODE);
+    assert!(
+        refusal.message.contains("`written.txt`"),
+        "{}",
+        refusal.message
+    );
+    assert!(
+        !matches!(read(), Decision::Ask(_)),
+        "a change already put to the person was asked about again"
+    );
+    assert!(
+        matches!(edit(&watching), Decision::Ask(_)),
+        "a write the gate can place is not put to the person under `watch`"
+    );
+}
+
+#[test]
+fn the_shell_call_that_changed_a_watched_checkout_is_reported_as_soon_as_it_ran() {
+    let (repo, _root, watching) = rig(IssueRequirement::Watch);
+    let after = || {
+        let input = Input {
+            session_id: "abcd1234".to_owned(),
+            cwd: repo.path().display().to_string(),
+            tool_name: "Bash".to_owned(),
+            tool_input: serde_json::json!({ "command": UNPLACEABLE_SHELL_WRITES[0] }),
+            ..Input::default()
+        };
+        hook::run_as(
+            Dialect::ClaudeCode,
+            Some("claude-code"),
+            Event::PostToolUse,
+            &input,
+            Some(&watching),
+        )
+    };
+    assert!(matches!(
+        shell_write(&watching, UNPLACEABLE_SHELL_WRITES[0]),
+        Decision::Allow(_)
+    ));
+    assert_eq!(after(), serde_json::json!({}));
+    std::fs::write(repo.path().join("written.txt"), "x").expect("the watched write lands");
+    let answer = after();
+    let note = answer["systemMessage"]
+        .as_str()
+        .expect("a note the person sees");
+    assert!(note.contains("`written.txt`"), "{note}");
+    assert_eq!(answer["hookSpecificOutput"]["additionalContext"], note);
+    assert!(
+        matches!(edit(&watching), Decision::Ask(refusal) if refusal.message.contains("`written.txt`")),
+        "the next call was not put to the person"
+    );
+}
+
+#[test]
+fn an_unplaceable_shell_write_launched_outside_every_repository_is_still_allowed_under_watch() {
+    let (_launch, _root, asking) = in_a_non_repository(IssueRequirement::Watch);
     for command in UNPLACEABLE_SHELL_WRITES {
         assert!(
             matches!(shell_write(&asking, command), Decision::Allow(_)),
@@ -802,10 +880,10 @@ fn an_unplaceable_shell_write_launched_outside_every_repository_is_still_allowed
 
 #[test]
 fn an_unplaceable_shell_write_at_an_unestablished_scope_is_asked_under_ask() {
-    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Watch);
     std::fs::create_dir(launch.path().join(".git")).expect("a `.git` entry Git cannot use");
     let root = tempfile::tempdir().expect("a temporary root");
-    let context = context(root.path(), launch.path(), IssueRequirement::Ask);
+    let context = context(root.path(), launch.path(), IssueRequirement::Watch);
     assert!(
         matches!(scope_of(launch.path()), Scope::Unknown),
         "{} was established, so this test never reaches the unknown scope",
@@ -826,7 +904,7 @@ fn an_unplaceable_shell_write_at_an_unestablished_scope_is_asked_under_ask() {
 
 #[test]
 fn a_redirect_to_an_absolute_path_outside_the_checkout_is_not_held() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, context) = rig(requirement);
         for command in ["echo x > /tmp/y", "echo x >> /tmp/y"] {
             let decision = shell_write(&context, &crate::test_env::outside_the_checkout(command));
@@ -838,9 +916,42 @@ fn a_redirect_to_an_absolute_path_outside_the_checkout_is_not_held() {
     }
 }
 
+fn held_or_watched(requirement: IssueRequirement, decision: &Decision) -> bool {
+    match decision {
+        Decision::Ask(refusal) | Decision::Deny(refusal) => refusal.code == CODE,
+        Decision::Allow(note) => {
+            requirement == IssueRequirement::Watch
+                && note.contains("`Unclaimed write policy` is `watch`")
+        }
+        _ => false,
+    }
+}
+
+#[test]
+fn a_write_placed_inside_the_checkout_is_still_asked_under_watch() {
+    let (repo, _root, context) = rig(IssueRequirement::Watch);
+    let inside = format!(
+        "echo x > {}/out.txt",
+        crate::test_env::shell_path(repo.path())
+    );
+    for command in [
+        "echo x > out.txt",
+        "echo x > ./a",
+        "git commit -m x",
+        inside.as_str(),
+    ] {
+        let decision = shell_write(&context, command);
+        assert!(
+            matches!(&decision, Decision::Ask(r) if r.code == CODE),
+            "{command}: {decision:?}"
+        );
+    }
+    assert!(matches!(edit(&context), Decision::Ask(_)));
+}
+
 #[test]
 fn rg_pre_runs_a_program_and_is_held() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, context) = rig(requirement);
         for command in [
             "rg --pre /bin/rm x",
@@ -858,7 +969,7 @@ fn rg_pre_runs_a_program_and_is_held() {
 
 #[test]
 fn a_plain_rg_search_keeps_todays_behaviour() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, context) = rig(requirement);
         for command in ["rg pattern src", "rg pattern src > /tmp/out"] {
             let decision = shell_write(&context, &crate::test_env::outside_the_checkout(command));
@@ -872,7 +983,7 @@ fn a_plain_rg_search_keeps_todays_behaviour() {
 
 #[test]
 fn a_quoted_heredoc_written_outside_the_checkout_is_not_held() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (_repo, _root, context) = rig(requirement);
         for command in [
             "cat > /private/tmp/x/scratchpad/issue.md <<'EOF'\n## Problem\n... `model_entries` in `src/tui/app.rs` ...\nEOF",
@@ -897,7 +1008,7 @@ fn a_quoted_heredoc_written_outside_the_checkout_is_not_held() {
 
 #[test]
 fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (repo, _root, context) = rig(requirement);
         let inside = format!(
             "cat > {}/out.md <<'EOF'\nx\nEOF",
@@ -945,7 +1056,7 @@ fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
         ] {
             let decision = shell_write(&context, command);
             assert!(
-                matches!(&decision, Decision::Ask(r) | Decision::Deny(r) if r.code == CODE),
+                held_or_watched(requirement, &decision),
                 "{requirement:?} {command}: {decision:?}"
             );
         }
@@ -954,7 +1065,7 @@ fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
 
 #[test]
 fn a_heredoc_body_naming_a_repository_command_is_data_not_a_command() {
-    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
     let decision = shell_write(
         &context,
         &crate::test_env::outside_the_checkout("cat > /tmp/a <<'EOF'\nrun git commit here\nEOF"),
@@ -979,7 +1090,7 @@ fn quoting_the_exemption_refuses_does_not_make_a_plain_read_a_write() {
 
 #[test]
 fn any_other_shell_write_is_still_held() {
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let (repo, _root, context) = rig(requirement);
         let inside = format!(
             "echo x > {}/out.txt",
@@ -1011,7 +1122,7 @@ fn any_other_shell_write_is_still_held() {
         ] {
             let decision = shell_write(&context, command);
             assert!(
-                matches!(&decision, Decision::Ask(r) | Decision::Deny(r) if r.code == CODE),
+                held_or_watched(requirement, &decision),
                 "{requirement:?} {command}: {decision:?}"
             );
         }
@@ -1019,18 +1130,18 @@ fn any_other_shell_write_is_still_held() {
 }
 
 #[test]
-fn the_three_unplaceable_shapes_are_asked_under_ask_and_refused_under_required() {
+fn the_three_unplaceable_shapes_run_watched_under_watch_and_are_refused_under_required() {
     let scratch = "/private/tmp/estigia-719-scratchpad";
     let shapes = [
         format!("cd {scratch} && cat > c64.md <<'EOF'\n## Problem\nan issue body\nEOF"),
         format!("cd {scratch}/ga; bash -c 'grep -n src src/lib.rs; sed -n 1,10p src/lib.rs'"),
         format!("cd {scratch} && printf '%s\\n' an issue line >> a2.md"),
     ];
-    let (_repo, _root, ask) = rig(IssueRequirement::Ask);
+    let (_repo, _root, watching) = rig(IssueRequirement::Watch);
     for shape in &shapes {
-        let decision = shell_write(&ask, shape);
+        let decision = shell_write(&watching, shape);
         assert!(
-            matches!(&decision, Decision::Ask(refusal) if refusal.code == CODE),
+            matches!(&decision, Decision::Allow(note) if note.contains("is `watch`")),
             "{shape}: {decision:?}"
         );
     }
@@ -1049,7 +1160,7 @@ fn a_dirty_checkout_is_reported_at_session_start_for_an_unclaimed_asked_run() {
     let repo = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
-    let asking = context(root.path(), repo.path(), IssueRequirement::Ask);
+    let asking = context(root.path(), repo.path(), IssueRequirement::Watch);
     std::fs::write(asking.repo_dir.join("notes.txt"), "x\n").expect("a dirty file");
     let unclaimed = session::Run::new("opencode-abcd1234".to_owned());
     let response = hook::session_start_response(&asking, &unclaimed);
@@ -1134,7 +1245,7 @@ fn held_for_an_issue(decision: &Decision) -> bool {
 
 #[test]
 fn a_patch_under_a_non_git_directory_is_not_refused_for_an_issue() {
-    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Watch);
     let target = launch.path().join("gpt-budget").join("package.json");
     let decision = patch_write(
         &context,
@@ -1145,7 +1256,7 @@ fn a_patch_under_a_non_git_directory_is_not_refused_for_an_issue() {
 
 #[test]
 fn an_absolute_write_under_a_non_git_directory_is_not_refused_for_an_issue() {
-    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Watch);
     for tool in ["Write", "Edit"] {
         let target = launch.path().join("gpt-budget").join("package.json");
         let decision = unclaimed_edit(
@@ -1163,7 +1274,7 @@ fn an_absolute_write_under_a_non_git_directory_is_not_refused_for_an_issue() {
 
 #[test]
 fn a_relative_write_under_a_non_git_directory_is_not_refused_for_an_issue() {
-    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Watch);
     for target in ["notes.md", "gpt-budget/package.json"] {
         let decision = unclaimed_edit(
             &context,
@@ -1180,7 +1291,7 @@ fn a_relative_write_under_a_non_git_directory_is_not_refused_for_an_issue() {
 
 #[test]
 fn a_shell_file_under_a_non_git_directory_is_not_refused_for_an_issue() {
-    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Watch);
     let target = crate::test_env::shell_path(&launch.path().join("notes.md"));
     for command in [
         format!("cat > {target} <<'EOF'\nx\nEOF"),
@@ -1196,13 +1307,13 @@ fn a_shell_file_under_a_non_git_directory_is_not_refused_for_an_issue() {
 
 #[test]
 fn a_write_from_a_non_git_directory_into_a_repository_is_still_held() {
-    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Watch);
     let repo = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
     let inside = repo.path().join("src.rs");
     let outside = launch.path().join("notes.md");
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let context = context(root.path(), launch.path(), requirement);
         let edit = unclaimed_edit(
             &context,
@@ -1232,11 +1343,11 @@ fn a_write_from_a_non_git_directory_into_a_repository_is_still_held() {
 
 #[test]
 fn a_patch_that_deletes_or_moves_a_path_in_a_repository_is_still_held() {
-    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Watch);
     let repo = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
-    let context = context(root.path(), launch.path(), IssueRequirement::Ask);
+    let context = context(root.path(), launch.path(), IssueRequirement::Watch);
     let inside = repo.path().join("src.rs").display().to_string();
     let outside = launch.path().join("notes.md").display().to_string();
     for entries in [
@@ -1264,7 +1375,7 @@ fn a_patch_that_deletes_or_moves_a_path_in_a_repository_is_still_held() {
 
 #[test]
 fn a_content_string_is_not_a_target_list_for_a_tool_that_is_not_a_patch() {
-    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Watch);
     let repo = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(repo.path());
     // `pre_write_code` names its path in `file`, which `path_argument` does not
@@ -1290,7 +1401,7 @@ fn a_content_string_is_not_a_target_list_for_a_tool_that_is_not_a_patch() {
 fn an_ancestor_this_process_cannot_open_is_held_rather_than_exempted() {
     use std::os::unix::fs::PermissionsExt;
 
-    let (launch, root, asking) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, root, asking) = in_a_non_repository(IssueRequirement::Watch);
     let locked = launch.path().join("locked");
     std::fs::create_dir(&locked).expect("a directory");
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
@@ -1350,7 +1461,7 @@ fn an_ancestor_this_process_cannot_open_is_held_rather_than_exempted() {
 
 #[test]
 fn a_write_tool_whose_body_named_no_readable_path_is_still_held() {
-    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Watch);
     let repo = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(repo.path());
     let inside = repo.path().join("src.rs").display().to_string();
@@ -1375,9 +1486,9 @@ fn a_write_tool_whose_body_named_no_readable_path_is_still_held() {
 
 #[test]
 fn a_write_from_a_non_git_directory_into_a_claimed_worktree_is_still_held() {
-    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Watch);
     let root = tempfile::tempdir().expect("a temporary root");
-    let context = context(root.path(), launch.path(), IssueRequirement::Ask);
+    let context = context(root.path(), launch.path(), IssueRequirement::Watch);
     let worktree = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(worktree.path());
     holder_of(&context, worktree.path());
@@ -1391,11 +1502,11 @@ fn a_write_from_a_non_git_directory_into_a_claimed_worktree_is_still_held() {
 
 #[test]
 fn a_repository_git_cannot_read_under_a_non_git_directory_is_still_held() {
-    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Watch);
     std::fs::create_dir(launch.path().join(".git")).expect("a `.git` entry Git cannot use");
     let elsewhere = tempfile::tempdir().expect("somewhere else");
     let root = tempfile::tempdir().expect("a temporary root");
-    let context = context(root.path(), launch.path(), IssueRequirement::Ask);
+    let context = context(root.path(), launch.path(), IssueRequirement::Watch);
     let decision = unclaimed_edit(
         &context,
         "Write",
@@ -1420,11 +1531,11 @@ fn a_repository_git_cannot_read_under_a_non_git_directory_is_still_held() {
 
 #[test]
 fn a_refusal_from_a_non_git_directory_does_not_call_it_this_repository() {
-    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Watch);
     let repo = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
-    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
         let context = context(root.path(), launch.path(), requirement);
         let decision = unclaimed_edit(
             &context,
@@ -1446,7 +1557,7 @@ fn a_refusal_from_a_non_git_directory_does_not_call_it_this_repository() {
 
 #[test]
 fn a_session_starting_in_a_non_git_directory_is_not_told_it_is_this_repository() {
-    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Watch);
     let text = session_start_text(&context);
     assert!(text.contains("ask"), "{text}");
     assert!(!text.contains("this repository"), "{text}");
@@ -1514,7 +1625,7 @@ fn a_host_automatic_mode_leaves_the_hook_answer_a_refusal_or_a_question() {
         assert_eq!(answer, plain, "{agent} {mode}: the mode changed the answer");
     }
 
-    let (_repo, _root, asking) = rig(IssueRequirement::Ask);
+    let (_repo, _root, asking) = rig(IssueRequirement::Watch);
     for mode in &modes[1..5] {
         let answer = hook_answer_in_mode(&asking, Dialect::ClaudeCode, "claude-code", mode);
         assert_eq!(decision_word(&answer), "ask", "{mode}: {answer}");

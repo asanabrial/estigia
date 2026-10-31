@@ -455,6 +455,16 @@ fn the_redirect_scan_reads_the_character_after_the_arrow() {
 }
 
 #[test]
+fn quoting_restarts_inside_a_substitution_in_double_quotes() {
+    assert_eq!(
+        writes_a_file("echo \"x $(gh pr view 1 --jq '\"\\(.a) -> \\(.b)\"') y\""),
+        None
+    );
+    assert!(writes_a_file("echo \"$(echo x > f)\"").is_some());
+    assert!(writes_a_file("echo \"$(echo \"$(echo x > f)\")\"").is_some());
+}
+
+#[test]
 fn an_interpreter_handed_code_is_a_write_and_one_handed_a_script_is_not() {
     // The boundary the declaration draws, held from both sides. `python -c` is
     // opaque and unusual; `python manage.py` is opaque and ordinary, and gating
@@ -1286,8 +1296,19 @@ fn a_line_an_executor_owns_is_left_whole() {
         "cat <<EOF\n$(git push)\nEOF",
         "echo \"$(git push)\"",
         "echo `git push`",
-        "echo 'git push'\ngit push",
         "# <<EOF\ngit push",
+        "true; echo 'git push' | sh",
+        "for x in 1; do echo 'git push'; done | sh",
+        "echo 'git push' | { true; sh; }",
+        "(echo 'git push') | sh",
+        "true; echo 'git push' | (sh)",
+        "true; $(echo 'git push')",
+        "x=$(echo 'git push'); $x",
+        "cat() { sh -c \"$1\"; }; cat 'git push'",
+        "function cat { sh -c \"$1\"; }; cat 'git push'",
+        "hash -p /bin/sh cat; cat -c 'git push'",
+        "true; echo 'git push' > f; sh f",
+        "x=$(case a in a) echo 'git push';; esac); $x",
         "rg --pre 'git push' f",
         "sort --compress-program 'git push' f",
         "gh codespace ssh -c box -- 'git push'",
@@ -1301,6 +1322,23 @@ fn a_line_an_executor_owns_is_left_whole() {
             "`{command}` was read as data and left unread"
         );
     }
+}
+
+#[test]
+fn a_command_after_quoted_data_on_its_own_line_stays_visible() {
+    let view = super::data_view("echo 'git push'\ngit push");
+    assert!(view.ends_with("\ngit push"), "{view:?}");
+}
+
+#[test]
+fn quoted_data_in_each_command_of_a_compound_line_is_not_a_command() {
+    let line = "R=o/r; for p in 1:2:abc; do IFS=: read pr id sha <<<\"$p\"; echo \"== #$pr \
+                head=$(gh pr view $pr --repo $R --json headRefOid --jq '.headRefOid[0:9]')\"; gh \
+                api \"repos/$R/pulls/$pr/reviews/$id/comments\" --paginate --jq \
+                '.[]|\"\\(.path|split(\"/\")|last)\"'; done";
+    let view = super::data_view(line);
+    assert_eq!(super::writes_a_file(&view), None, "{view:?}");
+    assert!(view.contains("gh api"), "{view:?}");
 }
 
 #[test]
@@ -1912,6 +1950,18 @@ mod differential {
             "gh repo clone o/r '--' '--upload-pack=touch ran_0_'",
             (3, 0),
         ),
+        ("true; echo 'touch ran_0_' | sh", (3, 0)),
+        ("for x in 1; do echo 'touch ran_0_'; done | sh", (3, 0)),
+        ("echo 'touch ran_0_' | { true; sh; }", (3, 0)),
+        ("(echo 'touch ran_0_') | sh", (3, 0)),
+        ("true; echo 'touch ran_0_' | (sh)", (3, 0)),
+        ("true; $(echo 'touch ran_0_')", (3, 0)),
+        ("x=$(echo 'touch ran_0_'); $x", (3, 0)),
+        ("cat() { sh -c \"$1\"; }; cat 'touch ran_0_'", (3, 0)),
+        ("function cat { sh -c \"$1\"; }; cat 'touch ran_0_'", (3, 0)),
+        ("hash -p /bin/sh cat; cat -c 'touch ran_0_'", (3, 0)),
+        ("true; echo 'touch ran_0_' > f; sh f", (3, 0)),
+        ("x=$(case a in a) echo 'touch ran_0_';; esac); $x", (4, 0)),
     ];
 
     const GENERATED_CASES: usize = 4000;
