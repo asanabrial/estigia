@@ -928,6 +928,44 @@ fn held_or_watched(requirement: IssueRequirement, decision: &Decision) -> bool {
 }
 
 #[test]
+fn a_git_write_inside_a_command_substitution_is_held() {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
+        let (repo, _root, context) = rig(requirement);
+        let own = crate::test_env::shell_path(repo.path());
+        let other = crate::test_env::repository_with_commit();
+        let clone = crate::test_env::shell_path(other.path());
+        for command in [
+            "echo \"$(git stash)\"".to_owned(),
+            "x=$(git reset --hard)".to_owned(),
+            "x=\"$(git commit -m x)\"".to_owned(),
+            "echo `git stash`".to_owned(),
+            format!("echo \"$(git -C {own} stash)\""),
+            format!("x=$(git -C {own} reset --hard)"),
+            format!("echo `git -C {own} stash`"),
+            format!("cd {clone} && echo \"$(git -C {own} stash)\""),
+        ] {
+            let decision = shell_write(&context, &command);
+            let held = match requirement {
+                IssueRequirement::Watch => matches!(&decision, Decision::Ask(r) if r.code == CODE),
+                _ => matches!(&decision, Decision::Deny(r) if r.code == CODE),
+            };
+            assert!(held, "{requirement:?} {command}: {decision:?}");
+        }
+        for command in [
+            "echo \"$(git status)\"".to_owned(),
+            "echo \"$(git stash list)\"".to_owned(),
+            format!("echo \"$(git -C {own} stash list)\""),
+        ] {
+            let decision = shell_write(&context, &command);
+            assert!(
+                matches!(decision, Decision::Outside(_)),
+                "{requirement:?} {command}: {decision:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_write_placed_inside_the_checkout_is_still_asked_under_watch() {
     let (repo, _root, context) = rig(IssueRequirement::Watch);
     let inside = format!(

@@ -869,7 +869,8 @@ fn without_leading_options(command: &str) -> String {
     let mut words = command.split_whitespace().peekable();
     while let Some(word) = words.next() {
         kept.push(word);
-        if word != "git" && word != "gh" && binary_name(word) != "estigia" {
+        let program = without_substitution_openers(word);
+        if program != "git" && program != "gh" && binary_name(program) != "estigia" {
             continue;
         }
         // Its own options, up to the subcommand. A word that does not start
@@ -887,6 +888,24 @@ fn without_leading_options(command: &str) -> String {
         }
     }
     kept.join(" ")
+}
+
+fn without_substitution_openers(word: &str) -> &str {
+    let mut rest = word;
+    loop {
+        let assigned = rest.split_once('=').and_then(|(name, value)| {
+            let identifier = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            identifier.then_some(value)
+        });
+        let next = assigned
+            .or_else(|| rest.strip_prefix("$("))
+            .or_else(|| rest.strip_prefix(['"', '`', '(']));
+        match next {
+            Some(shorter) => rest = shorter,
+            None => return rest,
+        }
+    }
 }
 
 /// The population and boundary `DISARMS_THE_HARNESS` enforces.
