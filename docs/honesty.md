@@ -4357,7 +4357,7 @@ the count cannot show:
 
 ## The token-efficiency programme
 
-Issue #148 asked for less redundant input and output across every supported runtime, with no lost
+The programme asked for less redundant input and output across every supported runtime, with no lost
 function. It closed with only its deterministic units delivered: the bounded session walk
 ([`sessions.md`](sessions.md)), the compact task acknowledgement and review view, the server-side
 receipt expansion, the reviewer's own usage kept apart from its answer, the per-class transcript
