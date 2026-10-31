@@ -528,13 +528,50 @@ fn doctor_reports_a_record_that_could_not_be_written_down() {
 
     crate::harness::session::record(&state, &serde_json::json!({ "verdict": "allow" }));
 
-    let check = crate::harness::doctor::store(Some(home.path()));
+    let check = crate::harness::doctor::store_records(Some(home.path()));
     let crate::harness::doctor::Health::Broken { detail, .. } = check.health else {
         panic!("a record that could not be written down was reported fine");
     };
     assert!(
         detail.contains("could not be written down") && detail.contains('1'),
         "{detail}"
+    );
+}
+
+#[test]
+fn a_counted_record_failure_in_a_store_that_opens_does_not_block_readiness() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let path = super::default_path(Some(home.path())).expect("a path");
+    Store::open(&path)
+        .expect("opens")
+        .note_snapshot_failure()
+        .expect("a counted snapshot failure");
+
+    let checks = vec![
+        crate::harness::doctor::store(Some(home.path())),
+        crate::harness::doctor::store_records(Some(home.path())),
+    ];
+
+    assert!(
+        matches!(
+            checks[0].health,
+            crate::harness::doctor::Health::Fine { .. }
+        ),
+        "a store that opens is reported broken: {:?}",
+        checks[0].health
+    );
+    assert!(
+        matches!(
+            checks[1].health,
+            crate::harness::doctor::Health::Broken { .. }
+        ),
+        "the counted failure is no longer reported: {:?}",
+        checks[1].health
+    );
+    assert_eq!(
+        crate::harness::doctor::first_blocking(&checks).map(|check| check.name),
+        None,
+        "a failure counted in the past blocks a run that could claim now"
     );
 }
 

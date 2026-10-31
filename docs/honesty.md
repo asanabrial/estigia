@@ -2839,7 +2839,7 @@ pointer that leaves it names the document it points at.
   `std::env::current_dir()`, takes no parameters, and is reachable only through a subprocess. A defect
   purely in that call site's arguments is caught by nothing.
 
-- **`doctor` checks twenty things, not everything.** Skill, installed skill assets, `gh`
+- **`doctor` checks twenty-one things, not everything.** Skill, installed skill assets, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
   reads, whether the root the gate decides in carries the rows those agents read, whether the gate
   each of them registers would actually run, whether the tool server each
@@ -2848,7 +2848,8 @@ pointer that leaves it names the document it points at.
   *does* parse still names an issue the tracker holds open, whether branches and checkouts no
   delivery owns have accumulated, whether any call has reached that
   gate and gone undecided, whether the binary answering this command is the checkout's own
-  build, whether the local workflow store opens, whether Pi's own settings exclude Estigia's
+  build, whether the local workflow store opens, whether that store ever counted a record it could
+  not write down, whether Pi's own settings exclude Estigia's
   extensions or override its tool server, whether the Pi subagent runners installed give their children
   the gate, whether a tracked lockfile is sent to every reviewer in full because
   `estigia.generated.toml` does not declare it (an advisory row that is absent when there is nothing to name), and which permission mode each of
@@ -3253,10 +3254,12 @@ pointer that leaves it names the document it points at.
   any remote state is written and with no data lost; the recovery is the same `git worktree remove`, written
   in the binding. Measured across twenty-four template shapes by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd`.
-- **Four of the twenty are about the past.** `LOOKS_BACK` excludes `silence`, `stale-run-pointer`,
-  `prune` and `gate-version` from readiness: undecided past calls, another run's pointer, orphaned
-  branches and a stale diagnostic binary do not prove a fresh claim impossible. The store row is not
-  exempt: an unreadable authority prevents claiming now. This classification is a policy boundary,
+- **Five of the twenty-one are about the past.** `LOOKS_BACK` excludes `silence`, `stale-run-pointer`,
+  `prune`, `gate-version` and `store-records` from readiness: undecided past calls, another run's
+  pointer, orphaned branches, a stale diagnostic binary and appends that already failed do not prove
+  a fresh claim impossible. `store-records` reads a counter that only grows, so one transient
+  snapshot failure would otherwise keep `doctor` refusing on a store every claim opens. The store
+  row is not exempt: an unreadable authority prevents claiming now. This classification is a policy boundary,
   not proof that the historical problems were repaired.
 - **The claim and review families decide from the local workflow store and write only to it; GitHub carries
   labels, the assignee and human prose.** First touch imports through `gh issue view`, refusing
