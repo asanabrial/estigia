@@ -491,6 +491,15 @@ fn file_targets<'a>(target: &'a str, declared: &'a [String]) -> Option<Vec<&'a s
 /// A shell write is placed only by literal redirect targets; a named repository operation arrives
 /// first in the classifier and writes this checkout itself, and everything else needs running.
 fn shell_write(context: &GateContext, target: &str, line: &str, scope: &Scope) -> Placement {
+    if target.starts_with("git ")
+        && git_directories(line).is_some_and(|directories| {
+            directories
+                .iter()
+                .all(|directory| matches!(against(context, scope, directory), Placement::Outside))
+        })
+    {
+        return Placement::Unplaceable;
+    }
     if super::shell::writes_a_file(&line.to_ascii_lowercase()).as_deref() != Some(target) {
         return Placement::Inside;
     }
@@ -511,6 +520,68 @@ fn shell_write(context: &GateContext, target: &str, line: &str, scope: &Scope) -
         Some(_) => Placement::Inside,
         None => Placement::Unplaceable,
     }
+}
+
+/// The directories every git command on `line` runs in, when each is literal and absolute: a
+/// leading `cd <dir> &&` for the whole line, or `git -C <dir>` on the command itself.
+///
+/// `None` for anything else — a second `cd`, a `pushd`, a git command with no literal directory,
+/// a directory spelled with a variable, a quote or a glob, or `GIT_DIR`/`--git-dir`/
+/// `--work-tree`, which send git somewhere the directory does not name.
+fn git_directories(line: &str) -> Option<Vec<String>> {
+    fn literal(word: &str) -> Option<String> {
+        (Path::new(word).is_absolute() && !word.contains(|c: char| "$`'\"\\*?~[{(".contains(c)))
+            .then(|| word.to_owned())
+    }
+    let line = line.trim_start();
+    let (leading, rest) = match line.strip_prefix("cd ") {
+        Some(after) => {
+            let after = after.trim_start();
+            let end = after.find(char::is_whitespace)?;
+            let rest = after[end..].trim_start().strip_prefix("&&")?;
+            (Some(literal(&after[..end])?), rest)
+        }
+        None => (None, line),
+    };
+    let words: Vec<&str> = rest.split_whitespace().collect();
+    let bare = |word: &str| -> String {
+        word.trim_matches(|c: char| !c.is_alphanumeric() && !"/_-.".contains(c))
+            .to_owned()
+    };
+    if words.iter().any(|word| {
+        matches!(
+            bare(word).as_str(),
+            "cd" | "pushd" | "popd" | "sh" | "bash" | "zsh" | "eval"
+        ) || word.contains("GIT_DIR")
+            || word.contains("GIT_WORK_TREE")
+            || word.starts_with("--git-dir")
+            || word.starts_with("--work-tree")
+    }) {
+        return None;
+    }
+    let mut directories = Vec::new();
+    for (at, word) in words.iter().enumerate() {
+        let named_git = bare(word);
+        if named_git != "git" && !named_git.ends_with("/git") {
+            continue;
+        }
+        if word.trim_start_matches(|c| ";&|".contains(c)) != named_git {
+            return None;
+        }
+        let mut options = words[at + 1..].iter();
+        let mut named = None;
+        while let Some(option) = options.next().filter(|option| option.starts_with('-')) {
+            match *option {
+                "-C" => named = Some(literal(options.next()?)?),
+                "-c" => {
+                    options.next()?;
+                }
+                _ => {}
+            }
+        }
+        directories.push(named.or_else(|| leading.clone())?);
+    }
+    (!directories.is_empty()).then_some(directories)
 }
 
 /// Where an absolute target lands, or a relative one from the directory the call runs in.

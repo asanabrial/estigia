@@ -3148,6 +3148,14 @@ pointer that leaves it names the document it points at.
     TARGET`, a literal absolute `TARGET` without `..`, any body (**not read**; how an issue body is drafted in
     the scratchpad) and a closing `DELIM` line. An "any shape" relaxation was abandoned after five review
     rounds each found a case the reader modelled differently from bash (operator decision 2026-10-02).
+  - **A named git write sent into another checkout is unplaceable, not inside** (`issue_requirement::git_directories`):
+    when every git command on the line runs in a literal absolute directory — a leading `cd DIR &&` for the
+    whole line, or `git -C DIR` on the command — and each lands outside the launch repository, the write is
+    treated as one the gate cannot place, because the rest of the line (an interpreter heredoc beside a
+    `git stash`) is not read. A second `cd`, `pushd`, `sh`/`bash`/`zsh`/`eval`, `GIT_DIR`, `--git-dir`,
+    `--work-tree`, a git word inside a subshell or quotes, or a directory with a `$`, quote, glob or `~` keeps
+    it inside. Not placed by this: a git command inside `"$(…)"`, which the classifier does not read as a
+    write at all.
   - **A write inside an isolated checkout that a claim names is exempt, whichever session made it** (a
     delegated writer, such as an OpenCode child session deriving its own run, holds no claim of its own): the
     exemption applies when a pointer holding an issue has a `worktree` covering both the call's directory and
