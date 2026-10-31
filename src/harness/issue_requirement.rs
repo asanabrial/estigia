@@ -530,7 +530,7 @@ fn shell_write(context: &GateContext, target: &str, line: &str, scope: &Scope) -
 /// `--work-tree`, which send git somewhere the directory does not name.
 fn git_directories(line: &str) -> Option<Vec<String>> {
     fn literal(word: &str) -> Option<String> {
-        (word.starts_with('/') && !word.contains(|c: char| "$`'\"\\*?~[{(".contains(c)))
+        (Path::new(word).is_absolute() && !word.contains(|c: char| "$`'\"\\*?~[{(".contains(c)))
             .then(|| word.to_owned())
     }
     let line = line.trim_start();
