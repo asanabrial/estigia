@@ -391,6 +391,9 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         // Forced broken in step 9 above, against a directory standing where
         // the database file belongs.
         "store",
+        // Broken by the same step 9: a store that does not open cannot be read
+        // for its counted failures either.
+        "store-records",
     ];
     let unforced: Vec<&String> = printed
         .iter()

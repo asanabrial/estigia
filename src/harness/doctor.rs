@@ -88,7 +88,13 @@ pub struct Check {
 /// now*, and must never block readiness. Declared here rather than asked of
 /// each check, beside [`CHECKS`], which is already the one place the names
 /// live.
-const LOOKS_BACK: &[&str] = &["silence", "stale-run-pointer", "prune", "gate-version"];
+const LOOKS_BACK: &[&str] = &[
+    "silence",
+    "stale-run-pointer",
+    "prune",
+    "gate-version",
+    "store-records",
+];
 
 impl Check {
     /// The lines that report this check, shared by `estigia doctor` and the
@@ -1204,6 +1210,7 @@ pub const CHECKS: &[&str] = &[
     "silence",
     "gate-version",
     "store",
+    "store-records",
     "pi-config",
     "pi-subagents",
     "lockfiles",
@@ -1534,6 +1541,7 @@ pub fn full(
     // Reported, never a blocker, for the reason `LOOKS_BACK` gives.
     checks.push(gate_version(repo_dir));
     checks.push(store(home));
+    checks.push(store_records(home));
     checks
 }
 
@@ -1641,11 +1649,10 @@ pub fn store(home: Option<&Path>) -> Check {
         let since = crate::harness::session::now_seconds()
             .unwrap_or_default()
             .saturating_sub(3600);
-        Ok((version, store.calls_since(since)?, store.record_failures()?))
+        Ok((version, store.calls_since(since)?))
     });
     let health = match opened {
-        Ok((version, calls, failures)) => {
-            let missed: u64 = failures.iter().map(|(_, count)| count).sum();
+        Ok((version, calls)) => {
             let now = crate::harness::session::now_seconds().unwrap_or_default();
             let snapshot = match crate::transport::store::snapshot_age(&path, now) {
                 Some(age) => format!(
@@ -1662,26 +1669,7 @@ pub fn store(home: Option<&Path>) -> Check {
                 calls.rest,
                 calls.other
             );
-            if missed == 0 {
-                Health::Fine { detail }
-            } else {
-                let kinds = failures
-                    .iter()
-                    .map(|(kind, count)| format!("{count} {kind}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                Health::broken(
-                    format!(
-                        "{detail}; {missed} record(s) could not be written down and were counted \
-                         instead: {kinds}"
-                    ),
-                    Resolution::no_command(
-                        NoCommandReason::OperatorKnowledge,
-                        "why the append failed — a decision that could not be written down is \
-                         not on the record, and this is where it is counted",
-                    ),
-                )
-            }
+            Health::Fine { detail }
         }
         Err(failure) => Health::broken(
             format!("{} does not open: {}", path.display(), failure.detail()),
@@ -1695,6 +1683,67 @@ pub fn store(home: Option<&Path>) -> Check {
     };
     Check {
         name: "store",
+        about,
+        health,
+    }
+}
+
+/// The records the store could not write down and counted instead.
+///
+/// A count that only grows describes appends that already failed, not whether
+/// a run can claim now, so it is reported and never blocks.
+pub fn store_records(home: Option<&Path>) -> Check {
+    use crate::transport::store::Store;
+    let about =
+        "whether any record the local workflow store could not write down was counted instead";
+    let skipped = |detail: String| Check {
+        name: "store-records",
+        about,
+        health: Health::Skipped { detail },
+    };
+    let path = match crate::transport::store::default_path(home) {
+        Ok(path) if path.exists() => path,
+        _ => return skipped("there is no store to read counted failures from".to_owned()),
+    };
+    let health = match Store::open(&path).and_then(|store| store.record_failures()) {
+        Err(failure) => Health::broken(
+            format!(
+                "the counted failures could not be read: {}",
+                failure.detail()
+            ),
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "inspect the store; the `store` row says whether it opens",
+            ),
+        ),
+        Ok(failures) => {
+            let missed: u64 = failures.iter().map(|(_, count)| count).sum();
+            if missed == 0 {
+                Health::Fine {
+                    detail: "no record was ever counted instead of written".to_owned(),
+                }
+            } else {
+                let kinds = failures
+                    .iter()
+                    .map(|(kind, count)| format!("{count} {kind}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Health::broken(
+                    format!(
+                        "{missed} record(s) could not be written down and were counted instead: \
+                         {kinds}"
+                    ),
+                    Resolution::no_command(
+                        NoCommandReason::OperatorKnowledge,
+                        "why the append failed — a decision that could not be written down is \
+                         not on the record, and this is where it is counted",
+                    ),
+                )
+            }
+        }
+    };
+    Check {
+        name: "store-records",
         about,
         health,
     }
