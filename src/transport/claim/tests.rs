@@ -10070,6 +10070,109 @@ fn a_quoted_non_path_token_is_refused_as_the_pathlike_bypass_it_is() {
     assert_eq!(envelope["path"], "ratio 1");
 }
 
+fn repo_with_two_nested_mod_files(change_both: bool) -> (tempfile::TempDir, String, String) {
+    let root = tempfile::tempdir().expect("a repository");
+    let at = root.path();
+    let git = |args: &[&str]| {
+        crate::transport::run(args, Some(at), crate::transport::How::write())
+            .unwrap_or_else(|failure| panic!("{args:?}: {failure:?}"));
+    };
+    let oid = || {
+        crate::transport::run(
+            &["git", "rev-parse", "HEAD"],
+            Some(at),
+            crate::transport::How::read(),
+        )
+        .expect("HEAD")
+        .stdout
+        .trim()
+        .to_owned()
+    };
+    git(&["git", "init", "--quiet", "-b", "main", "."]);
+    git(&["git", "config", "user.email", "estigia@example.invalid"]);
+    git(&["git", "config", "user.name", "Estigia test"]);
+    git(&["git", "config", "core.autocrlf", "false"]);
+    for dir in ["src/a", "src/b"] {
+        std::fs::create_dir_all(at.join(dir)).expect("the directory");
+        std::fs::write(at.join(dir).join("mod.rs"), ten_numbered_lines()).expect("the file");
+    }
+    git(&["git", "add", "."]);
+    git(&["git", "commit", "--quiet", "-m", "base"]);
+    let base = oid();
+    let changed = ten_numbered_lines().replace("line5\n", "line5-changed\n");
+    std::fs::write(at.join("src/a/mod.rs"), &changed).expect("the head file");
+    if change_both {
+        std::fs::write(at.join("src/b/mod.rs"), &changed).expect("the head file");
+    }
+    git(&["git", "add", "."]);
+    git(&["git", "commit", "--quiet", "-m", "head"]);
+    let head = oid();
+    (root, base, head)
+}
+
+fn record_bare_citation(change_both: bool, evidence: &str) -> serde_json::Value {
+    let (root, base, head) = repo_with_two_nested_mod_files(change_both);
+    let context = Context {
+        skill_dir: root.path().to_path_buf(),
+        repo_dir: root.path().to_path_buf(),
+        config: Vec::new(),
+        repo: None,
+    };
+    let operation_id = "1".repeat(32);
+    let epoch = "2".repeat(32);
+    let digest = "c".repeat(64);
+    let finding = citation_finding(
+        &operation_id,
+        &epoch,
+        &head,
+        &base,
+        &digest,
+        evidence,
+        "minor",
+    );
+    let receipt = ReviewTransaction {
+        epoch: epoch.clone(),
+        pr: finding.pr,
+        head: head.clone(),
+        base: base.clone(),
+        digest: digest.clone(),
+    };
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(
+        finding.issue,
+        published_only_stdout(&receipt),
+    )]);
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        record_review_finding(&context, &finding)
+    })
+    .expect_err("no live claim is scripted, so this cannot fully succeed")
+    .envelope()
+}
+
+#[test]
+fn a_bare_file_name_naming_exactly_one_changed_file_is_resolved_against_it() {
+    let envelope = record_bare_citation(false, "the reset is at (mod.rs:5).");
+    assert_eq!(
+        envelope["reason"], "unexpected-state",
+        "a bare name one changed path carries must clear the citation check: {envelope}"
+    );
+}
+
+#[test]
+fn a_bare_file_name_two_changed_files_carry_is_still_refused() {
+    let envelope = record_bare_citation(true, "the reset is at mod.rs:5");
+    assert_eq!(envelope["reason"], "finding-citation-unresolvable");
+    assert_eq!(envelope["cause"], "path-not-in-either-tree");
+    assert_eq!(envelope["path"], "mod.rs");
+}
+
+#[test]
+fn a_bare_file_name_resolved_against_the_change_keeps_its_line_check() {
+    let envelope = record_bare_citation(false, "the reset is at mod.rs:99");
+    assert_eq!(envelope["reason"], "finding-citation-unresolvable");
+    assert_eq!(envelope["cause"], "line-past-end-of-file");
+}
+
 #[test]
 fn a_citation_naming_a_path_present_only_at_base_is_accepted() {
     let (root, base, head) = repo_with_a_path_removed_at_head();
