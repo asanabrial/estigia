@@ -189,6 +189,7 @@ const REFUSED: &[&str] = &[
     "assisted-outside-the-worktree",
     "assisted-publishes-through-draft-pr",
     "assisted-push-unconfined",
+    "assisted-remote-write-unverified",
     "assisted-worktree-not-started",
     "assisted-write-unplaced",
     "autonomous-fixes-delivery-rows",

@@ -45,7 +45,9 @@ GitHub's thread mutations have no expected-head condition: a concurrent push bet
 and mutation cannot be prevented atomically. Readback detects changed heads but cannot undo a
 resolution already performed. Ancestry proves publication, not that the commit semantically fixes
 the concern. The run chooses which findings apply. Git replacement objects are not evidence.
-Generic `gh api` mutations are refused in assisted runs so they cannot bypass these typed checks;
+Generic `gh api` mutations (`assisted-api-mutation-unverified`) and shell GitHub writes such as
+`gh pr review` and `gh pr comment` (`assisted-remote-write-unverified`, also when a write in the
+worktree shares their line) are refused in assisted runs so they cannot bypass these typed checks;
 this is not a sandbox for arbitrary network clients. External review approvals expose their commit,
 not the historical base reviewed; the reader does not prove that historical base.
 

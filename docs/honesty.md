@@ -2098,8 +2098,8 @@ pointer that leaves it names the document it points at.
   `--method GET` anywhere on the line, so a post beside a `-X GET` read (`gh api -X GET a; gh api
   repos/o/r/issues -f t=x`) is unchecked. An issue filed in the web interface or by a token outside this
   harness is unchecked too.
-- **A delivery is refused in a state that holds no verdict.** `git merge`, `git tag`, `gh pr merge` and the
-  two `gh release` steps need the issue in `review` or `done`; `git push` and `gh pr create` are exempt
+- **A delivery by a run holding a claim is refused in a state that holds no verdict.** `git merge`, `git tag`,
+  `gh pr merge` and the two `gh release` steps need the issue in `review` or `done`; `git push` and `gh pr create` are exempt
   (publishing is how a run reaches review). Operator-declared boundaries are never read as deliveries,
   since Estigia cannot know whether a `make deploy` delivers or rehearses. Two `git merge` shapes are
   preparation, not delivery; the integration merge has its own entry below. The narrower: an exact literal
@@ -3104,6 +3104,13 @@ pointer that leaves it names the document it points at.
   `an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_the_checkout_changed`,
   `a_write_placed_inside_the_checkout_is_still_asked_under_watch` and
   `the_shell_call_that_changed_a_watched_checkout_is_reported_as_soon_as_it_ran`. What it does not hold:
+  - **A boundary is not held, under any value, and only the writes beside it are.** The classifier answers with
+    a line's strongest command, so `gh pr merge 3; git worktree remove /x` once ran unasked while the same removal
+    alone was asked, measured on a real run. `harness::write_beside_a_boundary` now reads the line again, and
+    `a_write_beside_a_boundary_is_put_to_the_person_under_watch` holds it. Still open, under `watch` and `required`
+    alike: an unclaimed `gh pr merge`, `git merge`, `git tag`, release or `gh api` mutation runs with no question,
+    and `Merge by` is not read on this path. A write beside a boundary is found by the same fragment lists as one
+    alone, so a command they do not name is not found here either.
   - **A GitHub tracker that names no repository infers one from the remote, so zero remotes is a tracker
     that cannot name an issue.** A write landing only in such repositories is not held (no ask, no deny) and
     the SessionStart text says there is nothing to claim. The read is `git remote` in the repository each
@@ -3186,6 +3193,11 @@ pointer that leaves it names the document it points at.
   the worktree, because nothing local reads whether a person delivered the branch
   (`releasing_an_assisted_run_forgets_its_pointer_whatever_names_the_issue`); `already-holding` from an
   assisted holder and the refused `release` tool name that command. What it does not hold:
+  - **A shell GitHub write is refused `assisted-remote-write-unverified`**, whether alone or beside a write in
+    the worktree (`an_assisted_run_reaches_a_pull_request_only_through_the_typed_tools`,
+    `a_write_in_the_worktree_does_not_carry_a_remote_write_past_the_claim`). `gh pr edit` and `gh pr comment` have
+    no typed tool, so in an assisted run they are a person's. Only a call deciding on this run's pointer is held: a
+    call with no session id goes through `guard::adjudicate_command`, which still passes it.
   - **`git push origin HEAD` is refused**: the hook reads `HEAD` as the local ref
     (`git_hands_the_hook_head_and_not_the_branch_for_a_push_of_head`). A push is admitted only when every
     line has the run's branch as both refs; `branch:main`, a tag and a deletion are refused
