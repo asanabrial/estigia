@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use crate::config::Workflow;
-use crate::outcome::{NoCommandReason, Observed, Refusal, Resolution};
+use crate::outcome::{Established, NoCommandReason, Observed, Refusal, Resolution};
 
 use super::session::Run;
 use super::{Action, Aside, Decision, GateContext, Sensitivity, names_no_write_path};
@@ -148,6 +148,20 @@ pub(super) fn standing(run: &Run) -> Result<String, String> {
     Ok(branch.to_owned())
 }
 
+fn remote_write(action: &Action, observed: &Observed) -> Option<String> {
+    match action {
+        Action::Remote { command } => Some(command.clone()),
+        Action::Write { .. } => {
+            let command = observed.command.as_ref()?;
+            let Established::Known(literal) = &command.literal else {
+                return None;
+            };
+            super::operation_window::remote_write_target(&super::shell_code(literal))
+        }
+        Action::Boundary { .. } | Action::Untouched => None,
+    }
+}
+
 pub(super) fn decision(
     context: &GateContext,
     run: &mut Run,
@@ -199,6 +213,19 @@ pub(super) fn decision(
     }
     if let Some(refusal) = super::operation_window::check_protected(context, action) {
         return deny(refusal);
+    }
+    if let Some(command) = remote_write(action, observed) {
+        return deny(Refusal::not_started(
+            "assisted-remote-write-unverified",
+            format!(
+                "`{command}` writes to GitHub with no verified pull request, thread or pushed fix \
+                 in this run"
+            ),
+            way_out(
+                "the typed tools: `review_thread` for replies and resolutions, `ready_pr` to mark \
+                 ready, `draft_pr` to publish; anything else by a person",
+            ),
+        ));
     }
 
     let Some(worktree) = run.worktree.clone() else {

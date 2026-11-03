@@ -1536,7 +1536,10 @@ holding no claim in a checkout with a tracker. `required` refuses every reposito
 place outside the checkout, with `issue-required`; `watch`, the default, asks the person on Claude Code
 for one it can place inside, refuses it on a host that cannot ask, and lets one it cannot place run,
 recording the checkout's `git status` and asking on the next call, naming the changed paths, only
-if it differs; a `git push` is held as a commit is;
+if it differs; a `git push` is held as a commit is, and a write carried on a line beside any other
+boundary (`gh pr merge …; git worktree remove …`) is held as it would be alone, the question naming
+the write. The boundary itself is not held: an unclaimed `gh pr merge`, `git merge`, `git tag`, release
+or `gh api` mutation passes under every value, and [`honesty.md`](honesty.md) says so;
 `off` is the behaviour described above.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.

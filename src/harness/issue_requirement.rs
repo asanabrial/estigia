@@ -100,8 +100,8 @@ pub(crate) enum Reach {
 /// The decision for a write made by a run holding no claim, or `None` when this is not one.
 ///
 /// A routine write is one, and so is `git push`: it publishes this repository's refs, so it is held
-/// as a commit is. Every other boundary is held by the checks that already answer for it, and a
-/// write that lands outside every repository the gate can place is not a write to this
+/// as a commit is. Every other boundary is left alone, except for a write its line also carries,
+/// and a write that lands outside every repository the gate can place is not a write to this
 /// repository. `declared` are the paths a write tool named in a patch body, empty for every other
 /// call; they are placed one by one, and a write to any repository is held. Under `ask` a write
 /// the gate cannot place is put to the person when the call was launched in a repository, or from
@@ -117,7 +117,8 @@ pub fn decision(
     if let Some(changed) = watched_change(context) {
         return Some(changed);
     }
-    if super::unclaimed::is_a_push(action) {
+    let beside = super::write_beside_a_boundary(action, literal);
+    if super::unclaimed::is_a_push(action) || beside.as_deref() == Some("git push") {
         let requirement = in_force(context)?;
         let scope = scope_of(&context.repo_dir);
         if matches!(scope, Scope::Outside) {
@@ -125,6 +126,14 @@ pub fn decision(
         }
         return held(context, requirement, &scope, Reach::Placed);
     }
+    let carried;
+    let (action, how) = match beside {
+        Some(target) => {
+            carried = Action::Write { target };
+            (&carried, Sensitivity::Routine)
+        }
+        None => (action, how),
+    };
     let Action::Write { target } = action else {
         return None;
     };

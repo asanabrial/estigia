@@ -372,6 +372,90 @@ fn a_boundary_other_than_a_push_is_left_to_the_checks_that_already_hold_it() {
     );
 }
 
+fn on_a_shell_line(context: &GateContext, line: &str) -> Decision {
+    unclaimed_edit(context, "Bash", serde_json::json!({ "command": line }))
+}
+
+const WRITES_BESIDE_A_BOUNDARY: &[&str] = &[
+    "gh pr merge 3 --merge; git worktree remove /some/path",
+    "gh pr merge 3 --merge && sleep 3; git -C ~/repo worktree remove \"$WT\" && echo removed",
+    "gh pr merge 3 --merge; git commit -m x",
+    "gh pr merge 3 --merge; git push origin HEAD",
+    "gh pr merge 3 --merge; git branch new",
+    "gh api -X POST repos/o/r/pulls/3/reviews -f event=COMMENT; git worktree remove /some/path",
+    "git tag -a v1 -m v1; git worktree remove /some/path",
+];
+
+#[test]
+fn a_write_beside_a_boundary_is_put_to_the_person_under_watch() {
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    for line in WRITES_BESIDE_A_BOUNDARY {
+        let decision = on_a_shell_line(&context, line);
+        assert!(
+            matches!(&decision, Decision::Ask(_)),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn a_write_beside_a_boundary_is_refused_under_required() {
+    let (_repo, _root, context) = rig(IssueRequirement::Required);
+    for line in WRITES_BESIDE_A_BOUNDARY {
+        let decision = on_a_shell_line(&context, line);
+        assert!(
+            matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn a_write_beside_a_boundary_passes_when_the_policy_is_off() {
+    let (_repo, _root, context) = rig(IssueRequirement::Off);
+    for line in WRITES_BESIDE_A_BOUNDARY {
+        let decision = on_a_shell_line(&context, line);
+        assert!(
+            matches!(&decision, Decision::Outside(Aside::NothingSworn)),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn the_question_names_the_write_and_not_the_boundary_beside_it() {
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    let decision = on_a_shell_line(
+        &context,
+        "gh pr merge 3 --merge; git worktree remove /some/path",
+    );
+    let Decision::Ask(refusal) = decision else {
+        panic!("not put to the person: {decision:?}");
+    };
+    let text = refusal.to_string();
+    assert!(text.starts_with("git worktree remove:"), "{text}");
+}
+
+#[test]
+fn a_boundary_with_only_reads_beside_it_is_still_left_alone() {
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    for line in [
+        "gh pr merge 3 --merge",
+        "gh pr merge 3 --merge 2>&1 | tail -1",
+        "gh pr merge 3 --merge >/dev/null",
+        "gh pr review 3 --approve && sleep 3 && gh pr merge 3 --merge; sleep 4; gh pr view 3 \
+         --json state,mergeCommit --jq .state; gh api repos/o/r/pulls/3/reviews --jq '.[]|.state'",
+        "git fetch -q origin; gh pr merge 3 --merge; git -C /some/path status --porcelain",
+        "git tag -a v1 -m v1; git log -1",
+    ] {
+        let decision = on_a_shell_line(&context, line);
+        assert!(
+            matches!(&decision, Decision::Outside(Aside::NothingSworn)),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
 #[test]
 fn the_push_guards_refusal_is_still_the_one_a_guarded_commit_gets() {
     let repo = crate::test_env::repository_with_commit();

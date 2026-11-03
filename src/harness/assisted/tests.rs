@@ -349,6 +349,75 @@ fn an_assisted_api_mutation_cannot_bypass_pushed_fix_verification() {
     assert_eq!(denied_as(&decision), "assisted-api-mutation-unverified");
 }
 
+fn decide_line(rig: &mut Rig, line: &str) -> Decision {
+    let input = serde_json::json!({ "command": line });
+    let (action, how, command) = crate::harness::classify_observing("Bash", &input, &[]);
+    let observed = Observed {
+        command: Some(command),
+        checkout: None,
+        push_refs: Vec::new(),
+    };
+    crate::harness::gate_observing(&rig.context, &mut rig.run, &action, how, &observed)
+}
+
+#[test]
+fn an_assisted_run_reaches_a_pull_request_only_through_the_typed_tools() {
+    for line in [
+        "gh pr review 3 --approve",
+        "gh pr review 3 --request-changes --body x",
+        "gh pr comment 3 --body x",
+        "gh pr edit 3 --title x",
+        "gh pr close 3",
+        "gh pr ready 3",
+        "gh --repo o/r pr review 3 --approve",
+    ] {
+        let mut rig = new_rig();
+        let decision = decide_line(&mut rig, line);
+        assert_eq!(
+            denied_as(&decision),
+            "assisted-remote-write-unverified",
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn a_write_in_the_worktree_does_not_carry_a_remote_write_past_the_claim() {
+    let mut rig = new_rig();
+    let decision = decide_line(&mut rig, "git commit -m x; gh pr review 3 --approve");
+    assert_eq!(denied_as(&decision), "assisted-remote-write-unverified");
+}
+
+#[test]
+fn a_remote_write_refusal_names_what_the_run_can_use() {
+    let mut rig = new_rig();
+    let Decision::Deny(refusal) = decide_line(&mut rig, "gh pr comment 3 --body x") else {
+        panic!("not refused");
+    };
+    let text = refusal.to_string();
+    assert!(text.contains("`review_thread`"), "{text}");
+    assert!(text.contains("`ready_pr`"), "{text}");
+}
+
+#[test]
+fn an_assisted_run_still_reads_pull_requests_and_writes_its_worktree() {
+    for line in [
+        "gh pr view 3 --json state",
+        "gh pr checks 3",
+        "gh api repos/o/r/pulls/3/comments",
+    ] {
+        let mut rig = new_rig();
+        let decision = decide_line(&mut rig, line);
+        assert!(
+            matches!(&decision, Decision::Outside(Aside::NotWatched)),
+            "{line}: {decision:?}"
+        );
+    }
+    let mut rig = new_rig();
+    let decision = decide_line(&mut rig, "git commit -m x");
+    assert!(matches!(&decision, Decision::Allow(_)), "{decision:?}");
+}
+
 #[test]
 fn a_pre_execution_push_names_the_effective_missing_hook_and_supported_publisher() {
     let mut rig = new_rig();

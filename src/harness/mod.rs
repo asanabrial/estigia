@@ -1711,6 +1711,51 @@ pub const REPOSITORY_SHELL_POPULATION: Population = Population {
            `git stash list` and `git stash show` are reads and are exempt at every occurrence.",
 };
 
+fn repository_write_in(code: &str, normalized: &str) -> Option<String> {
+    if let Some(matched) = REPOSITORY_SHELL
+        .iter()
+        .find(|fragment| names_fragment(code, fragment))
+    {
+        // A compound line carries one fragment per command, and the gate
+        // decides on the one reported here: when any of them is one the
+        // operation schedule may deny, that is the one reported, so the
+        // schedule sees the commit riding beside the worktree it would
+        // otherwise read alone.
+        let target = operation_window::protected_write_target(normalized).unwrap_or(*matched);
+        return Some(target.to_owned());
+    }
+    // Plain and porcelain local branch creation, which no fragment above
+    // names: deletions matched there first, so reaching this line with
+    // `git branch` still on it means the command names no delete, move,
+    // copy, list, or show flag beside the new name.
+    operation_window::is_branch_creation(normalized).then(|| "git branch".to_owned())
+}
+
+/// A shell line as the fragment lists read it: lowercased, its data spans blanked.
+pub(crate) fn shell_code(literal: &str) -> String {
+    let view = shell::data_view(&shell::unquote_plain_words(literal)).to_ascii_lowercase();
+    without_leading_options(&view)
+}
+
+/// The repository write a line carries beside the boundary it was classified as.
+///
+/// [`classify_observing`] answers with the line's strongest command, so for a run holding no
+/// claim, whose policy reads writes and not boundaries, the write would go unread.
+pub(crate) fn write_beside_a_boundary(action: &Action, literal: Option<&str>) -> Option<String> {
+    if !matches!(action, Action::Boundary { .. }) || unclaimed::is_a_push(action) {
+        return None;
+    }
+    let literal = literal?;
+    let unquoted = shell::unquote_plain_words(literal);
+    let view = shell::data_view(&unquoted).to_ascii_lowercase();
+    let code = without_leading_options(&view);
+    if contains_whole_command(&code, "git push") {
+        return Some("git push".to_owned());
+    }
+    let normalized = without_leading_options(&unquoted.to_ascii_lowercase());
+    repository_write_in(&code, &normalized).or_else(|| shell::writes_a_file(&view))
+}
+
 fn names_fragment(code: &str, fragment: &str) -> bool {
     if fragment != "git stash" {
         return code.contains(fragment);
@@ -2249,20 +2294,11 @@ pub fn classify_observing(
                 },
             );
         }
-        if let Some(matched) = REPOSITORY_SHELL
-            .iter()
-            .find(|fragment| names_fragment(&code, fragment))
-        {
-            // A compound line carries one fragment per command, and the gate
-            // decides on the one reported here: when any of them is one the
-            // operation schedule may deny, that is the one reported, so the
-            // schedule sees the commit riding beside the worktree it would
-            // otherwise read alone.
-            let target = operation_window::protected_write_target(&normalized).unwrap_or(*matched);
+        if let Some(target) = repository_write_in(&code, &normalized) {
             let boundary = names_a_boundary(&lowercased);
             return (
                 Action::Write {
-                    target: target.to_owned(),
+                    target: target.clone(),
                 },
                 if boundary {
                     Sensitivity::Boundary
@@ -2270,33 +2306,7 @@ pub fn classify_observing(
                     Sensitivity::Routine
                 },
                 CommandObserved {
-                    matched: Established::Known(target.to_owned()),
-                    against,
-                    literal,
-                    boundary_source: None,
-                    disqualifying_byte: None,
-                    same_tier_fragments: Vec::new(),
-                    write_targets: Vec::new(),
-                },
-            );
-        }
-        // Plain and porcelain local branch creation, which no fragment above
-        // names: deletions matched there first, so reaching this line with
-        // `git branch` still on it means the command names no delete, move,
-        // copy, list, or show flag beside the new name.
-        if operation_window::is_branch_creation(&normalized) {
-            let boundary = names_a_boundary(&lowercased);
-            return (
-                Action::Write {
-                    target: "git branch".to_owned(),
-                },
-                if boundary {
-                    Sensitivity::Boundary
-                } else {
-                    Sensitivity::Routine
-                },
-                CommandObserved {
-                    matched: Established::Known("git branch".to_owned()),
+                    matched: Established::Known(target),
                     against,
                     literal,
                     boundary_source: None,
@@ -3223,6 +3233,9 @@ fn decide_observing(
     let verifier = match action {
         Action::Untouched => return Decision::Outside(Aside::NotWatched),
         Action::Remote { command } => {
+            if run.assisted && run.issue.is_some() {
+                return assisted::decision(context, run, action, how, observed, command);
+            }
             return match operation_window::check_protected(context, action) {
                 Some(refusal) => Decision::Deny(Box::new(prefixed(refusal, command, observed))),
                 None => Decision::Outside(Aside::NotWatched),
@@ -3300,6 +3313,7 @@ fn decide_observing(
             .as_ref()
             .map(|command| command.write_targets.as_slice())
             .unwrap_or_default();
+        let subject = write_beside_a_boundary(action, literal).unwrap_or(subject);
         return match issue_requirement::decision(context, action, how, literal, write_targets) {
             Some(Decision::Deny(refusal)) => {
                 Decision::Deny(Box::new(prefixed(*refusal, &subject, observed)))
