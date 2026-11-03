@@ -15,7 +15,10 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `review-thread-write-unconfirmed` | A reply or resolution may have landed without a confirming readback. | Read the thread before retrying. Preserve `reply_confirmed`; do not claim resolution completed. |
 | `draft-pr-branch-not-checked-out` | The checkout does not have the pointer's branch checked out. | Return to the checkout/branch recorded by `assist`. |
 | `draft-pr-exists-ready` | A ready PR exists and correction policy is `refuse`. | A person decides the repository's correction policy; the run does not override it. |
+| `draft-pr-ready-not-read-back` | The branch is published and marking its draft ready did not read back (`committed`). | Do not publish again; call `ready_pr`. |
 | `draft-pr-redraft-not-read-back` | A requested return to draft was not confirmed; no correction was pushed. | Read the PR before attempting publication again. |
+| `ready-pr-reviewed-head-required` | `Self review` is `on` and `reviewed_head` was not given. | Review the published head in a context that did not write it, then pass it as `reviewed_head`. |
+| `ready-pr-review-not-this-head` | `reviewed_head` is not the published head; nothing was changed. | Review the published head and pass that head. |
 | `closing-keyword-live` | Title, body or commits would close an issue on merge. | Remove the closing keyword before publication. |
 | `ambiguous-open-prs` | Multiple open PRs name the branch. | A person settles which PR owns that branch before publication. |
 | `malformed-argument` | An argument was passed and could not be read as what it has to be — an issue number that is not a number. The refusal carries the `value` it was given. | Correct it and call again. |

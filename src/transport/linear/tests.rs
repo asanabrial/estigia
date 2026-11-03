@@ -549,6 +549,137 @@ fn a_github_issue_read_merged_through_dispatch_sends_nothing_to_linear() {
     assert!(linear_calls(&calls).is_empty(), "{calls:?}");
 }
 
+fn drafting_through_dispatch(
+    root: &std::path::Path,
+    self_review: &str,
+    ready_by: &str,
+) -> (
+    Result<serde_json::Value, crate::transport::Failure>,
+    Vec<String>,
+) {
+    let repo = crate::test_env::repository_with_commit();
+    let git = |at: &std::path::Path, arguments: &[&str]| {
+        crate::transport::run(&[&["git"][..], arguments].concat(), Some(at), How::write())
+            .unwrap_or_else(|failure| panic!("git {arguments:?}: {}", failure.detail()))
+            .stdout
+            .trim()
+            .to_owned()
+    };
+    let origin = root.join("origin.git");
+    std::fs::create_dir_all(&origin).expect("a remote");
+    git(&origin, &["init", "--quiet", "--bare"]);
+    git(repo.path(), &["branch", "-M", "main"]);
+    git(
+        repo.path(),
+        &["remote", "add", "origin", &origin.to_string_lossy()],
+    );
+    git(repo.path(), &["push", "--quiet", "origin", "main"]);
+    git(repo.path(), &["checkout", "--quiet", "-b", "eng-123"]);
+    git(
+        repo.path(),
+        &["commit", "--allow-empty", "--quiet", "-m", "work"],
+    );
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+
+    let skill_dir = root.join("skill");
+    std::fs::create_dir_all(&skill_dir).expect("a skill root");
+    std::fs::write(
+        skill_dir.join(crate::skill::CONTRACT),
+        crate::skill::CONTRACT_CONTENTS,
+    )
+    .expect("a contract");
+    let mut config = crate::config::Config::default();
+    for (setting, value) in [
+        (crate::config::Setting::Tracker, "linear ENG"),
+        (crate::config::Setting::DeliveryPreset, "assisted"),
+        (crate::config::Setting::SelfReview, self_review),
+        (crate::config::Setting::ReadyBy, ready_by),
+        (crate::config::Setting::StateNames, "review=In Review"),
+    ] {
+        setting.apply(&mut config, value).expect("a row");
+    }
+    crate::setup::write_repository_configuration(
+        &crate::skill::repository_config_path(repo.path()),
+        &config,
+        &[
+            crate::config::Setting::Tracker,
+            crate::config::Setting::Workflow,
+            crate::config::Setting::StateNames,
+            crate::config::Setting::SelfReview,
+            crate::config::Setting::ReadyBy,
+        ],
+    )
+    .expect("the repository's file");
+    let context = crate::transport::Context {
+        skill_dir,
+        repo_dir: repo.path().to_path_buf(),
+        config: Vec::new(),
+        repo: None,
+    };
+    let body = root.join("body.md");
+    std::fs::write(&body, "Words.").expect("a body");
+    let view = |draft: bool| {
+        serde_json::json!({
+            "number": 7, "url": "https://github.com/example/repo/pull/7", "headRefOid": head,
+            "headRefName": "eng-123", "state": "OPEN", "isDraft": draft,
+        })
+        .to_string()
+    };
+    let mut entries = vec![
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": r#"{"defaultBranchRef":{"name":"main"}}"#,
+        }),
+        serde_json::json!({ "matches": "pr list", "stdout": "[]" }),
+        serde_json::json!({
+            "matches": "pr create", "stdout": "https://github.com/example/repo/pull/7",
+        }),
+        serde_json::json!({ "matches": "pr ready", "stdout": "" }),
+        serde_json::json!({ "matches": "pr view", "nth": 1, "stdout": view(true) }),
+        serde_json::json!({ "matches": "pr view", "stdout": view(false) }),
+    ];
+    entries.extend(a_move("In Progress", accepted(), "In Review"));
+    let flags: Vec<String> = [
+        "--branch",
+        "eng-123",
+        "--worktree",
+        &repo.path().to_string_lossy(),
+        "--title",
+        "A title",
+        "--body-file",
+        &body.to_string_lossy(),
+        "--issue",
+        "ENG-123",
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+    through_programs(&["gh", "linear"], &entries, || {
+        crate::transport::dispatch::dispatch(&context, "draft-pr", &flags, "2026-10-25T00:00:00Z")
+    })
+}
+
+#[test]
+fn a_draft_pr_that_marks_ready_moves_the_linear_issue_once_and_reports_it() {
+    let root = tempfile::tempdir().expect("a root");
+    let (answer, calls) = drafting_through_dispatch(root.path(), "off", "agent");
+    let answer = answer.expect("published and marked");
+    assert_eq!(answer["marked_ready"], true, "{answer}");
+    assert_eq!(answer["linear_state"]["state"], "In Review", "{answer}");
+    assert_eq!(answer["tracker_written"], true, "{answer}");
+    assert_eq!(mutations(&calls).len(), 1, "{calls:?}");
+}
+
+#[test]
+fn a_draft_pr_that_leaves_a_draft_does_not_move_the_linear_issue() {
+    let root = tempfile::tempdir().expect("a root");
+    let (answer, calls) = drafting_through_dispatch(root.path(), "on", "agent");
+    let answer = answer.expect("published as a draft");
+    assert_eq!(answer["draft"], true, "{answer}");
+    assert!(answer.get("linear_state").is_none(), "{answer}");
+    assert!(linear_calls(&calls).is_empty(), "{calls:?}");
+}
+
 fn attachments(nodes: &[&str], has_next: bool) -> serde_json::Value {
     let nodes: Vec<_> = nodes
         .iter()

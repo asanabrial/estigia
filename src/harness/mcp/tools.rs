@@ -1658,7 +1658,9 @@ pub const TOOLS: &[Tool] = &[
                       a draft pull request: pushes fast-forward, opens a draft with the title and \
                        body as given, and reads it back. Refuses closing keywords. Reuses an open \
                        PR: ready corrections follow `Corrections after ready` (push-ready keeps it \
-                       ready, redraft returns it to draft, refuse stops). Writes nothing to the tracker. The branch and \
+                       ready, redraft returns it to draft, refuse stops). Never opens a pull \
+                      request ready: under `Ready by` `agent` with `Self review` `off` it then \
+                      marks the draft ready itself. Its answer names the next step. The branch and \
                       checkout are the ones `assist` recorded.",
         operation: "draft-pr",
         arguments: &[
@@ -1677,10 +1679,20 @@ pub const TOOLS: &[Tool] = &[
         name: "ready_pr",
         contract_name: "ready pull request",
         description: "Mark an assisted run's draft ready for review where `Ready by` is `agent`, \
-                      once its head is the checkout's, and read it back. Writes nothing to the \
-                      tracker.",
+                      once its head is the checkout's, and read it back. Where `Self review` is \
+                      `on`, `reviewed_head` is required and must be the published head: it is the \
+                      run's statement of which bytes it reviewed, not a proof. Writes nothing to \
+                      the tracker.",
         operation: "ready-pr",
-        arguments: &[RUN_ID],
+        arguments: &[
+            RUN_ID,
+            Argument::optional(
+                "reviewed_head",
+                "string",
+                "The exact published commit the self review covered. Required where `Self review` \
+                 is `on`; refused when it is not the published head.",
+            ),
+        ],
         effect: PointerEffect::None,
         writes: true,
     },
@@ -1692,7 +1704,9 @@ pub const TOOLS: &[Tool] = &[
                       request or awaited, the merge awaited, or merged. Review comments come back \
                        as data, including open threads from all authors. `expected_head` pins the \
                        reading; `wait_seconds` polls CI for that head (0-300). Every push requires \
-                       a new reading. `request_review` asks for the current stage's review.",
+                       a new reading. `request_review` asks for the current stage's review. `ci` \
+                       is `passed`, `failed` (with `failing_checks`), `pending`, `missing` or \
+                       `none` (no CI was seen, never a pass).",
         operation: "review-stages",
         arguments: &[
             RUN_ID,

@@ -6,8 +6,10 @@
 //! workflow cannot hand to the person — a closing keyword would close the issue
 //! on merge in Estigia's name.
 //!
-//! The pull request is read back for the pushed head and for being a draft; the
-//! team's own CI and reviews are theirs, and nothing here waits for either.
+//! The pull request is read back for the pushed head and for being a draft, and is
+//! never created open; the team's own CI and reviews are theirs, and nothing here
+//! waits for either. Where `Ready by` is `agent` and `Self review` is `off` there is
+//! no review to wait for, so the draft is marked ready and read back again.
 
 use super::claim::{
     PUBLISH_READBACK_ATTEMPTS, Push, open_prs, pr_number, publish_schedule, push_to_origin,
@@ -30,6 +32,10 @@ pub struct Draft<'a> {
     /// What `Corrections after ready` says to do when the open pull request is
     /// already ready for review.
     pub corrections: Corrections,
+    /// Who `Ready by` says marks the pull request ready.
+    pub ready_by: crate::config::Party,
+    /// Whether `Self review` is on, which is the review a ready mark waits for.
+    pub self_review: bool,
 }
 
 /// `draft-pr` — see the module.
@@ -49,6 +55,10 @@ pub struct Ready<'a> {
     pub worktree: &'a std::path::Path,
     /// Who `Ready by` says marks the pull request ready.
     pub ready_by: crate::config::Party,
+    /// Whether `Self review` is on, which makes `reviewed_head` required.
+    pub self_review: bool,
+    /// The head the run states it reviewed, in a context that did not write it.
+    pub reviewed_head: Option<&'a str>,
 }
 
 /// `ready-pr` — mark an assisted run's open draft ready for review, where
@@ -66,12 +76,22 @@ fn mark_ready_with_sleep(
         branch,
         worktree,
         ready_by,
+        self_review,
+        reviewed_head,
     } = *what;
     if ready_by != crate::config::Party::Agent {
         return Err(stop(
             "ready-is-the-persons",
             "`Ready by` is `person` in this repository, so a person marks the pull request ready \
              and the run waits for it; nothing was changed"
+                .to_owned(),
+        ));
+    }
+    if self_review && reviewed_head.is_none() {
+        return Err(stop(
+            "ready-pr-reviewed-head-required",
+            "`Self review` is `on` in this repository, so `reviewed_head` is required: the exact \
+             head the review covered, in a context that did not write it; nothing was changed"
                 .to_owned(),
         ));
     }
@@ -115,6 +135,19 @@ fn mark_ready_with_sleep(
                        first; nothing was changed",
         })));
     }
+    if let Some(reviewed) = reviewed_head.filter(|reviewed| self_review && *reviewed != head) {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "ready-pr-review-not-this-head",
+            "pr": number,
+            "reviewed_head": reviewed,
+            "published_head": head,
+            "action": "the review the run states covers a head other than the published one, so \
+                       what would be opened is not what was reviewed \u{2014} review the \
+                       published head in a context that did not write it and call `ready_pr` \
+                       with that head as `reviewed_head`; nothing was changed",
+        })));
+    }
     let already = open.get("isDraft").and_then(serde_json::Value::as_bool) == Some(false);
     if !already {
         run(
@@ -123,7 +156,52 @@ fn mark_ready_with_sleep(
             How::write(),
         )?;
     }
-    let mut seen = Vec::new();
+    let seen = match read_back_ready(context, number, branch, &head, sleep)? {
+        Ok(value) => {
+            return Ok(serde_json::json!({
+                "ok": true,
+                "pr": number,
+                "url": value.get("url"),
+                "branch": branch,
+                "head": head,
+                "draft": false,
+                "already_ready": already,
+                "tracker_written": false,
+                "next": reading_next(&head),
+            }));
+        }
+        Err(seen) => seen,
+    };
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "ready-pr-readback-failed",
+        "world": "unknown",
+        "pr": number,
+        "expected_head": head,
+        "observed": seen,
+        "action": format!(
+            "pull request #{number} was asked to be ready and did not read back as ready at \
+             `{head}` \u{2014} do not report it ready; read it, and run this again"
+        ),
+    })))
+}
+
+fn reading_next(head: &str) -> String {
+    format!(
+        "read where the pull request stands with `review_stages` (`expected_head` `{head}`, \
+         `wait_seconds` up to 300): the work is not finished until that head's CI reads \
+         `passed`, `failed` or `none` and every blocking stage's comments are addressed"
+    )
+}
+
+fn read_back_ready(
+    context: &Context,
+    number: u64,
+    branch: &str,
+    head: &str,
+    sleep: &mut dyn FnMut(std::time::Duration),
+) -> Result<Result<serde_json::Value, Option<serde_json::Value>>, Failure> {
+    let mut seen = None;
     for upcoming in 1..=PUBLISH_READBACK_ATTEMPTS {
         if upcoming > 1 {
             sleep(std::time::Duration::from_secs(readback_delay_secs(
@@ -140,33 +218,13 @@ fn mark_ready_with_sleep(
             ],
             Some(&context.repo_dir),
         )? {
-            if agrees(&value, branch, &head, false) {
-                return Ok(serde_json::json!({
-                    "ok": true,
-                    "pr": number,
-                    "url": value.get("url"),
-                    "branch": branch,
-                    "head": head,
-                    "draft": false,
-                    "already_ready": already,
-                    "tracker_written": false,
-                }));
+            if agrees(&value, branch, head, false) {
+                return Ok(Ok(value));
             }
-            seen.push(value);
+            seen = Some(value);
         }
     }
-    Err(Failure::Stop(serde_json::json!({
-        "ok": false,
-        "reason": "ready-pr-readback-failed",
-        "world": "unknown",
-        "pr": number,
-        "expected_head": head,
-        "observed": seen.last(),
-        "action": format!(
-            "pull request #{number} was asked to be ready and did not read back as ready at \
-             `{head}` \u{2014} do not report it ready; read it, and run this again"
-        ),
-    })))
+    Ok(Err(seen))
 }
 
 fn stop(reason: &str, action: String) -> Failure {
@@ -184,6 +242,8 @@ fn draft_with_sleep(
         title,
         body_file,
         corrections,
+        ready_by,
+        self_review,
     } = *what;
 
     let checked_out = run(
@@ -329,7 +389,8 @@ fn draft_with_sleep(
         .map_err(|_| unconfirmed(branch, &head, Some(number), &seen))?
         {
             if agrees(&value, branch, &head, stays_draft) {
-                return Ok(serde_json::json!({
+                let marks = stays_draft && ready_by == crate::config::Party::Agent && !self_review;
+                let mut published = serde_json::json!({
                     "ok": true,
                     "pr": number,
                     "url": value.get("url"),
@@ -340,7 +401,37 @@ fn draft_with_sleep(
                     "created": reused.is_none(),
                     "title_and_body_applied": reused.is_none(),
                     "tracker_written": false,
-                }));
+                });
+                let next = if marks {
+                    let marked = run(
+                        &["gh", "pr", "ready", &number.to_string()],
+                        Some(&context.repo_dir),
+                        How::write(),
+                    )
+                    .and_then(|_| read_back_ready(context, number, branch, &head, sleep));
+                    match marked {
+                        Ok(Ok(_)) => {
+                            published["draft"] = serde_json::json!(false);
+                            published["marked_ready"] = serde_json::json!(true);
+                            reading_next(&head)
+                        }
+                        Ok(Err(_)) | Err(_) => {
+                            return Err(mark_unconfirmed(branch, &head, number));
+                        }
+                    }
+                } else if stays_draft && ready_by == crate::config::Party::Agent {
+                    format!(
+                        "review the exact head `{head}` in a context that did not write it, then \
+                         call `ready_pr` with `reviewed_head` `{head}`; a correction pushed \
+                         afterwards needs a review of its own head"
+                    )
+                } else if stays_draft {
+                    "a person marks it ready; nothing is due from the run".to_owned()
+                } else {
+                    reading_next(&head)
+                };
+                published["next"] = serde_json::json!(next);
+                return Ok(published);
             }
             seen.push(value);
         }
@@ -405,6 +496,21 @@ fn unconfirmed(
              read back as an open draft at that head \u{2014} do not report one; read the \
              branch's pull requests, then run this again, which reuses an open draft rather than \
              making a second"
+        ),
+    }))
+}
+
+fn mark_unconfirmed(branch: &str, head: &str, number: u64) -> Failure {
+    Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "draft-pr-ready-not-read-back",
+        "world": "committed",
+        "pr": number,
+        "published_head": head,
+        "action": format!(
+            "`{branch}` is published at `{head}` as pull request #{number}, and marking it ready \
+             did not read back \u{2014} do not publish again and do not report it ready; call \
+             `ready_pr`, which marks the published draft and reads it back"
         ),
     }))
 }

@@ -1379,7 +1379,7 @@ fn run_tool_asking(
             flags.push(worktree.display().to_string());
         }
         if let (true, Some(issue)) = (
-            matches!(tool.operation, "ready-pr" | "review-stages"),
+            matches!(tool.operation, "draft-pr" | "ready-pr" | "review-stages"),
             &run.issue,
         ) {
             flags.push("--issue".to_owned());

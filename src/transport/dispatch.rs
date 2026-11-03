@@ -1722,16 +1722,31 @@ fn run_operation(
                 super::outbox::flush::run(context, &root, now)
             }
         }
-        "draft-pr" => super::draft::draft_pull_request(
-            context,
-            &super::draft::Draft {
-                branch: f.need("branch", operation)?,
-                worktree: Path::new(f.need("worktree", operation)?),
-                title: f.need("title", operation)?,
-                body_file: Path::new(f.need("body-file", operation)?),
-                corrections: context.layered().corrections_after_ready(),
-            },
-        ),
+        "draft-pr" => {
+            let layered = context.layered();
+            let drafted = super::draft::draft_pull_request(
+                context,
+                &super::draft::Draft {
+                    branch: f.need("branch", operation)?,
+                    worktree: Path::new(f.need("worktree", operation)?),
+                    title: f.need("title", operation)?,
+                    body_file: Path::new(f.need("body-file", operation)?),
+                    corrections: layered.corrections_after_ready(),
+                    ready_by: layered.ready_by(),
+                    self_review: layered.self_review(),
+                },
+            )?;
+            let issue = f.get("issue").map(|_| identity()).transpose()?;
+            if drafted.get("marked_ready") == Some(&serde_json::Value::Bool(true)) {
+                return Ok(super::linear::follow_state(
+                    &layered.state_names,
+                    issue.as_ref(),
+                    super::linear::IN_REVIEW,
+                    drafted,
+                ));
+            }
+            Ok(drafted)
+        }
         "review-stages" => {
             let layered = context.layered();
             let read = super::stages::review_stages(
@@ -1743,6 +1758,10 @@ fn run_operation(
                     merge_by: layered.merge_by(),
                     request: f.on("request-review"),
                     expected_head: f.get("expected-head"),
+                    now_secs: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|since| i64::try_from(since.as_secs()).unwrap_or_default())
+                        .unwrap_or_default(),
                     wait_seconds: f.get("wait-seconds").unwrap_or("0").parse::<u64>().map_err(|_| Failure::ConfigDefect(serde_json::json!({
                         "ok": false, "reason": "malformed-argument", "argument": "--wait-seconds",
                     })))?,
@@ -1779,6 +1798,8 @@ fn run_operation(
                     branch: f.need("branch", operation)?,
                     worktree: Path::new(f.need("worktree", operation)?),
                     ready_by: layered.ready_by(),
+                    self_review: layered.self_review(),
+                    reviewed_head: f.get("reviewed-head"),
                 },
             )?;
             let issue = f.get("issue").map(|_| identity()).transpose()?;

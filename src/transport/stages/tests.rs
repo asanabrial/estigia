@@ -1,6 +1,8 @@
 use super::*;
 use crate::config::{Config, Setting};
 
+mod no_ci;
+
 fn stages(written: &str) -> Vec<ReviewStage> {
     let mut config = Config::default();
     Setting::ExternalReviewers
@@ -18,11 +20,13 @@ struct Pr {
     reviews: Vec<serde_json::Value>,
     threads: Vec<serde_json::Value>,
     requested: Vec<serde_json::Value>,
+    updated: Option<&'static str>,
 }
 
 impl Pr {
     fn open() -> Self {
         Self {
+            updated: None,
             state: "OPEN",
             draft: false,
             checks: Vec::new(),
@@ -74,6 +78,7 @@ impl Pr {
             "headRefOid": "abc",
             "headRefName": "issue-12",
             "baseRefOid": "base",
+            "updatedAt": self.updated,
             "url": "https://example.invalid/pull/7",
             "mergeCommit": if self.state == "MERGED" { serde_json::json!({ "oid": "m1" }) } else { serde_json::Value::Null },
             "author": { "login": "alexis" },
@@ -88,7 +93,13 @@ impl Pr {
 }
 
 fn at(pr: &Pr, written: &str) -> serde_json::Value {
-    position(&pr.json(), &stages(written), Party::Agent, Party::Person)
+    position(
+        &pr.json(),
+        &stages(written),
+        Party::Agent,
+        Party::Person,
+        false,
+    )
 }
 
 fn named(answer: &serde_json::Value) -> &str {
@@ -217,7 +228,13 @@ fn no_stages_waits_only_for_the_merge() {
 fn an_approval_of_an_earlier_head_does_not_complete_review() {
     let mut pr = Pr::open().review("octocat", "APPROVED").json();
     pr["latestReviews"]["nodes"][0]["commit"] = serde_json::json!({ "oid": "old" });
-    let answer = position(&pr, &stages("review:any"), Party::Agent, Party::Person);
+    let answer = position(
+        &pr,
+        &stages("review:any"),
+        Party::Agent,
+        Party::Person,
+        false,
+    );
     assert_eq!(named(&answer), "awaiting-review", "{answer}");
 }
 
@@ -232,7 +249,7 @@ fn every_open_thread_is_available_even_before_its_stage_and_without_clipping() {
         .json();
     pr["reviewThreads"]["nodes"][1]["id"] = serde_json::json!("human-thread");
     pr["reviewThreads"]["nodes"][1]["comments"]["nodes"][0]["body"] = serde_json::json!(long_body);
-    let answer = position(&pr, &stages(TEAM), Party::Agent, Party::Person);
+    let answer = position(&pr, &stages(TEAM), Party::Agent, Party::Person, false);
     assert_eq!(answer["position"], "check-pending");
     assert_eq!(answer["open_threads"].as_array().unwrap().len(), 2);
     assert_eq!(answer["open_threads"][1]["id"], "human-thread");
@@ -253,6 +270,7 @@ fn wait(context: &Context, seconds: u64) -> Result<serde_json::Value, Failure> {
             request: false,
             expected_head: Some("abc"),
             wait_seconds: seconds,
+            now_secs: 0,
         },
         &mut |_| {},
     )
@@ -614,6 +632,8 @@ fn a_ready_pr_followup_publishes_then_resolves_and_restarts_ci_on_the_new_head()
                 title: "Review correction",
                 body_file: &rig.body,
                 corrections: crate::config::Corrections::PushReady,
+                ready_by: Party::Person,
+                self_review: false,
             },
         )
     })
@@ -651,6 +671,7 @@ fn a_ready_pr_followup_publishes_then_resolves_and_restarts_ci_on_the_new_head()
                 request: false,
                 expected_head: Some(&rig.fix),
                 wait_seconds: 5,
+                now_secs: 0,
             },
             &mut |_| {},
         )
@@ -708,6 +729,7 @@ fn call(context: &Context, written: &str, request: bool) -> Result<serde_json::V
             request,
             expected_head: None,
             wait_seconds: 0,
+            now_secs: 0,
         },
         &mut |_| {},
     )
