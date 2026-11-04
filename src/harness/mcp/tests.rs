@@ -583,7 +583,11 @@ fn a_record_nothing_can_read_stops_every_tool_that_names_a_run() {
     .expect("a torn pointer");
 
     let mut bound = 0;
-    for tool in super::tools::TOOLS {
+    for tool in super::tools::TOOLS
+        .iter()
+        .chain(super::tools::INTERNAL)
+        .filter(|tool| tool.name != "pr_review")
+    {
         if !tool
             .arguments
             .iter()
@@ -674,7 +678,11 @@ fn a_record_that_will_not_open_stops_every_tool_that_names_a_run() {
         .expect("a directory where the pointer should be");
 
     let mut bound = 0;
-    for tool in super::tools::TOOLS {
+    for tool in super::tools::TOOLS
+        .iter()
+        .chain(super::tools::INTERNAL)
+        .filter(|tool| tool.name != "pr_review")
+    {
         if !tool
             .arguments
             .iter()
@@ -1043,6 +1051,41 @@ fn the_record_disposition_description_qualifies_the_severe_refusal() {
 }
 
 #[test]
+fn a_malformed_pr_review_step_names_the_tool_an_agent_can_call() {
+    let response = ask(json!({
+        "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+        "params": {"name": "pr_review", "arguments": {
+            "action": "claim", "run_id": "claude-abcd1234"
+        }}
+    }))
+    .expect("a request with an id gets a response");
+    let said = response.to_string();
+    assert!(!said.contains("pr_review_claim"), "{said}");
+    assert!(said.contains("pr_review action claim"), "{said}");
+}
+
+#[test]
+fn pr_review_names_each_step_and_refuses_an_action_it_does_not_have() {
+    for action in tools::PULL_REVIEW_ACTIONS {
+        let row = format!("pr_review_{action}");
+        assert!(tools::find(&row).is_some(), "{row} is no row");
+        assert!(tools::retired(&row).is_some(), "{row} is still offered");
+    }
+    for arguments in [json!({}), json!({"action": "merge"}), json!({"action": 7})] {
+        let refused = super::pull_review_step(&arguments);
+        assert!(
+            matches!(refused, Err(ToolFailure::Malformed(_))),
+            "{arguments} was answered"
+        );
+    }
+    let (row, rest) =
+        super::pull_review_step(&json!({"action": "collect", "run_id": "r", "wait_seconds": 5}))
+            .expect("a step");
+    assert_eq!(row, "pr_review_collect");
+    assert_eq!(rest, json!({"run_id": "r", "wait_seconds": 5}));
+}
+
+#[test]
 fn the_tool_surface_is_exactly_the_names_it_keeps() {
     let mut exposed: Vec<&str> = TOOLS.iter().map(|tool| tool.name).collect();
     exposed.sort_unstable();
@@ -1066,12 +1109,7 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
         "launch_review_input",
         "list_sessions",
         "list_state",
-        "pr_review_claim",
-        "pr_review_collect",
-        "pr_review_launch",
-        "pr_review_release",
-        "pr_review_status",
-        "pr_review_submit",
+        "pr_review",
         "publish_review",
         "ready_pr",
         "record_computed_verdict",
@@ -6927,7 +6965,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 61_940;
+const TOOLS_LIST_CEILING: usize = 59_796;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -10024,26 +10062,6 @@ fn a_held_release_spend_without_its_receipt_is_not_refused_for_the_receipt() {
         Err(other) => format!("{other:?}"),
     };
     assert!(!text.contains("--spend has no"), "{text}");
-}
-
-#[test]
-fn the_status_tool_refuses_a_phase_that_is_not_in_its_vocabulary() {
-    let root = tempfile::tempdir().expect("a temporary root");
-    let repo_dir = root.path().join("repo");
-    std::fs::create_dir_all(&repo_dir).expect("a checkout");
-    let context = bare_context(&root, &repo_dir);
-
-    let failure = run_tool(
-        "status",
-        &json!({"run_id": "claude-abcd1234", "text": "x", "phase": "blocked"}),
-        Ok(&context),
-    )
-    .expect_err("blocked is a workflow state, not a phase");
-
-    assert!(
-        matches!(failure, ToolFailure::Refused(_) | ToolFailure::Malformed(_)),
-        "{failure:?}"
-    );
 }
 
 #[test]

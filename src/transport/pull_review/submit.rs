@@ -177,7 +177,7 @@ fn unconfirmed(held: &PullReview, detail: String) -> Failure {
             "the review of pull request #{} may have landed and was not confirmed: {detail}",
             held.pr
         ),
-        "call `pr_review_submit` again: it looks for this review by its marker before sending \
+        "call `pr_review` `submit` again: it looks for this review by its marker before sending \
          another. Do not report it as submitted until one reads back",
     )
 }
@@ -232,7 +232,7 @@ pub fn submit(context: &Context, run_id: &str) -> Result<serde_json::Value, Fail
             return Err(stop(
                 "pull-review-incomplete",
                 format!("no verdict yet: {} has not answered", missing.join(", ")),
-                "follow what `pr_review_status` names, then submit",
+                "follow what `pr_review` `status` names, then submit",
             ));
         }
         Verdict::Escalated { reasons } => {

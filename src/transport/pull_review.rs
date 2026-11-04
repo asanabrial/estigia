@@ -12,7 +12,7 @@ use super::target::{is_object_id, merge_base};
 use super::{Context, Failure, How, run};
 use crate::identity::Identity;
 
-/// What `pr_review_claim` was asked for.
+/// What `pr_review` `claim` was asked for.
 #[derive(Debug, Clone, Copy)]
 pub struct ClaimRequest<'a> {
     /// The pull request to review.
@@ -49,7 +49,7 @@ pub(crate) fn held_by(store: &Store, run_id: &str) -> Result<PullReview, Failure
         stop(
             "pull-review-not-held",
             format!("{run_id} holds no review-only claim"),
-            "`pr_review_claim` first; a claim another run displaced at its horizon is gone",
+            "`pr_review` `claim` first; a claim another run displaced at its horizon is gone",
         )
     })
 }
@@ -58,8 +58,8 @@ fn head_moved(pr: u64, detail: String) -> Failure {
     stop(
         "head-moved",
         format!("pull request #{pr}: {detail}"),
-        "nothing was reviewed against these bytes; `pr_review_release`, then a new \
-         `pr_review_claim` reads the head as it stands",
+        "nothing was reviewed against these bytes; `pr_review` `release`, then a new \
+         `pr_review` `claim` reads the head as it stands",
     )
 }
 

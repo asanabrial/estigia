@@ -173,12 +173,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `review_tier` | `SCRIPT review-tier` — see *Deriving the review tier* in github/operations.md |
 | `unassign` | `SCRIPT unassign` — see *Releasing an issue* in github/operations.md |
 | assisted checkout | `SCRIPT assist` |
-| pull request review claim | `SCRIPT pr-review-claim` |
-| pull request review release | `SCRIPT pr-review-release` |
-| pull request review status | `SCRIPT pr-review-status` |
-| pull request review launch | `SCRIPT pr-review-launch` |
-| pull request review collect | `SCRIPT pr-review-collect` |
-| pull request review submit | `SCRIPT pr-review-submit` |
+| pull request review | the `pr_review` tool, whose `action` names one step of the review-only claim |
 | draft pull request | `SCRIPT draft-pr` |
 | ready pull request | `SCRIPT ready-pr` |
 | review stages | `SCRIPT review-stages` |

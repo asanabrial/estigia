@@ -212,26 +212,26 @@ fn next_of(reading: &Reading) -> serde_json::Value {
         .collect();
     let wanted = offered(reading);
     if !wanted.is_empty() {
-        return serde_json::json!({ "kind": "launch", "operation": "pr_review_launch", "names": wanted });
+        return serde_json::json!({ "kind": "launch", "operation": "pr_review", "action": "launch", "names": wanted });
     }
     if !running.is_empty() {
-        return serde_json::json!({ "kind": "collect", "operation": "pr_review_collect", "names": running });
+        return serde_json::json!({ "kind": "collect", "operation": "pr_review", "action": "collect", "names": running });
     }
     match &reading.verdict {
         Verdict::Approved | Verdict::ChangesRequested { .. } => {
-            serde_json::json!({ "kind": "submit", "operation": "pr_review_submit" })
+            serde_json::json!({ "kind": "submit", "operation": "pr_review", "action": "submit" })
         }
         Verdict::Escalated { reasons } => serde_json::json!({
             "kind": "stop",
-            "operation": "pr_review_release",
+            "operation": "pr_review", "action": "release",
             "reason": "pull-review-escalated",
             "detail": reasons,
             "action": "the answers cannot settle a severe finding, so neither event is right: \
-                       `pr_review_release`, and report the findings to a person",
+                       `pr_review` `release`, and report the findings to a person",
         }),
         Verdict::Incomplete { missing } => serde_json::json!({
             "kind": "launch",
-            "operation": "pr_review_launch",
+            "operation": "pr_review", "action": "launch",
             "names": missing,
         }),
     }
@@ -284,7 +284,7 @@ fn no_review_ran(held: &PullReview, stopped: &serde_json::Value) -> serde_json::
         "ceiling": stopped["ceiling"],
         "detail": "no review ran: the change is larger than a reviewer may be handed, and it is \
                    refused rather than truncated. This is not a clean verdict",
-        "next": { "kind": "stop", "operation": "pr_review_release" },
+        "next": { "kind": "stop", "operation": "pr_review", "action": "release" },
     })
 }
 
@@ -307,14 +307,23 @@ pub(crate) fn payload_exceeds_ceiling(
 pub fn status(context: &Context, run_id: &str) -> Result<serde_json::Value, Failure> {
     let store = Store::open(&store_path()?)?;
     let held = held_by(&store, run_id)?;
-    match payload_of(context, &held) {
+    standing(context, &store, &held, run_id)
+}
+
+fn standing(
+    context: &Context,
+    store: &Store,
+    held: &PullReview,
+    run_id: &str,
+) -> Result<serde_json::Value, Failure> {
+    match payload_of(context, held) {
         Ok(_) => {}
         Err(Failure::Stop(stopped)) if stopped["reason"] == "review-payload-too-large" => {
-            return Ok(no_review_ran(&held, &stopped));
+            return Ok(no_review_ran(held, &stopped));
         }
         Err(failure) => return Err(failure),
     }
-    Ok(answer_of_reading(&read(context, &store, run_id)?))
+    Ok(answer_of_reading(&read(context, store, run_id)?))
 }
 
 // A team key in the head branch is the only tie a read-only tracker offers. The
@@ -610,7 +619,7 @@ pub(crate) fn collect_with(
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    let mut answer = answer_of_reading(&read(context, &store, run_id)?);
+    let mut answer = standing(context, &store, &held, run_id)?;
     answer["collected"] = collected.into();
     Ok(answer)
 }

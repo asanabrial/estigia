@@ -5,7 +5,7 @@ it deliberately never does.
 `SKILL.md` describes WHAT happens; this file is the only place that says HOW. Read it when the
 operator configuration names `linear` as the tracker.
 
-A review-only claim on a pull request (`pr_review_claim`) binds to the repository host and writes nothing here.
+A review-only claim on a pull request (`pr_review`) binds to the repository host and writes nothing here.
 
 ## Read, and a mapped state moved, only under assisted work
 

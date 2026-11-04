@@ -302,6 +302,10 @@ const NO_LINK: Argument = Argument::optional(
      branch closes the issue when its PR merges. Answers `link_outcome: skipped`.",
 );
 
+/// The steps `pr_review` takes, each an [`INTERNAL`] row named `pr_review_<action>`.
+pub const PULL_REVIEW_ACTIONS: &[&str] =
+    &["status", "claim", "launch", "collect", "submit", "release"];
+
 /// The delivery tools `tools/list` marks `anthropic/alwaysLoad`; every other tool stays deferred.
 pub const ALWAYS_LOADED: &[&str] = &[
     "claim",
@@ -1556,98 +1560,40 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
-        name: "pr_review_claim",
-        contract_name: "pull request review claim",
-        description: "Take a review-only claim on a pull request this run did not build: the \
-                      earliest unexpired claim wins, its head and merge base are captured, and a \
-                      detached worktree is made. Refuses a fork, a closed pull request and this \
-                      account's own. While held, every other writing tool, push, merge, file edit \
-                      in this repository and shell GitHub write is refused. Writes nothing to the \
-                      tracker.",
-        operation: "pr-review-claim",
+        name: "pr_review",
+        contract_name: "pull request review",
+        description: "Review a pull request this run did not build, under a review-only claim. \
+                      `action` is one step: `claim` takes it (`pr`, `horizon`), refusing a fork, a \
+                      closed pull request and this account's own; `status` answers the next step; \
+                      `launch` starts every reviewer offered; `collect` records what answered, \
+                      waiting up to `wait_seconds`; `submit` sends the computed verdict bound to \
+                      the reviewed head, and never merges; `release` puts the claim down and submits \
+                      nothing. While held, every other writing tool, push, merge and shell GitHub \
+                      write is refused.",
+        operation: "pr-review",
         arguments: &[
-            Argument::required("pr", "integer", "The pull request to review.").counting_from(1),
+            Argument::required("action", "string", "The step to take.").of(PULL_REVIEW_ACTIONS),
             RUN_ID,
-            Argument::required(
+            Argument::optional("pr", "integer", "`claim` only: the pull request.").counting_from(1),
+            Argument::optional(
                 "horizon",
                 "string",
-                "When this run expects to report, as 2026-08-01T18:00Z. Past it another run may \
-                 take the claim.",
+                "`claim` only: when this run expects to report, as 2026-08-01T18:00Z. Past it \
+                 another run may take the claim.",
             ),
             Argument::optional(
                 "worktree_root",
                 "string",
-                "Where the checkout is made, as for `start_branch`. Defaults to the configured \
-                 location.",
+                "`claim` only: where the checkout is made, as for `start_branch`.",
             ),
-        ],
-        effect: PointerEffect::ReviewClaim,
-        writes: true,
-    },
-    Tool {
-        name: "pr_review_release",
-        contract_name: "pull request review release",
-        description: "Put down this run's review-only claim and remove its detached worktree. \
-                      Submits nothing.",
-        operation: "pr-review-release",
-        arguments: &[RUN_ID],
-        effect: PointerEffect::Forget,
-        writes: true,
-    },
-    Tool {
-        name: "pr_review_status",
-        contract_name: "pull request review status",
-        description: "Where this run's review-only claim stands: the lenses the change licenses, \
-                      their answers, the computed verdict and the one next step. A change over \
-                      the payload ceiling answers `reviewed: false` and no verdict: no review \
-                      ran, which is not clean.",
-        operation: "pr-review-status",
-        arguments: &[RUN_ID],
-        effect: PointerEffect::None,
-        writes: false,
-    },
-    Tool {
-        name: "pr_review_launch",
-        contract_name: "pull request review launch",
-        description: "Start every reviewer `pr_review_status` offers, detached and tool-less, over \
-                      the merge base through the reviewed head. Criteria are the fixed lenses and \
-                      the tracker's issue when one can be read; the pull request's description is \
-                      never handed over.",
-        operation: "pr-review-launch",
-        arguments: &[RUN_ID],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
-        name: "pr_review_collect",
-        contract_name: "pull request review collect",
-        description: "Record every reviewer that has answered, waiting for the rest up to \
-                      `wait_seconds`, and answer what `pr_review_status` answers.",
-        operation: "pr-review-collect",
-        arguments: &[
-            RUN_ID,
             Argument::optional(
                 "wait_seconds",
                 "integer",
-                "Seconds to wait for a running reviewer; omitted checks once. Capped at 900.",
+                "`collect` only: seconds to wait for a running reviewer. Capped at 900.",
             )
             .counting_from(1),
         ],
         effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
-        name: "pr_review_submit",
-        contract_name: "pull request review submit",
-        description: "Send this run's computed verdict to GitHub: `approved` as an approval, \
-                      `changes-requested` as a request carrying the findings. Reads the head \
-                      again, sends the reviewed `commit_id` and reports only what reads back. A \
-                      moved head, a retarget or a closed pull request submits nothing and answers \
-                      `submitted: false`. Removes the worktree and puts the claim down. Never \
-                      merges.",
-        operation: "pr-review-submit",
-        arguments: &[RUN_ID],
-        effect: PointerEffect::Forget,
         writes: true,
     },
     Tool {
@@ -1913,27 +1859,136 @@ pub const TOOLS: &[Tool] = &[
 /// Operations a name on the menu or the CLI still runs through this table and no agent
 /// is offered. [`find`] reads them; `tools/list` does not, and [`RETIRED`] answers for
 /// them on `tools/call`.
-pub const INTERNAL: &[Tool] = &[Tool {
-    name: "flush",
-    contract_name: "flush",
-    description: "Send the GitHub writes queued while the git operation window was closed, \
+pub const INTERNAL: &[Tool] = &[
+    Tool {
+        name: "pr_review_claim",
+        contract_name: "pull request review claim",
+        description: "Take a review-only claim on a pull request this run did not build: the \
+                      earliest unexpired claim wins, its head and merge base are captured, and a \
+                      detached worktree is made. Refuses a fork, a closed pull request and this \
+                      account's own. While held, every other writing tool, push, merge, file edit \
+                      in this repository and shell GitHub write is refused. Writes nothing to the \
+                      tracker.",
+        operation: "pr-review-claim",
+        arguments: &[
+            Argument::required("pr", "integer", "The pull request to review.").counting_from(1),
+            RUN_ID,
+            Argument::required(
+                "horizon",
+                "string",
+                "When this run expects to report, as 2026-08-01T18:00Z. Past it another run may \
+                 take the claim.",
+            ),
+            Argument::optional(
+                "worktree_root",
+                "string",
+                "Where the checkout is made, as for `start_branch`. Defaults to the configured \
+                 location.",
+            ),
+        ],
+        effect: PointerEffect::ReviewClaim,
+        writes: true,
+    },
+    Tool {
+        name: "pr_review_release",
+        contract_name: "pull request review release",
+        description: "Put down this run's review-only claim and remove its detached worktree. \
+                      Submits nothing.",
+        operation: "pr-review-release",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::Forget,
+        writes: true,
+    },
+    Tool {
+        name: "pr_review_status",
+        contract_name: "pull request review status",
+        description: "Where this run's review-only claim stands: the lenses the change licenses, \
+                      their answers, the computed verdict and the one next step. A change over \
+                      the payload ceiling answers `reviewed: false` and no verdict: no review \
+                      ran, which is not clean.",
+        operation: "pr-review-status",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::None,
+        writes: false,
+    },
+    Tool {
+        name: "pr_review_launch",
+        contract_name: "pull request review launch",
+        description: "Start every reviewer `pr_review_status` offers, detached and tool-less, over \
+                      the merge base through the reviewed head. Criteria are the fixed lenses and \
+                      the tracker's issue when one can be read; the pull request's description is \
+                      never handed over.",
+        operation: "pr-review-launch",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "pr_review_collect",
+        contract_name: "pull request review collect",
+        description: "Record every reviewer that has answered, waiting for the rest up to \
+                      `wait_seconds`, and answer what `pr_review_status` answers.",
+        operation: "pr-review-collect",
+        arguments: &[
+            RUN_ID,
+            Argument::optional(
+                "wait_seconds",
+                "integer",
+                "Seconds to wait for a running reviewer; omitted checks once. Capped at 900.",
+            )
+            .counting_from(1),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "pr_review_submit",
+        contract_name: "pull request review submit",
+        description: "Send this run's computed verdict to GitHub: `approved` as an approval, \
+                      `changes-requested` as a request carrying the findings. Reads the head \
+                      again, sends the reviewed `commit_id` and reports only what reads back. A \
+                      moved head, a retarget or a closed pull request submits nothing and answers \
+                      `submitted: false`. Removes the worktree and puts the claim down. Never \
+                      merges.",
+        operation: "pr-review-submit",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::Forget,
+        writes: true,
+    },
+    Tool {
+        name: "flush",
+        contract_name: "flush",
+        description: "Send the GitHub writes queued while the git operation window was closed, \
                       oldest first, stopping at the first one it cannot read back. Refuses while \
                       the destination's window is closed. With `read_only`, lists the queue and \
                       sends nothing.",
-    operation: "flush",
-    arguments: &[Argument::optional(
-        "read_only",
-        "boolean",
-        "List the queue and send nothing.",
-    )],
-    effect: PointerEffect::None,
-    writes: true,
-}];
+        operation: "flush",
+        arguments: &[Argument::optional(
+            "read_only",
+            "boolean",
+            "List the queue and send nothing.",
+        )],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+];
 
 /// Names taken off the menu, each with what an agent does instead.
 ///
 /// A caller on an older skill gets this answer rather than the list of every name.
 pub const RETIRED: &[(&str, &str)] = &[
+    ("pr_review_claim", "call `pr_review` with `action: claim`"),
+    (
+        "pr_review_release",
+        "call `pr_review` with `action: release`",
+    ),
+    ("pr_review_status", "call `pr_review` with `action: status`"),
+    ("pr_review_launch", "call `pr_review` with `action: launch`"),
+    (
+        "pr_review_collect",
+        "call `pr_review` with `action: collect`",
+    ),
+    ("pr_review_submit", "call `pr_review` with `action: submit`"),
     (
         "where",
         "run `estigia where <reference> --json`, which answers the same object",
@@ -2076,6 +2131,7 @@ pub const ASSISTED_ONLY: &[&str] = &[
 /// not assisted-only: they bind to the repository host, and they are what a
 /// pull request review has under every `Workflow` and every `Tracker`.
 pub const PULL_REVIEW_TOOLS: &[&str] = &[
+    "pr_review",
     "pr_review_claim",
     "pr_review_release",
     "pr_review_status",
@@ -2106,6 +2162,7 @@ pub const NEEDS_NO_TRANSPORT: &[&str] = &[
 /// [`TOOLS`] against the transport's operations and the binding's rows name this list as
 /// their exemption. `deliver` is the composite: it calls other tools and the gate.
 pub const LOCAL_STORE_TOOLS: &[&str] = &[
+    "pr_review",
     "send_message",
     "ask",
     "wait",

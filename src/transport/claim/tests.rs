@@ -13237,7 +13237,8 @@ fn the_relocated_marker_fields_are_written_even_though_the_answer_dropped_them()
         fields
             .iter()
             .any(|(key, value)| *key == "mandatory-follow-up"
-                && value.contains("closed-by-own-delivery")),
+                && value.contains("closed-by-own-delivery")
+                && value.contains(crate::transport::closing::FOLLOW_UP)),
         "the follow-up the answer no longer carries must live on the marker: {fields:?}"
     );
     assert!(
