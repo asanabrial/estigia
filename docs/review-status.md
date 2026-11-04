@@ -1,6 +1,6 @@
 # `review_status`: what a review does next
 
-This is the review of a run's own publication. A pull request the run did not build has `pr_review_status` instead, in [assisted review](assisted-review.md).
+This is the review of a run's own publication. A pull request the run did not build has `pr_review` `status` instead, in [assisted review](assisted-review.md).
 
 gentle-ai v4 answers STATUS with exactly one next transition and the agent runs it
 without deciding; without one the orchestrator chooses the review route, which is what v4 removed.

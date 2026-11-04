@@ -71,7 +71,7 @@ fn findings_without_an_epoch_is_refused() {
 }
 
 #[test]
-fn a_branch_link_names_release_after_done_in_the_mandatory_follow_up() {
+fn assess_autoclose_reports_a_linked_branch_as_the_cause() {
     let repo = tempfile::tempdir().expect("a directory for the fixture repository");
     let git = |arguments: &[&str]| -> bool {
         std::process::Command::new("git")
@@ -144,6 +144,63 @@ fn a_branch_link_names_release_after_done_in_the_mandatory_follow_up() {
     .expect("a branch-link autoclose is reported, not refused");
 
     assert_eq!(answer["cause"], "branch-link");
+}
+
+#[test]
+fn an_unreadable_commit_range_is_a_failure_and_never_a_branch_link() {
+    let repo = tempfile::tempdir().expect("a directory for the fixture repository");
+    let git = |arguments: &[&str]| -> bool {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(git(&["init", "--quiet", "-b", "main"]));
+    assert!(git(&["config", "user.email", "nobody@example.invalid"]));
+    assert!(git(&["config", "user.name", "nobody"]));
+    assert!(git(&["commit", "--allow-empty", "--quiet", "-m", "base"]));
+    let branch = "fix/12-unreadable-range";
+    assert!(git(&["checkout", "--quiet", "-b", branch]));
+
+    let base = "no-such-base";
+    let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        {
+            "matches": "api graphql",
+            "stdout": serde_json::json!({
+                "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+                    "nodes": [{
+                        "number": 7,
+                        "state": "OPEN",
+                        "headRefName": branch,
+                        "baseRefName": base,
+                    }],
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                } } } },
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "json body", "stdout": "{\"body\":\"A body that names nothing.\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let bin = crate::test_env::scripted_gh();
+    let context = Context {
+        skill_dir: repo.path().to_path_buf(),
+        repo_dir: repo.path().to_path_buf(),
+        config: Vec::new(),
+        repo: None,
+    };
+    let answer = crate::test_env::with_scripted_gh(bin.path(), &answers, || {
+        assess_autoclose(&context, 12, Some(base), Some(branch))
+    });
+
+    assert!(
+        answer.is_err(),
+        "an unreadable commit range was answered as an assessment: {answer:?}"
+    );
 }
 
 #[test]

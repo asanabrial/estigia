@@ -1043,9 +1043,8 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
 /// it back rather than creating one, and the keyword is on the remote body the
 /// local scan never sees. The delivered issue is branch-linked, so the verdict's
 /// own cause is `branch-link`; the refusal must still name
-/// `closing-keyword-elsewhere`, the same cause the standalone
-/// `check-closing-keywords` reports, because the remedy is read from the cause
-/// and no edit removes a branch link.
+/// `closing-keyword-elsewhere`, because the remedy is read from the cause and
+/// no edit removes a branch link.
 #[test]
 fn a_closing_keyword_naming_another_issue_refuses_after_the_push_on_a_reused_pr() {
     let rig = tracker_rig();
@@ -1246,12 +1245,11 @@ fn a_closing_keyword_naming_another_issue_refuses_after_the_push_on_a_reused_pr(
         text.contains("the write landed"),
         "the post-push refusal did not report the write as landed: {text}"
     );
-    // The cause agrees with `check-closing-keywords`, whose own unit test pins
-    // the same value: the remedy is read from the cause, and a `branch-link`
-    // cannot be fixed by editing text.
+    // The remedy is read from the cause, and a `branch-link` cannot be fixed by
+    // editing text.
     assert!(
         text.contains("closing-keyword-elsewhere"),
-        "the post-push refusal disagreed with `check-closing-keywords` on why it fired: {text}"
+        "the post-push refusal named the wrong cause: {text}"
     );
     assert!(
         !text.contains("branch-link"),

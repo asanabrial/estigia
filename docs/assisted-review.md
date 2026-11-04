@@ -74,7 +74,7 @@ not the historical base reviewed; the reader does not prove that historical base
 
 ## Reviewing a pull request this run did not build
 
-`pr_review_claim` takes a review-only claim on one pull request, under every `Claim workflow` and
+`pr_review` `claim` takes a review-only claim on one pull request, under every `Claim workflow` and
 every `Tracker`, because it binds to the repository host and writes no tracker. An agent may take it
 as a person may, since the point is an unattended review.
 
@@ -93,7 +93,7 @@ runs, and every file write that lands in this repository, the review's own workt
 `review-claim-admits-no-write`. That covers push, merge, `gh pr review`, `gh pr comment`, `gh api`
 mutations and any shell worktree command. A writing tool outside the road is refused the same way,
 `run_checks` among them, because running a repository's checks executes the reviewed bytes. A note
-outside every repository stands aside. `pr_review_release` puts the claim down and removes the
+outside every repository stands aside. `pr_review` `release` puts the claim down and removes the
 worktree, reading nothing from GitHub, so a pull request that has gone does not strand it.
 
 The pull request number is never written to `Run.issue`. Every reader of that field asks the tracker
@@ -101,7 +101,7 @@ about an issue, and it is what keeps this claim out of `holders_for_action`, so 
 evidence in it. Merging stays outside this claim: it is delivery, and a skill that merges does so
 afterwards, under `Merge by`.
 
-The panel is `pr_review_launch`, `pr_review_collect` and `pr_review_status`, which follow the same
+The panel is `pr_review` `launch`, `pr_review` `collect` and `pr_review` `status`, which follow the same
 route as ordinary review without its ledger: the tier sizes the panel, `prompt::build` and detached,
 tool-less jobs read the change, and `settle_severe` decides each severe finding, with an inferential
 one going to the refuter first. Their answers are rows on this claim and stay local. Four things differ
@@ -122,7 +122,7 @@ A change over `REVIEW_PAYLOAD_CEILING` answers `reviewed: false` with no verdict
 release: no review ran, and that is not a clean result. A host relay is refused
 (`pull-review-needs-a-detached-reviewer`), because its jobs are recorded against an issue.
 
-`pr_review_submit` is the one road to GitHub. It sends `approved` as an approval and
+`pr_review` `submit` is the one road to GitHub. It sends `approved` as an approval and
 `changes-requested` as a request whose body carries the findings, which otherwise stay local; an
 `escalated` verdict sends nothing. It reads the head again, posts the review with the reviewed
 `commit_id` and reports `submitted: true` only once the review reads back at that commit in the state

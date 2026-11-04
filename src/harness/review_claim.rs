@@ -27,7 +27,7 @@ fn refused(run: &Run, what: &str) -> Refusal {
         ),
         Resolution::no_command(
             NoCommandReason::OperatorKnowledge,
-            "`pr_review_release`, which puts the claim down, and then the write under a claim \
+            "`pr_review` `release`, which puts the claim down, and then the write under a claim \
              that admits it",
         ),
     )

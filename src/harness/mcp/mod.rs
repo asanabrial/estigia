@@ -835,6 +835,33 @@ fn assist_one_of_several(
     Ok(answer)
 }
 
+/// The row a `pr_review` call names, and its arguments with `action` taken out.
+fn pull_review_step(arguments: &Value) -> Result<(String, Value), ToolFailure> {
+    let action = arguments.get("action").and_then(Value::as_str);
+    let Some(action) = action.filter(|action| tools::PULL_REVIEW_ACTIONS.contains(action)) else {
+        return Err(ToolFailure::Malformed(format!(
+            "`pr_review` needs `action`, one of: {}",
+            tools::PULL_REVIEW_ACTIONS.join(", ")
+        )));
+    };
+    let mut rest = arguments.clone();
+    if let Some(object) = rest.as_object_mut() {
+        object.remove("action");
+    }
+    Ok((format!("pr_review_{action}"), rest))
+}
+
+fn in_words_of(facade: &str, row: &str, failure: ToolFailure) -> ToolFailure {
+    match failure {
+        ToolFailure::Malformed(message) => ToolFailure::Malformed(
+            message
+                .strip_prefix(row)
+                .map_or(message.clone(), |rest| format!("{facade}{rest}")),
+        ),
+        other => other,
+    }
+}
+
 fn run_tool_asking(
     name: &str,
     arguments: &Value,
@@ -845,6 +872,12 @@ fn run_tool_asking(
         return Err(ToolFailure::Refused(Box::new(operation_has_no_tool(
             name, reason,
         ))));
+    }
+    if name == "pr_review" {
+        let (step, arguments) = pull_review_step(arguments)?;
+        let action = step.trim_start_matches("pr_review_");
+        return run_tool_asking(&step, &arguments, context, consent)
+            .map_err(|failure| in_words_of(&format!("pr_review action {action}"), &step, failure));
     }
     let tool = tools::find(name).ok_or_else(|| {
         let known = TOOLS
@@ -2156,7 +2189,7 @@ fn review_claim_refusal(
                 ),
                 Resolution::no_command(
                     crate::outcome::NoCommandReason::OperatorKnowledge,
-                    "`pr_review_release` first",
+                    "`pr_review` `release` first",
                 ),
             ));
         }
@@ -2171,7 +2204,7 @@ fn review_claim_refusal(
                 ),
                 Resolution::no_command(
                     crate::outcome::NoCommandReason::OperatorKnowledge,
-                    "`pr_review_release`, which puts the claim down",
+                    "`pr_review` `release`, which puts the claim down",
                 ),
             ));
         }

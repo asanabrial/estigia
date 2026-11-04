@@ -323,6 +323,10 @@ fn a_change_over_the_ceiling_answers_that_no_review_ran_and_no_verdict() {
             .expect("a detail")
             .contains("no review ran")
     );
+    let collected = collect(&rig);
+    assert_eq!(collected["reviewed"], false, "{collected}");
+    assert_eq!(collected["verdict"], serde_json::Value::Null);
+    assert_eq!(collected["next"]["kind"], "stop", "{collected}");
     let seen = Seen::default();
     let failure = gh(&rig, || {
         launch_with(&rig.context, RUN, &spawner(&[], &seen), 1_000)

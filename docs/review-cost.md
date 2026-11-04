@@ -157,6 +157,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `pr_review_status`, `pr_review_launch` and `pr_review_collect` join: its panel | 52 | 65,149 |
 | `pr_review_submit` joins: its one road to GitHub | 53 | 65,787 |
 | `where`, `feed`, `status` and `flush` become commands alone; `check_closing_keywords` goes, `publish_review` runs its scan | 48 | 61,940 |
+| One `pr_review` with `action` replaces the six `pr_review_*` names | 43 | 59,796 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
