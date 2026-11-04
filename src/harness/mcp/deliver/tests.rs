@@ -683,6 +683,32 @@ fn until(until: Until) -> Request {
 }
 
 #[test]
+fn an_until_it_does_not_know_is_refused_rather_than_taken_for_a_whole_delivery() {
+    assert_eq!(until_of(&json!({})).ok(), Some(None));
+    assert_eq!(
+        until_of(&json!({"until": "verdict"})).ok(),
+        Some(Some(Until::Verdict))
+    );
+    assert_eq!(
+        until_of(&json!({"until": "ci"})).ok(),
+        Some(Some(Until::Ci))
+    );
+    for wrong in [
+        json!("CI"),
+        json!("merge"),
+        json!(""),
+        json!(7),
+        json!(null),
+    ] {
+        let arguments = json!({"until": wrong});
+        assert!(
+            matches!(until_of(&arguments), Err(ToolFailure::Malformed(_))),
+            "{arguments} would run the whole delivery, merge included"
+        );
+    }
+}
+
+#[test]
 fn until_ci_releases_for_a_person_who_merges_and_neither_merges_nor_closes() {
     let world = world("b.txt", "two\n");
     for (merge_by_agent, delivery_auto) in [(false, true), (true, false), (false, false)] {
