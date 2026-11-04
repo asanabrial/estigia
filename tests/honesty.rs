@@ -3855,6 +3855,9 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
                 if shipped.contains("context.issue_requirement") {
                     reads.push("unclaimed write policy".to_owned());
                 }
+                if shipped.contains("context.unclaimed_github_writes") {
+                    reads.push("unclaimed github writes".to_owned());
+                }
                 if shipped.contains("context.decision_mode") {
                     reads.push("decision mode".to_owned());
                 }

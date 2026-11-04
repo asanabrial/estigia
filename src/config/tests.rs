@@ -112,6 +112,7 @@ fn every_variant() -> Vec<Setting> {
             | Setting::Body
             | Setting::Notifications
             | Setting::IssueRequirement
+            | Setting::UnclaimedGithubWrites
             | Setting::Workflow
             | Setting::DeliveryPreset
             | Setting::StateNames
@@ -189,6 +190,7 @@ fn every_setting_is_in_the_table() {
         Setting::Body,
         Setting::Notifications,
         Setting::IssueRequirement,
+        Setting::UnclaimedGithubWrites,
         Setting::Workflow,
         Setting::DeliveryPreset,
         Setting::StateNames,
@@ -313,6 +315,11 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
             Setting::IssueRequirement => Some(rendered(
                 crate::config::IssueRequirement::all(),
                 |c, v| c.issue_requirement = v,
+                setting,
+            )),
+            Setting::UnclaimedGithubWrites => Some(rendered(
+                crate::config::UnclaimedGithubWrites::all(),
+                |c, v| c.unclaimed_github_writes = v,
                 setting,
             )),
             Setting::Workflow => Some(rendered(
@@ -649,6 +656,7 @@ fn a_rendered_table_reads_back_identically() {
         evidence: Evidence::Measuring,
         publication_lane: crate::config::PublicationLane::Off,
         issue_requirement: crate::config::IssueRequirement::Watch,
+        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: crate::config::Workflow::Autonomous,
         state_names: Vec::new(),
@@ -2207,6 +2215,7 @@ fn the_gate_reads_exactly_the_rows_it_decides_from() {
             Setting::Tracker,
             Setting::RepositoryHost,
             Setting::IssueRequirement,
+            Setting::UnclaimedGithubWrites,
             Setting::Integration,
             Setting::Workflow,
             Setting::Boundaries,
