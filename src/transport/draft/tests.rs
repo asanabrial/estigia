@@ -1,5 +1,7 @@
 use super::*;
 
+mod delivery;
+
 const PR_URL: &str = "https://github.com/example/repo/pull/7";
 
 struct Rig {
@@ -80,6 +82,23 @@ impl Rig {
         body_file: &std::path::Path,
         corrections: Corrections,
     ) -> Result<serde_json::Value, Failure> {
+        self.call_delivering(
+            title,
+            body_file,
+            corrections,
+            crate::config::Party::Person,
+            false,
+        )
+    }
+
+    fn call_delivering(
+        &self,
+        title: &str,
+        body_file: &std::path::Path,
+        corrections: Corrections,
+        ready_by: crate::config::Party,
+        self_review: bool,
+    ) -> Result<serde_json::Value, Failure> {
         draft_with_sleep(
             &self.context,
             &Draft {
@@ -88,18 +107,31 @@ impl Rig {
                 title,
                 body_file,
                 corrections,
+                ready_by,
+                self_review,
             },
             &mut |_| {},
         )
     }
 
     fn ready(&self, ready_by: crate::config::Party) -> Result<serde_json::Value, Failure> {
+        self.ready_reviewing(ready_by, false, None)
+    }
+
+    fn ready_reviewing(
+        &self,
+        ready_by: crate::config::Party,
+        self_review: bool,
+        reviewed_head: Option<&str>,
+    ) -> Result<serde_json::Value, Failure> {
         mark_ready_with_sleep(
             &self.context,
             &Ready {
                 branch: "issue-12",
                 worktree: self.repo(),
                 ready_by,
+                self_review,
+                reviewed_head,
             },
             &mut |_| {},
         )

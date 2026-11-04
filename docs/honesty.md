@@ -2766,8 +2766,8 @@ pointer that leaves it names the document it points at.
   blocking), and with the window open they start `estigia flush` detached and report that it was started, not
   that it succeeded.
 - **One row is read by nobody.** `Delivery preset` stores nothing of its own and only writes the rows it
-  stands for. `State names` is read by `assist`, `ready_pr` and `review_stages`; `Corrections after ready`
-  and `Ready by` by `draft_pr` and `ready_pr`; `External reviewers` by `review_stages`; `Merge by` by
+  stands for. `State names` is read by `assist`, `draft_pr`, `ready_pr` and `review_stages`; `Corrections after ready`
+  by `draft_pr`; `Ready by` by `draft_pr` and `ready_pr`; `Self review` by `draft_pr` and `ready_pr`; `External reviewers` by `review_stages`; `Merge by` by
   `review_stages` and `deliver`, which hands back at `authorisation` when it is not `agent`; all through
   `Context::layered`. `READ_BY_NOBODY` in `tests/honesty.rs` lists `Delivery preset` and fails when it is
   read and not taken off the list.
@@ -3233,9 +3233,27 @@ pointer that leaves it names the document it points at.
     handled as `Corrections after ready` says (`refuse`: refused; `redraft`: asked back to draft; `push-ready`:
     pushed to as it stands, so CI and reviewers see the new head at once), a draft that exists is reused with
     title and body unchanged (`"title_and_body_applied": false`), and a failed read-back answers in the
-    `committed` world. `ready_pr` marks ready what was pushed, not what was reviewed (no receipt binds a
-    review to bytes, so `Self review` is an instruction). Held against a fake `gh` by
-    `src/transport/draft/tests.rs` and the `draft_pr` tests in `src/harness/mcp/tests.rs`.
+    `committed` world. It never creates a pull request open; under `Ready by: agent` with `Self review: off`
+    it then marks the draft ready and reads that back, and a mark that fails after the push is
+    `draft-pr-ready-not-read-back` in the `committed` world, never a call to publish again. Under
+    `Self review: on`, `ready_pr` requires `reviewed_head` and refuses one that is not the published head
+    (`ready-pr-review-not-this-head`). That is an **attestation, not proof**: no receipt binds a review to
+    bytes, so nothing shows a review happened, in a context that did not write the change, or that it read
+    the head it names; it stops a correction pushed after the review from opening unreviewed by accident,
+    and a run that states a head it never reviewed passes. A recorded verdict replaces it once assisted
+    runs have a review receipt. Held against a fake `gh` by `src/transport/draft/tests.rs` and the
+    `draft_pr` tests in `src/harness/mcp/tests.rs`.
+  - **`review_stages` answers `ci: none` on three conditions and a clock it cannot read exactly.** The
+    rollup must be empty, the head must hold no `.github/workflows` file (one extra read, made once per
+    head and only then) and no `check:` stage may be declared. GitHub exposes no time at which a head was
+    pushed, so the 120 seconds are counted from the pull request's `updatedAt`: a comment or an edit
+    delays `none`, never hastens it. A repository whose CI is external and reports late, with no workflow
+    file, can read `none`; declaring that CI as a `check:` stage closes it. A bot with no check of its own
+    cannot be waited for: only a declared `check:<name>@<login>` can be, so a repository with such a bot
+    must declare it. `Corrections per lineage` is stated by the skill for the assisted loop and counted by
+    no tool, since `draft_pr` writes nothing it could count from; and nothing makes a run call
+    `review_stages` after `ready_pr`. The answers name it, and a `Stop` hook that holds the session open is
+    not built. Held against a fake `gh` by `src/transport/stages/tests/no_ci.rs`.
   - **Coordination is left to the team**: nothing reads another person's claim, assignee or label, `assist`
     refuses a second run on one branch on this machine only, and Estigia cannot tell that the person, not the
     agent, named the issue.

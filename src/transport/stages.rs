@@ -13,7 +13,7 @@ use crate::config::{Party, ReviewStage, StageKind};
 pub(crate) mod thread;
 
 const QUERY: &str = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,\
-name:$name){pullRequest(number:$number){number state isDraft headRefName headRefOid baseRefOid url mergeCommit{oid} \
+name:$name){pullRequest(number:$number){number state isDraft headRefName headRefOid baseRefOid url updatedAt mergeCommit{oid} \
 author{login} reviewRequests(first:100){pageInfo{hasNextPage} nodes{requestedReviewer{__typename \
 ... on User{login} ... on Team{combinedSlug} ... on Bot{login}}}} latestReviews(first:100)\
 {pageInfo{hasNextPage} nodes{author{login} state body commit{oid}}} reviewThreads(first:100){pageInfo\
@@ -43,7 +43,12 @@ pub struct Stages<'a> {
     pub expected_head: Option<&'a str>,
     /// Maximum polling sleep, at most 300 seconds; waiting requires an exact head.
     pub wait_seconds: u64,
+    /// The present moment in Unix seconds, which the grace period before `none` is measured from.
+    pub now_secs: i64,
 }
+
+/// How long after a head was published an empty rollup is still read as checks not yet registered.
+pub const CI_GRACE_SECONDS: i64 = 120;
 
 /// `review-stages` — see the module.
 pub fn review_stages(context: &Context, what: &Stages<'_>) -> Result<serde_json::Value, Failure> {
@@ -73,7 +78,12 @@ fn stages_with_sleep(
     verify_reading(&pr, what.branch, what.expected_head)?;
     let base = text(&pr, &["baseRefOid"]).map(str::to_owned);
     let mut remaining = what.wait_seconds;
-    while remaining > 0 && ci_pending(&pr, what.stages) && text(&pr, &["state"]) == Some("OPEN") {
+    let mut workflows = Workflows::default();
+    let mut no_ci = no_ci_seen(context, &pr, what.stages, what.now_secs, &mut workflows)?;
+    while remaining > 0
+        && ci_pending(&pr, what.stages, no_ci)
+        && text(&pr, &["state"]) == Some("OPEN")
+    {
         let delay = remaining.min(5);
         sleep(std::time::Duration::from_secs(delay));
         remaining -= delay;
@@ -82,10 +92,18 @@ fn stages_with_sleep(
         if text(&pr, &["baseRefOid"]) != base.as_deref() {
             return Err(stale("the pull request base changed during this reading"));
         }
+        let waited = i64::try_from(what.wait_seconds - remaining).unwrap_or_default();
+        no_ci = no_ci_seen(
+            context,
+            &pr,
+            what.stages,
+            what.now_secs.saturating_add(waited),
+            &mut workflows,
+        )?;
     }
-    let mut answer = position(&pr, what.stages, what.ready_by, what.merge_by);
+    let mut answer = position(&pr, what.stages, what.ready_by, what.merge_by, no_ci);
     answer["wait_timed_out"] =
-        serde_json::json!(what.wait_seconds > 0 && ci_pending(&pr, what.stages));
+        serde_json::json!(what.wait_seconds > 0 && ci_pending(&pr, what.stages, no_ci));
     if answer["wait_timed_out"] == true {
         return Ok(answer);
     }
@@ -138,7 +156,7 @@ fn stages_with_sleep(
         verify_reading(&reread, what.branch, text(&pr, &["headRefOid"]))
             .map_err(|failure| unconfirmed(seen.clone(), failure.detail()))?;
         if requested(&reread).iter().any(|who| same(who, &reviewer)) {
-            let mut answer = position(&reread, what.stages, what.ready_by, what.merge_by);
+            let mut answer = position(&reread, what.stages, what.ready_by, what.merge_by, no_ci);
             answer["requested"] = serde_json::Value::String(reviewer);
             return Ok(answer);
         }
@@ -179,14 +197,103 @@ fn verify_reading(
     Ok(())
 }
 
-fn ci_pending(pr: &serde_json::Value, stages: &[ReviewStage]) -> bool {
-    matches!(ci_for_stages(pr, stages), "pending" | "missing")
+fn ci_pending(pr: &serde_json::Value, stages: &[ReviewStage], no_ci: bool) -> bool {
+    matches!(ci_for_stages(pr, stages, no_ci), "pending" | "missing")
 }
 
-fn ci_for_stages(pr: &serde_json::Value, stages: &[ReviewStage]) -> &'static str {
+fn declares_check(stages: &[ReviewStage]) -> bool {
+    stages
+        .iter()
+        .any(|stage| matches!(stage.kind, StageKind::Check { .. }))
+}
+
+#[derive(Default)]
+struct Workflows(Option<(String, bool)>);
+
+fn no_ci_seen(
+    context: &Context,
+    pr: &serde_json::Value,
+    stages: &[ReviewStage],
+    now_secs: i64,
+    workflows: &mut Workflows,
+) -> Result<bool, Failure> {
+    if ci_state(pr) != "missing" || declares_check(stages) {
+        return Ok(false);
+    }
+    let published = text(pr, &["updatedAt"]).and_then(super::ownership::parse_stamp);
+    if published.is_none_or(|at| now_secs.saturating_sub(at) < CI_GRACE_SECONDS) {
+        return Ok(false);
+    }
+    let Some(head) = text(pr, &["headRefOid"]) else {
+        return Ok(false);
+    };
+    if let Some((seen, held)) = &workflows.0
+        && seen == head
+    {
+        return Ok(!held);
+    }
+    let held = holds_workflow(context, head)?;
+    workflows.0 = Some((head.to_owned(), held));
+    Ok(!held)
+}
+
+fn holds_workflow(context: &Context, head: &str) -> Result<bool, Failure> {
+    let (owner, name) = super::closing::repo_identity(context)?;
+    let query = "query=query($owner:String!,$name:String!,$expression:String!){repository(\
+owner:$owner,name:$name){object(expression:$expression){... on Tree{entries{name}}}}}";
+    let owner = format!("owner={owner}");
+    let name = format!("name={name}");
+    let expression = format!("expression={head}:.github/workflows");
+    let data = super::gh_json(
+        &[
+            "api",
+            "graphql",
+            "-f",
+            query,
+            "-f",
+            &owner,
+            "-f",
+            &name,
+            "-f",
+            &expression,
+        ],
+        Some(&context.repo_dir),
+    )?;
+    let repository = data
+        .as_ref()
+        .filter(|value| {
+            value
+                .get("errors")
+                .and_then(serde_json::Value::as_array)
+                .is_none_or(Vec::is_empty)
+        })
+        .and_then(|value| value.get("data")?.get("repository"))
+        .filter(|repository| repository.is_object())
+        .ok_or_else(|| {
+            Failure::Read(
+                "the head's workflow files could not be read, so whether it runs any CI is unknown"
+                    .to_owned(),
+            )
+        })?;
+    Ok(repository
+        .get("object")
+        .and_then(|object| object.get("entries"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                text(entry, &["name"])
+                    .is_some_and(|file| file.ends_with(".yml") || file.ends_with(".yaml"))
+            })
+        }))
+}
+
+fn ci_for_stages(pr: &serde_json::Value, stages: &[ReviewStage], no_ci: bool) -> &'static str {
     let observed = ci_state(pr);
     if observed == "failed" {
         return observed;
+    }
+    if observed == "missing" && no_ci && !declares_check(stages) {
+        return "none";
     }
     let mut pending = false;
     for stage in stages.iter().filter(|stage| stage.blocking) {
@@ -205,28 +312,50 @@ fn ci_for_stages(pr: &serde_json::Value, stages: &[ReviewStage]) -> &'static str
     }
 }
 
-fn ci_state(pr: &serde_json::Value) -> &'static str {
-    let contexts = nodes(pr, &["commits"])
+fn rollup(pr: &serde_json::Value) -> Vec<&serde_json::Value> {
+    nodes(pr, &["commits"])
         .first()
         .map(|node| nodes(node, &["commit", "statusCheckRollup", "contexts"]))
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+fn pending_context(context: &serde_json::Value) -> bool {
+    text(context, &["status"]).is_some_and(|status| status != "COMPLETED")
+        || matches!(text(context, &["state"]), Some("PENDING" | "EXPECTED"))
+}
+
+fn failed_context(context: &serde_json::Value) -> bool {
+    !pending_context(context)
+        && !matches!(
+            text(context, &["conclusion"]).or_else(|| text(context, &["state"])),
+            Some("SUCCESS" | "NEUTRAL" | "SKIPPED")
+        )
+}
+
+fn failing_checks(pr: &serde_json::Value) -> Vec<&str> {
+    rollup(pr)
+        .into_iter()
+        .filter(|context| failed_context(context))
+        .map(|context| {
+            text(context, &["name"])
+                .or_else(|| text(context, &["context"]))
+                .unwrap_or("unnamed")
+        })
+        .collect()
+}
+
+fn ci_state(pr: &serde_json::Value) -> &'static str {
+    let contexts = rollup(pr);
     if contexts.is_empty() {
         return "missing";
     }
-    let mut pending = false;
-    for context in contexts {
-        if text(context, &["status"]).is_some_and(|status| status != "COMPLETED")
-            || matches!(text(context, &["state"]), Some("PENDING" | "EXPECTED"))
-        {
-            pending = true;
-        } else if !matches!(
-            text(context, &["conclusion"]).or_else(|| text(context, &["state"])),
-            Some("SUCCESS" | "NEUTRAL" | "SKIPPED")
-        ) {
-            return "failed";
-        }
+    if contexts.iter().any(|context| failed_context(context)) {
+        "failed"
+    } else if contexts.iter().any(|context| pending_context(context)) {
+        "pending"
+    } else {
+        "passed"
     }
-    if pending { "pending" } else { "passed" }
 }
 
 fn latest_pr(context: &Context, branch: &str) -> Result<Option<u64>, Failure> {
@@ -569,14 +698,16 @@ pub(crate) fn position(
     stages: &[ReviewStage],
     ready_by: Party,
     merge_by: Party,
+    no_ci: bool,
 ) -> serde_json::Value {
+    let ci = ci_for_stages(pr, stages, no_ci);
     let answer = |position: &str, next: String, extra: serde_json::Value| {
         let mut out = serde_json::json!({
             "ok": true,
             "pr": pr.get("number"),
             "head": pr.get("headRefOid"),
             "base": pr.get("baseRefOid"),
-            "ci": ci_for_stages(pr, stages),
+            "ci": ci,
             "open_threads": nodes(pr, &["reviewThreads"]).into_iter()
                 .filter(|thread| thread.get("isResolved").and_then(serde_json::Value::as_bool) == Some(false))
                 .collect::<Vec<_>>(),
@@ -586,6 +717,15 @@ pub(crate) fn position(
         });
         if let (Some(out), Some(extra)) = (out.as_object_mut(), extra.as_object()) {
             out.extend(extra.clone());
+        }
+        if ci == "failed" {
+            out["failing_checks"] = serde_json::json!(failing_checks(pr));
+        }
+        if ci == "none" {
+            out["ci_note"] = serde_json::json!(
+                "no CI was seen: the rollup stayed empty past the grace period, the head holds no \
+                 workflow file and no `check:` stage is declared; this is not a pass"
+            );
         }
         out
     };
@@ -609,7 +749,10 @@ pub(crate) fn position(
     }
     if pr.get("isDraft").and_then(serde_json::Value::as_bool) == Some(true) {
         let next = match ready_by {
-            Party::Agent => "mark it ready with `ready_pr` once the change is reviewed",
+            Party::Agent => {
+                "mark it ready with `ready_pr` once this head is reviewed, naming it as \
+                 `reviewed_head` where `Self review` is `on`"
+            }
             Party::Person => "a person marks it ready; nothing is due from the run",
         };
         return answer("draft", next.to_owned(), serde_json::json!({}));
