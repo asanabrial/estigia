@@ -877,7 +877,7 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 18,694 | file on disk |
+  | `skill/bindings/github.md` | 18,753 | file on disk |
   | `skill/policies/blind-judges.md` | 42,675 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
@@ -4429,6 +4429,10 @@ the count cannot show:
   answer says `criteria: fixed`.
 - **Generated hunks are read, not reproduced.** A review-only claim never regenerates a declared file,
   so a reader is all that stands behind one.
+- **A review verdict is not atomic against a push, and is not a merge's evidence.** See
+  [assisted review](assisted-review.md). Dismissal on push or retarget and a squash merge's new commit
+  are the host's behaviour and were not exercised live; neither was any submission, whose tests run
+  against a scripted `gh`.
 - **Fork and self-approval are read, not proved.** `isCrossRepository` must read exactly `false` or the
   claim is refused. That an author cannot approve their own pull request is GitHub's documented
   behaviour and was not exercised live.

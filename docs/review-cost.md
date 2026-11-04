@@ -155,6 +155,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `send_message` takes `broadcast`, `handoff` and `outcome`; `handoff` takes `deadline_seconds` | 47 | 61,376 |
 | `pr_review_claim` and `pr_review_release` join: a review-only claim on a pull request | 49 | 63,592 |
 | `pr_review_status`, `pr_review_launch` and `pr_review_collect` join: its panel | 52 | 65,149 |
+| `pr_review_submit` joins: its one road to GitHub | 53 | 65,787 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the

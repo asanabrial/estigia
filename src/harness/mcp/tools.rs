@@ -1750,6 +1750,20 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "pr_review_submit",
+        contract_name: "pull request review submit",
+        description: "Send this run's computed verdict to GitHub: `approved` as an approval, \
+                      `changes-requested` as a request carrying the findings. Reads the head \
+                      again, sends the reviewed `commit_id` and reports only what reads back. A \
+                      moved head, a retarget or a closed pull request submits nothing and answers \
+                      `submitted: false`. Removes the worktree and puts the claim down. Never \
+                      merges.",
+        operation: "pr-review-submit",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::Forget,
+        writes: true,
+    },
+    Tool {
         name: "draft_pr",
         contract_name: "draft pull request",
         description: "Publish an assisted run's branch, where the `Workflow` row is `assisted`, as \
@@ -2139,6 +2153,7 @@ pub const PULL_REVIEW_TOOLS: &[&str] = &[
     "pr_review_status",
     "pr_review_launch",
     "pr_review_collect",
+    "pr_review_submit",
 ];
 
 /// The tools that reach neither the tracker nor the repository host, so a tracker with no

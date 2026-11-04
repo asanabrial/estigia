@@ -5701,6 +5701,33 @@ fn a_run_holding_several_assisted_claims_takes_no_review_claim() {
 }
 
 #[test]
+fn every_answer_a_submission_gives_as_a_success_puts_the_pointer_down() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("a repository");
+    let context = bare_context(&root, &repo);
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.kind = crate::harness::session::RunKind::ReviewOnly;
+    run.reviewed_pr = Some(7);
+    run.repo_dir = Some(repo);
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    for answer in [
+        json!({ "ok": true, "submitted": true }),
+        json!({ "ok": true, "submitted": false, "reason": "head-moved" }),
+    ] {
+        super::apply_effect(
+            tools::find("pr_review_submit").expect("the tool is listed"),
+            &json!({ "run_id": "claude-abcd1234" }),
+            Some(&answer),
+            &mut run,
+            &context,
+        );
+        let after = crate::harness::session::load(&context.state_root, "claude-abcd1234");
+        assert!(!after.is_review_only(), "{answer} left the claim's pointer");
+    }
+}
+
+#[test]
 fn a_review_claim_and_an_issue_are_never_held_together() {
     let root = tempfile::tempdir().expect("a temporary root");
     let repo = root.path().join("repo");
@@ -6829,7 +6856,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 65_149;
+const TOOLS_LIST_CEILING: usize = 65_787;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

@@ -148,6 +148,7 @@ const STALE: &[&str] = &[
     "verdict-bound-to-other-bytes",
 ];
 const UNKNOWN: &[&str] = &[
+    "pull-review-submission-unconfirmed",
     "review-thread-write-unconfirmed",
     "ambiguous-write",
     "handoff-row-unwritten",
@@ -396,6 +397,7 @@ const REFUSED: &[&str] = &[
     "pull-review-fork-refused",
     "pull-review-escalated",
     "pull-review-held",
+    "pull-review-incomplete",
     "pull-review-needs-a-detached-reviewer",
     "pull-review-not-held",
     "pull-review-not-open",

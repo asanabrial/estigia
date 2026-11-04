@@ -1699,6 +1699,7 @@ fn run_operation(
             context.get("worktree location"),
         ),
         "pr-review-release" => super::pull_review::release(context, run_id()?),
+        "pr-review-submit" => super::pull_review::submit::submit(context, run_id()?),
         "pr-review-status" => super::pull_review::panel::status(context, run_id()?),
         "pr-review-launch" => super::pull_review::panel::launch(context, run_id()?),
         "pr-review-collect" => super::pull_review::panel::collect(

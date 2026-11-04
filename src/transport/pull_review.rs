@@ -369,6 +369,7 @@ pub fn release(context: &Context, run_id: &str) -> Result<serde_json::Value, Fai
 }
 
 pub mod panel;
+pub mod submit;
 
 #[cfg(test)]
 mod tests;
