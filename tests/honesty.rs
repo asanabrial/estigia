@@ -291,6 +291,11 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
         ("forty-six", 46),
         ("forty-seven", 47),
         ("forty-eight", 48),
+        ("forty-nine", 49),
+        ("fifty", 50),
+        ("fifty-one", 51),
+        ("fifty-two", 52),
+        ("fifty-three", 53),
     ]
     .iter()
     .filter_map(|(name, value)| {
@@ -790,6 +795,11 @@ fn every_tool_the_readme_lists_is_one_this_server_exposes() {
                 46 => "Forty-six",
                 47 => "Forty-seven",
                 48 => "Forty-eight",
+                49 => "Forty-nine",
+                50 => "Fifty",
+                51 => "Fifty-one",
+                52 => "Fifty-two",
+                53 => "Fifty-three",
                 other => panic!("{other} tools, and this test has no word for that"),
             }
         )),
@@ -4702,10 +4712,6 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
     (
         "hash-object",
         "a git subcommand, not a symbol this crate owns",
-    ),
-    (
-        "head-moved",
-        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
     (
         "lane-count",

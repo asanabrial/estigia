@@ -60,6 +60,7 @@ pub mod population;
 pub mod prune;
 pub mod refusal_class;
 pub(crate) mod registry;
+pub(crate) mod review_claim;
 pub mod roles;
 pub mod session;
 pub mod shell;
@@ -3224,6 +3225,9 @@ fn decide_observing(
     how: Sensitivity,
     observed: &Observed,
 ) -> Decision {
+    if run.is_review_only() {
+        return review_claim::decision(context, run, action, how, observed);
+    }
     if run.issue.is_none()
         && !run.assisted
         && let Some(changed) = issue_requirement::watched_change(context)

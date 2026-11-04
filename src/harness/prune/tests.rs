@@ -795,6 +795,49 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
 }
 
 #[test]
+fn a_live_review_claim_keeps_its_detached_checkout_and_a_leftover_one_is_swept() {
+    let (root, clone, trees) = sweep_fixture();
+    let skill = root.path().join("skill");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    let context = crate::transport::Context::live(skill, clone.clone(), None);
+    let mut reviewing = crate::harness::session::Run::new("claude-live1234".to_owned());
+    reviewing.kind = crate::harness::session::RunKind::ReviewOnly;
+    reviewing.reviewed_pr = Some(7);
+    reviewing.worktree = Some(trees.join("panel-1"));
+    reviewing.repo_dir = Some(clone);
+    let answer = |holdings: &[crate::harness::session::Run]| {
+        let view = View {
+            context: &context,
+            base: "main",
+            holdings,
+            root: Some(trees.as_path()),
+            ownership: Ok(Vec::new()),
+            ownership_root: Some(root.path().join("runs")),
+        };
+        let script = crate::test_env::answers(&[
+            crate::test_env::open_but_unmatched_issue(1),
+            crate::test_env::open_but_unmatched_issue(2),
+            crate::test_env::closed_issue(3),
+            crate::test_env::open_but_unmatched_issue(4),
+            serde_json::json!({ "matches": "pr list", "stdout": "[]", "status": 0 }),
+        ]);
+        let bin = crate::test_env::scripted_gh();
+        crate::test_env::with_scripted_gh(bin.path(), &script, || sweep(&view))
+            .expect("the sweep reads")
+            .into_iter()
+            .find(|entry| entry.kind == Kind::Worktree && entry.name.ends_with("panel-1"))
+            .expect("the detached checkout is listed")
+    };
+    let held = answer(std::slice::from_ref(&reviewing));
+    assert!(
+        !held.delete,
+        "a checkout a live review claim holds was swept"
+    );
+    assert!(held.reason.contains("claude-live1234"), "{}", held.reason);
+    assert!(answer(&[]).delete, "a leftover review checkout was kept");
+}
+
+#[test]
 fn a_kept_checkout_names_the_uncommitted_files_it_carries() {
     let (root, clone, trees) = sweep_fixture();
     let skill = root.path().join("skill");

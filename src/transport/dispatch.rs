@@ -1687,6 +1687,18 @@ fn run_operation(
             },
             context.get("worktree location"),
         ),
+        "pr-review-claim" => super::pull_review::claim(
+            context,
+            &super::pull_review::ClaimRequest {
+                pr: f.number("pr", operation)?,
+                run_id: run_id()?,
+                horizon: f.need("horizon", operation)?,
+                worktree_root: f.get("worktree-root"),
+                now,
+            },
+            context.get("worktree location"),
+        ),
+        "pr-review-release" => super::pull_review::release(context, run_id()?),
         "assist" => {
             let issue = identity()?;
             let started = super::branch::assist(
