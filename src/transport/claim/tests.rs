@@ -6913,7 +6913,7 @@ fn a_republish_over_an_unjudged_parent_whose_ledger_computes_approved_is_refused
         envelope["action"]
             .as_str()
             .expect("action")
-            .contains("record_computed_verdict"),
+            .contains("`deliver` with `until: verdict`"),
         "{envelope}"
     );
     assert!(!remote_has_branch(&world), "a refused publication pushed");

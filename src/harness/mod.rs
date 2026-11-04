@@ -1131,8 +1131,8 @@ pub(crate) fn merge_without_ci_release(pr: u64) -> Refusal {
         ),
         Resolution::no_command(
             NoCommandReason::WorldAction,
-            "`release_ci` with this exact receipt, which checks the verdict and marks the pull \
-             request ready",
+            "`deliver` with `until: ci`, which releases this exact receipt after checking the \
+             verdict and marks the pull request ready",
         ),
     )
 }

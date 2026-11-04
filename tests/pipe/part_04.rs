@@ -1263,31 +1263,14 @@ fn ci_release_refuses_a_receipt_no_computed_verdict_cleared() {
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
-    let request = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": "release_ci",
-            "arguments": {
-                "issue": 12,
-                "run_id": run_id,
-                "epoch": epoch,
-                "pr": 7,
-                "head": head,
-                "base": base,
-                "digest": digest,
-                "worktree": repo.display().to_string(),
-            }
-        }
-    })
-    .to_string();
+    let request = deliver_until("ci", run_id, None);
 
     let runs = home.join(".estigia").join("runs");
     let mut run = estigia::harness::session::Run::new(run_id.to_owned());
     run.issue = Some(estigia::identity::Identity::Number(12));
     run.state = Some("review".to_owned());
     run.repo_dir = Some(repo.to_path_buf());
+    hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
     assert!(
         estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
         "the fixture pointer was not stored"
@@ -1317,10 +1300,13 @@ fn ci_release_refuses_a_receipt_no_computed_verdict_cleared() {
         .as_str()
         .unwrap_or_default()
         .to_owned();
-    assert_eq!(response["result"]["isError"], true, "{response}");
     assert!(
-        text.contains("qualifying-review-verdict-missing"),
-        "an unreviewed receipt was refused for the wrong reason: {text}"
+        stopped_at_the_verdict(&response),
+        "an unreviewed receipt reached the CI release: {text}"
+    );
+    assert!(
+        !text.contains("\"reached\"") && !text.contains("release_ci"),
+        "an unreviewed receipt was released: {text}"
     );
     let calls = std::fs::read_to_string(&log).unwrap_or_default();
     assert!(
@@ -1462,9 +1448,12 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
             }).to_string(),
             "status": 0,
         },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": format!("commits/{head}/check-runs"), "stdout": "{\"total_count\":0,\"check_runs\":[]}", "status": 0 },
         { "matches": "pr view", "nth": 1, "stdout": pr_draft.to_string(), "status": 0 },
+        { "matches": "pr view", "nth": 2, "stdout": pr_draft.to_string(), "status": 0 },
         { "matches": "pr ready", "stdout": "", "status": 0 },
-        { "matches": "pr view", "nth": 2, "stdout": pr_ready.to_string(), "status": 0 },
+        { "matches": "pr view", "nth": 3, "stdout": pr_ready.to_string(), "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
@@ -1483,25 +1472,9 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
         "the fixture accidentally left a pointer for the publisher"
     );
 
-    let request = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": "release_ci",
-            "arguments": {
-                "issue": 12,
-                "run_id": resuming_run,
-                "epoch": epoch,
-                "pr": 7,
-                "head": head,
-                "base": base,
-                "digest": digest,
-                "worktree": repo.display().to_string(),
-            }
-        }
-    })
-    .to_string();
+    let request = deliver_until("ci", resuming_run, None);
+    name_origin_o_r(repo);
+    seed_store_with(home, &[(12, "review", comments)]);
 
     let mut child = tracker_command(home, repo, bin, &answers)
         .arg("mcp")
@@ -1526,18 +1499,24 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
         .as_str()
         .unwrap_or_default()
         .to_owned();
+    let delivered: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
     assert_eq!(
-        response["result"]["isError"], false,
+        delivered["reached"], "ci",
         "a run that did not publish, holding a live claim and the byte-exact latest receipt, was \
          refused: {text}"
     );
-    let answered: serde_json::Value =
-        serde_json::from_str(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
+    let answered = &delivered["release"];
     assert_eq!(answered["ci_released"], true, "{text}");
     assert_eq!(answered["next"], "ci_status", "{text}");
     assert_eq!(answered["lane"]["state"], "unreadable", "{text}");
-    assert_eq!(answered["basis"], "structural-readback", "{text}");
+    assert_eq!(answered["basis"], "computed-verdict", "{text}");
     assert_eq!(answered["findings"], serde_json::json!([]), "{text}");
+    assert_eq!(
+        delivered["done"],
+        serde_json::json!(["record_computed_verdict", "release_ci"]),
+        "{text}"
+    );
 
     let pointer: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(runs.join(format!("{resuming_run}.json")))
@@ -1743,6 +1722,8 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
                 }).to_string(),
                 "status": 0,
             },
+            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+            { "matches": format!("commits/{head}/check-runs"), "stdout": "{\"total_count\":0,\"check_runs\":[]}", "status": 0 },
             { "matches": "pr view", "nth": 1, "stdout": pr_draft.to_string(), "status": 0 },
             { "matches": "pr ready", "stdout": "", "status": 0 },
             { "matches": "pr view", "nth": 2, "stdout": pr_ready.to_string(), "status": 0 },
@@ -1756,33 +1737,13 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
     run.issue = Some(estigia::identity::Identity::Number(12));
     run.state = Some("review".to_owned());
     run.repo_dir = Some(repo.to_path_buf());
+    hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
     assert!(
         estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
         "the fixture pointer was not stored"
     );
 
-    let request = |name: &str, arguments: serde_json::Value| {
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        })
-        .to_string()
-    };
-    let release_request = request(
-        "release_ci",
-        serde_json::json!({
-            "issue": 12,
-            "run_id": run_id,
-            "epoch": epoch,
-            "pr": 7,
-            "head": head,
-            "base": base,
-            "digest": digest,
-            "worktree": repo.display().to_string(),
-        }),
-    );
+    let release_request = deliver_until("ci", run_id, None);
 
     let call =
         |request: &str, answers: String, counts: &std::path::Path| -> (serde_json::Value, String) {
@@ -1819,16 +1780,17 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
     // The warning stands unanswered. Nothing about delivery waits on it, so the
     // run reaches the write that marks the pull request ready.
     let (delivered, transcript) = call(&release_request, release_answers(before), &count);
-    assert_eq!(
-        delivered["result"]["isError"], false,
-        "a receipt holding a non-blocking finding was refused: {transcript}"
-    );
-    let released: serde_json::Value = serde_json::from_str(
+    let answer: serde_json::Value = serde_json::from_str(
         delivered["result"]["content"][0]["text"]
             .as_str()
             .unwrap_or_default(),
     )
     .unwrap_or_else(|error| panic!("{error}: {transcript}"));
+    assert_eq!(
+        answer["reached"], "ci",
+        "a receipt holding a non-blocking finding was refused: {transcript}"
+    );
+    let released = &answer["release"];
     assert_eq!(released["ci_released"], true, "{transcript}");
     assert!(
         transcript.contains("pr ready"),

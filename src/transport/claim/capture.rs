@@ -809,8 +809,8 @@ fn runner_lost(job: &Job) -> Failure {
             "the process running job {} for `{}` ended without leaving an answer",
             job.id, job.name
         ),
-        "the job is abandoned and nothing was recorded; call `launch_review_input` again for \
-         the same name",
+        "the job is abandoned and nothing was recorded; call `collect_review_input` with \
+         `launch: true` again for the same name",
     )
 }
 
@@ -831,7 +831,8 @@ fn job_missing(name: &str) -> Failure {
     stop(
         "capture-job-missing",
         format!("no job holds the slot for `{name}` on the current receipt"),
-        "call `launch_review_input` for this name once `review_status` offers it",
+        "call `collect_review_input` with `launch: true` for this name once `review_status` \
+         offers it",
     )
 }
 
@@ -842,8 +843,9 @@ fn job_other_run(job: &Job) -> Failure {
             "job {} for `{}` was launched by run {}, and only that run collects it",
             job.id, job.name, job.run_id
         ),
-        "call `launch_review_input` for this name from this run once `review_status` offers it; \
-         a job whose reviewer has finished or died no longer holds the slot",
+        "call `collect_review_input` with `launch: true` for this name from this run once \
+         `review_status` offers it; a job whose reviewer has finished or died no longer holds \
+         the slot",
     )
 }
 

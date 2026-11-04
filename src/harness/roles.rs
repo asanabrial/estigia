@@ -333,7 +333,7 @@ impl ReviewerLaunchCode {
                  provable"
             }
             Self::LaunchedByBinary => {
-                "call `launch_review_input` and then `collect_review_input` for the slot review status offers; the binary \
+                "call `collect_review_input` with `launch: true` and then without it for the slot review status offers; the binary \
                  launches this role itself and there is no Task launch to repair"
             }
         }
@@ -549,7 +549,7 @@ pub fn authorize_review_blind_launch(
         return Err(Refusal::not_started(
             ReviewerLaunchCode::LaunchedByBinary.code(),
             format!(
-                "`{name}` is launched by `launch_review_input` from the binary's own template \
+                "`{name}` is launched by `collect_review_input` with `launch: true` from the binary's own template \
                  and has no hand path"
             ),
             Resolution::no_command(

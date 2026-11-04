@@ -151,7 +151,8 @@ fn runner_lost(detail: &str) -> Failure {
         "ok": false,
         "reason": "checks-runner-lost",
         "detail": detail,
-        "action": "nothing was recorded; call `run_checks` again to start the checks afresh",
+        "action": "nothing was recorded; call `collect_review_input` with `checks: true` again to \
+                   start the checks afresh",
     }))
 }
 
@@ -219,7 +220,7 @@ fn target_moved(digest: &str) -> Failure {
         "digest": digest,
         "action": "nothing was recorded: the checkout changed while the checks ran, so the result \
                    is not for these bytes; commit or restore it, publish again, and call \
-                   `run_checks` for the new target",
+                   `collect_review_input` with `checks: true` for the new target",
     }))
 }
 
@@ -263,7 +264,8 @@ fn collected(
             "commands": commands,
             "checks": tails(outcome),
             "action": "the job ran past its deadline and its process group was killed; nothing \
-                       was recorded, so `run_checks` starts the checks afresh",
+                       was recorded, so `collect_review_input` with `checks: true` starts the \
+                       checks afresh",
         }));
     }
     let now = target::clean_target(context, base, request.worktree);
@@ -446,8 +448,8 @@ fn missing(receipt: &super::ReviewTransaction, commands: &str) -> Failure {
         "reason": "checks-receipt-missing",
         "digest": receipt.digest,
         "commands": commands,
-        "action": "keep the PR draft; call `run_checks` for this exact published target and \
-                   collect its answer, then record the verdict again",
+        "action": "keep the PR draft; call `collect_review_input` with `checks: true` for this \
+                   exact published target and collect its answer, then record the verdict again",
     }))
 }
 

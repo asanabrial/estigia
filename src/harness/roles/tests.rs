@@ -290,7 +290,8 @@ fn a_hand_launch_of_a_binary_launched_reviewer_is_refused_without_naming_a_setup
                 .expect_err("a hand launch with no installed file proceeded");
             let shown = refusal.to_string();
             assert!(
-                shown.contains("launch_review_input") && !shown.contains("estigia setup"),
+                shown.contains("`collect_review_input` with `launch: true`")
+                    && !shown.contains("estigia setup"),
                 "{name}: {shown}"
             );
             assert!(matches!(refusal.resolution, Resolution::NoCommand { .. }));

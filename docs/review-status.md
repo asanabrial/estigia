@@ -38,14 +38,15 @@ adds the transition to `review` and the launch of every slot that first status o
   where the tool takes one, and the tool's own non-receipt arguments: `branch`, `base`, `pr_title` and
   `pr_body_file` for `publish_review`; `escalated_to` and `reason` for `escalate_review`.
 - `collect`: obtain every `next.inputs[]` entry with its `capture` tool, then ask again. Every input
-  sharing a `capture` may be obtained in one call: `launch_review_input` and `collect_review_input`
-  take `names` as well as `name`, so a `high` review launches its four lenses in one call and collects
-  them in the next. A batch reports a slot a running job already holds (`capture-already-running`, a
+  sharing a `capture` may be obtained in one call: `collect_review_input`, with or without
+  `launch: true`, takes `names` as well as `name`, so a `high` review launches its four lenses in one
+  call and collects them in the next. A batch reports a slot a running job already holds (`capture-already-running`, a
   launch) or one still running (`capture-running`, a collect) rather than refusing the whole call.
   `next.arguments` is the receipt they record against. Each input is read against the job table
   and the job's lock, never the network, and names the one call that clears it:
-  - no job holds the slot on this receipt: `capture: "launch_review_input"`, which starts the
-    reviewer itself;
+  - no job holds the slot on this receipt: `capture: "launch_review_input"` from the transport, which
+    starts the reviewer itself. Over MCP the server rewrites it, in this answer and in the one a
+    publication or a collect carries, to `capture: "collect_review_input"` with `launch: true`;
   - the job finished, its runner died, or it is still alive a minute past its `deadline_at`:
     `capture: "collect_review_input"` and `job`, because collecting records the answer, abandons the
     job or ends it, and the slot is offered again;
@@ -56,10 +57,10 @@ adds the transition to `review` and the launch of every slot that first status o
   latest sensible time to ask again, since a reviewer usually answers sooner and asking earlier costs
   only a read. `kind` stays `collect`. A job of another epoch, or one already admitted, abandoned or
   stale, holds nothing. A name `status` does not offer, or one that is none of a lens, `refutation-batch` and
-`review-validator`, is refused `capture-input-not-offered` by `launch_review_input` before any
+`review-validator`, is refused `capture-input-not-offered` by a launch before any
 reviewer starts, so `status` is what decides what may be captured. A hand-recorded lens report, refutation or
 validator result is refused `recorded-by-capture-only`, so a slot
-`status` offers is cleared by `launch_review_input` and `collect_review_input` and by nothing else. With neither `claude` nor
+`status` offers is cleared by `collect_review_input`, launching or collecting, and by nothing else. With neither `claude` nor
 `codex` on `PATH` the collect refuses `reviewer-cli-missing`; the review then moves by
 `handoff_review` to a run that has one.
 - `stop`: `next.reason_code`, with `next.continuation` saying who acts. Nothing is executed.
@@ -72,24 +73,25 @@ validator result is refused `recorded-by-capture-only`, so a slot
 |---|---|---|---|
 | No publication | `execute` | `no-publication` | `publish_review`, `expected_epoch: none` |
 | Pull request closed, unmerged | `execute` | `pull-request-closed` | `publish_review`, `expected_epoch: none` |
-| A licensed lens has not reported | `collect` | `lens-report-missing` | `launch_review_input` or `collect_review_input` per lens role, or neither while its job runs |
+| A licensed lens has not reported | `collect` | `lens-report-missing` | `collect_review_input` per lens role, with `launch: true` to start it, or neither while its job runs |
 | Only the validator is owed | `collect` | `validator-owed` | one input, `review-validator`, annotated as above |
 | Inferential severe finding, no refuter batch yet | `collect` | `refutation-missing` | one input, `refutation-batch`, annotated as above, listing every finding id that needs an entry |
 | Verdict computable, not recorded | `execute` | `verdict-computable` | `record_computed_verdict` with the receipt |
 | Approved and recorded | `execute` | `approved` | `release_ci` with the receipt |
 
-Over MCP, where `Merge by` is the agent and `Delivery authorisation` is `auto`, the two rows above name
-`deliver` with `{issue, wait_seconds: 50}` instead, in `review_status`'s own answer and in the one a publication or a
-collect carries: `deliver` records the verdict and releases CI as its own first steps, so naming them
-alone costs a call each. `reason_code` is unchanged, and it is what `deliver` and `record_verdict` read.
-Anywhere `deliver` would hand back before releasing CI, the rows name what the table says.
+Over MCP, the two rows above always name `deliver`, in `review_status`'s own answer and in the one a
+publication or a collect carries: with `{issue, wait_seconds: 50}` where `Merge by` is the agent and
+`Delivery authorisation` is `auto`, since `deliver` records the verdict and releases CI as its own first
+steps; with `{issue, until: verdict}` and `{issue, until: ci}` otherwise, which stop after the
+verdict and after the release and leave the merge to the person. `reason_code` is unchanged, and it is
+what `deliver` and `record_verdict` read.
 | Rejected, correction unspent | `execute` | `correction-due` | `publish_review`, `expected_epoch: <this epoch>`; when the targeted validator failed the correction, the answer carries a plain `why` naming what it found |
 | Rejected, correction spent | `execute` | `correction-spent` | `escalate_review` with the receipt; the answer carries a plain `why` |
 | Escalated, recovered by a person (also over a moved pull request) | `execute` | `recovered` | `publish_review`, `expected_epoch: <this epoch>` |
 | Escalated, unrecovered (also over a closed or moved pull request) | `stop` | `escalated` | the person's `estigia recover <issue> --reason "<why>"` command, never an agent's; the stop carries a plain `why` sentence beside the reason code |
 | Approved, ledger or tier moved, and a finding was recorded after the verdict | `execute` | `verdict-stale` | `publish_review`, `expected_epoch: <this epoch>` |
 | Approved, ledger or tier moved, and no finding was recorded after the verdict | `stop` | `verdict-stale` | a person decides: record the defect the verdict did not weigh with `record_review_finding` and publish again, or close the pull request and publish afresh |
-| Approved by a legacy verdict with no computed marker, ledger not yet recorded | as the unjudged rows | | `record_computed_verdict`, or the lens and refutation inputs it needs |
+| Approved by a legacy verdict with no computed marker, ledger not yet recorded | as the unjudged rows | | `deliver` with `until: verdict`, or the lens and refutation inputs it needs |
 | Approved, CI already released | `stop` | `released` | the run holding the receipt merges it with `gh pr merge <pr> --merge --match-head-commit <head>` (the receipt's own pull request and head) once CI is green on that head, or at once when the publication lane reads `not-consulted`, `disabled` or `never-ran` and the continuation says no CI will run, and `Delivery authorisation` authorises this run; otherwise it asks first, naming the reviewed head and base. The same answer when the base advanced past the reviewed base, the pull request is ready, its head is the reviewed head, the new base descends from the reviewed base and GitHub reports it `MERGEABLE` with a `mergeStateStatus` that is not `DIRTY`; the continuation then names the new base, and CI is not asked again on it |
 | Approved, CI released, base advanced past the reviewed base, and GitHub still computing the mergeability | `stop` | `mergeability-unknown` | ask again once GitHub has answered; `UNKNOWN` (in `mergeable` or `mergeStateStatus`) is never read as clean |
 | Merged | `stop` | `delivered` | the run holding the receipt completes the delivery with `closing::FOLLOW_UP`: `transition --to done`, then `release`, which is last and not optional |

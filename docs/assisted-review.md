@@ -92,7 +92,7 @@ While the claim is held, `harness::review_claim` refuses every boundary and remo
 runs, and every file write that lands in this repository, the review's own worktree included, all as
 `review-claim-admits-no-write`. That covers push, merge, `gh pr review`, `gh pr comment`, `gh api`
 mutations and any shell worktree command. A writing tool outside the road is refused the same way,
-`run_checks` among them, because running a repository's checks executes the reviewed bytes. A note
+`collect_review_input` with `checks: true` among them, because running a repository's checks executes the reviewed bytes. A note
 outside every repository stands aside. `pr_review` `release` puts the claim down and removes the
 worktree, reading nothing from GitHub, so a pull request that has gone does not strand it.
 

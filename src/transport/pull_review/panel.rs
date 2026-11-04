@@ -226,8 +226,8 @@ fn next_of(reading: &Reading) -> serde_json::Value {
             "operation": "pr_review", "action": "release",
             "reason": "pull-review-escalated",
             "detail": reasons,
-            "action": "the answers cannot settle a severe finding, so neither event is right: \
-                       `pr_review` `release`, and report the findings to a person",
+            "instruction": "the answers cannot settle a severe finding, so neither event is right: \
+                            `pr_review` `release`, and report the findings to a person",
         }),
         Verdict::Incomplete { missing } => serde_json::json!({
             "kind": "launch",

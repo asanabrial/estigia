@@ -1338,29 +1338,33 @@ fn the_lens_count_stated_beside_review_tier_is_the_one_the_tier_derives() {
         );
     }
 
-    let description = estigia::harness::mcp::tools::find("review_tier")
-        .expect("review_tier is a registered tool")
-        .description;
-    let claimed = number_before(description, " lens, the `")
-        .expect("the review_tier tool description does not count the medium lens question");
-    assert_eq!(
-        medium as usize, claimed,
-        "the review_tier tool description claims {claimed} for the medium lens count and \
-         RiskLevel::lenses() answers {medium}"
-    );
-    let claimed = number_before(description, "lenses, `review-risk`")
-        .expect("the review_tier tool description does not count the high lens question");
-    assert_eq!(
-        high as usize, claimed,
-        "the review_tier tool description claims {claimed} for the high lens count and \
-         RiskLevel::lenses() answers {high}"
-    );
-    assert!(
-        description.contains(&format!("`low` answers {}", spelled(low))),
-        "the review_tier tool description does not say \"`low` answers {}\", which is what \
-         RiskLevel::Low.lenses() ({low}) now claims",
-        spelled(low)
-    );
+    for carrier in ["review_tier", "review_read"] {
+        let description = estigia::harness::mcp::tools::find(carrier)
+            .expect("the carrier is a registered tool")
+            .description;
+        let claimed = number_before(description, " lens, the `").unwrap_or_else(|| {
+            panic!("the {carrier} tool description does not count the medium lens question")
+        });
+        assert_eq!(
+            medium as usize, claimed,
+            "the {carrier} tool description claims {claimed} for the medium lens count and \
+             RiskLevel::lenses() answers {medium}"
+        );
+        let claimed = number_before(description, "lenses, `review-risk`").unwrap_or_else(|| {
+            panic!("the {carrier} tool description does not count the high lens question")
+        });
+        assert_eq!(
+            high as usize, claimed,
+            "the {carrier} tool description claims {claimed} for the high lens count and \
+             RiskLevel::lenses() answers {high}"
+        );
+        assert!(
+            description.contains(&format!("`low` answers {}", spelled(low))),
+            "the {carrier} tool description does not say \"`low` answers {}\", which is what \
+             RiskLevel::Low.lenses() ({low}) now claims",
+            spelled(low)
+        );
+    }
 
     let github = std::fs::read_to_string(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("skill/bindings/github/operations.md"),
@@ -5093,8 +5097,9 @@ fn no_text_an_agent_executes_tells_a_run_to_record_an_aggregate_verdict() {
     let block = estigia::setup::opencode_review_section();
     for required in [
         "`collect_review_input`",
-        "`record_computed_verdict`",
-        "`release_ci`",
+        "`deliver`",
+        "`until: verdict`",
+        "`until: ci`",
     ] {
         assert!(
             block.contains(required),

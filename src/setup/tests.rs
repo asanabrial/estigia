@@ -12975,9 +12975,10 @@ fn a_fresh_opencode_adapter_file_names_task_judges_not_handoff() {
     );
     assert!(
         compact.contains("After`publish_review`")
-            && compact
-                .contains("call`launch_review_input`andthen`collect_review_input`foreachinput"),
-        "a fresh OpenCode adapter no longer names the post-publish launch_review_input call: {text}"
+            && compact.contains(
+                "call`collect_review_input`with`launch:true`andthenwithoutitforeachinput"
+            ),
+        "a fresh OpenCode adapter no longer names the post-publish launch call: {text}"
     );
     assert!(
         compact.contains("withoutlaunchingfirstisadefectagainstthissentence"),
@@ -13035,7 +13036,7 @@ fn an_upgraded_opencode_adapter_file_replaces_a_stale_review_section() {
     );
     let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
     assert!(
-        compact.contains("call`launch_review_input`andthen`collect_review_input`foreachinput")
+        compact.contains("call`collect_review_input`with`launch:true`andthenwithoutitforeachinput")
             && compact.contains("After`publish_review`")
             && compact.contains("thesealedlenses,"),
         "an upgraded OpenCode adapter did not replace the stale section with the current one: {text}"
@@ -16209,7 +16210,7 @@ fn every_runtime_is_pointed_at_a_skill_that_describes_the_binary_launched_review
         );
         let installed = fs::read_to_string(paths.skill_root.join(skill::CONTRACT))
             .expect("the skill was installed where the directive points");
-        for tool in ["launch_review_input", "collect_review_input"] {
+        for tool in ["collect_review_input", "launch: true"] {
             assert!(
                 installed.contains(tool),
                 "{} is pointed at a skill that does not describe {tool}",

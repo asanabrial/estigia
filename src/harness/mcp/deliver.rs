@@ -63,6 +63,21 @@ pub(super) trait Hands {
     fn pause(&self, duration: Duration);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Until {
+    Verdict,
+    Ci,
+}
+
+impl Until {
+    fn word(self) -> &'static str {
+        match self {
+            Until::Verdict => "verdict",
+            Until::Ci => "ci",
+        }
+    }
+}
+
 pub(super) struct Request {
     pub(super) issue: u64,
     pub(super) run_id: String,
@@ -70,6 +85,8 @@ pub(super) struct Request {
     pub(super) readback_pause: Duration,
     pub(super) spend: Option<String>,
     pub(super) appendix: Option<String>,
+    pub(super) until: Option<Until>,
+    pub(super) never_ran_evidence: Option<String>,
 }
 
 enum Halt {
@@ -109,6 +126,14 @@ fn stop_answer(step: &str, reason: &str, detail: Value) -> Value {
 
 fn stop(step: &str, reason: &str, detail: Value) -> Halt {
     Halt::Stopped(stop_answer(step, reason, detail))
+}
+
+fn receipt_missing() -> Halt {
+    stop(
+        "receipt",
+        "receipt-missing",
+        json!({"detail": "this run holds no complete review transaction in its pointer"}),
+    )
 }
 
 fn refused(step: &str, refusal: Value) -> Halt {
@@ -237,6 +262,8 @@ struct Deliver<'a, H: Hands> {
     deadline: Instant,
     released_at: u64,
     done: Vec<&'static str>,
+    verdict: Option<Value>,
+    released: Option<Value>,
 }
 
 pub(super) fn run<H: Hands>(hands: &H, request: &Request) -> Value {
@@ -248,6 +275,8 @@ pub(super) fn run<H: Hands>(hands: &H, request: &Request) -> Value {
         deadline: started + request.wait,
         released_at: 0,
         done: Vec::new(),
+        verdict: None,
+        released: None,
     };
     let outcome = deliver.sequence();
     let (Ok(mut answer) | Err(Halt::Stopped(mut answer) | Halt::Pending(mut answer))) = outcome;
@@ -265,13 +294,14 @@ impl<H: Hands> Deliver<'_, H> {
                 json!({"issue": issue, "run_id": run_id, "expect_state": "review", "compact": true}),
             )
             .map_err(|refusal| refused("hold", refusal))?;
-        let Some(receipt) = hands.receipt() else {
-            return Err(stop(
-                "receipt",
-                "receipt-missing",
-                json!({"detail": "this run holds no complete review transaction in its pointer"}),
-            ));
+        let receipt = match hands.receipt() {
+            Some(receipt) => receipt,
+            None if self.request.until.is_some() => self.receipt_in_status()?,
+            None => return Err(receipt_missing()),
         };
+        if let Some(until) = self.request.until {
+            return self.until(until, &receipt);
+        }
         let answer = match self.review(&receipt)? {
             Position::Delivered => self.landed(&receipt)?,
             Position::Open => {
@@ -284,6 +314,61 @@ impl<H: Hands> Deliver<'_, H> {
                 self.close(&receipt, &merged, &ci)?
             }
         };
+        Ok(answer)
+    }
+
+    fn receipt_in_status(&self) -> Step<ReviewTransaction> {
+        let status = self.call(
+            "receipt",
+            "review_status",
+            json!({"issue": self.request.issue, "compact": true}),
+        )?;
+        let seen = &status["receipt"];
+        let field = |name: &str| seen[name].as_str().unwrap_or_default().to_owned();
+        let read = ReviewTransaction {
+            epoch: field("epoch"),
+            pr: seen["pr"].as_u64().unwrap_or_default(),
+            head: field("head"),
+            base: field("base"),
+            digest: field("digest"),
+        };
+        if read.is_complete() {
+            Ok(read)
+        } else {
+            Err(receipt_missing())
+        }
+    }
+
+    fn record_verdict(&mut self, step: &str, receipt: &ReviewTransaction) -> Step<Value> {
+        let mut arguments = self.receipt_arguments(receipt);
+        if let Some(worktree) = self.hands.worktree() {
+            arguments["worktree"] = json!(worktree);
+        }
+        if let Some(file) = &self.request.never_ran_evidence {
+            arguments["never_ran_evidence_file"] = json!(file);
+        }
+        let recorded = self.call(step, "record_computed_verdict", arguments)?;
+        self.done.push("record_computed_verdict");
+        self.verdict = Some(recorded.clone());
+        Ok(recorded)
+    }
+
+    fn until(&mut self, until: Until, receipt: &ReviewTransaction) -> Step<Value> {
+        let verdict = self.record_verdict("verdict", receipt)?;
+        let mut answer = json!({
+            "ok": true,
+            "delivered": false,
+            "reached": until.word(),
+            "verdict": verdict,
+        });
+        if until == Until::Ci {
+            let lane = self.release(receipt)?;
+            answer["release"] = self
+                .released
+                .clone()
+                .unwrap_or(json!({"released_earlier": true}));
+            answer["lane"] = lane;
+        }
         Ok(answer)
     }
 
@@ -350,12 +435,15 @@ impl<H: Hands> Deliver<'_, H> {
             let reason = next["reason_code"].as_str().unwrap_or_default();
             match next["kind"].as_str().unwrap_or_default() {
                 "execute" if reason == "verdict-computable" && !recorded => {
-                    let mut arguments = self.receipt_arguments(receipt);
-                    if let Some(worktree) = self.hands.worktree() {
-                        arguments["worktree"] = json!(worktree);
-                    }
-                    self.call("review", "record_computed_verdict", arguments)?;
-                    self.done.push("record_computed_verdict");
+                    self.record_verdict("review", receipt)?;
+                    recorded = true;
+                }
+                "stop"
+                    if reason == "publication-lane-never-ran"
+                        && self.request.never_ran_evidence.is_some()
+                        && !recorded =>
+                {
+                    self.record_verdict("review", receipt)?;
                     recorded = true;
                 }
                 "execute" if reason == "approved" => return Ok(Position::Open),
@@ -364,7 +452,13 @@ impl<H: Hands> Deliver<'_, H> {
                 "collect" if all_running(&next) => {
                     self.wait("review", "inputs-running", next["ask_after"].as_u64())?;
                 }
-                _ => return Err(stop("review", reason, json!({"next": next}))),
+                _ => {
+                    let mut detail = json!({"next": next});
+                    if let Some(verdict) = &self.verdict {
+                        detail["verdict"] = verdict.clone();
+                    }
+                    return Err(stop("review", reason, detail));
+                }
             }
         }
     }
@@ -400,7 +494,8 @@ impl<H: Hands> Deliver<'_, H> {
                     .unwrap_or(0);
             }
             None => {
-                self.call("release", "release_ci", self.receipt_arguments(receipt))?;
+                self.released =
+                    Some(self.call("release", "release_ci", self.receipt_arguments(receipt))?);
                 self.done.push("release_ci");
                 self.released_at = self.hands.now();
             }
@@ -1305,6 +1400,15 @@ pub(super) fn deliver(
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
         appendix,
+        until: match arguments.get("until").and_then(Value::as_str) {
+            Some("verdict") => Some(Until::Verdict),
+            Some("ci") => Some(Until::Ci),
+            _ => None,
+        },
+        never_ran_evidence: arguments
+            .get("never_ran_evidence_file")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
     };
     let live = Live::new(context, named.id, context.repository_host.named_repo());
     Ok(result_of(run(&live, &request), compact))

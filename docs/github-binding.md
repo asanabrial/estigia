@@ -99,8 +99,10 @@ nothing answers, and a seam test holds the two lists together: an operation that
 nor declared fails the build. The operations the tools absorbed keep their capability under the
 surviving name: `claim` performs `reclaim` through `takeover`, `list_state` answers identities through
 `identities`, `review_status` carries the publication lane and the correction count, `review_read`
-reads what six tools used to, `review_tier` narrows a repair's range, and `target` classifies base
-movement.
+reads what six tools used to and, with `view: tier` and `parent_head`, narrows a repair's range and,
+with `view: target`, classifies base movement; `collect_review_input` starts a reviewer with `launch`
+and runs the declared checks with `checks`, and `deliver` records the verdict and releases CI
+through `until`.
 
 One crate. Five on day one would split boundaries before any of them had earned the split; a boundary
 gets split out when it has earned the seat. The container image is the exception to "one binary on a

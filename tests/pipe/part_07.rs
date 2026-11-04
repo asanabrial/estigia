@@ -1174,25 +1174,13 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         run.issue = Some(estigia::identity::Identity::Number(12));
         run.state = Some("review".to_owned());
         run.repo_dir = Some(repo.to_path_buf());
+        hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
         assert!(
             estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
             "the fixture pointer was not stored"
         );
 
-        let request = serde_json::json!({
-            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": { "name": "record_computed_verdict", "arguments": {
-                "issue": 12,
-                "run_id": reviewer,
-                "epoch": epoch,
-                "pr": 7,
-                "head": head,
-                "base": base,
-                "digest": digest,
-            "worktree": repo.display().to_string(),
-            }}
-        })
-        .to_string();
+        let request = deliver_until("verdict", reviewer, None);
 
         let mut child = tracker_command(home, repo, bin, &answers)
             .arg("mcp")
@@ -1251,8 +1239,8 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         let Some(reason) = refusal else {
             // The state that must never refuse. A repository with no
             // dispatchable lane has no check runs on any head.
-            assert_eq!(
-                response["result"]["isError"], false,
+            assert!(
+                !stopped_at_the_verdict(&response) && text.contains("\"reached\":\"verdict\""),
                 "a head with no check runs was refused, which breaks every repository that has \
                  no lane: {text}"
             );
@@ -1264,8 +1252,8 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
             );
             continue;
         };
-        assert_eq!(
-            response["result"]["isError"], true,
+        assert!(
+            stopped_at_the_verdict(&response),
             "the {label} lane cleared a verdict: {text}"
         );
         assert!(
@@ -1512,30 +1500,17 @@ fn a_never_ran_lane_is_told_apart_from_one_that_ran_and_failed() {
         run.issue = Some(estigia::identity::Identity::Number(12));
         run.state = Some("review".to_owned());
         run.repo_dir = Some(repo.to_path_buf());
+        hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
         assert!(
             estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
             "the fixture pointer was not stored"
         );
 
-        let mut arguments = serde_json::json!({
-            "issue": 12,
-            "run_id": reviewer,
-            "epoch": epoch,
-            "pr": 7,
-            "head": head,
-            "base": base,
-            "digest": digest,
-            "worktree": repo.display().to_string(),
-        });
-        if give_evidence {
-            arguments["never_ran_evidence_file"] =
-                serde_json::json!(evidence.display().to_string());
-        }
-        let request = serde_json::json!({
-            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": { "name": "record_computed_verdict", "arguments": arguments }
-        })
-        .to_string();
+        let request = deliver_until(
+            "verdict",
+            reviewer,
+            give_evidence.then_some(evidence.as_path()),
+        );
         // Read-only, takes no evidence and refuses nothing — the second half
         // this row exists for: the same head, read through the advisory tool
         // every run is told to consult before ever reaching
@@ -1590,7 +1565,8 @@ fn a_never_ran_lane_is_told_apart_from_one_that_ran_and_failed() {
             );
             let payload: serde_json::Value =
                 serde_json::from_str(&text).unwrap_or_else(|_| panic!("{text}"));
-            assert_eq!(payload["outcome"], "approved", "{label}: {text}");
+            assert_eq!(payload["reached"], "verdict", "{label}: {text}");
+            assert_eq!(payload["verdict"]["outcome"], "approved", "{label}: {text}");
             let staged = recorded_entries(home, 12)
                 .into_iter()
                 .rev()
@@ -1615,8 +1591,8 @@ fn a_never_ran_lane_is_told_apart_from_one_that_ran_and_failed() {
             );
             continue;
         };
-        assert_eq!(
-            response["result"]["isError"], true,
+        assert!(
+            stopped_at_the_verdict(&response),
             "{label}: the lane cleared a verdict it should have refused: {text}"
         );
         assert!(
@@ -1767,26 +1743,13 @@ fn an_unfinished_sibling_check_run_refuses_a_never_ran_clearance() {
     run.issue = Some(estigia::identity::Identity::Number(12));
     run.state = Some("review".to_owned());
     run.repo_dir = Some(repo.to_path_buf());
+    hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
     assert!(
         estigia::harness::session::store(&runs_dir, &run).expect("the pointer is writable"),
         "the fixture pointer was not stored"
     );
 
-    let request = serde_json::json!({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": { "name": "record_computed_verdict", "arguments": {
-            "issue": 12,
-            "run_id": reviewer,
-            "epoch": epoch,
-            "pr": 7,
-            "head": head,
-            "base": base,
-            "digest": digest,
-            "worktree": repo.display().to_string(),
-            "never_ran_evidence_file": evidence.display().to_string(),
-        }}
-    })
-    .to_string();
+    let request = deliver_until("verdict", reviewer, Some(evidence.as_path()));
 
     let log = trace.path().join("unfinished-sibling.log");
     let mut child = tracker_command(home, repo, bin, &script)
@@ -1822,8 +1785,8 @@ fn an_unfinished_sibling_check_run_refuses_a_never_ran_clearance() {
         calls.contains("actions/runs/800000001/jobs"),
         "the never-ran run's jobs were never read: {calls}"
     );
-    assert_eq!(
-        response["result"]["isError"], true,
+    assert!(
+        stopped_at_the_verdict(&response),
         "a head with an unfinished sibling check run cleared a verdict with evidence supplied: \
          {text}"
     );
@@ -1979,26 +1942,13 @@ fn a_head_with_two_failing_runs_refuses_on_either_listing_order() {
         run.issue = Some(estigia::identity::Identity::Number(12));
         run.state = Some("review".to_owned());
         run.repo_dir = Some(repo.to_path_buf());
+        hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
         assert!(
             estigia::harness::session::store(&runs_dir, &run).expect("the pointer is writable"),
             "the fixture pointer was not stored"
         );
 
-        let request = serde_json::json!({
-            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": { "name": "record_computed_verdict", "arguments": {
-                "issue": 12,
-                "run_id": reviewer,
-                "epoch": epoch,
-                "pr": 7,
-                "head": head,
-                "base": base,
-                "digest": digest,
-            "worktree": repo.display().to_string(),
-                "never_ran_evidence_file": evidence.display().to_string(),
-            }}
-        })
-        .to_string();
+        let request = deliver_until("verdict", reviewer, Some(evidence.as_path()));
 
         let mut child = tracker_command(home, repo, bin, &script)
             .arg("mcp")
@@ -2038,8 +1988,8 @@ fn a_head_with_two_failing_runs_refuses_on_either_listing_order() {
                 && calls.contains("actions/runs/500000002/jobs"),
             "{label}: not every distinct workflow run on the head was classified: {calls}"
         );
-        assert_eq!(
-            response["result"]["isError"], true,
+        assert!(
+            stopped_at_the_verdict(&response),
             "{label}: a head with a genuinely-failed run beside a never-ran one cleared a verdict \
              even with evidence supplied: {text}"
         );
@@ -2154,26 +2104,13 @@ fn a_blank_or_filler_never_ran_evidence_file_is_told_apart_from_no_file_at_all()
     run.issue = Some(estigia::identity::Identity::Number(12));
     run.state = Some("review".to_owned());
     run.repo_dir = Some(repo.to_path_buf());
+    hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
     assert!(
         estigia::harness::session::store(&runs_dir, &run).expect("the pointer is writable"),
         "the fixture pointer was not stored"
     );
 
-    let request = serde_json::json!({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": { "name": "record_computed_verdict", "arguments": {
-            "issue": 12,
-            "run_id": reviewer,
-            "epoch": epoch,
-            "pr": 7,
-            "head": head,
-            "base": base,
-            "digest": digest,
-            "worktree": repo.display().to_string(),
-            "never_ran_evidence_file": evidence.display().to_string(),
-        }}
-    })
-    .to_string();
+    let request = deliver_until("verdict", reviewer, Some(evidence.as_path()));
 
     use std::io::Write;
     for (label, contents) in [("blank", "   \n\t"), ("filler", "n/a")] {
@@ -2204,20 +2141,21 @@ fn a_blank_or_filler_never_ran_evidence_file_is_told_apart_from_no_file_at_all()
             .to_owned();
         let calls = std::fs::read_to_string(&log).unwrap_or_default();
 
-        assert_eq!(
-            response["result"]["isError"], true,
+        assert!(
+            stopped_at_the_verdict(&response),
             "{label}: a {contents:?} --never-ran-evidence-file cleared the head: {text}"
         );
-        // The reason is rendered as its own parenthesised line, distinct from
-        // the detail prose that also names `publication-lane-never-ran` as the
-        // *other* case's reason — a plain substring check on the whole text
-        // would pass on that mention alone.
-        assert!(
-            text.contains("(blank-never-ran-evidence)"),
+        // The reason is the stop's own field, distinct from the detail prose that also
+        // names `publication-lane-never-ran` as the *other* case's reason — a plain
+        // substring check on the whole text would pass on that mention alone.
+        let answer: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or_else(|_| panic!("{label}: {text}"));
+        assert_eq!(
+            answer["stopped"]["reason"], "blank-never-ran-evidence",
             "{label}: a {contents:?} evidence file was not told apart from an absent one: {text}"
         );
-        assert!(
-            !text.contains("(publication-lane-never-ran)"),
+        assert_ne!(
+            answer["stopped"]["refusal"]["code"], "publication-lane-never-ran",
             "{label}: a {contents:?} evidence file was refused as though none had been supplied \
              at all: {text}"
         );
@@ -2337,26 +2275,13 @@ fn a_partial_jobs_page_refuses_rather_than_clearing_the_head() {
     run.issue = Some(estigia::identity::Identity::Number(12));
     run.state = Some("review".to_owned());
     run.repo_dir = Some(repo.to_path_buf());
+    hold_receipt(&mut run, repo, (&epoch, &head, &base, &digest));
     assert!(
         estigia::harness::session::store(&runs_dir, &run).expect("the pointer is writable"),
         "the fixture pointer was not stored"
     );
 
-    let request = serde_json::json!({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": { "name": "record_computed_verdict", "arguments": {
-            "issue": 12,
-            "run_id": reviewer,
-            "epoch": epoch,
-            "pr": 7,
-            "head": head,
-            "base": base,
-            "digest": digest,
-            "worktree": repo.display().to_string(),
-            "never_ran_evidence_file": evidence.display().to_string(),
-        }}
-    })
-    .to_string();
+    let request = deliver_until("verdict", reviewer, Some(evidence.as_path()));
 
     let log = trace.path().join("partial-page.log");
     let mut child = tracker_command(home, repo, bin, &script)
@@ -2387,8 +2312,8 @@ fn a_partial_jobs_page_refuses_rather_than_clearing_the_head() {
         calls.contains("actions/runs/600000001/jobs?per_page=100"),
         "the jobs listing was not read with per_page=100, matching the check-runs read: {calls}"
     );
-    assert_eq!(
-        response["result"]["isError"], true,
+    assert!(
+        stopped_at_the_verdict(&response),
         "a partial jobs page cleared the head even with evidence supplied: {text}"
     );
     assert!(
@@ -2883,7 +2808,8 @@ fn review_tier_reads_the_repair_range_named_by_parent_head_over_the_real_mcp_ser
 
     let request = serde_json::json!({
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": { "name": "review_tier", "arguments": {
+        "params": { "name": "review_read", "arguments": {
+            "view": "tier",
             "base": base,
             "head": head,
             "parent_head": parent_head,
@@ -2914,7 +2840,7 @@ fn review_tier_reads_the_repair_range_named_by_parent_head_over_the_real_mcp_ser
         .to_owned();
     assert_ne!(
         response["result"]["isError"], true,
-        "review_tier refused a repair round: {text}"
+        "review_read with view tier refused a repair round: {text}"
     );
     let answer: serde_json::Value =
         serde_json::from_str(&text).unwrap_or_else(|_| panic!("{text}"));
@@ -3010,7 +2936,8 @@ fn target_classifies_base_movement_when_recorded_base_is_given_over_the_real_mcp
 
     let request = serde_json::json!({
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": { "name": "target", "arguments": {
+        "params": { "name": "review_read", "arguments": {
+            "view": "target",
             "base": "main",
             "recorded_base": recorded_base,
             "worktree": repo.display().to_string(),
@@ -3040,7 +2967,7 @@ fn target_classifies_base_movement_when_recorded_base_is_given_over_the_real_mcp
         .to_owned();
     assert_ne!(
         response["result"]["isError"], true,
-        "target refused a base-movement read: {text}"
+        "review_read with view target refused a base-movement read: {text}"
     );
     let answer: serde_json::Value =
         serde_json::from_str(&text).unwrap_or_else(|_| panic!("{text}"));

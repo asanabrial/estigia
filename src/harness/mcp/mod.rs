@@ -525,7 +525,9 @@ fn read_only_tracker_refusal(name: &str, context: &GateContext) -> Refusal {
         let admitted = tools::ASSISTED_ONLY
             .iter()
             .chain(tools::NEEDS_NO_TRANSPORT)
+            .filter(|name| tools::retired(name).is_none())
             .copied()
+            .chain(["review_read (view tier or target)"])
             .collect::<Vec<_>>()
             .join(", ");
         return Refusal::not_started(
@@ -851,6 +853,53 @@ fn pull_review_step(arguments: &Value) -> Result<(String, Value), ToolFailure> {
     Ok((format!("pr_review_{action}"), rest))
 }
 
+const TIER_ONLY: &[&str] = &[
+    "parent_head",
+    "clearing_finding",
+    "focus",
+    "focus_reason",
+    "raise",
+    "raise_reason",
+];
+const TARGET_ONLY: &[&str] = &["recorded_base", "native_start", "manifest"];
+
+/// The arguments a facade hands the row it forwards to: the row's own, `compact`, and the
+/// `dropping` ones the facade alone reads, taken out. Anything else is refused by name, so a
+/// facade never takes in silence what the row would have refused.
+fn forwarded(
+    facade: &str,
+    row: &'static str,
+    arguments: &Value,
+    dropping: &[&str],
+) -> Result<(&'static str, Value), ToolFailure> {
+    let target = tools::find(row).ok_or_else(|| {
+        ToolFailure::Malformed(format!("{facade} forwards to {row}, which is no row"))
+    })?;
+    let takes = |key: &str| {
+        key == "compact"
+            || dropping.contains(&key)
+            || target.arguments.iter().any(|argument| argument.name == key)
+    };
+    let mut rest = arguments.clone();
+    if let Some(object) = rest.as_object_mut() {
+        if let Some(key) = object.keys().find(|key| !takes(key)) {
+            return Err(ToolFailure::Malformed(format!(
+                "{facade} does not take `{key}`; it takes {}",
+                target
+                    .arguments
+                    .iter()
+                    .map(|argument| format!("`{}`", argument.name))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+        for key in dropping {
+            object.remove(*key);
+        }
+    }
+    Ok((row, rest))
+}
+
 fn in_words_of(facade: &str, row: &str, failure: ToolFailure) -> ToolFailure {
     match failure {
         ToolFailure::Malformed(message) => ToolFailure::Malformed(
@@ -859,6 +908,83 @@ fn in_words_of(facade: &str, row: &str, failure: ToolFailure) -> ToolFailure {
                 .map_or(message.clone(), |rest| format!("{facade}{rest}")),
         ),
         other => other,
+    }
+}
+
+/// The row a `review_read` view of `tier` or `target` is read through, with its arguments;
+/// `None` for every other view, which is refused here when it lacks the `issue` it needs or
+/// carries an argument that belongs to one of those two.
+fn read_view_step(
+    arguments: &Value,
+) -> Result<Option<(&'static str, &'static str, Value)>, ToolFailure> {
+    let view = arguments.get("view").and_then(Value::as_str);
+    let (view, row) = match view {
+        Some("tier") => ("tier", "review_tier"),
+        Some("target") => ("target", "target"),
+        Some(other) => {
+            for (keys, owner) in [(TIER_ONLY, "tier"), (TARGET_ONLY, "target")] {
+                if let Some(key) = keys.iter().find(|key| arguments.get(**key).is_some()) {
+                    return Err(ToolFailure::Malformed(format!(
+                        "`review_read` view `{other}` does not take `{key}`, which belongs to \
+                         view `{owner}`"
+                    )));
+                }
+            }
+            if arguments.get("issue").is_none()
+                && tools::find("review_read").is_some_and(|tool| {
+                    tool.arguments
+                        .iter()
+                        .find(|argument| argument.name == "view")
+                        .and_then(|argument| argument.choices)
+                        .is_some_and(|views| views.contains(&other))
+                })
+            {
+                return Err(ToolFailure::Malformed(format!(
+                    "review_read needs `issue` for view `{other}`: Issue number."
+                )));
+            }
+            return Ok(None);
+        }
+        None => return Ok(None),
+    };
+    let label = format!("`review_read` view `{view}`");
+    let (row, rest) = forwarded(&label, row, arguments, &["view", "issue"])?;
+    Ok(Some((row, view, rest)))
+}
+
+/// The row a `collect_review_input` with `launch` or `checks` is carried out by, with its
+/// arguments; `None` for a plain collect. Nothing launches without `launch: true` and a
+/// named slot.
+fn collect_step(arguments: &Value) -> Result<Option<(&'static str, Value)>, ToolFailure> {
+    let on = |key: &str| arguments.get(key) == Some(&json!(true));
+    match (on("launch"), on("checks")) {
+        (false, false) => Ok(None),
+        (true, true) => Err(ToolFailure::Malformed(
+            "`launch` and `checks` are two different calls; give one".to_owned(),
+        )),
+        (true, false) => {
+            if arguments.get("name").is_none() && arguments.get("names").is_none() {
+                return Err(ToolFailure::Malformed(
+                    "`collect_review_input` with `launch: true` needs `name` or `names`: nothing \
+                     launches without a named slot"
+                        .to_owned(),
+                ));
+            }
+            forwarded(
+                "`collect_review_input` with `launch: true`",
+                "launch_review_input",
+                arguments,
+                &["launch", "checks"],
+            )
+            .map(Some)
+        }
+        (false, true) => forwarded(
+            "`collect_review_input` with `checks: true`",
+            "run_checks",
+            arguments,
+            &["launch", "checks"],
+        )
+        .map(Some),
     }
 }
 
@@ -878,6 +1004,12 @@ fn run_tool_asking(
         let action = step.trim_start_matches("pr_review_");
         return run_tool_asking(&step, &arguments, context, consent)
             .map_err(|failure| in_words_of(&format!("pr_review action {action}"), &step, failure));
+    }
+    if name == "review_read"
+        && let Some((row, view, rest)) = read_view_step(arguments)?
+    {
+        return run_tool_asking(row, &rest, context, consent)
+            .map_err(|failure| in_words_of(&format!("review_read view {view}"), row, failure));
     }
     let tool = tools::find(name).ok_or_else(|| {
         let known = TOOLS
@@ -1032,6 +1164,14 @@ fn run_tool_asking(
         if let Some(refusal) = review_claim_refusal(tool, arguments, &holding, holds_several) {
             return Err(ToolFailure::Refused(Box::new(refusal)));
         }
+    }
+
+    if name == "collect_review_input"
+        && let Some((row, rest)) = collect_step(arguments)?
+    {
+        return run_tool_asking(row, &rest, Ok(context), consent).map_err(|failure| {
+            in_words_of("collect_review_input with launch or checks", row, failure)
+        });
     }
 
     match name {
@@ -1689,6 +1829,7 @@ fn run_tool_asking(
     let mut body = answer.body;
     if let Some(body) = body.as_mut() {
         route_through_deliver(tool.name, body, || delivers(context));
+        capture_through_collect(tool.name, body);
     }
     if compact
         && tool.name == "review_status"
@@ -2256,29 +2397,51 @@ fn error_response(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
+fn review_status_of<'a>(tool: &str, body: &'a mut Value) -> Option<&'a mut Value> {
+    match tool {
+        "review_status" => Some(body),
+        _ => body.get_mut("review_status"),
+    }
+    .filter(|status| status.is_object())
+}
+
 fn route_through_deliver(tool: &str, body: &mut Value, delivers: impl FnOnce() -> bool) {
-    let status = match tool {
-        "review_status" => body,
-        _ => match body.get_mut("review_status") {
-            Some(status) => status,
-            None => return,
-        },
+    let Some(next) = review_status_of(tool, body).and_then(|status| status.get_mut("next")) else {
+        return;
     };
-    let next = &mut status["next"];
-    if next["kind"] != "execute"
-        || !matches!(
-            next["reason_code"].as_str(),
-            Some("verdict-computable" | "approved")
-        )
-        || !delivers()
-    {
+    let until = match next["reason_code"].as_str() {
+        Some("verdict-computable") => "verdict",
+        Some("approved") => "ci",
+        _ => return,
+    };
+    if next["kind"] != "execute" {
         return;
     }
+    let issue = next["arguments"]["issue"].clone();
     next["operation"] = json!("deliver");
-    next["arguments"] = json!({
-        "issue": next["arguments"]["issue"],
-        "wait_seconds": ROUTED_DELIVER_WAIT_SECONDS,
-    });
+    next["arguments"] = if delivers() {
+        json!({"issue": issue, "wait_seconds": ROUTED_DELIVER_WAIT_SECONDS})
+    } else {
+        json!({"issue": issue, "until": until})
+    };
+}
+
+/// A slot `review_status` offers to start is started by `collect_review_input` with
+/// `launch: true`, so its `capture` says that.
+fn capture_through_collect(tool: &str, body: &mut Value) {
+    let Some(inputs) = review_status_of(tool, body)
+        .and_then(|status| status.get_mut("next"))
+        .and_then(|next| next.get_mut("inputs"))
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    for input in inputs {
+        if input["capture"] == "launch_review_input" {
+            input["capture"] = json!("collect_review_input");
+            input["launch"] = json!(true);
+        }
+    }
 }
 
 /// The wait a routed `deliver` asks for: the per-call ceiling every host was

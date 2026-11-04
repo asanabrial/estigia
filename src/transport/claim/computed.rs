@@ -710,14 +710,15 @@ pub(super) fn require_computed_clearance(
         ComputedOutcome::Incomplete => Err(super::stop(
             "computed-verdict-incomplete",
             detail,
-            "keep the PR draft; call `review_status`, then `launch_review_input` and then `collect_review_input` for every lens slot \
-                 it offers, and for the validator after a correction, then record the verdict",
+            "keep the PR draft; call `review_status`, then `collect_review_input` with `launch: \
+                 true` and then without it for every lens slot it offers, and for the validator \
+                 after a correction, then record the verdict",
         )),
         ComputedOutcome::Approved if recorded.is_empty() && level != RiskLevel::Low => {
             Err(super::stop(
                 "computed-verdict-unrecorded",
                 detail,
-                "keep the PR draft; record the computed verdict with `record_computed_verdict`",
+                "keep the PR draft; record the computed verdict with `deliver` and `until: verdict`",
             ))
         }
         ComputedOutcome::Approved => {
@@ -1042,9 +1043,9 @@ pub fn record_computed_verdict(
             "reason": "computed-verdict-incomplete",
             "computed": computed.outcome.as_str(),
             "missing_roles": computed.missing_roles,
-            "action": "call `review_status`, then `launch_review_input` and then `collect_review_input` for each missing lens slot it \
-                       offers, and for the validator after a correction, then record the verdict \
-                       again",
+            "action": "call `review_status`, then `collect_review_input` with `launch: true` and \
+                       then without it for each missing lens slot it offers, and for the \
+                       validator after a correction, then record the verdict again",
         })));
     }
 

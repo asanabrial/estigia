@@ -1395,7 +1395,8 @@ fn never_ran_evidence_required(
              spending-limit failure on the account running Actions kept it from starting.{heard} \
              Estigia cannot verify the cause from here: confirm it yourself \u{2014} the account's \
              Actions billing status, or an equivalent local check \u{2014} then record this same \
-             verdict again with --never-ran-evidence-file naming a file that says what you found. \
+             verdict again, through `deliver` with `never_ran_evidence_file` (the command line's \
+             --never-ran-evidence-file), naming a file that says what you found. \
              That argument changes nothing for a run that genuinely executed a step; it is read \
              only when every job's steps are empty",
             named.join(", "),
@@ -1784,8 +1785,8 @@ fn publication_lane_answer(
                     "action": "every job on every failing run reports no steps at all \u{2014} \
                                that is what GitHub recorded; commonly a billing or spending-limit \
                                failure on the account running Actions kept it from starting rather \
-                               than a defect. Launch: record_computed_verdict can still approve this \
-                               head, gated on --never-ran-evidence-file rather than on green",
+                               than a defect. Launch: recording the computed verdict can still approve \
+                               this head, gated on --never-ran-evidence-file rather than on green",
                 }),
             ),
             (Some(RedClassification::Ran(red)), _) => (
@@ -3772,8 +3773,8 @@ fn unjudged_republish_refusal(
                        ledger computes approved, no finding has been recorded against that exact \
                        receipt since its newest lens report, and the base has not advanced past \
                        the one it recorded. Republishing now would pay a new review for a \
-                       warning or suggestion the policy elects nothing on. Run \
-                       record_computed_verdict first and deliver; or record a review_finding \
+                       warning or suggestion the policy elects nothing on. Record the computed \
+                       verdict first (`deliver` with `until: verdict`) and deliver; or record a review_finding \
                        against that receipt naming the defect the panel did not weigh, which \
                        licenses the narrow repair. Nothing has been pushed and no pull request \
                        was opened",
@@ -4153,9 +4154,9 @@ fn release_basis(
             "base": receipt.base,
             "digest": receipt.digest,
         },
-        "action": "keep the PR draft; call `review_status`, `launch_review_input` and then `collect_review_input` for every \
-                   lens slot it offers, then `record_computed_verdict`, for this exact latest \
-                   receipt",
+        "action": "keep the PR draft; call `review_status`, `collect_review_input` with `launch: \
+                   true` and then without it for every lens slot it offers, then `deliver` with \
+                   `until: verdict`, for this exact latest receipt",
     })))
 }
 
@@ -7837,8 +7838,9 @@ pub fn retired_review_verdict(receipt: Option<&ReviewTransaction>, ignored: &[&s
         "ok": false,
         "reason": "review-verdict-retired",
         "ignored": ignored,
-        "action": "judges record findings only; call `launch_review_input` and then `collect_review_input` for every lens slot \
-                   `review_status` offers, then `record_computed_verdict` for the exact receipt",
+        "action": "judges record findings only; call `collect_review_input` with `launch: true` \
+                   and then without it for every lens slot `review_status` offers, then \
+                   `deliver` with `until: verdict` for the exact receipt",
     });
     if let Some(receipt) = receipt {
         envelope["receipt"] = serde_json::json!({
@@ -7864,8 +7866,8 @@ pub fn recorded_by_capture_only(operation: &str) -> Failure {
         "reason": "recorded-by-capture-only",
         "operation": operation,
         "action": "the binary launches this reviewer and records its result itself; call \
-                   `review_status` for the slot it offers, then `launch_review_input` and then `collect_review_input` with that \
-                   slot's name",
+                   `review_status` for the slot it offers, then `collect_review_input` with \
+                   `launch: true` and then without it, with that slot's name",
     }))
 }
 
@@ -9952,12 +9954,12 @@ fn published(
     // the judgement happens at the edit.
     let next = if inline_payload {
         "transition --to review, hand each judge the `payload` from this answer rather than a \
-         checkout to search, record each lens report and the computed verdict, then release_ci with \
-         this exact receipt"
+         checkout to search, record each lens report and the computed verdict, then release CI \
+         with this exact receipt"
     } else {
-        "ask for start_review on the publication, or transition --to review, launch_review_input \
-         and collect_review_input for each slot review_status offers, record_computed_verdict, \
-         then release_ci with this exact receipt"
+        "ask for start_review on the publication, or transition --to review, collect_review_input \
+         with launch: true and then without it for each slot review_status offers, then deliver \
+         with until: ci for this exact receipt"
     };
     // The topology declaration, the lineage, the autoclose verdict and its
     // mandatory follow-up all moved to `review_transaction` — see
