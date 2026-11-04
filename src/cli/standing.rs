@@ -20,7 +20,7 @@ use crate::transport::{Context, Failure};
 
 const RECENT: usize = 5;
 const PREVIEW: usize = 200;
-const LINEAR: &str = "the Linear binding reads an issue's title, description and state type only";
+const LINEAR: &str = "the Linear binding reads an issue's title, description, URL and state only";
 
 /// What the tracker says about an issue and a pull request.
 pub(crate) trait Tracker {
@@ -28,6 +28,8 @@ pub(crate) trait Tracker {
     fn issue(&self, repo: &Repo, number: u64) -> Result<Value, String>;
     /// `number`, `url`, `state`, `headRefOid` and `baseRefOid` of a pull request.
     fn pull(&self, repo: &Repo, number: u64) -> Result<Value, String>;
+    /// `state`, `closed` and `url` of a Linear issue.
+    fn linear(&self, key: &str) -> Result<Value, String>;
 }
 
 struct Gh;
@@ -58,6 +60,14 @@ impl Tracker for Gh {
             "--json",
             "number,url,state,headRefOid,baseRefOid",
         ])
+    }
+
+    fn linear(&self, key: &str) -> Result<Value, String> {
+        crate::transport::linear::read_standing(&Identity::Key(key.to_owned()))
+            .map(|standing| {
+                json!({ "state": standing.state, "closed": standing.closed, "url": standing.url })
+            })
+            .map_err(|failure| why(&failure))
     }
 }
 
@@ -111,7 +121,7 @@ fn unavailable_everywhere(reason: &str) -> Value {
     json!({ "unavailable": reason })
 }
 
-fn linear(key: &str, taken_at: u64) -> Value {
+fn linear(key: &str, taken_at: u64, inputs: &Inputs<'_>) -> Value {
     let mut answer = json!({
         "reference": key,
         "taken_at": taken_at,
@@ -121,7 +131,33 @@ fn linear(key: &str, taken_at: u64) -> Value {
     for field in FIELDS {
         answer[field] = unavailable_everywhere(LINEAR);
     }
+    match inputs.tracker.linear(key) {
+        Ok(standing) => {
+            answer["issue"] = json!({
+                "state": if standing["closed"] == true { "closed" } else { "open" },
+                "url": standing["url"],
+            });
+            answer["workflow"] = json!({ "state": standing["state"] });
+        }
+        Err(reason) => {
+            answer["issue"] = unavailable_everywhere(&reason);
+            answer["workflow"] = unavailable_everywhere(&reason);
+        }
+    }
+    let held = holders(inputs.root, &Identity::Key(key.to_owned()), None);
+    answer["messages"] = section(held.as_ref().map_err(Clone::clone).and_then(|held| {
+        match store::open_for_read(&store::beside(inputs.root)) {
+            Ok(Some(opened)) => messages(&opened, held, taken_at),
+            Ok(None) => Err("the local store does not exist yet, so nothing was read".to_owned()),
+            Err(failure) => Err(why(&failure)),
+        }
+    }));
+    answer["holders"] = section(held.map(|held| json!({ "rows": rows_of(&held) })));
     answer
+}
+
+fn rows_of(held: &[Holder]) -> Vec<Value> {
+    held.iter().map(|holder| holder.row.clone()).collect()
 }
 
 const FIELDS: [&str; 10] = [
@@ -177,18 +213,20 @@ struct Holder {
     row: Value,
 }
 
-fn holders(root: &Path, scope: &Scope) -> Result<Vec<Holder>, String> {
+fn holders(root: &Path, issue: &Identity, repo: Option<&Repo>) -> Result<Vec<Holder>, String> {
     let every = crate::cli::sessions::entries(root).map_err(|refusal| refusal.message)?;
     Ok(every
         .into_iter()
-        .filter(|entry| entry.issue == Some(Identity::Number(scope.number)))
+        .filter(|entry| entry.issue.as_ref() == Some(issue))
         .filter(|entry| {
-            [entry.repo_dir.as_deref(), entry.worktree.as_deref()]
-                .into_iter()
-                .flatten()
-                .find_map(|dir| scope::repo_at(Path::new(dir)))
-                .as_ref()
-                == Some(&scope.repo)
+            repo.is_none_or(|repo| {
+                [entry.repo_dir.as_deref(), entry.worktree.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .find_map(|dir| scope::repo_at(Path::new(dir)))
+                    .as_ref()
+                    == Some(repo)
+            })
         })
         .map(|entry| {
             let branch = entry.worktree.as_deref().and_then(|tree| {
@@ -281,6 +319,7 @@ fn from_store(
 ) -> [(&'static str, Result<Value, String>); 7] {
     let path = store::beside(inputs.root);
     let spelled = scope::spelled(&scope.repo);
+    let number = Identity::Number(scope.number);
     let opened = match store::open_for_read(&path) {
         Ok(Some(opened)) => Ok(opened),
         Ok(None) => Err("the local store does not exist yet, so nothing was read".to_owned()),
@@ -337,13 +376,15 @@ fn from_store(
         (
             "holders",
             with(&|_| {
-                holders(inputs.root, scope).map(|held| json!({ "rows": held.iter().map(|h| h.row.clone()).collect::<Vec<_>>() }))
+                holders(inputs.root, &number, Some(&scope.repo))
+                    .map(|held| json!({ "rows": rows_of(&held) }))
             }),
         ),
         (
             "messages",
             with(&|store| {
-                holders(inputs.root, scope).and_then(|held| messages(store, &held, until))
+                holders(inputs.root, &number, Some(&scope.repo))
+                    .and_then(|held| messages(store, &held, until))
             }),
         ),
     ]
@@ -397,7 +438,7 @@ pub(crate) fn answer(reference: &str, inputs: &Inputs<'_>) -> Result<Value, Refu
     let taken_at = inputs.now.ok_or_else(super::feed::clock_unreadable)?;
     let parsed = Reference::parse(reference).map_err(|detail| malformed(&detail))?;
     if let Reference::Local(Identity::Key(key)) = &parsed {
-        return Ok(linear(key, taken_at));
+        return Ok(linear(key, taken_at, inputs));
     }
     let path = store::beside(inputs.root);
     let scope = scope::resolve(

@@ -27,8 +27,8 @@ second lookup. Title and description are what the run works from; the state's ty
 refuse an issue that is `completed` or `canceled` (`issue-not-open`). A key is
 upper-cased, so its two spellings are one issue, and its team (the text before the last `-`)
 must be the configured `<team-key>` (`linear-team-mismatch`). The query is a constant in
-`src/transport/linear.rs`, beside the two operations *Moving a mapped state* sends; no other
-operation is composed.
+`src/transport/linear.rs`, beside the two operations *Moving a mapped state* sends and the read
+`where` makes of a key's state and URL (`query EstigiaStanding`); no other operation is composed.
 
 The issue identity is a string on this path — the branch name carries the key, so Linear's own
 GitHub integration links the draft pull request, which is that integration acting and not Estigia.
