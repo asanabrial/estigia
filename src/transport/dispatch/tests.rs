@@ -427,6 +427,18 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
     // `review` was left unable to publish at all.
     const OPERATOR_ONLY: &[(&str, &str, &str)] = &[
         (
+            "draft-pr",
+            "published-head",
+            "read from the run pointer by the tool server: it is what the run already pushed, \
+             which a caller naming it could understate",
+        ),
+        (
+            "draft-pr",
+            "corrections-spent",
+            "read from the run pointer by the tool server: it is the count `Corrections per \
+             lineage` holds, which a caller naming it could reset",
+        ),
+        (
             "review-finding",
             "lens",
             "set only by `collect_review_input`; a hand call naming it is refused \

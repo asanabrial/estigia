@@ -1736,6 +1736,16 @@ fn run_operation(
         }
         "draft-pr" => {
             let layered = context.layered();
+            let spent = f.get("corrections-spent").unwrap_or("0");
+            let corrections_spent = spent.trim().parse::<u32>().map_err(|_| {
+                Failure::ConfigDefect(serde_json::json!({
+                    "ok": false,
+                    "reason": "malformed-argument",
+                    "operation": operation,
+                    "argument": "--corrections-spent",
+                    "value": spent,
+                }))
+            })?;
             let drafted = super::draft::draft_pull_request(
                 context,
                 &super::draft::Draft {
@@ -1746,6 +1756,9 @@ fn run_operation(
                     corrections: layered.corrections_after_ready(),
                     ready_by: layered.ready_by(),
                     self_review: layered.self_review(),
+                    published_head: f.get("published-head"),
+                    corrections_spent,
+                    corrections_allowed: super::claim::corrections_per_lineage(context),
                 },
             )?;
             let issue = f.get("issue").map(|_| identity()).transpose()?;

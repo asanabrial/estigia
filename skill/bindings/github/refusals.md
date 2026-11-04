@@ -20,6 +20,7 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `head-moved` | The head is not the one read or the one reviewed. | `pr_review_release`, then a new `pr_review_claim`; no verdict carries across. |
 | `draft-pr-branch-not-checked-out` | The checkout does not have the pointer's branch checked out. | Return to the checkout/branch recorded by `assist`. |
 | `draft-pr-exists-ready` | A ready PR exists and correction policy is `refuse`. | A person decides the repository's correction policy; the run does not override it. |
+| `draft-pr-corrections-spent` | This run has pushed the corrections `Corrections per lineage` allows to this branch and the head is a new one; nothing was pushed. | Report what is left to the person, who decides whether to raise the row. |
 | `draft-pr-ready-not-read-back` | The branch is published and marking its draft ready did not read back (`committed`). | Do not publish again; call `ready_pr`. |
 | `draft-pr-redraft-not-read-back` | A requested return to draft was not confirmed; no correction was pushed. | Read the PR before attempting publication again. |
 | `ready-pr-reviewed-head-required` | `Self review` is `on` and `reviewed_head` was not given. | Review the published head in a context that did not write it, then pass it as `reviewed_head`. |

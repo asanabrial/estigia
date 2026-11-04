@@ -261,3 +261,46 @@ fn without_a_self_review_ready_needs_no_reviewed_head() {
     let (outcome, _) = ready_with(&rig, false, None);
     outcome.expect("nothing was reviewed, so nothing is stated");
 }
+
+#[test]
+fn a_new_head_past_the_row_is_refused_before_anything_is_pushed() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = script(&serde_json::json!([]), &view(&rig.head, true));
+    let outcome = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.call_after(&"0".repeat(40), 1)
+    });
+    let envelope = outcome.expect_err("a correction past the row").envelope();
+    assert_eq!(
+        envelope["reason"], "draft-pr-corrections-spent",
+        "{envelope}"
+    );
+    assert_eq!(envelope["corrections_allowed"], 1, "{envelope}");
+    assert!(!rig.on_origin());
+    assert!(
+        !logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr create") || call.starts_with("pr list")),
+        "the refusal came after a host call"
+    );
+}
+
+#[test]
+fn the_row_stops_only_a_new_head_and_only_once_it_is_spent() {
+    for (same_head, spent) in [(true, 1), (false, 0)] {
+        let rig = rig();
+        let bin = crate::test_env::scripted_gh();
+        let answers = script(&serde_json::json!([]), &view(&rig.head, true));
+        let published = if same_head {
+            rig.head.clone()
+        } else {
+            "0".repeat(40)
+        };
+        crate::test_env::with_scripted_gh(bin.path(), &answers, || {
+            rig.call_after(&published, spent)
+        })
+        .unwrap_or_else(|failure| panic!("{same_head}/{spent}: {}", failure.detail()));
+        assert!(rig.on_origin(), "{same_head}/{spent}");
+    }
+}

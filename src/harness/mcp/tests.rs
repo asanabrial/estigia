@@ -2639,7 +2639,14 @@ fn every_tool_sends_flags_the_transport_accepts() {
             | "review-computed-verdict"
             | "spend" => &["--operation-id"],
             "review-thread" => &["--branch", "--worktree"],
-            "draft-pr" | "ready-pr" => &["--branch", "--worktree", "--issue"],
+            "draft-pr" => &[
+                "--branch",
+                "--worktree",
+                "--issue",
+                "--published-head",
+                "--corrections-spent",
+            ],
+            "ready-pr" => &["--branch", "--worktree", "--issue"],
             "review-stages" => &["--branch", "--issue"],
             _ => &[],
         };
@@ -6284,6 +6291,253 @@ fn draft_pr_publishes_the_branch_and_checkout_the_assisted_pointer_names() {
     )
     .unwrap();
     assert!(answer.to_string().contains("reply-1"), "{answer}");
+}
+
+struct AssistedBranch {
+    root: tempfile::TempDir,
+    _repo: tempfile::TempDir,
+    worktree: std::path::PathBuf,
+    context: GateContext,
+    body: std::path::PathBuf,
+    bin: &'static tempfile::TempDir,
+}
+
+fn git_at(at: &std::path::Path, arguments: &[&str]) -> String {
+    crate::transport::run(
+        &["git"]
+            .into_iter()
+            .chain(arguments.iter().copied())
+            .collect::<Vec<_>>(),
+        Some(at),
+        crate::transport::How::write(),
+    )
+    .unwrap_or_else(|failure| panic!("git {arguments:?}: {}", failure.detail()))
+    .stdout
+    .trim()
+    .to_owned()
+}
+
+fn assisted_branch() -> AssistedBranch {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = repository_with_commit();
+    let origin = root.path().join("origin.git");
+    std::fs::create_dir_all(&origin).expect("a remote directory");
+    git_at(&origin, &["init", "--quiet", "--bare"]);
+    git_at(repo.path(), &["branch", "-M", "main"]);
+    git_at(
+        repo.path(),
+        &["remote", "add", "origin", &origin.to_string_lossy()],
+    );
+    git_at(repo.path(), &["push", "--quiet", "origin", "main"]);
+    let worktree = root.path().join("tree");
+    git_at(
+        repo.path(),
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "issue-12",
+            worktree.to_str().unwrap(),
+        ],
+    );
+    let mut context = assisted_context(&root);
+    context.repo_dir = worktree.clone();
+    let mut run = session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.assisted = true;
+    run.branch = Some("issue-12".to_owned());
+    run.worktree = Some(worktree.clone());
+    run.repo_dir = Some(repo.path().to_path_buf());
+    session::store(&context.state_root, &run).expect("the pointer writes");
+    let body = root.path().join("body.md");
+    std::fs::write(&body, "Words.").expect("the body file");
+    AssistedBranch {
+        root,
+        _repo: repo,
+        worktree,
+        context,
+        body,
+        bin: crate::test_env::scripted_gh(),
+    }
+}
+
+const ASSISTED_PR: &str = "https://github.com/example/repo/pull/7";
+
+impl AssistedBranch {
+    fn commit(&self) -> String {
+        git_at(
+            &self.worktree,
+            &["commit", "--allow-empty", "--quiet", "-m", "work"],
+        );
+        git_at(&self.worktree, &["rev-parse", "HEAD"])
+    }
+
+    fn origin_head(&self) -> Option<String> {
+        git_at(
+            &self.worktree,
+            &["ls-remote", "--heads", "origin", "issue-12"],
+        )
+        .split_whitespace()
+        .next()
+        .map(str::to_owned)
+    }
+
+    fn publication(&self) -> Option<session::AssistedPublication> {
+        session::load(&self.context.state_root, "claude-abcd1234").assisted_publication
+    }
+
+    fn allow_corrections(&self, limit: u32) {
+        let skill = &self.context.skill_root;
+        std::fs::create_dir_all(skill).expect("the skill directory");
+        std::fs::write(
+            skill.join(crate::skill::CONTRACT),
+            format!("| Setting | Value |\n|---|---|\n| Corrections per lineage | {limit} |\n"),
+        )
+        .expect("the row writes");
+    }
+
+    fn view(&self, draft: bool) -> Value {
+        json!({
+            "number": 7, "url": ASSISTED_PR, "headRefOid": git_at(&self.worktree, &["rev-parse", "HEAD"]),
+            "headRefName": "issue-12", "state": "OPEN", "isDraft": draft,
+        })
+    }
+
+    fn draft(&self, create_status: i64) -> Result<Value, ToolFailure> {
+        let open = if self.publication().is_some() {
+            json!([self.view(true)]).to_string()
+        } else {
+            "[]".to_owned()
+        };
+        let answers = crate::test_env::answers(&[
+            json!({ "matches": "repo view", "stdout": r#"{"defaultBranchRef":{"name":"main"}}"# }),
+            json!({ "matches": "pr list", "stdout": open }),
+            json!({ "matches": "pr create", "stdout": ASSISTED_PR, "status": create_status }),
+            json!({ "matches": "pr view", "stdout": self.view(true).to_string() }),
+        ]);
+        tool_answer(crate::test_env::with_scripted_gh(
+            self.bin.path(),
+            &answers,
+            || {
+                run_tool(
+                    "draft_pr",
+                    &draft_pr_arguments(&self.body),
+                    Ok(&self.context),
+                )
+            },
+        ))
+    }
+
+    fn ready(&self, reviewed_head: Option<&str>) -> Result<Value, ToolFailure> {
+        let mut arguments = json!({ "run_id": "claude-abcd1234" });
+        if let Some(head) = reviewed_head {
+            arguments["reviewed_head"] = json!(head);
+        }
+        let answers = crate::test_env::answers(&[
+            json!({ "matches": "pr list", "stdout": json!([self.view(true)]).to_string() }),
+            json!({ "matches": "pr ready", "stdout": "" }),
+            json!({ "matches": "pr view", "stdout": self.view(false).to_string() }),
+        ]);
+        tool_answer(crate::test_env::with_logging_gh(
+            self.bin.path(),
+            &answers,
+            &self.root.path().join("gh.log"),
+            || run_tool("ready_pr", &arguments, Ok(&self.context)),
+        ))
+    }
+}
+
+fn tool_answer(outcome: Result<Value, ToolFailure>) -> Result<Value, ToolFailure> {
+    outcome.map(|answer| {
+        serde_json::from_str(answer["content"][0]["text"].as_str().expect("text")).expect("json")
+    })
+}
+
+fn refused_code(outcome: Result<Value, ToolFailure>) -> String {
+    match outcome {
+        Err(ToolFailure::Refused(refusal)) => refusal.code.to_string(),
+        other => panic!("not a refusal: {other:?}"),
+    }
+}
+
+#[test]
+fn draft_pr_counts_each_new_head_and_refuses_the_one_past_the_row() {
+    let rig = assisted_branch();
+    rig.allow_corrections(1);
+
+    let original = rig.commit();
+    let first = rig.draft(0).expect("the original publishes");
+    assert_eq!(first["corrections_spent"], 0, "{first}");
+    assert_eq!(first["corrections_allowed"], 1, "{first}");
+
+    let again = rig.draft(0).expect("the same head is no new round");
+    assert_eq!(again["corrections_spent"], 0, "{again}");
+    assert_eq!(rig.publication().map(|p| p.head), Some(original));
+
+    let corrected = rig.commit();
+    let second = rig.draft(0).expect("the one correction the row allows");
+    assert_eq!(second["corrections_spent"], 1, "{second}");
+    assert_eq!(rig.draft(0).expect("a retry of it")["corrections_spent"], 1);
+
+    let past = rig.commit();
+    assert_eq!(refused_code(rig.draft(0)), "draft-pr-corrections-spent");
+    assert_eq!(rig.origin_head().as_deref(), Some(corrected.as_str()));
+    let held = rig.publication().expect("the count stays on the pointer");
+    assert_eq!(
+        (held.head.as_str(), held.corrections),
+        (corrected.as_str(), 1)
+    );
+
+    rig.allow_corrections(2);
+    let raised = rig.draft(0).expect("a person's raised row clears the hold");
+    assert_eq!(raised["corrections_spent"], 2, "{raised}");
+    assert_eq!(rig.origin_head(), Some(past));
+}
+
+#[test]
+fn a_draft_pr_that_fails_after_its_push_still_counts_the_head() {
+    let rig = assisted_branch();
+    let head = rig.commit();
+    let code = refused_code(rig.draft(1));
+    assert_ne!(code, "draft-pr-corrections-spent");
+    assert_eq!(rig.origin_head().as_deref(), Some(head.as_str()));
+    assert_eq!(rig.publication().map(|p| p.head), Some(head));
+}
+
+#[test]
+fn a_draft_pr_refused_before_its_push_counts_nothing() {
+    let rig = assisted_branch();
+    rig.commit();
+    std::fs::write(&rig.body, "Closes #12").expect("the body file");
+    assert_eq!(refused_code(rig.draft(0)), "closing-keyword-live");
+    assert_eq!(rig.publication(), None);
+}
+
+#[test]
+fn ready_pr_hands_its_reviewed_head_to_the_transport() {
+    let rig = assisted_branch();
+    let path = crate::skill::repository_config_path(&rig.worktree);
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("the directory");
+    std::fs::write(
+        &path,
+        "| Setting | Value |\n|---|---|\n| Claim workflow | assisted |\n| Self review | on |\n\
+         | Ready by | agent |\n",
+    )
+    .expect("the rows write");
+    let head = rig.commit();
+
+    assert_eq!(
+        refused_code(rig.ready(None)),
+        "ready-pr-reviewed-head-required"
+    );
+    assert_eq!(
+        refused_code(rig.ready(Some(&"0".repeat(40)))),
+        "ready-pr-review-not-this-head"
+    );
+    let ready = rig.ready(Some(&head)).expect("the reviewed head opens");
+    assert_eq!(ready["draft"], false, "{ready}");
+    assert_eq!(ready["head"], head.as_str(), "{ready}");
 }
 
 #[test]
