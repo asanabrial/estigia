@@ -1480,13 +1480,14 @@ fn publication_tools_bind_to_the_repository_host_the_local_ones_to_neither_and_t
         "judge_workspaces",
     ];
     for tool in TOOLS {
-        let expected = if host.contains(&tool.name) {
-            super::tools::TransportBind::RepositoryHost
-        } else if neither.contains(&tool.name) {
-            super::tools::TransportBind::None
-        } else {
-            super::tools::TransportBind::Tracker
-        };
+        let expected =
+            if host.contains(&tool.name) || super::tools::PULL_REVIEW_TOOLS.contains(&tool.name) {
+                super::tools::TransportBind::RepositoryHost
+            } else if neither.contains(&tool.name) {
+                super::tools::TransportBind::None
+            } else {
+                super::tools::TransportBind::Tracker
+            };
         assert_eq!(
             tool.binds(),
             expected,
@@ -5344,6 +5345,7 @@ fn every_tool_is_a_tracker_writer_an_assisted_only_a_local_writer_or_a_read_and_
                 tools::TRACKER_WRITERS.contains(&tool.name),
             ),
             ("assisted only", tools::ASSISTED_ONLY.contains(&tool.name)),
+            ("pull review", tools::PULL_REVIEW_TOOLS.contains(&tool.name)),
             ("local writer", LOCAL_WRITER_TOOLS.contains(&tool.name)),
             ("read", READ_TOOLS.contains(&tool.name)),
         ];
@@ -5363,6 +5365,7 @@ fn every_tool_is_a_tracker_writer_an_assisted_only_a_local_writer_or_a_read_and_
     for name in tools::TRACKER_WRITERS
         .iter()
         .chain(tools::ASSISTED_ONLY)
+        .chain(tools::PULL_REVIEW_TOOLS)
         .chain(LOCAL_WRITER_TOOLS)
         .chain(READ_TOOLS)
     {
@@ -5491,6 +5494,246 @@ fn assist_arguments(issue: u64) -> Value {
         "branch": "issue-12",
         "base": "main",
     })
+}
+
+fn pull_review_rig() -> (tempfile::TempDir, std::path::PathBuf, String) {
+    let git = |directory: &std::path::Path, arguments: &[&str]| {
+        let done = std::process::Command::new("git")
+            .arg("-C")
+            .arg(directory)
+            .args(arguments)
+            .output()
+            .expect("git runs");
+        assert!(done.status.success(), "git {arguments:?}");
+        String::from_utf8_lossy(&done.stdout).trim().to_owned()
+    };
+    let root = tempfile::tempdir().expect("a temporary root");
+    let origin = root.path().join("origin.git");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&origin).expect("a remote");
+    std::fs::create_dir_all(&repo).expect("a repository");
+    git(&origin, &["init", "--quiet", "--bare", "-b", "main"]);
+    git(&repo, &["init", "--quiet", "-b", "main"]);
+    git(&repo, &["config", "user.email", "estigia@example.invalid"]);
+    git(&repo, &["config", "user.name", "Estigia test"]);
+    git(
+        &repo,
+        &["remote", "add", "origin", &origin.to_string_lossy()],
+    );
+    git(&repo, &["commit", "--allow-empty", "--quiet", "-m", "base"]);
+    git(&repo, &["push", "--quiet", "origin", "main"]);
+    git(
+        &repo,
+        &["commit", "--allow-empty", "--quiet", "-m", "topic"],
+    );
+    let head = git(&repo, &["rev-parse", "HEAD"]);
+    git(
+        &repo,
+        &[
+            "push",
+            "--quiet",
+            "origin",
+            "HEAD:refs/pull/7/head",
+            "HEAD:refs/heads/topic",
+        ],
+    );
+    git(&repo, &["reset", "--quiet", "--hard", "HEAD~1"]);
+    (root, repo, head)
+}
+
+fn linear_assisted_context(root: &tempfile::TempDir, repo: &std::path::Path) -> GateContext {
+    let mut context = bare_context(root, repo);
+    context.workflow = Some(crate::config::Workflow::Assisted);
+    context.tracker = crate::config::Tracker::Linear {
+        team: "ABC".to_owned(),
+    };
+    context.repository_host = crate::config::RepositoryHost::Github {
+        repo: Some(crate::config::RepoRef {
+            owner: "acme".to_owned(),
+            name: "widget".to_owned(),
+        }),
+    };
+    context
+}
+
+fn pull_review_answers(head: &str, base: &str) -> String {
+    crate::test_env::answers(&[
+        json!({
+            "matches": "repo view",
+            "stdout": json!({ "owner": { "login": "acme" }, "name": "widget" }).to_string(),
+            "status": 0,
+        }),
+        json!({
+            "matches": "pr view 7",
+            "stdout": json!({
+                "state": "OPEN",
+                "isCrossRepository": false,
+                "author": { "login": "a-teammate" },
+                "headRefOid": head,
+                "headRefName": "topic",
+                "baseRefName": "main",
+                "baseRefOid": base,
+            })
+            .to_string(),
+            "status": 0,
+        }),
+        json!({
+            "matches": "api user",
+            "stdout": json!({ "login": "the-reviewer" }).to_string(),
+            "status": 0,
+        }),
+    ])
+}
+
+#[test]
+fn a_foreign_pull_request_under_linear_and_assisted_yields_a_review_claim_and_a_detached_worktree()
+{
+    let (root, repo, head) = pull_review_rig();
+    let base = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git runs");
+    let base = String::from_utf8_lossy(&base.stdout).trim().to_owned();
+    let context = linear_assisted_context(&root, &repo);
+    let trees = root.path().join("trees/<repo>/<branch>");
+    let arguments = json!({
+        "pr": 7,
+        "run_id": "claude-abcd1234",
+        "horizon": "2099-01-01T18:00Z",
+        "worktree_root": trees.to_string_lossy(),
+    });
+    let answer = crate::test_env::with_scripted_gh(
+        crate::test_env::scripted_gh().path(),
+        &pull_review_answers(&head, &base),
+        || run_tool("pr_review_claim", &arguments, Ok(&context)),
+    )
+    .expect("the claim is taken");
+    assert!(answer.to_string().contains(&head), "{answer}");
+    let run = crate::harness::session::load(&context.state_root, "claude-abcd1234");
+    assert!(run.is_review_only());
+    assert_eq!(run.reviewed_pr, Some(7));
+    assert_eq!(run.issue, None, "a pull request number is never an issue");
+    let worktree = run.worktree.expect("the worktree is recorded");
+    assert!(worktree.is_dir());
+    let release = run_tool(
+        "pr_review_release",
+        &json!({ "run_id": "claude-abcd1234" }),
+        Ok(&context),
+    )
+    .expect("the claim is put down");
+    assert!(release.to_string().contains("released"), "{release}");
+    assert!(!worktree.exists());
+    assert!(
+        !crate::harness::session::load(&context.state_root, "claude-abcd1234").is_review_only()
+    );
+}
+
+#[test]
+fn a_run_holding_a_review_claim_is_refused_every_other_writing_tool() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("a repository");
+    let context = bare_context(&root, &repo);
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.kind = crate::harness::session::RunKind::ReviewOnly;
+    run.reviewed_pr = Some(7);
+    run.repo_dir = Some(repo);
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let writers = TOOLS.iter().filter(|tool| {
+        tool.writes
+            && !tools::PULL_REVIEW_TOOLS.contains(&tool.name)
+            && (!tools::is_local_store(tool.name) || tool.name == "deliver")
+            && tool.arguments.iter().any(|a| a.name == "run_id")
+    });
+    let mut seen = Vec::new();
+    for tool in writers {
+        seen.push(tool.name);
+        let ToolFailure::Refused(refusal) = run_tool(
+            tool.name,
+            &arguments_naming(tool, "claude-abcd1234"),
+            Ok(&context),
+        )
+        .expect_err("a review-only run writes through nothing else") else {
+            panic!(
+                "{}: refused as malformed rather than by the rule",
+                tool.name
+            );
+        };
+        assert_eq!(
+            refusal.code, "review-claim-admits-no-write",
+            "{}",
+            tool.name
+        );
+    }
+    for expected in [
+        "publish_review",
+        "deliver",
+        "claim",
+        "run_checks",
+        "comment",
+    ] {
+        assert!(seen.contains(&expected), "{expected} was not exercised");
+    }
+}
+
+#[test]
+fn a_run_holding_several_assisted_claims_takes_no_review_claim() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("a repository");
+    let context = bare_context(&root, &repo);
+    let mut child = crate::harness::session::Run::new("claude-abcd1234-child".to_owned());
+    child.issue = Some(crate::identity::Identity::Number(12));
+    child.parent = Some("claude-abcd1234".to_owned());
+    child.repo_dir = Some(repo);
+    crate::harness::session::store(&context.state_root, &child).expect("the pointer writes");
+    let arguments = json!({
+        "pr": 7, "run_id": "claude-abcd1234", "horizon": "2099-01-01T18:00Z",
+    });
+    let ToolFailure::Refused(refusal) = run_tool("pr_review_claim", &arguments, Ok(&context))
+        .expect_err("a session holding claims takes no review claim")
+    else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "already-holding");
+}
+
+#[test]
+fn a_review_claim_and_an_issue_are_never_held_together() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("a repository");
+    let context = bare_context(&root, &repo);
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.repo_dir = Some(repo.clone());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let arguments = json!({
+        "pr": 7, "run_id": "claude-abcd1234", "horizon": "2099-01-01T18:00Z",
+    });
+    let ToolFailure::Refused(refusal) = run_tool("pr_review_claim", &arguments, Ok(&context))
+        .expect_err("a run holding an issue takes no review claim")
+    else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "already-holding");
+
+    let mut reviewing = crate::harness::session::Run::new("claude-abcd5678".to_owned());
+    reviewing.kind = crate::harness::session::RunKind::ReviewOnly;
+    reviewing.reviewed_pr = Some(3);
+    reviewing.repo_dir = Some(repo);
+    crate::harness::session::store(&context.state_root, &reviewing).expect("the pointer writes");
+    let arguments = json!({
+        "pr": 7, "run_id": "claude-abcd5678", "horizon": "2099-01-01T18:00Z",
+    });
+    let ToolFailure::Refused(refusal) = run_tool("pr_review_claim", &arguments, Ok(&context))
+        .expect_err("a second pull request is a second claim")
+    else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "review-claim-admits-no-write");
 }
 
 #[test]
@@ -6586,7 +6829,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 62_218;
+const TOOLS_LIST_CEILING: usize = 63_592;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

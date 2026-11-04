@@ -13,7 +13,7 @@ use crate::outcome::{Established, NoCommandReason, Observed, Refusal, Resolution
 use super::session::{self, Run};
 use super::{Action, Aside, Decision, GateContext, Sensitivity, names_no_write_path};
 
-enum Landing {
+pub(super) enum Landing {
     Inside,
     SameRepository,
     Elsewhere,
@@ -25,7 +25,7 @@ fn way_out(text: impl Into<String>) -> Resolution {
     Resolution::no_command(NoCommandReason::OperatorKnowledge, text)
 }
 
-fn landing(worktree: &Path, from: &Path, target: &str) -> Landing {
+pub(super) fn landing(worktree: &Path, from: &Path, target: &str) -> Landing {
     if names_no_write_path(target) {
         return Landing::Unplaced;
     }
@@ -46,14 +46,14 @@ fn landing(worktree: &Path, from: &Path, target: &str) -> Landing {
     }
 }
 
-struct Aimed {
-    from: std::path::PathBuf,
-    target: std::path::PathBuf,
+pub(super) struct Aimed {
+    pub(super) from: std::path::PathBuf,
+    pub(super) target: std::path::PathBuf,
 }
 
 // A shell write's target is the verb it ran (`sed -i`), never a path, so only a
 // write tool's absolute path is placed by its target rather than by the caller's cwd.
-fn aimed_at(run: &Run, action: &Action) -> Option<Aimed> {
+pub(super) fn aimed_at(run: &Run, action: &Action) -> Option<Aimed> {
     let Action::Write { target } = action else {
         return None;
     };
@@ -148,7 +148,7 @@ pub(super) fn standing(run: &Run) -> Result<String, String> {
     Ok(branch.to_owned())
 }
 
-fn remote_write(action: &Action, observed: &Observed) -> Option<String> {
+pub(super) fn remote_write(action: &Action, observed: &Observed) -> Option<String> {
     match action {
         Action::Remote { command } => Some(command.clone()),
         Action::Write { .. } => {

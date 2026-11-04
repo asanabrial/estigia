@@ -174,6 +174,8 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `check closing keywords` | `SCRIPT check-closing-keywords` |
 | `unassign` | `SCRIPT unassign` — see *Releasing an issue* in github/operations.md |
 | assisted checkout | `SCRIPT assist` |
+| pull request review claim | `SCRIPT pr-review-claim` |
+| pull request review release | `SCRIPT pr-review-release` |
 | draft pull request | `SCRIPT draft-pr` |
 | ready pull request | `SCRIPT ready-pr` |
 | review stages | `SCRIPT review-stages` |

@@ -170,7 +170,10 @@ pub fn ownership(root: &Path) -> Result<Vec<std::path::PathBuf>, String> {
         ));
     }
     let mut paths = Vec::new();
-    for pointer in super::session::holdings(root) {
+    for pointer in super::session::holdings(root)
+        .into_iter()
+        .chain(super::session::review_holdings(root))
+    {
         if pointer.worktree.is_none() && pointer.repo_dir.is_none() {
             return Err(format!(
                 "ownership has no readable checkout ({})",

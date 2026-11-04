@@ -72,6 +72,35 @@ worktree shares their line) are refused in assisted runs so they cannot bypass t
 this is not a sandbox for arbitrary network clients. External review approvals expose their commit,
 not the historical base reviewed; the reader does not prove that historical base.
 
+## Reviewing a pull request this run did not build
+
+`pr_review_claim` takes a review-only claim on one pull request, under every `Claim workflow` and
+every `Tracker`, because it binds to the repository host and writes no tracker. An agent may take it
+as a person may, since the point is an unattended review.
+
+The claim is a `pull_reviews` row in the local store, keyed on the repository and the pull request.
+The earliest claim whose horizon has not passed wins, and a loser is refused `pull-review-held`
+before it makes anything. Claiming reads the pull request first and stops without a write on a fork
+(`pull-review-fork-refused`), on anything not open (`pull-review-not-open`) and on this account's own
+(`pull-review-own-pull-request`). Then it fetches `refs/pull/<n>/head` and the base branch, captures
+the head, the base tip and their merge base, and makes a detached worktree itself, with hooks switched
+off so that a repository whose `core.hooksPath` is relative does not run a script from the bytes under
+review. A head other than the one this run holds is `head-moved`: a new review is a new claim, and
+there is no correction loop, because this run cannot push.
+
+While the claim is held, `harness::review_claim` refuses every boundary and remote write wherever it
+runs, and every file write that lands in this repository, the review's own worktree included, all as
+`review-claim-admits-no-write`. That covers push, merge, `gh pr review`, `gh pr comment`, `gh api`
+mutations and any shell worktree command. A writing tool outside the road is refused the same way,
+`run_checks` among them, because running a repository's checks executes the reviewed bytes. A note
+outside every repository stands aside. `pr_review_release` puts the claim down and removes the
+worktree, reading nothing from GitHub, so a pull request that has gone does not strand it.
+
+The pull request number is never written to `Run.issue`. Every reader of that field asks the tracker
+about an issue, and it is what keeps this claim out of `holders_for_action`, so a merge finds no
+evidence in it. Merging stays outside this claim: it is delivery, and a skill that merges does so
+afterwards, under `Merge by`.
+
 ## Regression evidence
 
 `src/transport/draft/tests.rs` holds the real bare-remote matrix for draft/ready follow-ups with
