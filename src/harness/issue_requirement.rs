@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use super::{Action, Decision, GateContext, Sensitivity, session};
-use crate::config::IssueRequirement;
+use crate::config::{IssueRequirement, UnclaimedGithubWrites};
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 /// The stable code of this refusal.
@@ -90,19 +90,23 @@ enum Placement {
     Unplaceable,
 }
 
-/// How a hold was reached: by placing the write, or by failing to place it.
+/// How a hold was reached: by placing the write, by a GitHub write `Unclaimed GitHub writes` could
+/// have let pass, or by failing to place the write.
 #[derive(Clone, Copy)]
 pub(crate) enum Reach {
     Placed,
+    GithubWrite,
     Unplaceable,
 }
 
 /// The decision for a write made by a run holding no claim, or `None` when this is not one.
 ///
 /// A routine write is one, and so is `git push`: it publishes this repository's refs, so it is held
-/// as a commit is. Every other boundary is left alone, except for a write its line also carries,
-/// and a write that lands outside every repository the gate can place is not a write to this
-/// repository. `declared` are the paths a write tool named in a patch body, empty for every other
+/// as a commit is. So is every other boundary and every GitHub write that is no boundary
+/// ([`Action::Remote`]), unless `Unclaimed GitHub writes` is `allowed`, and it is always asked
+/// under `watch`, never watched: it reaches other people and leaves no trace here to compare. A
+/// write its line also carries is held under both values, and a write that lands outside every
+/// repository the gate can place is not a write to this repository. `declared` are the paths a write tool named in a patch body, empty for every other
 /// call; they are placed one by one, and a write to any repository is held. Under `ask` a write
 /// the gate cannot place is put to the person when the call was launched in a repository, or from
 /// a directory whose repository could not be established, and allowed from outside every
@@ -125,6 +129,17 @@ pub fn decision(
             return None;
         }
         return held(context, requirement, &scope, Reach::Placed);
+    }
+    if beside.is_none() && matches!(action, Action::Boundary { .. } | Action::Remote { .. }) {
+        if context.unclaimed_github_writes == UnclaimedGithubWrites::Allowed {
+            return None;
+        }
+        let requirement = in_force(context)?;
+        let scope = scope_of(&context.repo_dir);
+        if matches!(scope, Scope::Outside) {
+            return None;
+        }
+        return held(context, requirement, &scope, Reach::GithubWrite);
     }
     let carried;
     let (action, how) = match beside {
@@ -727,8 +742,15 @@ pub(crate) fn refusal(
          checkout to write in; or `Unclaimed write policy` set to `off` for this repository, \
          when its writes need no claim"
     };
+    let way_in = match reach {
+        Reach::GithubWrite => format!(
+            "{way_in}; or `Unclaimed GitHub writes` set to `allowed` for this repository, when \
+             only its GitHub writes need no claim"
+        ),
+        Reach::Placed | Reach::Unplaceable => way_in.to_string(),
+    };
     let here = match (scope, reach) {
-        (Scope::Repository(_), Reach::Placed) => " in this repository",
+        (Scope::Repository(_), Reach::Placed | Reach::GithubWrite) => " in this repository",
         (Scope::Repository(_), Reach::Unplaceable) => {
             ", and this write could not be placed inside or outside this repository without \
              running it, so it is held"

@@ -13,7 +13,7 @@ use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use super::{
     Authority, Config, DEFAULT_ASK_TIMEOUT, DecisionMode, Evidence, GitOperationWindow,
     IssueRequirement, Language, LoopPlugin, Notifications, Profile, PublicationLane, RepoRef,
-    RepositoryHost, ReviewBudget, Tracker, Workflow, WorktreeRoot, delivery,
+    RepositoryHost, ReviewBudget, Tracker, UnclaimedGithubWrites, Workflow, WorktreeRoot, delivery,
 };
 use crate::setup::AgentAdapter;
 
@@ -67,6 +67,8 @@ pub enum Setting {
     Notifications,
     /// What a run holding no claim may write in a checkout whose tracker can name an issue.
     IssueRequirement,
+    /// Whether a run holding no claim may merge, tag, release or write to GitHub.
+    UnclaimedGithubWrites,
     /// Who witnesses a claim in this repository: Estigia, or the team.
     Workflow,
     /// The delivery rows in one word: a preset that fills the five it names.
@@ -110,6 +112,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting::Tracker,
     Setting::RepositoryHost,
     Setting::IssueRequirement,
+    Setting::UnclaimedGithubWrites,
     Setting::Integration,
     Setting::Worktree,
     // Delivery, in the order the steps happen. The preset first, for the
@@ -301,8 +304,8 @@ pub const AGENT_SETTINGS: &[Setting] = &[
 /// The settings that are the same whichever agent asks, in table order.
 ///
 /// Not every row here is read the same way. Most are read by an agent, out
-/// of the prose, or by the transport — but nine rows reach the gate's
-/// `GateContext`, the seven here and two of the repository-only rows, and eight
+/// of the prose, or by the transport — but ten rows reach the gate's
+/// `GateContext`, the seven here and three of the repository-only rows, and nine
 /// of them feed its own allow/deny decision: `Repository host` is carried so
 /// MCP publication tools can bind to it rather than so `decide` branches on
 /// it, and `Workflow` decides only for the pointer an `assisted` run left.
@@ -343,6 +346,7 @@ pub const MACHINE_SETTINGS: &[Setting] = &[Setting::Summary, Setting::Body, Sett
 /// The rows only a repository's own file answers, in table order.
 pub const REPOSITORY_SETTINGS: &[Setting] = &[
     Setting::IssueRequirement,
+    Setting::UnclaimedGithubWrites,
     Setting::DeliveryPreset,
     Setting::Workflow,
     Setting::StateNames,
@@ -363,6 +367,7 @@ pub const OPTIONS_SETTINGS: &[Setting] = &[
     Setting::Tracker,
     Setting::RepositoryHost,
     Setting::IssueRequirement,
+    Setting::UnclaimedGithubWrites,
     Setting::Integration,
     Setting::Worktree,
     Setting::DeliveryPreset,
@@ -473,6 +478,7 @@ impl Setting {
             // the person rather than to the repository.
             Self::Summary | Self::Body | Self::Notifications => Scope::Machine,
             Self::IssueRequirement
+            | Self::UnclaimedGithubWrites
             | Self::Workflow
             | Self::DeliveryPreset
             | Self::StateNames
@@ -497,6 +503,7 @@ impl Setting {
             Self::Tracker
             | Self::RepositoryHost
             | Self::IssueRequirement
+            | Self::UnclaimedGithubWrites
             | Self::Integration
             | Self::Worktree => Group::Repository,
             Self::DeliveryPreset
@@ -534,8 +541,9 @@ impl Setting {
     /// the agent holding the tools does on this one. `harness::GateContext`
     /// carries exactly these as fields built from the contract —
     /// `tracker`, `repository_host`, `boundaries`, `window`, `evidence`,
-    /// `integration`, `operation_window`, `issue_requirement` and `workflow`,
-    /// the last an `Option` that is `None` when the contract could not be read —
+    /// `integration`, `operation_window`, `issue_requirement`,
+    /// `unclaimed_github_writes` and `workflow`, the last an `Option` that is
+    /// `None` when the contract could not be read —
     /// and `tests/honesty.rs`'s
     /// `every_setting_the_gate_enforces_is_one_gate_context_actually_carries`
     /// crosses that source against this predicate. Every other
@@ -561,6 +569,7 @@ impl Setting {
             | Self::DecisionMode
             | Self::Integration
             | Self::IssueRequirement
+            | Self::UnclaimedGithubWrites
             | Self::Workflow => true,
             Self::Delivery
             | Self::Transitions
@@ -631,6 +640,10 @@ impl Setting {
             Self::IssueRequirement => {
                 "whether a run holding no claim may write in this repository: watched, allowed, or \
                  refused"
+            }
+            Self::UnclaimedGithubWrites => {
+                "whether a run holding no claim may merge, tag, release or write to GitHub: held \
+                 like a commit, or allowed"
             }
             Self::Workflow => {
                 "who witnesses a claim in this repository: Estigia writes the tracker, or the \
@@ -717,6 +730,7 @@ impl Setting {
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::CorrectionsPerLineage => Answers::some(&["3", "1"]),
             Self::IssueRequirement => Answers::all(&["watch", "off", "required"]),
+            Self::UnclaimedGithubWrites => Answers::all(&["held", "allowed"]),
             Self::Workflow => Answers::all(&["autonomous", "assisted"]),
             // `custom` is accepted and not offered, for the reason `Profile`'s is.
             Self::DeliveryPreset => Answers::some(&["autonomous", "assisted", "team"]),
@@ -767,6 +781,7 @@ impl Setting {
             Self::Body => "Issue body language",
             Self::Notifications => "Notifications",
             Self::IssueRequirement => "Unclaimed write policy",
+            Self::UnclaimedGithubWrites => "Unclaimed GitHub writes",
             Self::Workflow => "Claim workflow",
             Self::DeliveryPreset => "Delivery preset",
             Self::StateNames => "State names",
@@ -915,6 +930,14 @@ impl Setting {
             (Self::IssueRequirement, "required") => {
                 "a write by a run holding no claim is refused until an issue is claimed"
             }
+            (Self::UnclaimedGithubWrites, "held") => {
+                "a merge, release, tag, `git merge` or GitHub write by a run holding no claim is \
+                 put to the person, or refused, as `Unclaimed write policy` says"
+            }
+            (Self::UnclaimedGithubWrites, "allowed") => {
+                "those boundaries pass with no question; commits, pushes, branches and file writes \
+                 stay under `Unclaimed write policy`"
+            }
             (Self::Workflow, "autonomous") => {
                 "Estigia holds the claim and writes the tracker, as it always has"
             }
@@ -1060,6 +1083,7 @@ impl Setting {
             Self::Evidence => "`reading`, or `measuring`",
             Self::PublicationLane => "`on`, or `off`",
             Self::IssueRequirement => "`watch`, `off`, or `required`",
+            Self::UnclaimedGithubWrites => "`held`, or `allowed`",
             Self::Workflow => "`autonomous`, or `assisted`",
             Self::DeliveryPreset => "`autonomous`, `assisted`, `team`, or `custom`",
             Self::StateNames => {
@@ -1322,6 +1346,13 @@ impl Setting {
                     _ => return Err(self.reject(value)),
                 }
             }
+            Self::UnclaimedGithubWrites => {
+                config.unclaimed_github_writes = match lower(value).trim() {
+                    "held" => UnclaimedGithubWrites::Held,
+                    "allowed" => UnclaimedGithubWrites::Allowed,
+                    _ => return Err(self.reject(value)),
+                }
+            }
             Self::Workflow => {
                 config.workflow = match lower(value).trim() {
                     "autonomous" => Workflow::Autonomous,
@@ -1424,6 +1455,7 @@ impl Setting {
             Self::DecisionMode => config.decision_mode.as_value().to_owned(),
             Self::PublicationLane => config.publication_lane.as_value().to_owned(),
             Self::IssueRequirement => config.issue_requirement.as_value().to_owned(),
+            Self::UnclaimedGithubWrites => config.unclaimed_github_writes.as_value().to_owned(),
             Self::Workflow => config.workflow.as_value().to_owned(),
             Self::DeliveryPreset => config.delivery_preset().map_or_else(
                 || "custom".to_owned(),

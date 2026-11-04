@@ -23,6 +23,7 @@ fn context(root: &Path, repo: &Path, requirement: IssueRequirement) -> GateConte
         state_root: root.join("state"),
         operation_window: Default::default(),
         issue_requirement: requirement,
+        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: Duration::from_secs(120),
@@ -358,22 +359,231 @@ fn an_unclaimed_push_is_asked_under_a_read_only_tracker() {
     assert!(matches!(push(&context), Decision::Ask(_)));
 }
 
+fn on_a_shell_line(context: &GateContext, line: &str) -> Decision {
+    unclaimed_edit(context, "Bash", serde_json::json!({ "command": line }))
+}
+
+fn with_github_writes(
+    mut context: GateContext,
+    writes: crate::config::UnclaimedGithubWrites,
+) -> GateContext {
+    context.unclaimed_github_writes = writes;
+    context
+}
+
+const GITHUB_WRITES: &[&str] = &[
+    "gh pr merge 3 --merge",
+    "gh pr review 3 --approve",
+    "gh pr comment 3 --body x",
+    "gh api -X POST repos/o/r/pulls/3/reviews -f event=COMMENT",
+    "git tag -a v1 -m v1",
+    "git merge topic",
+    "gh release create v1",
+];
+
+const GITHUB_READS: &[&str] = &[
+    "gh pr view 3 --json state --jq .state",
+    "gh api repos/o/r/pulls/3/reviews --jq '.[]|.state'",
+];
+
 #[test]
-fn a_boundary_other_than_a_push_is_left_to_the_checks_that_already_hold_it() {
+fn an_unclaimed_github_write_is_put_to_the_person_under_watch() {
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    for line in GITHUB_WRITES {
+        let decision = on_a_shell_line(&context, line);
+        assert!(
+            matches!(&decision, Decision::Ask(refusal) if refusal.code == CODE),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn an_unclaimed_github_write_is_refused_under_required() {
     let (_repo, _root, context) = rig(IssueRequirement::Required);
-    let decision = unclaimed_edit(
-        &context,
-        "Bash",
-        serde_json::json!({ "command": "gh pr merge 3 --merge" }),
+    for line in GITHUB_WRITES {
+        let decision = on_a_shell_line(&context, line);
+        assert!(
+            matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn an_unclaimed_github_write_passes_when_the_policy_is_off() {
+    let (_repo, _root, context) = rig(IssueRequirement::Off);
+    for line in GITHUB_WRITES {
+        assert!(
+            !matches!(
+                on_a_shell_line(&context, line),
+                Decision::Ask(_) | Decision::Deny(_)
+            ),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn a_github_read_passes_under_every_value() {
+    for requirement in IssueRequirement::all() {
+        let (_repo, _root, context) = rig(requirement);
+        for line in GITHUB_READS {
+            let decision = on_a_shell_line(&context, line);
+            assert!(
+                !matches!(&decision, Decision::Ask(_) | Decision::Deny(_)),
+                "{requirement:?} {line}: {decision:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_github_write_under_a_read_only_tracker_is_asked_and_never_watched() {
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    let context = under_linear(context);
+    let decision = on_a_shell_line(&context, "gh pr merge 3 --merge");
+    assert!(matches!(&decision, Decision::Ask(_)), "{decision:?}");
+}
+
+#[test]
+fn a_github_write_from_outside_every_repository_is_left_alone() {
+    let (_repo, _root, mut context) = rig(IssueRequirement::Required);
+    let elsewhere = non_repository();
+    context.repo_dir = elsewhere.path().to_path_buf();
+    assert_eq!(
+        on_a_shell_line(&context, "gh pr merge 3 --merge"),
+        Decision::Outside(Aside::NothingSworn)
     );
+}
+
+#[test]
+fn an_unclaimed_github_write_is_held_through_the_gate_command_too() {
+    let (_repo, _root, context) = rig(IssueRequirement::Required);
+    for line in ["gh pr review 3 --approve", "gh pr merge 3 --merge"] {
+        let input = serde_json::json!({ "command": line });
+        let (action, how, _) = crate::harness::classify_observing("Bash", &input, &[]);
+        let readings = guard::Readings {
+            literal: Some(line),
+            ..guard::Readings::default()
+        };
+        let decision =
+            guard::adjudicate_command(&context, &context.repo_dir, &action, how, &[], readings)
+                .decision;
+        assert!(
+            matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn a_run_holding_a_claim_is_not_held_for_a_github_write() {
+    let (_repo, _root, context) = rig(IssueRequirement::Required);
+    let input = serde_json::json!({ "command": "gh pr review 3 --approve" });
+    let (action, how, command) = crate::harness::classify_observing("Bash", &input, &[]);
+    let observed = Observed {
+        command: Some(command),
+        checkout: None,
+        push_refs: Vec::new(),
+    };
+    let mut run = session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(7));
+    let decision = crate::harness::gate_observing(&context, &mut run, &action, how, &observed);
     assert!(
         !matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
         "{decision:?}"
     );
 }
 
-fn on_a_shell_line(context: &GateContext, line: &str) -> Decision {
-    unclaimed_edit(context, "Bash", serde_json::json!({ "command": line }))
+#[test]
+fn allowed_lets_the_github_writes_pass_under_watch_and_required() {
+    for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
+        let (_repo, _root, context) = rig(requirement);
+        let context = with_github_writes(context, crate::config::UnclaimedGithubWrites::Allowed);
+        for line in GITHUB_WRITES {
+            let decision = on_a_shell_line(&context, line);
+            assert!(
+                matches!(&decision, Decision::Outside(_)),
+                "{requirement:?} {line}: {decision:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn held_asks_for_a_merge_where_allowed_does_not() {
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    let held = with_github_writes(context, crate::config::UnclaimedGithubWrites::Held);
+    assert!(matches!(
+        on_a_shell_line(&held, "gh pr merge 3"),
+        Decision::Ask(_)
+    ));
+    let allowed = with_github_writes(held, crate::config::UnclaimedGithubWrites::Allowed);
+    assert_eq!(
+        on_a_shell_line(&allowed, "gh pr merge 3"),
+        Decision::Outside(Aside::NothingSworn)
+    );
+}
+
+#[test]
+fn the_question_names_the_row_that_answers_it() {
+    for (workflow, line, names_the_row) in [
+        (None, "gh pr merge 3", true),
+        (
+            Some(crate::config::Workflow::Assisted),
+            "gh api -X DELETE repos/o/r/pulls/3/reviews/4",
+            true,
+        ),
+        (None, "git commit -m x", false),
+        (None, "git push origin main", false),
+        (None, "gh pr merge 3; git worktree remove /x", false),
+    ] {
+        let (_repo, _root, mut context) = rig(IssueRequirement::Watch);
+        context.workflow = workflow;
+        let decision = on_a_shell_line(&context, line);
+        let Decision::Ask(refusal) = decision else {
+            panic!("{line}: not put to the person: {decision:?}");
+        };
+        let text = refusal.to_string();
+        assert_eq!(
+            text.contains("`Unclaimed GitHub writes` set to `allowed`"),
+            names_the_row,
+            "{line}: {text}"
+        );
+    }
+}
+
+#[test]
+fn allowed_still_holds_what_the_policy_holds() {
+    for line in [
+        "git commit -m x",
+        "gh pr merge 3; git worktree remove /x",
+        "git push origin main",
+    ] {
+        for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {
+            let (_repo, _root, context) = rig(requirement);
+            let context =
+                with_github_writes(context, crate::config::UnclaimedGithubWrites::Allowed);
+            let decision = on_a_shell_line(&context, line);
+            assert!(
+                matches!(&decision, Decision::Ask(_) | Decision::Deny(_)),
+                "{requirement:?} {line}: {decision:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_operation_windows_refusal_is_not_loosened_by_allowed() {
+    let (_repo, _root, mut context) = rig(IssueRequirement::Watch);
+    context.unclaimed_github_writes = crate::config::UnclaimedGithubWrites::Allowed;
+    context.operation_window = crate::config::GitOperationWindow::Invalid;
+    let decision = on_a_shell_line(&context, "gh pr review 3 --approve");
+    assert!(
+        matches!(&decision, Decision::Deny(refusal) if refusal.code == "git-operation-window-denied"),
+        "{decision:?}"
+    );
 }
 
 const WRITES_BESIDE_A_BOUNDARY: &[&str] = &[
@@ -437,8 +647,17 @@ fn the_question_names_the_write_and_not_the_boundary_beside_it() {
 }
 
 #[test]
-fn a_boundary_with_only_reads_beside_it_is_still_left_alone() {
+fn a_boundary_with_only_reads_beside_it_is_held_as_a_boundary_unless_allowed() {
     let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    let held = context;
+    for line in ["gh pr merge 3 --merge", "git tag -a v1 -m v1; git log -1"] {
+        let decision = on_a_shell_line(&held, line);
+        assert!(
+            matches!(&decision, Decision::Ask(_)),
+            "{line}: {decision:?}"
+        );
+    }
+    let context = with_github_writes(held, crate::config::UnclaimedGithubWrites::Allowed);
     for line in [
         "gh pr merge 3 --merge",
         "gh pr merge 3 --merge 2>&1 | tail -1",

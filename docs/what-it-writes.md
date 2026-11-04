@@ -1538,9 +1538,12 @@ for one it can place inside, refuses it on a host that cannot ask, and lets one 
 recording the checkout's `git status` and asking on the next call, naming the changed paths, only
 if it differs; a `git push` is held as a commit is, and a write carried on a line beside any other
 boundary (`gh pr merge …; git worktree remove …`) is held as it would be alone, the question naming
-the write. The boundary itself is not held: an unclaimed `gh pr merge`, `git merge`, `git tag`, release
-or `gh api` mutation passes under every value, and [`honesty.md`](honesty.md) says so;
-`off` is the behaviour described above.
+the write. The boundary itself is held too, by the repository's `Unclaimed GitHub writes` row (`held`, the
+default, or `allowed`, answered only by the same file): an unclaimed `gh pr merge`, `git merge`,
+`git tag`, release, `gh api` mutation or `gh pr review` is asked under `watch` and refused under
+`required`, never run and compared, and `Merge by` is not read on this path; `allowed` lets those
+boundaries pass while commits, pushes and file writes stay held, and [`honesty.md`](honesty.md) says what
+that costs; `off` is the behaviour described above.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.
 

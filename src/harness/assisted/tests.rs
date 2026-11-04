@@ -72,6 +72,7 @@ fn new_rig() -> Rig {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(Workflow::Assisted),
         window: Duration::ZERO,
@@ -386,6 +387,65 @@ fn a_write_in_the_worktree_does_not_carry_a_remote_write_past_the_claim() {
     let mut rig = new_rig();
     let decision = decide_line(&mut rig, "git commit -m x; gh pr review 3 --approve");
     assert_eq!(denied_as(&decision), "assisted-remote-write-unverified");
+}
+
+#[test]
+fn an_admitted_boundary_does_not_carry_a_remote_write_past_the_claim() {
+    for line in [
+        "git pull; gh pr review 3 --approve",
+        "git pull && gh pr comment 3 --body x",
+        "git merge; gh pr review 3 --approve",
+        "gh pr review 3 --approve; git pull",
+    ] {
+        let mut rig = new_rig();
+        let decision = decide_line(&mut rig, line);
+        assert_eq!(
+            denied_as(&decision),
+            "assisted-remote-write-unverified",
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn an_operator_declared_boundary_does_not_carry_a_remote_write_past_the_claim() {
+    let mut rig = new_rig();
+    rig.context.boundaries = vec!["npm publish".to_owned()];
+    let decision = decide_line(&mut rig, "npm publish; gh pr review 3 --approve");
+    assert_eq!(denied_as(&decision), "assisted-remote-write-unverified");
+}
+
+#[test]
+fn the_specific_assisted_refusals_answer_before_the_remote_write() {
+    for (line, code) in [
+        (
+            "gh pr merge 3; gh pr review 3 --approve",
+            "assisted-does-not-deliver",
+        ),
+        (
+            "gh pr review 3 --approve; gh pr merge 3",
+            "assisted-does-not-deliver",
+        ),
+        (
+            "gh pr create --title x; gh pr review 3 --approve",
+            "assisted-publishes-through-draft-pr",
+        ),
+        (
+            "gh api -X POST repos/o/r/pulls/3/reviews; gh pr review 3 --approve",
+            "assisted-api-mutation-unverified",
+        ),
+    ] {
+        let mut rig = new_rig();
+        let decision = decide_line(&mut rig, line);
+        assert_eq!(denied_as(&decision), code, "{line}");
+    }
+}
+
+#[test]
+fn a_boundary_beside_only_reads_is_still_admitted_in_an_assisted_run() {
+    let mut rig = new_rig();
+    let decision = decide_line(&mut rig, "git pull; gh pr view 3 --json state");
+    assert!(!matches!(&decision, Decision::Deny(_)), "{decision:?}");
 }
 
 #[test]

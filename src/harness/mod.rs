@@ -3146,6 +3146,9 @@ pub struct GateContext {
     pub operation_window: crate::config::GitOperationWindow,
     /// What a run holding no claim may write here. Read from the repository's own file only.
     pub issue_requirement: crate::config::IssueRequirement,
+    /// Whether a run holding no claim may merge, tag, release or write to GitHub. Read from the
+    /// repository's own file only.
+    pub unclaimed_github_writes: crate::config::UnclaimedGithubWrites,
     /// Whether a question tool is put to the person or refused and decided here.
     pub decision_mode: crate::config::DecisionMode,
     /// Who witnesses a claim here. Read from the repository's own file only; `None` when
@@ -3250,10 +3253,25 @@ fn decide_observing(
             if run.assisted && run.issue.is_some() {
                 return assisted::decision(context, run, action, how, observed, command);
             }
-            return match operation_window::check_protected(context, action) {
-                Some(refusal) => Decision::Deny(Box::new(prefixed(refusal, command, observed))),
-                None => Decision::Outside(Aside::NotWatched),
-            };
+            if let Some(refusal) = operation_window::check_protected(context, action) {
+                return Decision::Deny(Box::new(prefixed(refusal, command, observed)));
+            }
+            if run.issue.is_none() && !run.assisted && !run.unreadable {
+                let literal = match observed.command.as_ref().map(|seen| &seen.literal) {
+                    Some(Established::Known(text)) => Some(text.as_str()),
+                    _ => None,
+                };
+                match issue_requirement::decision(context, action, how, literal, &[]) {
+                    Some(Decision::Deny(refusal)) => {
+                        return Decision::Deny(Box::new(prefixed(*refusal, command, observed)));
+                    }
+                    Some(Decision::Ask(refusal)) => {
+                        return Decision::Ask(Box::new(prefixed(*refusal, command, observed)));
+                    }
+                    _ => {}
+                }
+            }
+            return Decision::Outside(Aside::NotWatched);
         }
         Action::Write { .. } => "write",
         Action::Boundary { .. } => "boundary",

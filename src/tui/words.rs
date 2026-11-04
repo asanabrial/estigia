@@ -427,6 +427,12 @@ pub const SPANISH: &[(&str, &str)] = &[
         "`watch`, `off`, or `required`",
         "`watch`, `off` o `required`",
     ),
+    ("Unclaimed GitHub writes", "Escrituras en GitHub sin reclamo"),
+    (
+        "whether a run holding no claim may merge, tag, release or write to GitHub: held like a commit, or allowed",
+        "si una ejecución sin reclamo puede fusionar, etiquetar, publicar o escribir en GitHub: se retiene como un commit, o se permite",
+    ),
+    ("`held`, or `allowed`", "`held` o `allowed`"),
     ("Claim workflow", "Flujo de reclamación"),
     (
         "who witnesses a claim in this repository: Estigia writes the tracker, or the team coordinates and Estigia does not",
