@@ -527,6 +527,34 @@ fn held_asks_for_a_merge_where_allowed_does_not() {
 }
 
 #[test]
+fn the_question_names_the_row_that_answers_it() {
+    for (workflow, line, names_the_row) in [
+        (None, "gh pr merge 3", true),
+        (
+            Some(crate::config::Workflow::Assisted),
+            "gh api -X DELETE repos/o/r/pulls/3/reviews/4",
+            true,
+        ),
+        (None, "git commit -m x", false),
+        (None, "git push origin main", false),
+        (None, "gh pr merge 3; git worktree remove /x", false),
+    ] {
+        let (_repo, _root, mut context) = rig(IssueRequirement::Watch);
+        context.workflow = workflow;
+        let decision = on_a_shell_line(&context, line);
+        let Decision::Ask(refusal) = decision else {
+            panic!("{line}: not put to the person: {decision:?}");
+        };
+        let text = refusal.to_string();
+        assert_eq!(
+            text.contains("`Unclaimed GitHub writes` set to `allowed`"),
+            names_the_row,
+            "{line}: {text}"
+        );
+    }
+}
+
+#[test]
 fn allowed_still_holds_what_the_policy_holds() {
     for line in [
         "git commit -m x",

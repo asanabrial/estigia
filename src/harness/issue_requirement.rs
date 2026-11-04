@@ -90,10 +90,12 @@ enum Placement {
     Unplaceable,
 }
 
-/// How a hold was reached: by placing the write, or by failing to place it.
+/// How a hold was reached: by placing the write, by a GitHub write `Unclaimed GitHub writes` could
+/// have let pass, or by failing to place the write.
 #[derive(Clone, Copy)]
 pub(crate) enum Reach {
     Placed,
+    GithubWrite,
     Unplaceable,
 }
 
@@ -137,7 +139,7 @@ pub fn decision(
         if matches!(scope, Scope::Outside) {
             return None;
         }
-        return held(context, requirement, &scope, Reach::Placed);
+        return held(context, requirement, &scope, Reach::GithubWrite);
     }
     let carried;
     let (action, how) = match beside {
@@ -740,8 +742,15 @@ pub(crate) fn refusal(
          checkout to write in; or `Unclaimed write policy` set to `off` for this repository, \
          when its writes need no claim"
     };
+    let way_in = match reach {
+        Reach::GithubWrite => format!(
+            "{way_in}; or `Unclaimed GitHub writes` set to `allowed` for this repository, when \
+             only its GitHub writes need no claim"
+        ),
+        Reach::Placed | Reach::Unplaceable => way_in.to_string(),
+    };
     let here = match (scope, reach) {
-        (Scope::Repository(_), Reach::Placed) => " in this repository",
+        (Scope::Repository(_), Reach::Placed | Reach::GithubWrite) => " in this repository",
         (Scope::Repository(_), Reach::Unplaceable) => {
             ", and this write could not be placed inside or outside this repository without \
              running it, so it is held"
