@@ -338,6 +338,19 @@ pub fn follow_state(
     answer
 }
 
+/// [`follow_state`] for an `assist` answer: the started state, on a first call
+/// only. A resume must not move an issue back from wherever it has reached.
+pub fn follow_started(
+    names: &[(String, String)],
+    identity: &Identity,
+    answer: serde_json::Value,
+) -> serde_json::Value {
+    if answer["resumed_existing_worktree"] == true {
+        return answer;
+    }
+    follow_state(names, Some(identity), STARTED, answer)
+}
+
 /// Sends one operation through the CLI and answers Linear's JSON, or the stop
 /// that names why there is none.
 fn post(query: &str, variables: &serde_json::Value, how: How) -> Result<String, Failure> {

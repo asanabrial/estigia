@@ -880,6 +880,7 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
         ),
         None => String::new(),
     };
+    let children = several_claims_paragraph(context, run);
     let dirt = unclaimed_dirt_note(context, run);
     // Which roles this run's delegated contexts actually ran as, from the
     // pointer. Absent when the set is empty, and that absence is deliberately
@@ -948,7 +949,7 @@ This session carries no identity Estigia can derive a run id from, so nothing ca
             "additionalContext": format!(
                 "## Estigia
 
-Run id `{}`. {held}{handoff}{isolation}{dirt}{delegated}{inline}{}{}{}{}",
+Run id `{}`. {held}{handoff}{isolation}{children}{dirt}{delegated}{inline}{}{}{}{}",
                 run.run_id,
                 drift_note(context),
                 build_note(context),
@@ -957,6 +958,39 @@ Run id `{}`. {held}{handoff}{isolation}{dirt}{delegated}{inline}{}{}{}{}",
             ),
         }
     })
+}
+
+fn several_claims_paragraph(context: &GateContext, run: &session::Run) -> String {
+    let children = session::children(&context.state_root, &run.run_id);
+    if children.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<String> = children
+        .iter()
+        .map(|child| {
+            format!(
+                "- `{}` holds issue #{} in `{}`",
+                child.run_id,
+                child
+                    .issue
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+                child
+                    .worktree
+                    .as_ref()
+                    .map(|worktree| worktree.display().to_string())
+                    .unwrap_or_default()
+            )
+        })
+        .collect();
+    format!(
+        "\n\nThis session holds several assisted claims. A call is decided under the one it lands \
+         in: a write tool by its absolute path, a shell call by one `git -C <worktree> …` or the \
+         directory it runs in; anything else by this run's own policy. Publish with each claim's \
+         own run id.\n{}",
+        lines.join("\n")
+    )
 }
 
 /// The issues another run handed to this runtime in this repository.
@@ -1251,7 +1285,10 @@ pub fn run_as(
                 return json!({});
             }
             let run = session::load(&context.state_root, &run_id);
-            if run.issue.is_some() || run.assisted {
+            if run.issue.is_some()
+                || run.assisted
+                || !session::children(&context.state_root, &run_id).is_empty()
+            {
                 return json!({});
             }
             match super::issue_requirement::watched_note(context) {
@@ -1291,6 +1328,9 @@ pub fn run_as(
                     &input.session_id,
                     None,
                 );
+                for child in session::children(&context.state_root, &run_id) {
+                    session::forget(&context.state_root, &child.run_id);
+                }
                 session::forget(&context.state_root, &run_id);
             }
             json!({})
@@ -1441,7 +1481,7 @@ pub fn run_as(
             // ever runs) — no clamped `workdir` or write-target candidate is
             // read here the way `estigia gate` reads one, so there is nothing
             // to drop.
-            let observed = Observed {
+            let mut observed = Observed {
                 command: Some(command_observed),
                 checkout: Some(CheckoutObserved {
                     adjudicated: context.repo_dir.display().to_string(),
@@ -1455,6 +1495,40 @@ pub fn run_as(
                 push_refs: Vec::new(),
             };
             let mut run = session::load(&context.state_root, &run_id);
+            let mut run_id = run_id;
+            let landed = (dialect == Dialect::ClaudeCode
+                && run.issue.is_none()
+                && !run.unreadable
+                && !input.session_id.trim().is_empty())
+            .then(|| {
+                let literal = match observed.command.as_ref().map(|command| &command.literal) {
+                    Some(crate::outcome::Established::Known(text)) => Some(text.as_str()),
+                    _ => None,
+                };
+                super::assisted::landed_child(
+                    &context.state_root,
+                    &run_id,
+                    &context.repo_dir,
+                    &action,
+                    literal,
+                )
+            })
+            .flatten();
+            let mut narrowed = None;
+            if let Some(landed) = landed {
+                run = landed.run;
+                run_id = run.run_id.clone();
+                if let Some(runs_in) = landed.runs_in {
+                    if let Some(checkout) = observed.checkout.as_mut() {
+                        checkout.adjudicated = runs_in.display().to_string();
+                    }
+                    narrowed = Some(GateContext {
+                        repo_dir: runs_in,
+                        ..context.clone()
+                    });
+                }
+            }
+            let context = narrowed.as_ref().unwrap_or(context);
             let declared_launch = is_prelaunch_tool(agent, &input.tool_name)
                 .then(|| {
                     input
@@ -1586,8 +1660,8 @@ pub fn run_as(
                 &[],
             );
             let answer = response_in(dialect, &decision);
-            if mail_recipient(dialect, host, input).is_some() {
-                return with_mail(context, dialect, &recorded, answer);
+            if let Some(recipient) = mail_recipient(dialect, host, input) {
+                return with_mail(context, dialect, &recipient, answer);
             }
             answer
         }

@@ -1706,10 +1706,9 @@ fn run_operation(
                 // and does not replace.
                 context.get("worktree location"),
             )?;
-            Ok(super::linear::follow_state(
+            Ok(super::linear::follow_started(
                 &context.layered().state_names,
-                Some(&issue),
-                super::linear::STARTED,
+                &issue,
                 started,
             ))
         }

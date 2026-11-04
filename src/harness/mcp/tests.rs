@@ -5697,6 +5697,150 @@ fn assist_from_a_run_holding_another_issue_is_refused_without_naming_release() {
     );
 }
 
+struct Several {
+    root: tempfile::TempDir,
+    context: GateContext,
+    bin: &'static tempfile::TempDir,
+    answers: String,
+}
+
+fn several_rig() -> Several {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    let origin = root.path().join("origin.git");
+    let git = |at: &std::path::Path, arguments: &[&str]| {
+        crate::transport::run(
+            &["git"]
+                .into_iter()
+                .chain(arguments.iter().copied())
+                .collect::<Vec<_>>(),
+            Some(at),
+            crate::transport::How::write(),
+        )
+        .unwrap_or_else(|failure| panic!("git {arguments:?}: {}", failure.detail()));
+    };
+    std::fs::create_dir_all(&origin).expect("a remote directory");
+    std::fs::create_dir_all(&repo).expect("a repository directory");
+    git(&origin, &["init", "--quiet", "--bare", "-b", "main"]);
+    git(&repo, &["init", "--quiet", "-b", "main"]);
+    git(&repo, &["config", "user.email", "x@example.invalid"]);
+    git(&repo, &["config", "user.name", "x"]);
+    git(
+        &repo,
+        &["remote", "add", "origin", &origin.to_string_lossy()],
+    );
+    git(&repo, &["commit", "--allow-empty", "--quiet", "-m", "base"]);
+    git(&repo, &["push", "--quiet", "origin", "main"]);
+    let mut context = assisted_context(&root);
+    context.repo_dir = repo;
+    Several {
+        context,
+        bin: crate::test_env::scripted_gh(),
+        answers: crate::test_env::answers(&[
+            json!({ "matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r"}"# }),
+            crate::test_env::issue_view_answer(11, json!({ "state": "OPEN", "title": "A" })),
+            crate::test_env::issue_view_answer(12, json!({ "state": "OPEN", "title": "B" })),
+        ]),
+        root,
+    }
+}
+
+fn several_arguments(rig: &Several, issue: u64) -> Value {
+    json!({
+        "issue": issue,
+        "run_id": "claude-abcd1234",
+        "branch": format!("issue-{issue}"),
+        "base": "main",
+        "worktree_root": rig.root.path().join("trees").display().to_string(),
+        "several": true,
+    })
+}
+
+fn assist_several(rig: &Several, arguments: &Value) -> Result<Value, ToolFailure> {
+    crate::test_env::with_scripted_gh(rig.bin.path(), &rig.answers, || {
+        run_tool("assist", arguments, Ok(&rig.context))
+    })
+}
+
+#[test]
+fn assist_with_several_mints_one_child_per_worktree_and_leaves_the_parent_unsworn() {
+    let rig = several_rig();
+    let root = &rig.context.state_root;
+    for issue in [11, 12] {
+        let answer = assist_several(&rig, &several_arguments(&rig, issue));
+        let answer = answer.unwrap_or_else(|why| panic!("assist of #{issue}: {why}"));
+        let child = crate::harness::session::child_run_id(
+            "claude-abcd1234",
+            &crate::identity::Identity::Number(issue),
+            &format!("issue-{issue}"),
+        );
+        assert!(answer.to_string().contains(&child), "{answer}");
+        let pointer = crate::harness::session::load(root, &child);
+        assert_eq!(pointer.parent.as_deref(), Some("claude-abcd1234"));
+        assert_eq!(pointer.base.as_deref(), Some("main"));
+        assert!(pointer.assisted);
+        let marker = crate::transport::branch::read_ownership(
+            pointer.worktree.as_deref().expect("a worktree"),
+        )
+        .expect("the marker reads")
+        .expect("the marker exists");
+        assert_eq!(marker["run_id"], json!(child));
+    }
+    assert_eq!(
+        crate::harness::session::children(root, "claude-abcd1234").len(),
+        2
+    );
+    assert!(
+        crate::harness::session::load(root, "claude-abcd1234")
+            .issue
+            .is_none()
+    );
+
+    let again = assist_several(&rig, &several_arguments(&rig, 11)).map_err(|_| "refused");
+    assert!(
+        again
+            .expect("a retry resumes")
+            .to_string()
+            .contains("resumed_existing_worktree"),
+    );
+    assert_eq!(
+        crate::harness::session::children(root, "claude-abcd1234").len(),
+        2,
+        "a retry minted another child"
+    );
+
+    let mut own_claim = several_arguments(&rig, 11);
+    own_claim["several"] = json!(false);
+    let Err(ToolFailure::Refused(refusal)) = assist_several(&rig, &own_claim) else {
+        panic!("a run holding children also took a claim of its own");
+    };
+    assert_eq!(refusal.code, "already-holding");
+}
+
+#[test]
+fn assist_with_several_refuses_a_run_that_holds_an_issue_itself() {
+    let rig = several_rig();
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(99));
+    crate::harness::session::store(&rig.context.state_root, &run).expect("the pointer writes");
+    let Err(ToolFailure::Refused(refusal)) = assist_several(&rig, &several_arguments(&rig, 11))
+    else {
+        panic!("a run holding #99 took #11 beside it");
+    };
+    assert_eq!(refusal.code, "already-holding");
+}
+
+#[test]
+fn assist_with_several_is_refused_on_another_host() {
+    let rig = several_rig();
+    let mut arguments = several_arguments(&rig, 11);
+    arguments["run_id"] = json!("codex-abcd1234");
+    let Err(ToolFailure::Refused(refusal)) = assist_several(&rig, &arguments) else {
+        panic!("another host took several claims");
+    };
+    assert_eq!(refusal.code, "several-claims-not-on-this-host");
+}
+
 #[test]
 fn the_assisted_effect_records_the_local_claim() {
     let root = tempfile::tempdir().expect("a temporary root");
@@ -5717,6 +5861,7 @@ fn the_assisted_effect_records_the_local_claim() {
     assert!(after.assisted);
     assert_eq!(after.issue, Some(crate::identity::Identity::Number(12)));
     assert_eq!(after.branch.as_deref(), Some("issue-12"));
+    assert_eq!(after.base.as_deref(), Some("main"));
     assert_eq!(after.worktree.as_ref(), Some(&worktree));
     assert_eq!(after.repo_dir.as_ref(), Some(&context.repo_dir));
     assert_eq!(after.lands_in(), vec![&worktree]);
@@ -6441,7 +6586,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 61_953;
+const TOOLS_LIST_CEILING: usize = 62_218;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

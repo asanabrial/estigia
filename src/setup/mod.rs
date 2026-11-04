@@ -5202,6 +5202,7 @@ pub fn forget_state(options: &SetupOptions) -> Vec<PathBuf> {
             }
         }
     }
+    remove(crate::harness::session::pointers_lock_path(&runs));
     remove(crate::harness::session::ledger_path(&runs));
     remove(crate::harness::session::roles_path(&runs));
     // The store holds the decision history and the workflow state that has no

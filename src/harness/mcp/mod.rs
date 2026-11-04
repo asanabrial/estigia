@@ -768,6 +768,84 @@ pub fn run_tool(
     run_tool_asking(name, arguments, context, None)
 }
 
+// `assist` under a child's id, so the marker and the pointer name the child and
+// every other reader of a pointer needs no change. Anything malformed in the
+// arguments is left for that call to refuse.
+fn assist_one_of_several(
+    arguments: &Value,
+    context: &GateContext,
+    consent: Option<&mut messaging::Consent<'_>>,
+) -> Result<Value, ToolFailure> {
+    let mut child_arguments = arguments.clone();
+    child_arguments
+        .as_object_mut()
+        .map(|fields| fields.remove("several"));
+    let parent = arguments.get("run_id").and_then(Value::as_str);
+    let issue = arguments
+        .get("issue")
+        .cloned()
+        .and_then(|issue| serde_json::from_value::<crate::identity::Identity>(issue).ok());
+    let branch = arguments.get("branch").and_then(Value::as_str);
+    let (Some(parent), Some(issue), Some(branch)) = (parent, issue, branch) else {
+        return run_tool_asking("assist", &child_arguments, Ok(context), consent);
+    };
+    let session::RunIdShape::Named { runtime } = session::run_id_shape(parent) else {
+        return run_tool_asking("assist", &child_arguments, Ok(context), consent);
+    };
+    if runtime != session::DEFAULT_RUNTIME {
+        return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
+            "several-claims-not-on-this-host",
+            format!(
+                "{parent} runs on `{runtime}`, and only Claude Code's hook reaches several claims \
+                 from one session"
+            ),
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::OperatorKnowledge,
+                "`assist` without `several`, or one session per issue",
+            ),
+        ))));
+    }
+    let holding = session::load(&context.state_root, parent);
+    if holding.unreadable {
+        return run_tool_asking("assist", &child_arguments, Ok(context), consent);
+    }
+    if let Some(held) = holding.issue.as_ref() {
+        return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
+            "already-holding",
+            format!(
+                "{parent} holds issue #{held} itself, so it cannot also hold #{issue} beside others"
+            ),
+            Resolution::run(format!("estigia release --run-id {parent}")),
+        ))));
+    }
+    let child = session::child_run_id(parent, &issue, branch);
+    child_arguments["run_id"] = json!(child);
+    let mut answer = run_tool_asking("assist", &child_arguments, Ok(context), consent)?;
+    if session::load(&context.state_root, &child).issue.is_none() {
+        return Ok(answer);
+    }
+    let (_, recorded) = session::updated(&context.state_root, &child, |run| {
+        run.parent = Some(parent.to_owned());
+    });
+    let note = if recorded {
+        format!(
+            "\n\nestigia: this claim's run id is `{child}`, a child of `{parent}`: pass it to \
+             `draft_pr`, `ready_pr`, `review_stages` and `review_thread`, and to `estigia release \
+             --run-id`."
+        )
+    } else {
+        format!(
+            "\n\nestigia: the worktree exists and `{}` could not be written, so the gate does not \
+             reach this claim from this session. Call `assist` again.",
+            session::pointer_path(&context.state_root, &child).display()
+        )
+    };
+    if let Some(text) = answer["content"][0]["text"].as_str().map(str::to_owned) {
+        answer["content"][0]["text"] = json!(format!("{text}{note}"));
+    }
+    Ok(answer)
+}
+
 fn run_tool_asking(
     name: &str,
     arguments: &Value,
@@ -789,6 +867,13 @@ fn run_tool_asking(
             "{name} is not a tool this server exposes; it has: {known}"
         ))
     })?;
+
+    if name == "assist"
+        && arguments.get("several") == Some(&json!(true))
+        && let Ok(context) = context
+    {
+        return assist_one_of_several(arguments, context, consent);
+    }
 
     let expanded = match context {
         Ok(context) => expanded_receipt(tool, arguments, context)?,
@@ -1013,6 +1098,22 @@ fn run_tool_asking(
             serde_json::from_value::<crate::identity::Identity>(value.clone()).ok()
         });
         let holding = session::load(&context.state_root, holder);
+        if tool.effect == PointerEffect::Assisted
+            && let [child, ..] = session::children(&context.state_root, holder).as_slice()
+        {
+            return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
+                "already-holding",
+                format!(
+                    "{holder} already holds several claims, {} among them, and a claim of its own \
+                     would leave the gate two answers for one session",
+                    child.run_id
+                ),
+                Resolution::no_command(
+                    crate::outcome::NoCommandReason::OperatorKnowledge,
+                    "`assist` with `several: true`",
+                ),
+            ))));
+        }
         let held = holding.issue;
         if let (Some(held), Some(wanted)) = (held, wanted)
             && held != wanted
@@ -1887,6 +1988,10 @@ pub(crate) fn apply_effect(
         .get("branch")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
+    let base = arguments
+        .get("base")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
     let repo_dir = context.repo_dir.clone();
 
     // The checkout a resumed run adopted rather than built with
@@ -2003,6 +2108,7 @@ pub(crate) fn apply_effect(
                 run.repo_dir = Some(repo_dir.clone());
                 run.worktree = worktree.clone();
                 run.branch = branch.clone();
+                run.base = base.clone();
                 run.assisted = true;
             }
             PointerEffect::Isolated => {

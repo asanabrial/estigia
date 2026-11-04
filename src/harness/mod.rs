@@ -2746,6 +2746,33 @@ fn exact_integration_merge(command: &str) -> bool {
     true
 }
 
+/// A word that names a directory and nothing else, its quotes taken off.
+fn plain_directory(word: &str) -> Option<String> {
+    let unquoted = ['\'', '"']
+        .iter()
+        .find_map(|quote| word.strip_prefix(*quote)?.strip_suffix(*quote))
+        .unwrap_or(word);
+    let after_drive = &unquoted[shell::drive_prefix_len(unquoted)..];
+    (!unquoted.is_empty()
+        && !unquoted.starts_with(['-', '~'])
+        && after_drive
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"/._-~+@".contains(&byte)))
+    .then(|| unquoted.to_owned())
+}
+
+/// Whether any word of `text` moves where a command runs.
+fn changes_directory(text: &str) -> bool {
+    text.split(|character: char| character.is_whitespace() || ";&|()".contains(character))
+        .any(names_another_directory)
+}
+
+fn names_another_directory(word: &str) -> bool {
+    matches!(word, "cd" | "pushd" | "-C" | "--git-dir" | "--work-tree")
+        || word.starts_with("--git-dir=")
+        || word.starts_with("--work-tree=")
+}
+
 /// Where `command` says it runs, and whether what runs there is an exact
 /// integration merge.
 ///
@@ -2756,23 +2783,6 @@ fn directed_integration_merge(command: &str, literal: bool) -> (RunsIn, bool, St
     if literal && exact_integration_merge(command) {
         return (RunsIn::Session, true, command.trim().to_owned());
     }
-    let plain_directory = |word: &str| {
-        let unquoted = ['\'', '"']
-            .iter()
-            .find_map(|quote| word.strip_prefix(*quote)?.strip_suffix(*quote))
-            .unwrap_or(word);
-        let after_drive = &unquoted[shell::drive_prefix_len(unquoted)..];
-        (!unquoted.is_empty()
-            && !unquoted.starts_with(['-', '~'])
-            && after_drive
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"/._-~+@".contains(&byte)))
-        .then(|| unquoted.to_owned())
-    };
-    let changes_directory = |text: &str| {
-        text.split(|character: char| character.is_whitespace() || ";&|()".contains(character))
-            .any(|word| matches!(word, "cd" | "pushd" | "-C" | "--git-dir" | "--work-tree"))
-    };
     let trimmed = command.trim();
     let named = if let Some((head, rest)) = trimmed.split_once("&&") {
         match head.split_ascii_whitespace().collect::<Vec<_>>().as_slice() {

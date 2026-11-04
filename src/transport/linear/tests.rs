@@ -6,7 +6,7 @@
 use crate::identity::Identity;
 use crate::transport::How;
 
-use super::{Issue, QUERY, read_issue};
+use super::{Issue, QUERY, STARTED, follow_started, read_issue};
 
 /// Runs `body` with a stand-in `linear` answering `entries`, and answers what
 /// it returned beside every argument list the stand-in was asked, in order.
@@ -732,6 +732,30 @@ fn an_unknown_issue_or_a_rejected_credential_is_not_an_absence() {
     }))
     .expect_err("a rejected credential");
     assert_eq!(a_reason(&rejected), "linear-credential-rejected");
+}
+
+#[test]
+fn a_resumed_assist_moves_no_state() {
+    let names = vec![(STARTED.to_owned(), "In Progress".to_owned())];
+    let answer = follow_started(
+        &names,
+        &Identity::Key("ABC-102".to_owned()),
+        serde_json::json!({ "resumed_existing_worktree": true }),
+    );
+    assert!(answer.get("linear_state").is_none(), "{answer}");
+}
+
+#[test]
+fn a_first_assist_moves_the_issue_to_started() {
+    let names = vec![(STARTED.to_owned(), "In Progress".to_owned())];
+    let (answer, _) = through(&a_move("Todo", accepted(), "In Progress"), || {
+        follow_started(
+            &names,
+            &Identity::Key("ABC-102".to_owned()),
+            serde_json::json!({ "resumed_existing_worktree": false }),
+        )
+    });
+    assert_eq!(answer["linear_state"]["state"], "In Progress", "{answer}");
 }
 
 fn standing_answering(

@@ -1653,6 +1653,13 @@ pub const TOOLS: &[Tool] = &[
                 "Where the checkout is made, as for `start_branch`. Defaults to the configured \
                  location.",
             ),
+            Argument::optional(
+                "several",
+                "boolean",
+                "Hold this claim beside others: one child run per worktree, whose id the answer \
+                 names and `draft_pr`, `ready_pr`, `review_stages` and `review_thread` take. A \
+                 call is decided under the child it lands in. Claude Code only.",
+            ),
         ],
         effect: PointerEffect::Assisted,
         writes: true,
@@ -1962,6 +1969,7 @@ pub fn unexposed_reason(name: &str) -> Option<&'static str> {
 /// `create`'s `repo` is the other kind: this server reads it to choose the
 /// repository the transport is pointed at, so the transport never sees it.
 pub const POINTER_ONLY: &[(&str, &str)] = &[
+    ("assist", "several"),
     ("create", "repo"),
     ("claim", "state"),
     ("handoff", "deadline_seconds"),
