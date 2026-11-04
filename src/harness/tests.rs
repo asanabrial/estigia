@@ -3578,6 +3578,11 @@ fn the_gate_measures_the_commands_that_switch_it_off() {
         "estigia doctor",
         "estigia config list",
         "estigia gate --tool Read",
+        "estigia where 12 --json",
+        "estigia feed --json",
+        "estigia status set \"reading the spec\"",
+        "estigia flush",
+        "estigia flush --status",
     ] {
         let (_, how) = crate::harness::classify("Bash", &serde_json::json!({"command": line}));
         assert_eq!(

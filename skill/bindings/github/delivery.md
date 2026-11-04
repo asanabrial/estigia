@@ -13,12 +13,12 @@ this run did not write, and it settles a branch-derived link that needs the PR t
 from *there* carries `"world": "committed"`, which every surface reads as **the write landed; what
 failed came after it** rather than as nothing having happened. Any refusal without that field means
 what it always meant. When the keyword from *there* names another issue, the refusal carries
-`"cause": "closing-keyword-elsewhere"` — the same cause `check-closing-keywords` reports, because the
+`"cause": "closing-keyword-elsewhere"`, because the
 remedy is read from the cause and a branch link, the cause `assess_autoclose` itself gives when no
 keyword names this issue, is not one an edit removes.
 
-A `git log` that does not answer is not a branch with no keywords: both this scan and
-`check-closing-keywords` refuse on it rather than continuing with an empty list.
+A `git log` that does not answer is not a branch with no keywords: this scan refuses on it rather
+than continuing with an empty list.
 
 **An issue that is not finished when its PR merges is a separate case**, because the auto-close does
 not care whether the delivery was the whole issue or one slice of it. Marking a partly-delivered
@@ -42,10 +42,10 @@ The scan refuses a keyword naming **any** issue, not only the one under delivery
 branch's body closes #464 on merge, whose `done` transition then never runs.
 
 **Then verify it mechanically, because reading your own prose is how it slipped through.**
-`publish-review` runs the check as part of publishing and refuses to finish while a keyword is live;
-`check-closing-keywords` runs it standalone. Run it again before merging — the branch's commit
-messages can introduce one after the body is already clean. Editing the body does remove the link,
-though the value can lag a few seconds, so re-run rather than trusting the first response.
+`publish-review` runs the check as part of publishing and refuses to finish while a keyword is live,
+and a commit message that introduces one reaches the remote only through another publication, which
+runs it again. Editing the body does remove the link, though the value can lag a few seconds, so
+publish again rather than trusting the first response.
 
 **One consequence to state rather than rediscover.** A project's native *Linked pull requests* column
 is populated by these references, so under `gh issue develop` it fills itself and under a
@@ -67,7 +67,7 @@ than proven.
 
 While the window is closed, `claim`, `transition`, `comment`, `create`, `unassign` and `start_branch` answer
 from the local store and queue their GitHub writes; an issue created then carries a provisional number until
-the queue is sent. The `flush` operation sends the queue in order once the window is open, and every write to
+the queue is sent. `estigia flush` sends the queue in order once the window is open, and every write to
 GitHub and every publication runs it first. A queue that does not drain refuses `outbox-pending`, naming the
 write it stopped at and how many remain: settle that write, then run `flush` again.
 
@@ -506,7 +506,7 @@ reference, and the answer carries `delivery` (pull request, merge commit, parent
 
 That is the **final-delivery** path. An intermediate slice of a retained issue must not borrow it.
 Start its branch with `start_branch` `no_link: true` (`--no-link`): nothing links the branch, its merge
-leaves the issue open, and `check_closing_keywords` answers `will_autoclose: false`. The last slice
+leaves the issue open, and the publication's autoclose verdict reads `will_autoclose: false`. The last slice
 starts linked. `deliver` reads the merged pull request's `closingIssuesReferences`: when they do not
 name the issue it posts the evidence, moves the issue back to `in-progress` under the same claim and
 answers `continues: true`, releasing and closing nothing. For a slice whose branch is already linked: record the workflow state that should survive before merging, renew with

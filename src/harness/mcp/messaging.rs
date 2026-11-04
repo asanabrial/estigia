@@ -896,30 +896,3 @@ pub(super) fn list_sessions(
         .map(|answer| text_result(answer.to_string()))
         .map_err(refused)
 }
-
-pub(super) fn feed(arguments: &Value, context: &GateContext) -> Result<Value, ToolFailure> {
-    let mut selectors = arguments.clone();
-    if let Some(fields) = selectors.as_object_mut()
-        && let Some(repository) = fields.remove("repository")
-    {
-        fields.insert("repo".to_owned(), repository);
-    }
-    crate::cli::feed::page(&selectors, &context.state_root, session::now_seconds())
-        .map(|page| text_result(page.to_string()))
-        .map_err(refused)
-}
-
-pub(super) fn standing(arguments: &Value, context: &GateContext) -> Result<Value, ToolFailure> {
-    let reference = arguments
-        .get("reference")
-        .and_then(Value::as_str)
-        .ok_or_else(|| malformed("`reference` is a string; where needs it".to_owned()))?;
-    let transport = crate::transport::Context::live(
-        context.skill_root.clone(),
-        context.repo_dir.clone(),
-        context.tracker.named_repo(),
-    );
-    crate::cli::standing::read(reference, &transport, &context.state_root)
-        .map(|answer| text_result(answer.to_string()))
-        .map_err(refused)
-}

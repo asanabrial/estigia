@@ -156,12 +156,13 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `pr_review_claim` and `pr_review_release` join: a review-only claim on a pull request | 49 | 63,592 |
 | `pr_review_status`, `pr_review_launch` and `pr_review_collect` join: its panel | 52 | 65,149 |
 | `pr_review_submit` joins: its one road to GitHub | 53 | 65,787 |
+| `where`, `feed`, `status` and `flush` become commands alone; `check_closing_keywords` goes, `publish_review` runs its scan | 48 | 61,940 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
 rest were absorbed by a surviving name reached through a parameter or a `view`. `TOOLS_LIST_CEILING` in
-`src/harness/mcp/tests.rs` bounds the list, and each growth above was a reviewed raise by exactly the
-measured difference. It is the largest list a process can answer, the unreadable-context one.
+`src/harness/mcp/tests.rs` bounds the list, and each change above moved it by exactly the measured
+difference. It is the largest list a process can answer, the unreadable-context one.
 
 The list depends on the process's `GateContext`, fixed for the process, so `listChanged` stays false.
 Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool; under any other readable

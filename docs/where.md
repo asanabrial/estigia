@@ -1,6 +1,6 @@
 # `estigia where`
 
-The one answer to «what has happened to this issue»: `estigia where <ref>` and the `where` MCP tool return
+The one answer to «what has happened to this issue»: `estigia where <ref>` returns
 repository, state, holder, pull request, review, checklist, clauses, messages and queued writes in one
 read. It is read-only: it opens `~/.estigia/state.db` for reading, creates no store that is absent, needs no
 claim and sits behind no gate. Gaps are in [`honesty.md`](honesty.md), "Where".
@@ -44,11 +44,3 @@ store holds with no state is `unavailable`, not a default.
 
 `taken_at` stamps the answer: the holder can change between reads.
 
-## The MCP tool
-
-`where` takes `reference` and answers the same object as `estigia where --json`. It is read-only
-(`writes: false`, no pointer effect) and answered from the local store and the tracker, so it is on every
-runtime with a tool server; the CLI-only runtimes use the command. Refusals: `ambiguous-issue`,
-`where-reference-malformed` ([`refusal-classes.md`](refusal-classes.md)). It binds to neither the tracker nor the
-repository host, so `Tracker linear` under `Workflow: assisted` answers it; the same holds for the other tools
-that read only Estigia's store or git (`NEEDS_NO_TRANSPORT` in `harness::mcp::tools`).

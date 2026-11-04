@@ -50,7 +50,7 @@ skips the develop call and so the Development-sidebar link. The branch is still 
 the answer says so honestly: `natively_linked: false` and `link_outcome: skipped`, with no `link_queued`
 even while the schedule is closed, because nothing is deferred. The branch reaches the remote with the
 first push, as a hand-created one does. With no link and no closing keyword GitHub reports no closing
-reference, so `check_closing_keywords` answers `will_autoclose: false` and the merge leaves the issue
+reference, so the publication's autoclose verdict reads `will_autoclose: false` and the merge leaves the issue
 open; the last slice starts linked as before and closes it as described above. Nothing downstream
 assumed the link: `verify_claim`'s own-delivery close and the post-merge continuation are reached only
 when GitHub closed the issue. The opt-out does not remove a link that already exists, which is why a

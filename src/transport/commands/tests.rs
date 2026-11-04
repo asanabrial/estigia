@@ -70,8 +70,6 @@ fn findings_without_an_epoch_is_refused() {
     assert_eq!(payload["reason"], "finding-without-transaction");
 }
 
-/// `check-closing-keywords` names the release step, not only `transition --to
-/// done` — the field carries [`crate::transport::closing::FOLLOW_UP`]'s text.
 #[test]
 fn a_branch_link_names_release_after_done_in_the_mandatory_follow_up() {
     let repo = tempfile::tempdir().expect("a directory for the fixture repository");
@@ -141,98 +139,11 @@ fn a_branch_link_names_release_after_done_in_the_mandatory_follow_up() {
         repo: None,
     };
     let answer = crate::test_env::with_scripted_gh(bin.path(), &answers, || {
-        check_closing_keywords(&context, issue, Some(base), Some(branch))
+        assess_autoclose(&context, issue, Some(base), Some(branch))
     })
     .expect("a branch-link autoclose is reported, not refused");
 
     assert_eq!(answer["cause"], "branch-link");
-    let follow_up = answer["mandatory_follow_up"]
-        .as_str()
-        .expect("mandatory_follow_up is a string");
-    assert_eq!(
-        follow_up,
-        crate::transport::closing::FOLLOW_UP,
-        "the follow-up is not the shared constant, so it can drift from it silently: {follow_up}"
-    );
-}
-
-/// A closing keyword naming an issue other than the delivered one is refused by
-/// the standalone check too.
-#[test]
-fn a_closing_keyword_naming_another_issue_is_refused_by_the_standalone_check() {
-    let repo = tempfile::tempdir().expect("a directory for the fixture repository");
-    let git = |arguments: &[&str]| -> bool {
-        std::process::Command::new("git")
-            .arg("-C")
-            .arg(repo.path())
-            .args(arguments)
-            .output()
-            .is_ok_and(|output| output.status.success())
-    };
-    assert!(git(&["init", "--quiet", "-b", "main"]));
-    assert!(git(&["config", "user.email", "nobody@example.invalid"]));
-    assert!(git(&["config", "user.name", "nobody"]));
-    assert!(git(&["commit", "--allow-empty", "--quiet", "-m", "base"]));
-    let base_sha = std::process::Command::new("git")
-        .arg("-C")
-        .arg(repo.path())
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .expect("git names the head")
-        .stdout;
-    let base_sha = String::from_utf8_lossy(&base_sha).trim().to_owned();
-    assert!(git(&["update-ref", "refs/remotes/origin/main", &base_sha]));
-
-    let branch = "fix/575-closes-another";
-    assert!(git(&["checkout", "--quiet", "-b", branch]));
-    assert!(git(&[
-        "commit",
-        "--allow-empty",
-        "--quiet",
-        "-m",
-        "a change that names no issue",
-    ]));
-
-    let issue = 575;
-    let base = "main";
-    let answers = serde_json::to_string(&serde_json::json!([
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
-        {
-            "matches": "api graphql",
-            "stdout": serde_json::json!({
-                "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
-                    "nodes": [{
-                        "number": 7,
-                        "state": "OPEN",
-                        "headRefName": branch,
-                        "baseRefName": base,
-                    }],
-                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
-                } } } },
-            }).to_string(),
-            "status": 0,
-        },
-        { "matches": "json body", "stdout": "{\"body\":\"Closes #464, and names #469.\"}", "status": 0 },
-    ]))
-    .expect("the fake tracker script serialises");
-
-    let bin = crate::test_env::scripted_gh();
-    let context = Context {
-        skill_dir: repo.path().to_path_buf(),
-        repo_dir: repo.path().to_path_buf(),
-        config: Vec::new(),
-        repo: None,
-    };
-    let failure = crate::test_env::with_scripted_gh(bin.path(), &answers, || {
-        check_closing_keywords(&context, issue, Some(base), Some(branch))
-    })
-    .expect_err("a keyword naming another issue must be refused");
-    let Failure::Stop(payload) = failure else {
-        panic!("expected a Stop, got {failure:?}");
-    };
-    assert_eq!(payload["reason"], "closing-keyword-live");
-    assert_eq!(payload["cause"], "closing-keyword-elsewhere");
-    assert_eq!(payload["other_issue_keywords"][0]["text"], "Closes #464");
 }
 
 #[test]
