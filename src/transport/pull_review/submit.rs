@@ -251,49 +251,51 @@ pub fn submit(context: &Context, run_id: &str) -> Result<serde_json::Value, Fail
         Verdict::Approved => "APPROVE",
         Verdict::ChangesRequested { .. } => "REQUEST_CHANGES",
     };
-    let live = read_live(context, held.pr)?;
-    if live.state != "OPEN" {
-        return refuse(
-            context,
-            &store,
-            &held,
-            "pull-review-not-open",
-            format!("pull request #{} is {} now", held.pr, live.state),
-        );
-    }
-    if live.head != held.head {
-        return refuse(
-            context,
-            &store,
-            &held,
-            "head-moved",
-            format!(
-                "the review read {} and the head is now {}; a new review is a new claim",
-                held.head, live.head
-            ),
-        );
-    }
-    if live.base_ref != held.base_ref {
-        return refuse(
-            context,
-            &store,
-            &held,
-            "pull-review-retargeted",
-            format!(
-                "the review was measured against {} and the pull request now targets {}",
-                held.base_ref, live.base_ref
-            ),
-        );
-    }
-    let open = match &reading.verdict {
-        Verdict::ChangesRequested { open } => open.as_slice(),
-        _ => &[],
-    };
+    // Looked for before the pull request is judged: a review an earlier call may
+    // have landed is answered for, whatever has happened to the pull request since.
     let found =
         already_sent(context, &held).map_err(|failure| unconfirmed(&held, failure.detail()))?;
     let sent = match found {
         Some(sent) => sent,
         None => {
+            let live = read_live(context, held.pr)?;
+            if live.state != "OPEN" {
+                return refuse(
+                    context,
+                    &store,
+                    &held,
+                    "pull-review-not-open",
+                    format!("pull request #{} is {} now", held.pr, live.state),
+                );
+            }
+            if live.head != held.head {
+                return refuse(
+                    context,
+                    &store,
+                    &held,
+                    "head-moved",
+                    format!(
+                        "the review read {} and the head is now {}; a new review is a new claim",
+                        held.head, live.head
+                    ),
+                );
+            }
+            if live.base_ref != held.base_ref {
+                return refuse(
+                    context,
+                    &store,
+                    &held,
+                    "pull-review-retargeted",
+                    format!(
+                        "the review was measured against {} and the pull request now targets {}",
+                        held.base_ref, live.base_ref
+                    ),
+                );
+            }
+            let open = match &reading.verdict {
+                Verdict::ChangesRequested { open } => open.as_slice(),
+                _ => &[],
+            };
             let body = body_of(&held, event, &reading.findings, open);
             send(context, &held, event, &body)
                 .map_err(|failure| unconfirmed(&held, failure.detail()))?

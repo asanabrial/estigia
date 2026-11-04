@@ -279,9 +279,11 @@ fn a_head_that_moved_submits_nothing_reads_head_moved_and_removes_the_worktree()
     let rig = rig();
     let worktree = reviewed(&rig, CLEAN);
     let moved = "d".repeat(40);
-    let answer = gh(&rig, &[view(&rig, &moved, "OPEN", "main")], || {
-        submit(&rig.context, RUN)
-    })
+    let answer = gh(
+        &rig,
+        &[view(&rig, &moved, "OPEN", "main"), no_reviews()],
+        || submit(&rig.context, RUN),
+    )
     .expect("an answer");
     assert_eq!(answer["submitted"], false);
     assert_eq!(answer["reason"], "head-moved");
@@ -297,9 +299,11 @@ fn a_retarget_and_a_closed_pull_request_submit_nothing() {
     ] {
         let rig = rig();
         let worktree = reviewed(&rig, CLEAN);
-        let answer = gh(&rig, &[view(&rig, &rig.head, state, base)], || {
-            submit(&rig.context, RUN)
-        })
+        let answer = gh(
+            &rig,
+            &[view(&rig, &rig.head, state, base), no_reviews()],
+            || submit(&rig.context, RUN),
+        )
         .expect("an answer");
         assert_eq!(answer["reason"], reason);
         assert_eq!(answer["submitted"], false);
@@ -403,6 +407,104 @@ fn a_retry_finds_the_review_a_lost_answer_left_and_sends_no_second_one() {
         !log(&rig).contains("--method POST"),
         "a second verdict was sent"
     );
+}
+
+#[test]
+fn a_retry_after_the_head_moved_answers_for_the_review_that_landed_rather_than_nothing_sent() {
+    for (state, base, moved) in [
+        ("OPEN", "main", true),
+        ("MERGED", "main", false),
+        ("OPEN", "another-base", false),
+    ] {
+        let rig = rig();
+        let worktree = reviewed(&rig, CLEAN);
+        let store = Store::open(&store_path().expect("a path")).expect("the store");
+        let epoch = store
+            .pull_review_of(RUN)
+            .expect("a read")
+            .expect("a row")
+            .epoch;
+        let live = if moved {
+            "d".repeat(40)
+        } else {
+            rig.head.clone()
+        };
+        let existing = serde_json::json!([[{
+            "id": 41,
+            "body": format!("approved\n<!-- estigia:pull-review {epoch} -->"),
+        }]]);
+        let answer = gh(
+            &rig,
+            &[
+                view(&rig, &live, state, base),
+                serde_json::json!({
+                    "matches": "--paginate --slurp",
+                    "stdout": existing.to_string(),
+                    "status": 0,
+                }),
+                read_back(41, &rig.head, "APPROVED"),
+            ],
+            || submit(&rig.context, RUN),
+        )
+        .expect("the retry");
+        assert_eq!(answer["submitted"], true, "{answer}");
+        assert_eq!(answer["commit_id"], rig.head.as_str());
+        assert_eq!(answer["head_moved_during_submission"], moved);
+        assert!(
+            !log(&rig).contains("--method POST"),
+            "a second verdict was sent"
+        );
+        gone(&rig, &worktree);
+    }
+}
+
+#[test]
+fn an_unreadable_search_for_the_first_review_is_unconfirmed_and_sends_nothing() {
+    let rig = rig();
+    let worktree = reviewed(&rig, CLEAN);
+    let failure = gh(
+        &rig,
+        &[
+            view(&rig, &rig.head, "OPEN", "main"),
+            serde_json::json!({ "matches": "--paginate --slurp", "stdout": "", "stderr": "HTTP 502", "status": 1 }),
+        ],
+        || submit(&rig.context, RUN),
+    )
+    .expect_err("not confirmed");
+    assert!(
+        failure
+            .envelope()
+            .to_string()
+            .contains("pull-review-submission-unconfirmed"),
+        "{}",
+        failure.envelope()
+    );
+    assert!(!log(&rig).contains("--method POST"));
+    assert!(
+        worktree.is_dir(),
+        "the claim was put down with its outcome unknown"
+    );
+}
+
+#[test]
+fn an_escalated_verdict_sends_nothing_and_puts_the_claim_down() {
+    let rig = rig();
+    let insufficient = serde_json::json!({ "findings": [{
+        "id": "unsure",
+        "class": "severe",
+        "evidence": "change.txt:1 may do the wrong thing",
+        "impact": "the wrong thing may happen",
+        "location": "change.txt:1",
+        "evidence_class": "insufficient",
+        "causal_disposition": "introduced",
+    }]})
+    .to_string();
+    let worktree = reviewed(&rig, &insufficient);
+    let answer = gh(&rig, &[], || submit(&rig.context, RUN)).expect("an answer");
+    assert_eq!(answer["submitted"], false);
+    assert_eq!(answer["reason"], "pull-review-escalated");
+    assert!(!log(&rig).contains("--method POST"));
+    gone(&rig, &worktree);
 }
 
 #[test]

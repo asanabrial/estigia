@@ -128,8 +128,9 @@ release: no review ran, and that is not a clean result. A host relay is refused
 `commit_id` and reports `submitted: true` only once the review reads back at that commit in the state
 sent. A moved head answers `head-moved`, a changed base branch `pull-review-retargeted` and a closed
 pull request `pull-review-not-open`, each with `submitted: false`, the worktree removed and the claim
-put down. A lost answer is `pull-review-submission-unconfirmed` and keeps the claim, and a retry finds
-the first review by the marker in its body rather than sending a second.
+put down. A lost answer is `pull-review-submission-unconfirmed` and keeps the claim. A retry looks for
+the first review by the marker in its body before it judges the pull request again, so a review that
+landed is reported as submitted even if the head has moved or the pull request has closed since.
 
 GitHub has no conditional write here, so a push between the last read and the post cannot be
 prevented, the same limit as the thread mutations above. A last read of the head reports
