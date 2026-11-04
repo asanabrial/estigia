@@ -1375,6 +1375,7 @@ pub(super) fn deliver(
     };
     let issue = arguments["issue"].as_u64().unwrap_or_default();
     let seconds = requested_wait(arguments)?;
+    let until = until_of(arguments)?;
     let compact = arguments.get("compact").and_then(Value::as_bool) == Some(true);
     let appendix = match arguments.get("appendix_file").and_then(Value::as_str) {
         None => None,
@@ -1400,11 +1401,7 @@ pub(super) fn deliver(
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
         appendix,
-        until: match arguments.get("until").and_then(Value::as_str) {
-            Some("verdict") => Some(Until::Verdict),
-            Some("ci") => Some(Until::Ci),
-            _ => None,
-        },
+        until,
         never_ran_evidence: arguments
             .get("never_ran_evidence_file")
             .and_then(Value::as_str)
@@ -1412,6 +1409,19 @@ pub(super) fn deliver(
     };
     let live = Live::new(context, named.id, context.repository_host.named_repo());
     Ok(result_of(run(&live, &request), compact))
+}
+
+fn until_of(arguments: &Value) -> Result<Option<Until>, ToolFailure> {
+    let Some(until) = arguments.get("until") else {
+        return Ok(None);
+    };
+    match until.as_str() {
+        Some("verdict") => Ok(Some(Until::Verdict)),
+        Some("ci") => Ok(Some(Until::Ci)),
+        _ => Err(ToolFailure::Malformed(format!(
+            "`until` is one of verdict, ci, not {until}"
+        ))),
+    }
 }
 
 fn result_of(answer: Value, compact: bool) -> Value {
