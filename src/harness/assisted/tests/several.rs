@@ -118,6 +118,11 @@ fn worktree(run: &session::Run) -> &Path {
     run.worktree.as_deref().expect("a worktree")
 }
 
+// A shell line's spelling: outside quotes a backslash is an escape, not a separator.
+fn spelled(run: &session::Run) -> String {
+    worktree(run).display().to_string().replace('\\', "/")
+}
+
 fn verdict(answer: &Value) -> String {
     answer["hookSpecificOutput"]["permissionDecision"]
         .as_str()
@@ -187,10 +192,7 @@ fn an_edit_where_two_children_cover_the_landing_is_decided_by_the_parents_policy
 #[test]
 fn a_single_git_dash_c_is_decided_under_the_child_it_names() {
     let fan = fan();
-    let command = format!(
-        "git -C {} commit -m \"fix: one; two\"",
-        worktree(&fan.a).display()
-    );
+    let command = format!("git -C {} commit -m \"fix: one; two\"", spelled(&fan.a));
     let answer = bash(&fan.context, &command);
     assert_eq!(verdict(&answer), "allow", "{answer}");
     assert_eq!(allowed_under(&fan.context), vec![fan.a.run_id.clone()]);
@@ -202,8 +204,8 @@ fn two_git_dash_c_in_one_call_are_decided_under_neither_child() {
     for separator in [";", "&&", "|", "\n"] {
         let command = format!(
             "git -C {} commit -m x {separator} git -C {} commit -m y",
-            worktree(&fan.a).display(),
-            worktree(&fan.b).display()
+            spelled(&fan.a),
+            spelled(&fan.b)
         );
         let answer = bash(&fan.context, &command);
         let policy = without_children(&fan, |context| bash(context, &command));
@@ -215,8 +217,8 @@ fn two_git_dash_c_in_one_call_are_decided_under_neither_child() {
 #[test]
 fn a_git_dash_c_hiding_code_or_a_second_directory_is_decided_under_no_child() {
     let fan = fan();
-    let a = worktree(&fan.a).display().to_string();
-    let b = worktree(&fan.b).display().to_string();
+    let a = spelled(&fan.a);
+    let b = spelled(&fan.b);
     for command in [
         format!("git -C {a} commit -m \"$(sed -i x {b}/y)\""),
         format!("git -C {a} commit -m `sed -i x {b}/y`"),
@@ -243,7 +245,7 @@ fn a_shell_write_inside_one_child_stays_there_unless_it_changes_directory() {
 
     assert_eq!(allowed_under(&inside), vec![fan.a.run_id.clone()]);
 
-    let elsewhere = format!("cd {} && sed -i s/a/b/ x", worktree(&fan.b).display());
+    let elsewhere = format!("cd {} && sed -i s/a/b/ x", spelled(&fan.b));
     let answer = bash(&inside, &elsewhere);
     assert_eq!(allowed_under(&inside), vec![fan.a.run_id], "{answer}");
 }
@@ -253,7 +255,7 @@ fn git_dash_c_from_inside_one_child_is_decided_under_the_one_it_names() {
     let fan = fan();
     let mut inside = fan.context.clone();
     inside.repo_dir = worktree(&fan.a).to_path_buf();
-    let command = format!("git -C {} commit -m x", worktree(&fan.b).display());
+    let command = format!("git -C {} commit -m x", spelled(&fan.b));
     let answer = bash(&inside, &command);
     assert_eq!(verdict(&answer), "allow", "{answer}");
     assert_eq!(allowed_under(&inside), vec![fan.b.run_id]);
@@ -271,7 +273,7 @@ fn a_stale_child_is_refused_rather_than_stepped_over() {
 #[test]
 fn a_merge_of_the_base_inside_a_childs_worktree_is_admitted() {
     let fan = fan();
-    let a = worktree(&fan.a).display().to_string();
+    let a = spelled(&fan.a);
     for command in [
         format!("git -C {a} merge main"),
         format!("git -C {a} merge --no-edit origin/main"),
@@ -286,7 +288,7 @@ fn a_merge_of_the_base_inside_a_childs_worktree_is_admitted() {
 #[test]
 fn a_merge_of_anything_but_the_base_is_still_refused() {
     let fan = fan();
-    let a = worktree(&fan.a).display().to_string();
+    let a = spelled(&fan.a);
     for command in [
         format!("git -C {a} merge issue-12"),
         format!("git -C {a} merge"),
@@ -308,7 +310,7 @@ fn a_merge_is_refused_for_a_pointer_that_recorded_no_base() {
     session::update(&fan.context.state_root, &fan.a.run_id, |run| {
         run.base = None;
     });
-    let command = format!("git -C {} merge main", worktree(&fan.a).display());
+    let command = format!("git -C {} merge main", spelled(&fan.a));
     let answer = bash(&fan.context, &command);
     assert!(
         reason(&answer).contains("assisted-does-not-deliver"),
@@ -384,6 +386,20 @@ fn another_sessions_children_are_not_this_ones() {
             session_id: "ffff0000".to_owned(),
             ..input("Edit", json!({ "file_path": target.display().to_string() }))
         },
+    );
+    assert!(allowed_under(&fan.context).is_empty(), "{answer}");
+}
+
+#[test]
+fn another_dialect_never_selects_a_child() {
+    let fan = fan();
+    let target = worktree(&fan.b).join("x.txt");
+    let answer = run_as(
+        Dialect::GeminiCli,
+        None,
+        Event::PreToolUse,
+        &input("Edit", json!({ "file_path": target.display().to_string() })),
+        Some(&fan.context),
     );
     assert!(allowed_under(&fan.context).is_empty(), "{answer}");
 }

@@ -960,12 +960,6 @@ Run id `{}`. {held}{handoff}{isolation}{children}{dirt}{delegated}{inline}{}{}{}
     })
 }
 
-/// The issues another run handed to this runtime in this repository.
-///
-/// A handoff is a request, not a claim: the store records it so a session that
-/// starts later can see it, and taking one still goes through `claim`. A store
-/// that exists and cannot be read says so, because silence would be read as
-/// nothing having been handed over.
 fn several_claims_paragraph(context: &GateContext, run: &session::Run) -> String {
     let children = session::children(&context.state_root, &run.run_id);
     if children.is_empty() {
@@ -999,6 +993,12 @@ fn several_claims_paragraph(context: &GateContext, run: &session::Run) -> String
     )
 }
 
+/// The issues another run handed to this runtime in this repository.
+///
+/// A handoff is a request, not a claim: the store records it so a session that
+/// starts later can see it, and taking one still goes through `claim`. A store
+/// that exists and cannot be read says so, because silence would be read as
+/// nothing having been handed over.
 fn handoff_paragraph(context: &GateContext, run: &session::Run) -> String {
     let session::RunIdShape::Named { runtime } = session::run_id_shape(&run.run_id) else {
         return String::new();

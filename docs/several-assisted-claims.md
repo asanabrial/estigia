@@ -39,7 +39,8 @@ primary checkout whatever its commands `cd` into.
 "Exactly one" is read strictly. Outside quotes, `; & | < > ( ) $` backticks, a backslash, `#` and a line
 break all disqualify the line; inside double quotes, `$`, a backtick and a backslash do. A word starting
 with `-` straight after the path (`-c`, a second `-C`) disqualifies it too. So `git -C A … ; git -C B …`
-is decided under neither.
+is decided under neither. On Windows the path is spelled with forward slashes, since a backslash outside
+quotes is an escape to the shell that runs the line.
 
 `SessionEnd` forgets the children with the session's own pointer, and `SessionStart` lists each one.
 
