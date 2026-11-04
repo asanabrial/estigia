@@ -384,7 +384,9 @@ the verdict, or an advanced base, is what clears it. The rule holds once the led
 `approved`, not only once the verdict is recorded: an unjudged parent whose every licensed lens has
 reported and which computes `approved` is refused the same way: the author records the verdict and
 delivers, or records a finding since its newest lens report, and one whose licensed lens has not reported is refused
-`republish-before-panel-reported`. It is no longer a counted round: nothing
+`republish-before-panel-reported`. A parent whose declared checks recorded a failed receipt for its
+exact bytes is refused neither way: no lens may be launched on it, so the republish abandons nothing
+and spends no correction. It is no longer a counted round: nothing
 charges the author's election to a ceiling, because there is none, and the new lineage it begins owns
 its own corrections.
 

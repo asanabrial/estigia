@@ -428,3 +428,140 @@ fn a_spawn_that_fails_is_the_answer_and_nothing_runs_in_the_foreground() {
     assert_eq!(ran_times(&file), 0);
     assert_eq!(recorded_receipts(), 0);
 }
+
+fn republish_world_declaring(script: &str) -> RepublishWorld {
+    let mut world = republish_world();
+    git(&world.work, &["checkout", "-q", "main"]);
+    put(
+        &world.work.join("estigia.generated.toml"),
+        &declaration_for(&[("tests", script)]),
+    );
+    git(&world.work, &["add", "-A"]);
+    git(&world.work, &["commit", "--quiet", "-m", "declares checks"]);
+    git(&world.work, &["push", "-q", "origin", "main"]);
+    world.base = head_of(&world.work);
+    git(
+        &world.work,
+        &["checkout", "-q", "-B", REPUBLISH_BRANCH, "main"],
+    );
+    world
+}
+
+fn checks_receipt_on(
+    world: &RepublishWorld,
+    receipt: &ReviewTransaction,
+    passed: &str,
+) -> ownership::Comment {
+    let declared = declared_at(&world.work, &receipt.base).expect("the declaration");
+    wrote(
+        "9",
+        markers::render(
+            "checks-receipt",
+            &[
+                ("run-id", REPUBLISH_RUN),
+                ("digest", &receipt.digest),
+                ("commands", &commands_digest(&declared)),
+                ("passed", passed),
+                ("results", "tests=1:3"),
+            ],
+        )
+        .expect("a checks marker"),
+    )
+}
+
+#[test]
+fn a_failed_checks_receipt_with_no_lens_report_republishes() {
+    let world = republish_world_declaring("exit 1");
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+    let comments = [
+        published(&parent),
+        checks_receipt_on(&world, &parent, "false"),
+    ];
+
+    world
+        .publish(&comments, &parent_head)
+        .expect("a failed receipt launches no lens, so a republish abandons none");
+    assert_eq!(
+        receipt_standing(&comments, &parent)
+            .expect("readable")
+            .standing,
+        Standing::Unjudged,
+        "the correction count reads this standing, and it must spend nothing"
+    );
+}
+
+#[test]
+fn a_failed_checks_receipt_whose_ledger_computes_approved_republishes() {
+    let world = republish_world_declaring("exit 1");
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+
+    world
+        .publish(
+            &[
+                published(&parent),
+                recorded_lens_report_for(&parent, 3, RELIABILITY_LENS, None),
+                checks_receipt_on(&world, &parent, "false"),
+            ],
+            &parent_head,
+        )
+        .expect("the verdict the approval refusal names would refuse these failed bytes");
+}
+
+#[test]
+fn checks_that_recorded_no_receipt_yet_with_no_lens_report_are_still_refused() {
+    let world = republish_world_declaring("sleep 60");
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+
+    let envelope = refusal_of(world.publish(&[published(&parent)], &parent_head));
+    assert_eq!(
+        envelope["reason"], "republish-before-panel-reported",
+        "{envelope}"
+    );
+}
+
+#[test]
+fn a_passing_checks_receipt_with_no_lens_report_is_still_refused() {
+    let world = republish_world_declaring("exit 0");
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+
+    let envelope = refusal_of(world.publish(
+        &[
+            published(&parent),
+            checks_receipt_on(&world, &parent, "true"),
+        ],
+        &parent_head,
+    ));
+    assert_eq!(
+        envelope["reason"], "republish-before-panel-reported",
+        "{envelope}"
+    );
+}
+
+#[test]
+fn a_failed_receipt_for_other_bytes_with_no_lens_report_is_still_refused() {
+    let world = republish_world_declaring("exit 1");
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+    let other = world.receipt('2', &parent_head);
+
+    let envelope = refusal_of(world.publish(
+        &[
+            published(&parent),
+            checks_receipt_on(&world, &other, "false"),
+        ],
+        &parent_head,
+    ));
+    assert_eq!(
+        envelope["reason"], "republish-before-panel-reported",
+        "{envelope}"
+    );
+}

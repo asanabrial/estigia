@@ -144,7 +144,7 @@ a parent on the same pull request that stands rejected or escalated — a comput
 correction, and when `review_status`'s `corrections` already counts as many on that lineage as
 `Corrections per lineage` allows it refuses `correction-already-spent`. A publication over a parent nobody has judged is not a correction and is
 not refused as one, but it is refused `approved-republish-without-cause` when its ledger already
-computes `approved` and `republish-before-panel-reported` when a licensed lens has not reported. A publication over a parent on the same pull request that was approved — by a
+computes `approved` and `republish-before-panel-reported` when a licensed lens has not reported, and by neither when the parent's declared checks recorded a failed receipt for its exact bytes. A publication over a parent on the same pull request that was approved — by a
 computed `approved`, or by a retired `accepted` verdict — is a **new candidate** and zeroes the count,
 but it is not a new budget: it spends no correction and is still bounded by
 `correction-budget-exceeded` and `correction-outside-reviewed-scope` against its pull request's
@@ -437,7 +437,7 @@ receipt exists to escalate.
 
 ## Running declared checks
 
-`run_checks` runs the `[[check]]` tables the base's `estigia.generated.toml` declares, as a detached job against the clean checkout, and records a receipt for the published target's digest and the declared commands. It answers `declared: false` and records nothing when the base declares none, `cached` when a receipt already stands, and `running` with `ask_after` while a job is out: call again, with `wait_seconds` (at most 50) to wait. A finished answer carries each check's exit, seconds and output tail. `publish_review` and `republish_review` with `start_review` call it before launching any lens (waiting no time): while the receipt is running or red it launches none and says why under `launch_skipped`, and `review_status` answers a `collect` with no input and `ask_after` (Unix seconds) while it runs, or a `stop` `checks-failed`, instead of offering a lens; nothing declared launches as before. While the base declares checks, the verdict and `release_ci` refuse without a passing receipt for the exact digest: `checks-receipt-missing`, or `checks-failed`.
+`run_checks` runs the `[[check]]` tables the base's `estigia.generated.toml` declares, as a detached job against the clean checkout, and records a receipt for the published target's digest and the declared commands. It answers `declared: false` and records nothing when the base declares none, `cached` when a receipt already stands, and `running` with `ask_after` while a job is out: call again, with `wait_seconds` (at most 50) to wait. A finished answer carries each check's exit, seconds and output tail. `publish_review` and `republish_review` with `start_review` call it before launching any lens (waiting no time): while the receipt is running or red it launches none and says why under `launch_skipped`, and `review_status` answers a `collect` with no input and `ask_after` (Unix seconds) while it runs, or a `stop` `checks-failed`, instead of offering a lens, and that failed receipt admits the republish that corrects it; nothing declared launches as before. While the base declares checks, the verdict and `release_ci` refuse without a passing receipt for the exact digest: `checks-receipt-missing`, or `checks-failed`.
 
 ## Recording a computed verdict
 
