@@ -41,6 +41,10 @@ pub const ATTACHMENTS_QUERY: &str = "query EstigiaAttachments($id: String!) { is
 pub const STATES_QUERY: &str = "query EstigiaStates($id: String!) { issue(id: $id) { id state { \
                                 name } team { states { nodes { id name } } } } }";
 
+/// The query that reads where an issue stands: its URL and its state's name and type.
+pub const STANDING_QUERY: &str =
+    "query EstigiaStanding($id: String!) { issue(id: $id) { url state { name type } } }";
+
 /// The workflow state `assist` moves an issue into, as `State names` keys it.
 pub const STARTED: &str = "in-progress";
 /// The workflow state `ready_pr` moves an issue into.
@@ -70,6 +74,53 @@ pub struct Issue {
 pub fn read_issue(identity: &Identity) -> Result<Issue, Failure> {
     let variables = serde_json::json!({ "id": identity.to_string() });
     parse(&post(QUERY, &variables, How::read())?, identity)
+}
+
+/// Where one issue stands in Linear, finished or not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Standing {
+    /// The issue's URL.
+    pub url: String,
+    /// The workflow state's name, as the team spells it.
+    pub state: String,
+    /// Whether the state's type is `completed` or `canceled`.
+    pub closed: bool,
+}
+
+/// Reads an issue's state without refusing a finished one, which [`read_issue`] does.
+pub fn read_standing(identity: &Identity) -> Result<Standing, Failure> {
+    let variables = serde_json::json!({ "id": identity.to_string() });
+    let value = json_of(&post(STANDING_QUERY, &variables, How::read())?)?;
+    let issue = value
+        .get("data")
+        .and_then(|data| data.get("issue"))
+        .filter(|issue| !issue.is_null());
+    let Some(issue) = issue else {
+        if graphql_errors(&value)
+            .into_iter()
+            .any(is_authentication_error)
+        {
+            return Err(credential_rejected());
+        }
+        return Err(issue_unknown(identity));
+    };
+    let text = |value: Option<&serde_json::Value>| {
+        value
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let state = issue.get("state");
+    Ok(Standing {
+        url: text(issue.get("url")),
+        state: text(state.and_then(|state| state.get("name"))),
+        closed: matches!(
+            state
+                .and_then(|state| state.get("type"))
+                .and_then(serde_json::Value::as_str),
+            Some("completed" | "canceled")
+        ),
+    })
 }
 
 /// Whether `url` is among the URLs attached to the issue in Linear.

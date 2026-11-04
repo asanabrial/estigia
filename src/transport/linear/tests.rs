@@ -744,3 +744,60 @@ fn a_resumed_assist_moves_no_state() {
     );
     assert!(answer.get("linear_state").is_none(), "{answer}");
 }
+
+fn standing_answering(
+    stdout: &str,
+) -> (
+    Result<super::Standing, crate::transport::Failure>,
+    Vec<String>,
+) {
+    through(
+        &[serde_json::json!({ "matches": "EstigiaStanding", "stdout": stdout })],
+        || super::read_standing(&Identity::Key("ABC-102".to_owned())),
+    )
+}
+
+#[test]
+fn a_finished_issue_is_read_as_closed_where_assist_would_refuse_it() {
+    let (read, calls) = standing_answering(
+        "{\"data\":{\"issue\":{\"url\":\"u\",\"state\":{\"name\":\"Done\",\"type\":\"completed\"}}}}",
+    );
+    let read = read.expect("a finished issue is still read");
+    assert!(read.closed);
+    assert_eq!(read.state, "Done");
+    assert_eq!(
+        calls,
+        vec![format!(
+            "api --variables-json {{\"id\":\"ABC-102\"}} {}",
+            super::STANDING_QUERY
+        )]
+    );
+    assert!(!calls[0].contains("mutation"), "a mutation was sent");
+}
+
+#[test]
+fn a_started_issue_is_read_as_open_with_its_url() {
+    let (read, _) = standing_answering(
+        "{\"data\":{\"issue\":{\"url\":\"u\",\"state\":{\"name\":\"In Progress\",\"type\":\"started\"}}}}",
+    );
+    let read = read.expect("the issue is read");
+    assert!(!read.closed);
+    assert_eq!(read.url, "u");
+}
+
+#[test]
+fn an_unknown_key_or_a_missing_cli_is_a_failure_that_names_why() {
+    let (unknown, _) = standing_answering("{\"data\":{\"issue\":null}}");
+    assert_eq!(
+        a_reason(&unknown.expect_err("unknown")),
+        "linear-issue-unknown"
+    );
+    let missing = super::request(
+        "estigia-no-such-linear-cli",
+        super::STANDING_QUERY,
+        &serde_json::json!({ "id": "ABC-102" }),
+        How::read(),
+    )
+    .expect_err("no such program");
+    assert_eq!(a_reason(&missing), "linear-cli-missing");
+}
