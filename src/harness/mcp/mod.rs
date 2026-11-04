@@ -1856,8 +1856,6 @@ fn held_spend_receipt(run: &session::Run, issue: u64, spend: &str) -> Option<Str
     Some(value.to_string())
 }
 
-/// Turns the transport's dispatch answer into the MCP refusal and applies
-/// the local consequence of an uncertain publication.
 /// Counts the head a `draft_pr` call landed, including one that failed after its push.
 fn count_assisted_push(
     answered: &mut Result<Value, crate::transport::Failure>,
@@ -1889,6 +1887,8 @@ fn count_assisted_push(
     *run = after;
 }
 
+/// Turns the transport's dispatch answer into the MCP refusal and applies
+/// the local consequence of an uncertain publication.
 fn refusal_from_answer(
     tool: &Tool,
     answer: &tracker::Answer,
