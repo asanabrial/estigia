@@ -219,7 +219,7 @@ fn next_of(reading: &Reading) -> serde_json::Value {
     }
     match &reading.verdict {
         Verdict::Approved | Verdict::ChangesRequested { .. } => {
-            serde_json::json!({ "kind": "verdict", "operation": "pr_review_release" })
+            serde_json::json!({ "kind": "submit", "operation": "pr_review_submit" })
         }
         Verdict::Escalated { reasons } => serde_json::json!({
             "kind": "stop",
@@ -290,6 +290,17 @@ fn no_review_ran(held: &PullReview, stopped: &serde_json::Value) -> serde_json::
 
 fn payload_of(context: &Context, held: &PullReview) -> Result<ReviewPayload, Failure> {
     review_payload_whole(&context.repo_dir, &held.merge_base, &held.head)
+}
+
+pub(crate) fn payload_exceeds_ceiling(
+    context: &Context,
+    held: &PullReview,
+) -> Result<bool, Failure> {
+    match payload_of(context, held) {
+        Ok(_) => Ok(false),
+        Err(Failure::Stop(stopped)) if stopped["reason"] == "review-payload-too-large" => Ok(true),
+        Err(failure) => Err(failure),
+    }
 }
 
 /// `pr-review-status`: what the claimed review stands at, and the one next step.

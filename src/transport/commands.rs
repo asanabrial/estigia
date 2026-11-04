@@ -37,6 +37,7 @@ pub const SCRIPTED: &[&str] = &[
     "pr-review-status",
     "pr-review-launch",
     "pr-review-collect",
+    "pr-review-submit",
     "draft-pr",
     "ready-pr",
     "review-stages",

@@ -1467,7 +1467,7 @@ operations with schemas, instead of composing `gh` by hand and hoping. The one f
 path needs is among them, so it is adjudicated like every other write rather than typed into a shell.
 The **gate** is what happens when it tries to work around them.
 
-**The local workflow store, `~/.estigia/state.db`, is the authority**: claims, states, receipts,
+**The local workflow store, `~/.estigia/state.db`, is the authority** (a review-only claim's rows, `pull_reviews` and `pull_review_slots`, among them): claims, states, receipts,
 findings, verdicts, spend, tasks and `blocked-until` clauses are rows in it, and two runs on one
 machine adjudicate against each other in one transaction. The tracker keeps issues and their prose,
 pull requests, branches, and labels and an assignee written after the local commit as a projection

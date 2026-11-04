@@ -183,7 +183,8 @@ Judgement calls that could have gone the other way:
   door, which a `send` is not, so the rule says no and nothing is written. Nothing the run held moved,
   so it is not `stale`, and the answer is the rule rather than an unread surface.
 - `review-claim-admits-no-write` is `not_started` and stays the same on every retry while the claim
-  is held; `head-moved` is `stale`, and no verdict carries across it.
+  is held; `head-moved` is `stale`, and no verdict carries across it; `pull-review-submission-unconfirmed`
+  is `unknown`, and the review may have landed.
 - `assisted-claim-stale`, `assisted-claim-not-in-force` and `reviewer-definition-changed` are `stale`:
   what the run held moved. The five reasons the gate stands aside for (`not-watched`, `nothing-sworn`,
   `no-tracker`, `another-checkout`, `outside-the-claim`) are not refusals and carry no class.
