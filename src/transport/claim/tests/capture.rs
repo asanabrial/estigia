@@ -9,11 +9,14 @@ use crate::reviewer::Recording;
 use crate::reviewer::job::{JobStatus, OnThread, Spawner, job_status};
 use crate::reviewer::result::{Criterion, Finding, Outcome, RoleResult, Validation};
 use crate::reviewer::{Adapter, Invocation, ReviewerCode};
+#[cfg(unix)]
+use crate::transport::claim::capture::jobs_dir;
 use crate::transport::claim::capture::{
     ANSWER_SCOPED, Batch, CaptureInput, Check, Lens, MAX_WAIT_SECONDS, REFUTATION_ANSWER_SCOPED,
-    after_a_write, collect_with, jobs_dir, launch_with, offered_role, patience_for, prepare_with,
+    after_a_write, collect_with, launch_with, offered_role, patience_for, prepare_with,
     record_lens_answer, record_refuter_answer, record_validator_answer, take_slot,
 };
+#[cfg(unix)]
 use crate::transport::generated::checks::{commands_digest, declared_at};
 use crate::transport::store::NewJob;
 use crate::transport::store::{forget_scratch_store, store_path};
@@ -525,12 +528,15 @@ fn capturable_as(run_id: &'static str) -> World {
     world_of(|receipt, payload| vec![live_claim(run_id), published_with_payload(receipt, payload)])
 }
 
+#[cfg(unix)]
 const DECLARED_CHECK: &str = "[[check]]\nname = \"declared\"\ncommand = [\"true\"]\n\n";
 
+#[cfg(unix)]
 fn put(path: &std::path::Path, text: &str) {
     crate::paths::replace_atomically(path, text).expect("a fixture file");
 }
 
+#[cfg(unix)]
 /// A world whose base declares a check, so `review_status` is held by the checks while one runs.
 fn declared_world() -> World {
     let root = tempfile::tempdir().expect("a directory");
@@ -600,6 +606,7 @@ fn running_check(world: &World) -> std::fs::File {
     crate::reviewer::job::begin(&dir).expect("the check job's lock")
 }
 
+#[cfg(unix)]
 fn next_step(world: &World) -> serde_json::Value {
     let bin = crate::test_env::scripted_gh();
     let script = script_for(world, lane_read_answers());
