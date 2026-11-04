@@ -72,9 +72,9 @@ its reviewers without asking;
 `review-delegation-retired`).
 
 Review permission is no longer a row: a run acquires a distinct reviewer unconditionally. The
-binary still launches a lens, refuter or validator only when the run calls `launch_review_input`,
-and nobody is asked first: before launching a lens the run says the one-line `forecast` that
-`review_tier` answers — the tier, the lens count and the expected spend, the `Review budget` figure
+binary still launches a lens, refuter or validator only when the run calls `collect_review_input`
+with `launch: true`, and nobody is asked first: before launching a lens the run says the one-line
+`forecast` that `review_read` with `view: tier` answers — the tier, the lens count and the expected spend, the `Review budget` figure
 times the lenses the tier licenses. If no reviewer is available, the run records a durable
 exact-receipt handoff and releases ownership.
 
@@ -151,7 +151,7 @@ The gate holds the agent's own hand to the same window. While it is closed, an a
 that merges, tags, creates or readies a pull request, changes a release, or creates, comments on,
 edits or develops an issue, creates a label, or calls `gh api` with a method other than `GET` or a
 `graphql` mutation is denied with `git-operation-window-denied`, as a commit is; `gh issue view`,
-`gh issue list`, `gh pr view` and a `GET` call stay allowed. `release_ci` is refused the same way. A
+`gh issue list`, `gh pr view` and a `GET` call stay allowed. `deliver` is refused the same way. A
 session start reports the queue without asking GitHub: with the window closed, how many writes wait and
 when they can go; with it open, that `estigia flush` was started in the background. The `Stop` hook
 says it too and never keeps the session from stopping.

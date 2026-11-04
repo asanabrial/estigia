@@ -38,7 +38,7 @@ Every acquired lens runs concurrently, each sealed to the identical diff and cri
 `Read` — it cannot fetch anything the launch did not hand it, so the binary, which launches it,
 carries every byte a lens reviews. An `inferential` lens finding is answered by the refuter below and by nothing else.
 
-The orchestrator calls `launch_review_input` for each lens slot `review_status` offers, as a `collect`
+The orchestrator calls `collect_review_input` with `launch: true` for each lens slot `review_status` offers, as a `collect`
 input, for a lens a receipt still owes; the binary starts the reviewer process itself, from a template embedded in the binary — the first installed `claude` or `codex` CLI, with
 no tools (an OpenCode run with its relay plugin installed relays instead, launching the built-in sub-agent and marker prompt the `relay: true` answer's `launch` names) — and records the findings and then the lens report, or records nothing when any finding is
 outside the change. On Claude Code there is no hand launch: setup installs no lens definition and the
@@ -206,8 +206,8 @@ the diff, and the candidates themselves, and returns exactly one of `corroborate
 `inconclusive` for each.
 
 The recording run does not launch the refuter and does not record the batch. `review_status` offers
-the batch as a `collect` input, `refutation-batch`, whose `capture` is `launch_review_input`, and that
-tool launches the refuter itself — the first installed `claude` or `codex` CLI (the relay on an OpenCode run with its plugin installed), with no tools, handed
+the batch as a `collect` input, `refutation-batch`, whose `capture` is `collect_review_input` with `launch: true`, and that
+call launches the refuter itself — the first installed `claude` or `codex` CLI (the relay on an OpenCode run with its plugin installed), with no tools, handed
 the exact receipt, the diff and the listed candidates — and records its answer in one write credited to
 `review-refuter`, or records nothing when the answer names a finding that was not offered or leaves
 one out. Its distinctness is that of a fresh, isolated context, not of a separate authoring session.

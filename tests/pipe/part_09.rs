@@ -3390,9 +3390,10 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
         .expect("a lens is offered")
         .to_owned();
     assert_eq!(
-        before["next"]["inputs"][0]["capture"], "launch_review_input",
+        before["next"]["inputs"][0]["capture"], "collect_review_input",
         "{before}"
     );
+    assert_eq!(before["next"]["inputs"][0]["launch"], true, "{before}");
 
     let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
     let mut stale = estigia::harness::session::Run::new(run_id.to_owned());
@@ -3409,8 +3410,8 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
     assert!(verified_at().is_null(), "the fixture pointer was verified");
 
     let started = ask(
-        "launch_review_input",
-        serde_json::json!({"issue": 12, "run_id": run_id, "name": name}),
+        "collect_review_input",
+        serde_json::json!({"issue": 12, "run_id": run_id, "name": name, "launch": true}),
     );
     assert!(
         !launched.exists(),
@@ -3503,8 +3504,8 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
     );
 
     let again = ask(
-        "launch_review_input",
-        serde_json::json!({"issue": 12, "run_id": run_id, "name": name}),
+        "collect_review_input",
+        serde_json::json!({"issue": 12, "run_id": run_id, "name": name, "launch": true}),
     );
     assert_eq!(again["isError"], true, "{again}");
     let said = again["content"][0]["text"].as_str().unwrap_or_default();
@@ -3691,7 +3692,8 @@ fn a_high_tier_review_launches_and_collects_every_offered_slot_in_batched_calls(
         .into_iter()
         .flatten()
         .map(|input| {
-            assert_eq!(input["capture"], "launch_review_input", "{before}");
+            assert_eq!(input["capture"], "collect_review_input", "{before}");
+            assert_eq!(input["launch"], true, "{before}");
             input["name"]
                 .as_str()
                 .expect("a lens is offered")
@@ -3707,8 +3709,8 @@ fn a_high_tier_review_launches_and_collects_every_offered_slot_in_batched_calls(
     let mut advancing = 0;
     advancing += 1;
     let launched = ask(
-        "launch_review_input",
-        serde_json::json!({"issue": 12, "run_id": run_id, "names": names}),
+        "collect_review_input",
+        serde_json::json!({"issue": 12, "run_id": run_id, "names": names, "launch": true}),
     );
     assert_ne!(launched["isError"], true, "{launched}");
     let launched = text_of(&launched);
@@ -3747,22 +3749,15 @@ fn a_high_tier_review_launches_and_collects_every_offered_slot_in_batched_calls(
         after["next"]["reason_code"], "verdict-computable",
         "{after}"
     );
-    let bound = after["receipt"].clone();
+    assert_eq!(after["next"]["operation"], "deliver", "{after}");
     let recorded = ask(
-        "record_computed_verdict",
-        serde_json::json!({
-            "issue": 12,
-            "run_id": run_id,
-            "epoch": bound["epoch"],
-            "pr": bound["pr"],
-            "head": bound["head"],
-            "base": bound["base"],
-            "digest": bound["digest"],
-        }),
+        "deliver",
+        serde_json::json!({"issue": 12, "run_id": run_id, "until": "verdict"}),
     );
     assert_ne!(recorded["isError"], true, "{recorded}");
     let recorded = text_of(&recorded);
-    assert_eq!(recorded["outcome"], "approved", "{recorded}");
+    assert_eq!(recorded["reached"], "verdict", "{recorded}");
+    assert_eq!(recorded["verdict"]["outcome"], "approved", "{recorded}");
 }
 
 #[cfg(unix)]
@@ -3942,8 +3937,8 @@ fn a_quota_failure_on_a_lens_records_nothing_and_leaves_release_ci_refused() {
         .to_owned();
 
     let started = ask(
-        "launch_review_input",
-        serde_json::json!({"issue": 12, "run_id": run_id, "name": name}),
+        "collect_review_input",
+        serde_json::json!({"issue": 12, "run_id": run_id, "name": name, "launch": true}),
     );
     assert_ne!(started["isError"], true, "{started}");
     let captured = collect_when_done(
@@ -3966,42 +3961,28 @@ fn a_quota_failure_on_a_lens_records_nothing_and_leaves_release_ci_refused() {
         "a lens that never answered is no longer offered: {after}"
     );
     assert_ne!(after["next"]["operation"], "release_ci", "{after}");
+    assert_ne!(after["next"]["operation"], "deliver", "{after}");
 
-    let receipt = serde_json::json!({
-        "issue": 12,
-        "run_id": run_id,
-        "epoch": epoch,
-        "pr": 7,
-        "head": head,
-        "base": base,
-        "digest": digest,
-    });
-    let with = |extra: serde_json::Value| -> serde_json::Value {
-        let mut arguments = receipt.clone();
-        for (key, value) in extra.as_object().expect("an object") {
-            arguments[key] = value.clone();
-        }
-        arguments
-    };
-
-    let computed = ask(
-        "record_computed_verdict",
-        with(serde_json::json!({"worktree": repo.display().to_string()})),
-    );
-    let said = refusal_of(&computed);
-    assert!(
-        !said.contains("\"approved\"") && said.contains("computed-verdict-incomplete"),
-        "{computed}"
-    );
-
-    let released = ask(
-        "release_ci",
-        with(serde_json::json!({"worktree": repo.display().to_string()})),
-    );
-    assert!(
-        refusal_of(&released).contains("qualifying-review-verdict-missing"),
-        "{released}"
-    );
+    for until in ["verdict", "ci"] {
+        let computed = ask(
+            "deliver",
+            serde_json::json!({"issue": 12, "run_id": run_id, "until": until}),
+        );
+        let computed = text_of(&computed);
+        assert_eq!(computed["delivered"], false, "{until}: {computed}");
+        assert_eq!(
+            computed["stopped"]["reason"], "computed-verdict-incomplete",
+            "{until}: {computed}"
+        );
+        assert_eq!(
+            computed["stopped"]["step"], "verdict",
+            "{until}: {computed}"
+        );
+        assert!(
+            !computed.to_string().contains("\"approved\"") && computed.get("reached").is_none(),
+            "{until}: {computed}"
+        );
+    }
 
     let calls = std::fs::read_to_string(&log).unwrap_or_default();
     assert!(
@@ -4232,14 +4213,17 @@ fn launch_and_collect_review_input_run_the_offered_refuter_and_record_the_batch_
         "{before}"
     );
     assert_eq!(
-        before["next"]["inputs"][0]["capture"], "launch_review_input",
+        before["next"]["inputs"][0]["capture"], "collect_review_input",
         "{before}"
     );
+    assert_eq!(before["next"]["inputs"][0]["launch"], true, "{before}");
     assert_eq!(before["next"]["inputs"][0]["name"], "refutation-batch");
 
     let started = ask(
-        "launch_review_input",
-        serde_json::json!({"issue": 12, "run_id": run_id, "name": "refutation-batch"}),
+        "collect_review_input",
+        serde_json::json!({
+            "issue": 12, "run_id": run_id, "name": "refutation-batch", "launch": true,
+        }),
     );
     assert_ne!(started["isError"], true, "{started}");
     let captured = collect_when_done(

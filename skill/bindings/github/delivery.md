@@ -330,7 +330,8 @@ rather than waiting; only where the lane reads `disabled` or
 `never-ran`, when no CI can run, does it skip the rollup and need `appendix_file` with the local suite command and
 result, which is appended to the generated evidence.
 
-**Before `ci_status`, call `release_ci` with the latest reviewed receipt.** It records the release for
+**Before `ci_status`, release CI with the latest reviewed receipt:** `deliver` with `until: ci`, which
+records the verdict if it is owed, runs the `release_ci` operation and stops, whoever merges. It records the release for
 that exact receipt, and the `gh pr merge` boundary refuses a merge whose receipt it never released,
 whichever route took the pull request out of draft. A compatible repository
 starts PR CI on `ready_for_review` and not on topic push, open, synchronize, or reopen; Estigia's own
@@ -340,17 +341,17 @@ discover that set (or take an explicit `Publication lanes` list), start each onc
 they just pushed, once per publication epoch and not once per push, and record which files started
 and how many on the receipt. Dispatching does not mark the pull request ready. A workflow that must
 not run per publication (a release lane, a nightly) is named on `Publication lanes exclude`.
-`record_computed_verdict` then refuses an `approved` verdict for a head whose check runs are red or
+The verdict then refuses an `approved` outcome for a head whose check runs are red or
 unfinished, so the cheapest disqualifying signal comes before the most expensive spend. A repository with no dispatchable candidate gets the old ordering:
 Estigia cannot prove a lane exists, and absence still proceeds. `publish_review` makes a
 reused PR draft and reads that back before push, or creates a new PR with `--draft`; the lenses can
 therefore run before ordinary cooperative CI. `start_review` and `record_verdict` fold the
-transition, launches and verdict into them; `release_ci` stays its own.
+transition, launches and verdict into them; the release stays its own.
 `release_ci` replays the live claim, the newest receipt on its own pull request, draft PR and coherent target, then
 marks ready and reads the result back.
 
-**`release_ci` answers whether CI will run.** Its answer carries `lane`, the reading `review_status`
-gives, and `next`: `merge` when `lane.state` is `not-consulted`, `disabled` or `never-ran`, so run no
+**The release answers whether CI will run.** `deliver` with `until: ci` hands back `release`, whose
+answer carries `lane`, the reading `review_status` gives, and `next`: `merge` when `lane.state` is `not-consulted`, `disabled` or `never-ran`, so run no
 `ci_status` and watch no checks; `ci_status` for every other reading, an unreadable one included.
 `ci_released` is `true` only then.
 

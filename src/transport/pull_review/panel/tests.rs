@@ -307,6 +307,29 @@ fn an_inferential_severe_finding_goes_to_the_refuter_before_any_verdict() {
 }
 
 #[test]
+fn every_next_step_names_an_action_pr_review_takes() {
+    let rig = rig("change.txt", 20);
+    claimed(&rig);
+    let seen = Seen::default();
+    let answer = severe("maybe", "inferential");
+    let unsettled = serde_json::json!({ "outcomes": [] }).to_string();
+    let reviewers = spawner(&[(LENS, &answer), ("review-refuter", &unsettled)], &seen);
+    gh(&rig, || launch_with(&rig.context, RUN, &reviewers, 1_000)).expect("the lens");
+    let waiting = collect(&rig);
+    gh(&rig, || launch_with(&rig.context, RUN, &reviewers, 1_001)).expect("the refuter");
+    let escalated = collect(&rig);
+    assert_eq!(escalated["verdict"], "escalated", "{escalated}");
+    assert_eq!(escalated["next"]["action"], "release", "{escalated}");
+    for answer in [waiting, escalated] {
+        let action = answer["next"]["action"].as_str().unwrap_or_default();
+        assert!(
+            crate::harness::mcp::tools::PULL_REVIEW_ACTIONS.contains(&action),
+            "{answer}"
+        );
+    }
+}
+
+#[test]
 fn a_change_over_the_ceiling_answers_that_no_review_ran_and_no_verdict() {
     let rig = rig(
         "big.txt",

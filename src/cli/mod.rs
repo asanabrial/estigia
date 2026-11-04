@@ -5485,7 +5485,7 @@ fn recover(
                 say!("  candidate in a successor lineage, reviewed again under the same tier.");
                 say!(
                     "  pinned: tier {}, lens focus {} \u{2014} acquire the panel that tier licenses (four \
-                     lenses at high, the focus's lens at medium); `review_tier` does not size it",
+                     lenses at high, the focus's lens at medium); `review_read` with `view: tier` does not size it",
                     answer["level"].as_str().unwrap_or_default(),
                     answer["focus"].as_str().unwrap_or_default()
                 );

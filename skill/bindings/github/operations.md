@@ -368,8 +368,10 @@ report cannot be told from a right one until a second disagrees with it.
 
 ## Capturing a review input
 
-`launch_review_input` and `collect_review_input` are the two calls that turn a lens, the refutation batch or the validator a
-`collect` names into a recorded result. Both take `--name` for one slot or `--names <name,...>` for
+`collect_review_input` with `launch: true` (the `launch_review_input` operation) and `collect_review_input` are the two calls that turn a lens, the refutation batch or the validator a
+`collect` names into a recorded result; `review_status` offers a slot to start as `capture: collect_review_input` with
+`launch: true`. Launching takes `name` or `names` and nothing else, and nothing launches without `launch: true`: a
+collect never starts a reviewer, abandoned slot or not. Both take `--name` for one slot or `--names <name,...>` for
 every slot the `collect` offers in the same state, so a `high` review launches its four lenses in one
 call and collects them in the next; each slot keeps its own claim check, and a batch reports a slot a
 running job already holds (`capture-already-running`, a launch) or one still running (`capture-running`,
@@ -437,11 +439,11 @@ receipt exists to escalate.
 
 ## Running declared checks
 
-`run_checks` runs the `[[check]]` tables the base's `estigia.generated.toml` declares, as a detached job against the clean checkout, and records a receipt for the published target's digest and the declared commands. It answers `declared: false` and records nothing when the base declares none, `cached` when a receipt already stands, and `running` with `ask_after` while a job is out: call again, with `wait_seconds` (at most 50) to wait. A finished answer carries each check's exit, seconds and output tail. `publish_review` and `republish_review` with `start_review` call it before launching any lens (waiting no time): while the receipt is running or red it launches none and says why under `launch_skipped`, and `review_status` answers a `collect` with no input and `ask_after` (Unix seconds) while it runs, or a `stop` `checks-failed`, instead of offering a lens, and that failed receipt admits the republish that corrects it; nothing declared launches as before. While the base declares checks, the verdict and `release_ci` refuse without a passing receipt for the exact digest: `checks-receipt-missing`, or `checks-failed`.
+`collect_review_input` with `checks: true` (the `run_checks` operation; it takes `wait_seconds` and nothing else) runs the `[[check]]` tables the base's `estigia.generated.toml` declares, as a detached job against the clean checkout, and records a receipt for the published target's digest and the declared commands. It answers `declared: false` and records nothing when the base declares none, `cached` when a receipt already stands, and `running` with `ask_after` while a job is out: call again, with `wait_seconds` (at most 50) to wait. A finished answer carries each check's exit, seconds and output tail. `publish_review` and `republish_review` with `start_review` call it before launching any lens (waiting no time): while the receipt is running or red it launches none and says why under `launch_skipped`, and `review_status` answers a `collect` with no input and `ask_after` (Unix seconds) while it runs, or a `stop` `checks-failed`, instead of offering a lens, and that failed receipt admits the republish that corrects it; nothing declared launches as before. While the base declares checks, the verdict and `release_ci` refuse without a passing receipt for the exact digest: `checks-receipt-missing`, or `checks-failed`.
 
 ## Recording a computed verdict
 
-`review_read` with `view: verdict` answers, and `review_computed_verdict` records once, the verdict one exact
+`review_read` with `view: verdict` answers, and `review_computed_verdict` (`deliver` with `until: verdict`) records once, the verdict one exact
 receipt's ledger supports. The caller names the receipt and never the outcome. Each severe finding is
 settled by the order in *What the ledger computes* in `policies/blind-judges.md`, which owns it. The outcome is `escalated` over `rejected` over `approved`, and
 `approved` additionally needs every lens role the receipt's review panel licenses to have filed a
@@ -466,7 +468,8 @@ not the waste. `approved` also regenerates every file `estigia.generated.toml` d
 and the change adds or modifies, which the payload showed as one `# estigia-generated` line instead of
 hunks, and records only when each is byte-identical: `generated-reproduction-mismatch` or
 `generated-reproduction-unavailable` otherwise, naming each path. Every distinct workflow run behind a red lane has to report `steps: []` for it to
-classify `never-ran` instead of `red`: `--never-ran-evidence-file` names the caller's own local
+classify `never-ran` instead of `red`: `never_ran_evidence_file` (`--never-ran-evidence-file`; `deliver` takes it and
+passes it to the recording) names the caller's own local
 verification, refused `publication-lane-never-ran` when absent or `blank-never-ran-evidence` when
 blank or filler, and the marker records the classification and the evidence. Any one run that
 genuinely ran and failed still refuses `publication-lane-red`. A retry
@@ -592,7 +595,7 @@ landed and the claim is still held: repeat with the same `spend` (it replays), a
 ## Delivering in one call
 
 `deliver` is the tool that runs the tail of a publication that needs no judgement: the computed
-verdict, `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
+verdict (`record_computed_verdict`), `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
 topology readback and the close, each through the operation that owns it. The merge goes through the
 decision the `gh pr merge` boundary makes. It answers `delivered`; `pending` with `ask_after`, after
 `wait_seconds` (1-900, default 20) of waiting inside the call; or `stopped` with the `step`, a
@@ -602,3 +605,11 @@ second call resumes from the store without repeating a landed write. `spend` is 
 run. The steps and what each hands back are in *CI, merge and delivery* in delivery.md; a stop after
 the merge landed carries `merged` and, from the release, `close_incomplete`, which is repeated as
 *Releasing an issue* says.
+
+`until` stops the tail early for a person who merges and checks neither `Merge by` nor `Delivery
+authorisation`: `verdict` records the verdict and answers `reached: verdict`; `ci` also releases CI
+(unless a `ci-release` marker already names the receipt) and answers `reached: ci` with `release` and
+`lane`. Either stops at the step that refuses, with the refusal's code. A pointer holding no review
+transaction gets the receipt from `review_status`, and the release writes it to the pointer.
+`never_ran_evidence_file` goes to the recording, also in the full tail where `review_status` stops on
+`publication-lane-never-ran`.

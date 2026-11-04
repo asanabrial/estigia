@@ -5633,7 +5633,7 @@ pub fn opencode_review_section() -> String {
         "launch the reviewer with your own sub-agent tool naming the\n\
          reserved reviewer, and the OpenCode review relay plugin supplies the binary's prompt and\n\
          hands the answer back for admission, so the answer is never yours to read. With the plugin\n\
-         installed, `launch_review_input` answers `relay: true` here even when a CLI is installed.",
+         installed, `collect_review_input` with `launch: true` answers `relay: true` here even when a CLI is installed.",
     )
 }
 
@@ -5660,12 +5660,12 @@ fn review_section(relay: &str) -> String {
         "## Review on this host\n\n\
          `review-blind` is a Claude launch type. It is not a missing capability here.\n\
          The binary launches the panel. After `publish_review` and a publication lane that is green, never-ran, absent, disabled, or has\n\
-         no lane at all \u{2014} not red, not unreadable \u{2014} call `launch_review_input` and then `collect_review_input` for each input\n\
+         no lane at all \u{2014} not red, not unreadable \u{2014} call `collect_review_input` with `launch: true` and then without it for each input\n\
          `review_status` offers (the sealed lenses, {medium_lenses} at `medium`, {high_lenses} at\n\
-         `high`, {low_lenses} at `low`, the roles named by `review_tier`'s `lens_roles`; the refuter when a\n\
+         `high`, {low_lenses} at `low`, the roles named by the `lens_roles` of `review_read` with `view: tier`; the refuter when a\n\
          standing `inferential` finding owes one; and for a correction, the validator). An input whose\n\
          `capture` is `null` has its reviewer still running: call nothing for it and ask `review_status`\n\
-         again. Pass `names` to `launch_review_input` or `collect_review_input` to advance every offered input\n\
+         again. Pass `names` to `collect_review_input`, with or without `launch: true`, to advance every offered input\n\
          in one call; each slot keeps its own claim check and a running slot is reported rather than\n\
          stopping the batch. Launch no `Task` for\n\
          any of them yourself: the binary starts the first installed `claude` or `codex` CLI with no\n\
@@ -5673,11 +5673,11 @@ fn review_section(relay: &str) -> String {
          refuter's batch, or the validator's result, itself; those records have no tool of their own,\n\
          so only `collect_review_input` writes them and a hand call cannot reach one. A\n\
          missing, out-of-quota or logged-out CLI refuses the capture and records nothing, and the\n\
-         input stays offered. On a machine with neither CLI, `launch_review_input` answers `relay:\n\
+         input stays offered. On a machine with neither CLI, a launch answers `relay:\n\
          true` and starts no CLI: {relay} That is a\n\
          launch, not a handoff: `handoff_review` remains only for a host that can neither start a\n\
          CLI nor relay. When `review_status` offers none, call\n\
-         `record_computed_verdict`, then `release_ci`. A receipt that stands escalated stays so until a\n\
+         `deliver` with `until: verdict`, then `deliver` with `until: ci` (or `deliver` alone where the agent merges). A receipt that stands escalated stays so until a\n\
          person runs `estigia recover`; tell them the command and never run it yourself.\n\
          Call `handoff_review` only if that launch failed, never as the first move and never a\n\
          smaller or serialized panel. A host that can call the tool and calls `handoff_review`\n\

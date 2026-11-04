@@ -160,17 +160,17 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `review_finding` | `SCRIPT review-finding` — see *Recording a finding* in github/operations.md |
 | `escalate_review` | `SCRIPT escalate-review` — see *Escalating a review* in github/operations.md |
 | `review_disposition` | `SCRIPT review-disposition` — see *Recording a disposition* in github/operations.md |
-| `launch_review_input` | `SCRIPT launch-review-input` — see *Capturing a review input* in github/operations.md |
+| `launch_review_input` | `SCRIPT launch-review-input`, as `collect_review_input` with `launch` — see *Capturing a review input* in github/operations.md |
 | `collect_review_input` | `SCRIPT collect-review-input` — see *Capturing a review input* in github/operations.md |
-| `review_computed_verdict` | `SCRIPT review-computed-verdict` — see *Recording a computed verdict* in github/operations.md |
+| `review_computed_verdict` | `SCRIPT review-computed-verdict`, as `deliver` with `until` `verdict` — see *Recording a computed verdict* in github/operations.md |
 | `record_spend` | `SCRIPT spend` |
 | `review_status` | `SCRIPT review-status` — answers `lane` and `corrections` beside `next` |
 | `review_read` | `SCRIPT review-read` |
-| `target` | `SCRIPT target` |
-| `release_ci` | `SCRIPT release-ci` — see *Recording a computed verdict* in github/operations.md |
+| `target` | `SCRIPT target`, as `review_read` with `view` `target` |
+| `release_ci` | `SCRIPT release-ci`, as `deliver` with `until` `ci` — see *Recording a computed verdict* in github/operations.md |
 | `deliver` | the `deliver` tool, which calls the operations above and the merge gate rather than one `SCRIPT` operation — see *Delivering in one call* in github/operations.md |
-| `run_checks` | `SCRIPT run-checks` — see *Running declared checks* in github/operations.md |
-| `review_tier` | `SCRIPT review-tier` — see *Deriving the review tier* in github/operations.md |
+| `run_checks` | `SCRIPT run-checks`, as `collect_review_input` with `checks` — see *Running declared checks* in github/operations.md |
+| `review_tier` | `SCRIPT review-tier`, as `review_read` with `view` `tier` — see *Deriving the review tier* in github/operations.md |
 | `unassign` | `SCRIPT unassign` — see *Releasing an issue* in github/operations.md |
 | assisted checkout | `SCRIPT assist` |
 | pull request review | the `pr_review` tool, whose `action` names one step of the review-only claim |
@@ -182,7 +182,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 
 Not scripted, performed by the agent after verifying SHAs (`github/delivery.md`): `ci_status`,
 `publish_version`, `close`; `merge` by hand, or by `deliver`. The review verdict is computed from the finding ledger and recorded by
-`review_computed_verdict`; `last_activity` is the issue's timeline in the local store.
+`review_computed_verdict` (`deliver` with `until` `verdict`); `last_activity` is the issue's timeline in the local store.
 
 ### Operations no tool exposes
 
@@ -192,8 +192,9 @@ Each name below has no tool of its own; the call on the right answers it.
 - `list_identities` → `list_state` with `identities`.
 - `review_findings`, `review_transaction`, `review_payload_membership`, `inspect_candidate`, `computed_verdict`, `spend_summary` → `review_read` with `view` `findings`, `transaction`, `membership`, `inspect`, `verdict`, `spend`.
 - `repair_rounds`, `publication_lane` → `review_status`, which answers `lane` and `corrections`.
-- `review_tier_for_repair` → `review_tier` with `parent_head`.
-- `expected_target`, `base_movement` → `target`, which classifies base movement when `recorded_base` is given.
+- `review_tier_for_repair` → `review_read` with `view` `tier` and `parent_head`.
+- `expected_target`, `base_movement` → `review_read` with `view` `target`, which classifies base movement when `recorded_base` is given.
+- `review_tier`, `target`, `launch_review_input`, `run_checks`, `record_computed_verdict`, `release_ci` → `review_read` with `view` `tier`, `target`; `collect_review_input` with `launch`, `checks`; `deliver` with `until` `verdict`, `ci`.
 - `review_refutation`, `review_validator_result` and the lens report → recorded only by `collect_review_input`, after the binary ran the reviewer; `review_verdict` is retired, and the verdict is computed by `record_computed_verdict`.
 
 ### Markdown bodies always go through a file

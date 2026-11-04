@@ -628,7 +628,7 @@ pub fn selected_documents(config: &Config) -> String {
 ",
     );
     lines.push_str(&format!(
-        "Independent review here is the lenses `review_tier` licenses \u{2014} {medium} at \
+        "Independent review here is the lenses `review_read` with `view: tier` licenses \u{2014} {medium} at \
          `medium`, {high} at `high`, {low} at `low` \u{2014} over one target.
 
 ",
@@ -696,7 +696,7 @@ pub fn selected_documents(config: &Config) -> String {
              context is asked to think. Only Claude Code reads the sub-agent definitions `setup` \
              installs — the roles the routing names — so launching one of those needs no model \
              named in the prompt. Every other key except `reviewer` is a declaration nothing starts for you \
-             (`reviewer` is read by `launch_review_input` when it starts a lens, the refuter or \
+             (`reviewer` is read by `collect_review_input` with `launch: true` when it starts a lens, the refuter or \
              the validator): hand \
              the work to the model the row names for it yourself and say which one you used; where \
              the row names none, launch the context with no model named and let the default stand. \

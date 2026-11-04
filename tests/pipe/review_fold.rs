@@ -260,20 +260,6 @@ fn offered(rig: &TrackerRig, world: &World) -> Vec<String> {
         .collect()
 }
 
-fn verdict_arguments(rig: &TrackerRig, world: &World) -> serde_json::Value {
-    let status = answer(&ask(
-        rig,
-        world,
-        "review_status",
-        serde_json::json!({"issue": 12}),
-    ));
-    let bound = &status["receipt"];
-    serde_json::json!({
-        "issue": 12, "run_id": RUN_ID, "epoch": bound["epoch"], "pr": bound["pr"],
-        "head": bound["head"], "base": bound["base"], "digest": bound["digest"],
-    })
-}
-
 #[test]
 fn collect_records_the_verdict_only_when_the_review_names_it_next() {
     let rig = tracker_rig();
@@ -297,8 +283,8 @@ fn collect_records_the_verdict_only_when_the_review_names_it_next() {
     answer(&ask(
         &rig,
         &world,
-        "launch_review_input",
-        serde_json::json!({"issue": 12, "run_id": RUN_ID, "names": names}),
+        "collect_review_input",
+        serde_json::json!({"issue": 12, "run_id": RUN_ID, "names": names, "launch": true}),
     ));
     let partial = answer(&ask(
         &rig,
@@ -333,10 +319,11 @@ fn collect_records_the_verdict_only_when_the_review_names_it_next() {
     let again = answer(&ask(
         &rig,
         &world,
-        "record_computed_verdict",
-        verdict_arguments(&rig, &world),
+        "deliver",
+        serde_json::json!({"issue": 12, "run_id": RUN_ID, "until": "verdict"}),
     ));
-    assert_eq!(again["reused_existing_verdict"], true, "{again}");
+    assert_eq!(again["reached"], "verdict", "{again}");
+    assert_eq!(again["verdict"]["reused_existing_verdict"], true, "{again}");
 }
 
 #[test]
@@ -356,8 +343,8 @@ fn collect_with_a_slot_still_running_records_no_verdict() {
     answer(&ask(
         &rig,
         &world,
-        "launch_review_input",
-        serde_json::json!({"issue": 12, "run_id": RUN_ID, "names": names}),
+        "collect_review_input",
+        serde_json::json!({"issue": 12, "run_id": RUN_ID, "names": names, "launch": true}),
     ));
     let running = answer(&ask(
         &rig,
@@ -497,8 +484,8 @@ fn settled_checks(rig: &TrackerRig, world: &World) -> serde_json::Value {
         last = answer(&ask(
             rig,
             world,
-            "run_checks",
-            serde_json::json!({"issue": 12, "run_id": RUN_ID, "wait_seconds": 5}),
+            "collect_review_input",
+            serde_json::json!({"issue": 12, "run_id": RUN_ID, "checks": true, "wait_seconds": 5}),
         ));
         if last["state"] != "running" {
             break;

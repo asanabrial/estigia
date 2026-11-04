@@ -111,6 +111,7 @@ struct Fake {
     receipt: Option<ReviewTransaction>,
     scripts: RefCell<HashMap<String, Vec<Result<Value, Value>>>>,
     calls: RefCell<Vec<String>>,
+    sent: RefCell<Vec<(String, Value)>>,
     decision: Result<(), Value>,
     merge_by_agent: bool,
     delivery_auto: bool,
@@ -204,6 +205,7 @@ fn fake(world: &World) -> Fake {
         receipt: Some(receipt),
         scripts: RefCell::new(scripts),
         calls: RefCell::new(Vec::new()),
+        sent: RefCell::new(Vec::new()),
         decision: Ok(()),
         merge_by_agent: true,
         delivery_auto: true,
@@ -223,6 +225,9 @@ fn fake(world: &World) -> Fake {
 impl Hands for Fake {
     fn tool(&self, name: &str, arguments: Value) -> Result<Value, Value> {
         self.calls.borrow_mut().push(name.to_owned());
+        self.sent
+            .borrow_mut()
+            .push((name.to_owned(), arguments.clone()));
         if name == "release" {
             let file = arguments["evidence_file"]
                 .as_str()
@@ -306,6 +311,8 @@ fn request() -> Request {
         readback_pause: Duration::ZERO,
         spend: None,
         appendix: None,
+        until: None,
+        never_ran_evidence: None,
     }
 }
 
@@ -657,6 +664,197 @@ fn merge_by_person_and_ask_authorisation_hand_back_before_any_release() {
         assert!(!calls.contains(&"release_ci".to_owned()), "{calls:?}");
         assert!(!calls.contains(&"release".to_owned()), "{calls:?}");
     }
+}
+
+fn sent_to(fake: &Fake, tool: &str) -> Vec<Value> {
+    fake.sent
+        .borrow()
+        .iter()
+        .filter(|(name, _)| name == tool)
+        .map(|(_, arguments)| arguments.clone())
+        .collect()
+}
+
+fn until(until: Until) -> Request {
+    Request {
+        until: Some(until),
+        ..request()
+    }
+}
+
+#[test]
+fn until_ci_releases_for_a_person_who_merges_and_neither_merges_nor_closes() {
+    let world = world("b.txt", "two\n");
+    for (merge_by_agent, delivery_auto) in [(false, true), (true, false), (false, false)] {
+        let mut fake = fake(&world);
+        fake.merge_by_agent = merge_by_agent;
+        fake.delivery_auto = delivery_auto;
+        let ran = drive(&fake, &[], &until(Until::Ci));
+
+        assert_eq!(ran.answer["reached"], "ci", "{}", ran.answer);
+        assert_eq!(ran.answer["delivered"], false, "{}", ran.answer);
+        assert_eq!(ran.answer["verdict"]["outcome"], "approved");
+        assert_eq!(ran.answer["release"], json!({"ok": true}));
+        assert_eq!(ran.answer["lane"]["state"], "running");
+        assert_eq!(
+            called(&fake),
+            ["verify_claim", "record_computed_verdict", "release_ci"],
+            "{merge_by_agent} {delivery_auto}"
+        );
+        assert_eq!(
+            ran.answer["done"],
+            json!(["record_computed_verdict", "release_ci"])
+        );
+        assert!(!merged_by_gh(&ran) && ran.gh.is_empty(), "{:?}", ran.gh);
+    }
+}
+
+#[test]
+fn until_ci_that_finds_the_release_recorded_releases_nothing_again() {
+    let world = world("b.txt", "two\n");
+    let mut fake = fake(&world);
+    fake.stamp = Some(session::stamp_of(NOW - 30));
+    let ran = drive(&fake, &[], &until(Until::Ci));
+
+    assert_eq!(ran.answer["reached"], "ci", "{}", ran.answer);
+    assert_eq!(ran.answer["release"], json!({"released_earlier": true}));
+    assert!(!called(&fake).contains(&"release_ci".to_owned()));
+}
+
+#[test]
+fn until_verdict_records_the_verdict_and_stops_before_any_release() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let ran = drive(&fake, &[], &until(Until::Verdict));
+
+    assert_eq!(ran.answer["reached"], "verdict", "{}", ran.answer);
+    assert_eq!(ran.answer["verdict"]["outcome"], "approved");
+    assert!(ran.answer.get("release").is_none(), "{}", ran.answer);
+    assert_eq!(called(&fake), ["verify_claim", "record_computed_verdict"]);
+    assert!(ran.gh.is_empty(), "{:?}", ran.gh);
+}
+
+#[test]
+fn until_hands_back_a_refused_verdict_and_releases_nothing() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    fake.scripts.borrow_mut().insert(
+        "record_computed_verdict".into(),
+        vec![Err(
+            json!({"code": "computed-verdict-incomplete", "message": "a lens is missing"}),
+        )],
+    );
+    for stage in [Until::Verdict, Until::Ci] {
+        let ran = drive(&fake, &[], &until(stage));
+        assert_eq!(stopped(&ran), ("verdict", "computed-verdict-incomplete"));
+    }
+    assert!(!called(&fake).contains(&"release_ci".to_owned()));
+}
+
+#[test]
+fn a_never_ran_evidence_file_reaches_the_verdict_it_is_for() {
+    let world = world("b.txt", "two\n");
+    let with_evidence = Request {
+        never_ran_evidence: Some("/tmp/evidence.md".into()),
+        ..until(Until::Verdict)
+    };
+    let fake = fake(&world);
+    let ran = drive(&fake, &[], &with_evidence);
+    assert_eq!(ran.answer["reached"], "verdict", "{}", ran.answer);
+    assert_eq!(
+        sent_to(&fake, "record_computed_verdict")[0]["never_ran_evidence_file"],
+        "/tmp/evidence.md"
+    );
+
+    let plain = self::fake(&world);
+    drive(&plain, &[], &until(Until::Verdict));
+    assert!(
+        sent_to(&plain, "record_computed_verdict")[0]
+            .get("never_ran_evidence_file")
+            .is_none()
+    );
+}
+
+#[test]
+fn a_delivery_over_a_lane_that_never_ran_records_the_verdict_with_the_evidence_it_was_given() {
+    let world = world("b.txt", "two\n");
+    let receipt = receipt_of(&world);
+    let never_ran = json!({
+        "kind": "stop", "reason_code": "publication-lane-never-ran",
+        "operation": null, "continuation": "c",
+    });
+    let held_back = |evidence: Option<&str>| {
+        let fake = fake(&world);
+        fake.scripts.borrow_mut().insert(
+            "review_status".into(),
+            vec![
+                status(&receipt, never_ran.clone()),
+                status(&receipt, execute("deliver", "approved")),
+            ],
+        );
+        let request = Request {
+            never_ran_evidence: evidence.map(Into::into),
+            ..request()
+        };
+        let ran = drive(&fake, &green_script(&world), &request);
+        (fake, ran)
+    };
+
+    let (fake, ran) = held_back(Some("/tmp/evidence.md"));
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert_eq!(
+        sent_to(&fake, "record_computed_verdict")[0]["never_ran_evidence_file"],
+        "/tmp/evidence.md"
+    );
+
+    let (fake, ran) = held_back(None);
+    assert_eq!(stopped(&ran), ("review", "publication-lane-never-ran"));
+    assert!(!called(&fake).contains(&"record_computed_verdict".to_owned()));
+}
+
+#[test]
+fn until_without_a_receipt_in_the_pointer_reads_it_from_the_status_and_still_hands_back_a_plain_delivery()
+ {
+    let world = world("b.txt", "two\n");
+    let receipt = receipt_of(&world);
+
+    let mut reader = fake(&world);
+    reader.receipt = None;
+    let ran = drive(&reader, &[], &until(Until::Ci));
+    assert_eq!(ran.answer["reached"], "ci", "{}", ran.answer);
+    assert_eq!(
+        called(&reader),
+        [
+            "verify_claim",
+            "review_status",
+            "record_computed_verdict",
+            "release_ci"
+        ]
+    );
+    for tool in ["record_computed_verdict", "release_ci"] {
+        let sent = &sent_to(&reader, tool)[0];
+        assert_eq!(sent["epoch"], receipt.epoch, "{tool}");
+        assert_eq!(sent["digest"], receipt.digest, "{tool}");
+        assert_eq!(sent["head"], receipt.head, "{tool}");
+    }
+
+    let mut unreadable = fake(&world);
+    unreadable.receipt = None;
+    unreadable.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![Ok(
+            json!({"ok": true, "receipt": null, "next": halt("no-publication")}),
+        )],
+    );
+    let ran = drive(&unreadable, &[], &until(Until::Ci));
+    assert_eq!(stopped(&ran), ("receipt", "receipt-missing"));
+    assert!(!called(&unreadable).contains(&"release_ci".to_owned()));
+
+    let mut plain = fake(&world);
+    plain.receipt = None;
+    let ran = drive(&plain, &[], &request());
+    assert_eq!(stopped(&ran), ("receipt", "receipt-missing"));
+    assert_eq!(called(&plain), ["verify_claim"]);
 }
 
 #[test]

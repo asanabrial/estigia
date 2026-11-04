@@ -1,3 +1,7 @@
+fn every_row() -> impl Iterator<Item = &'static tools::Tool> {
+    TOOLS.iter().chain(tools::INTERNAL)
+}
+
 /// The transport's source: the dispatcher that answers in this process — the
 /// flags a tool sends are checked against the code that reads them, not
 /// against a published schema alone.
@@ -179,6 +183,8 @@ fn note(found: &mut Vec<(String, &'static str)>, name: &str, how: &'static str) 
 use super::*;
 
 use crate::test_env::repository_with_commit;
+
+mod facade_tests;
 
 /// Registers a real worktree of `repo` at `path`, and writes an ownership
 /// marker inside it naming `run_id` and `issue` — the same shape
@@ -1106,28 +1112,22 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
         "heartbeat",
         "inbox",
         "judge_workspaces",
-        "launch_review_input",
         "list_sessions",
         "list_state",
         "pr_review",
         "publish_review",
         "ready_pr",
-        "record_computed_verdict",
         "record_disposition",
         "record_review_finding",
         "record_spend",
         "release",
-        "release_ci",
         "republish_review",
         "review_read",
         "review_stages",
         "review_status",
         "review_thread",
-        "review_tier",
-        "run_checks",
         "send_message",
         "start_branch",
-        "target",
         "task",
         "tasks",
         "transition",
@@ -1136,6 +1136,14 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
     ];
     kept.sort_unstable();
     assert_eq!(exposed, kept);
+    assert_eq!(TOOLS.len(), 37);
+    assert_eq!(
+        TOOLS
+            .iter()
+            .filter(|tool| !tools::is_assisted_only(tool.name))
+            .count(),
+        32
+    );
 }
 
 #[test]
@@ -1233,7 +1241,7 @@ fn a_read_only_tool_says_so_in_its_schema() {
 fn every_required_operation_is_exposed_or_declared() {
     let required = crate::skill::required_operations();
     for operation in &required {
-        let exposed = TOOLS.iter().any(|tool| tool.contract_name == operation);
+        let exposed = every_row().any(|tool| tool.contract_name == operation);
         let declared = NOT_EXPOSED.iter().any(|(name, _)| name == operation);
         assert!(
             exposed || declared,
@@ -1268,10 +1276,9 @@ fn every_tool_maps_to_a_transport_operation_the_binding_documents() {
         .iter()
         .find(|file| file.path == "bindings/github.md")
         .expect("the GitHub binding ships");
-    for tool in TOOLS
-        .iter()
-        .filter(|tool| !tools::is_local_store(tool.name))
-    {
+    for tool in every_row().filter(|tool| {
+        !tools::is_local_store(tool.name) && !tools::PULL_REVIEW_TOOLS.contains(&tool.name)
+    }) {
         assert!(
             binding.contents.contains(tool.operation),
             "{} runs `{}`, which bindings/github.md never names",
@@ -1332,10 +1339,9 @@ fn every_tool_names_a_row_the_binding_actually_has() {
         .iter()
         .find(|file| file.path == "bindings/github.md")
         .expect("the GitHub binding ships");
-    for tool in TOOLS
-        .iter()
-        .filter(|tool| !tools::is_local_store(tool.name))
-    {
+    for tool in every_row().filter(|tool| {
+        !tools::is_local_store(tool.name) && !tools::PULL_REVIEW_TOOLS.contains(&tool.name)
+    }) {
         let row = format!("| {}", tool.contract_name);
         let backticked = format!("| `{}`", tool.contract_name);
         assert!(
@@ -1370,8 +1376,7 @@ fn cli_names(command: &clap::Command, into: &mut Vec<String>) {
 }
 
 fn callable_names() -> Vec<String> {
-    let mut names: Vec<String> = TOOLS
-        .iter()
+    let mut names: Vec<String> = every_row()
         .flat_map(|tool| [tool.name, tool.contract_name, tool.operation])
         .chain(NOT_EXPOSED.iter().map(|(name, _)| *name))
         .chain(NOT_RUN.iter().map(|(name, _)| *name))
@@ -1439,6 +1444,17 @@ fn operation_candidates(line: &str, in_operation_table: bool) -> Vec<String> {
     found
 }
 
+fn retired_calls(line: &str) -> Vec<(&str, &'static str)> {
+    backticked(line)
+        .into_iter()
+        .filter(|(start, _, _)| {
+            let before = line[..*start].trim_end().to_ascii_lowercase();
+            before.ends_with(" call") || before.ends_with(" calls") || before == "call"
+        })
+        .filter_map(|(_, _, word)| tools::retired(word).map(|replacement| (word, replacement)))
+        .collect()
+}
+
 fn absorption_map(binding: &str) -> Vec<&str> {
     let mut in_fence = false;
     let mut in_map = false;
@@ -1501,6 +1517,12 @@ fn unresolved_operations(path: &str, contents: &str, callable: &[String]) -> Vec
             } else {
                 in_operation_table = false;
             }
+        }
+        for (word, replacement) in retired_calls(line) {
+            stale.push(format!(
+                "{path}:{} tells the agent to call `{word}`, which is retired: {replacement}",
+                index + 1
+            ));
         }
         for word in operation_candidates(line, in_operation_table && !in_fence) {
             let word = spelling(&word);
@@ -1642,7 +1664,7 @@ fn publication_tools_bind_to_the_repository_host_the_local_ones_to_neither_and_t
         "review_thread",
         "judge_workspaces",
     ];
-    for tool in TOOLS {
+    for tool in every_row() {
         let expected =
             if host.contains(&tool.name) || super::tools::PULL_REVIEW_TOOLS.contains(&tool.name) {
                 super::tools::TransportBind::RepositoryHost
@@ -2179,7 +2201,7 @@ fn a_tool_that_changes_the_filesystem_is_not_advertised_as_read_only() {
     // asking. `changelog_notes` once said read-only while its `out`
     // argument wrote a file at a path the caller chose.
     let mut writers = 0;
-    for tool in TOOLS {
+    for tool in every_row() {
         if !transport_touches_the_disk(tool.operation) {
             continue;
         }
@@ -2528,7 +2550,7 @@ fn transport_valueless(operation: &str) -> Vec<String> {
 fn a_boolean_argument_is_one_the_transport_takes_without_a_value() {
     let mut booleans = 0;
     let mut valueless_seen = 0;
-    for tool in TOOLS {
+    for tool in every_row() {
         if tools::is_local_store(tool.name) {
             continue;
         }
@@ -2592,7 +2614,7 @@ fn transport_constrained(operation: &str) -> Vec<String> {
 fn a_flag_constrained_to_the_workflow_states_publishes_them() {
     let mut published = 0;
     let mut found = 0;
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in every_row() {
         let constrained = transport_constrained(tool.operation);
         found += constrained.len();
         for argument in tool.arguments {
@@ -2673,15 +2695,17 @@ fn server_supplied() -> Vec<(String, String)> {
     supplied
 }
 
+const REFUSED_BY_VIEW: &[(&str, &str)] = &[("review_read", "issue")];
+
 #[test]
 fn a_flag_the_transport_requires_is_one_somebody_sends() {
     let supplied = server_supplied();
     let mut crossed = 0;
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in every_row() {
         for flag in transport_required(tool.operation) {
             crossed += 1;
             let asked_of_the_agent = tool.arguments.iter().any(|argument| {
-                argument.required
+                (argument.required || REFUSED_BY_VIEW.contains(&(tool.name, argument.name)))
                     && argument.as_flag() == flag
                     && !crate::harness::mcp::tools::is_pointer_only(tool.name, argument.name)
             });
@@ -2718,10 +2742,7 @@ fn transport_integers(operation: &str) -> Vec<String> {
 fn an_integer_argument_is_one_the_transport_parses_as_a_whole_number() {
     let mut declared = 0;
     let mut found = 0;
-    for tool in crate::harness::mcp::tools::TOOLS
-        .iter()
-        .filter(|tool| !crate::harness::mcp::tools::is_local_store(tool.name))
-    {
+    for tool in every_row().filter(|tool| !crate::harness::mcp::tools::is_local_store(tool.name)) {
         let integers = transport_integers(tool.operation);
         found += integers.len();
         for argument in tool.arguments {
@@ -2778,10 +2799,7 @@ fn the_flags_read_out_of_the_transport_are_the_ones_it_declares() {
 
 #[test]
 fn every_tool_sends_flags_the_transport_accepts() {
-    for tool in TOOLS
-        .iter()
-        .filter(|tool| !tools::is_local_store(tool.name))
-    {
+    for tool in every_row().filter(|tool| !tools::is_local_store(tool.name)) {
         let Some((accepted, required)) = transport_flags(tool.operation) else {
             panic!(
                 "{} runs `{}`, which the transport does not declare",
@@ -2836,10 +2854,11 @@ fn every_tool_sends_flags_the_transport_accepts() {
                 tool.operation,
                 tool.name
             );
-            let optional = tool
-                .arguments
-                .iter()
-                .find(|argument| &argument.as_flag() == flag && !argument.required);
+            let optional = tool.arguments.iter().find(|argument| {
+                &argument.as_flag() == flag
+                    && !argument.required
+                    && !REFUSED_BY_VIEW.contains(&(tool.name, argument.name))
+            });
             assert!(
                 optional.is_none(),
                 "`{}` requires `{flag}` and {} declares it optional — an agent that leaves it \
@@ -3173,10 +3192,7 @@ fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
 
     {
         let silent = "release_ci";
-        let tool = super::tools::TOOLS
-            .iter()
-            .find(|tool| tool.name == silent)
-            .expect("the tool is listed");
+        let tool = tools::find(silent).expect("the tool is a row");
         assert_eq!(
             tool.effect,
             super::PointerEffect::Renew,
@@ -3826,10 +3842,7 @@ fn every_receipt_effect_recovers_the_complete_receipt_atomically() {
     });
 
     for name in ["publish_review", "republish_review", "release_ci"] {
-        let tool = super::tools::TOOLS
-            .iter()
-            .find(|tool| tool.name == name)
-            .expect("the tool is listed");
+        let tool = tools::find(name).expect("the tool is a row");
         let mut run = crate::harness::session::Run::new(format!("claude-{name}"));
         let arguments = if name == "release_ci" {
             receipt_json.clone()
@@ -4203,7 +4216,7 @@ fn no_tool_bound_to_a_run_accepts_the_name_that_names_none() {
         crate::harness::session::NAMELESS
     );
     let mut bound = 0;
-    for tool in TOOLS {
+    for tool in every_row() {
         if !tool.arguments.iter().any(|a| a.name == "run_id") {
             continue;
         }
@@ -4503,7 +4516,7 @@ fn every_tool_that_takes_a_run_id_refuses_the_shapes_the_predicate_refuses() {
         ("a/b-cd", session::Unminted::Runtime),
     ];
     let mut bound = 0;
-    for tool in tools::TOOLS {
+    for tool in every_row() {
         if !tool
             .arguments
             .iter()
@@ -4584,7 +4597,7 @@ fn a_run_id_sent_as_a_json_number_is_refused_by_every_tool_that_takes_one() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = arg_context(&root);
     let mut bound = 0;
-    for tool in tools::TOOLS {
+    for tool in every_row() {
         if !tool
             .arguments
             .iter()
@@ -4734,7 +4747,7 @@ fn create_refuses_a_repo_that_is_not_owner_name_before_anything_is_read_or_run()
 
 #[test]
 fn only_create_takes_a_repo_and_it_is_optional() {
-    for tool in tools::TOOLS {
+    for tool in every_row() {
         let takes = tool
             .arguments
             .iter()
@@ -4801,7 +4814,7 @@ fn a_publish_names_the_checkout_the_gate_will_measure_against() {
 #[test]
 fn the_operation_epoch_has_one_shape_in_every_tool_that_asks_for_it() {
     let mut asked = 0;
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in every_row() {
         for argument in tool.arguments {
             if argument.name != "target_operation" {
                 continue;
@@ -4825,7 +4838,7 @@ fn the_operation_epoch_has_one_shape_in_every_tool_that_asks_for_it() {
 fn a_tool_that_moves_the_run_pointer_is_a_tool_that_writes() {
     use crate::harness::mcp::tools::PointerEffect;
     let mut moved = 0;
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in every_row() {
         let moves = !matches!(tool.effect, PointerEffect::None | PointerEffect::Renew);
         if !moves {
             continue;
@@ -4854,7 +4867,7 @@ fn a_tool_that_moves_the_run_pointer_is_a_tool_that_writes() {
 /// broken transport, arriving through a bound nobody published.
 #[test]
 fn an_integer_that_counts_from_one_is_refused_below_it_and_says_so_in_the_schema() {
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in every_row() {
         for argument in tool.arguments {
             if argument.json_type != "integer" {
                 continue;
@@ -4975,7 +4988,7 @@ fn an_argument_a_tool_does_not_take_is_refused_rather_than_dropped() {
         "a wrong argument was reported as the tracker's answer: {refused:?}"
     );
 
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in every_row() {
         let mut arguments = serde_json::Map::new();
         for argument in tool.arguments.iter().filter(|argument| argument.required) {
             arguments.insert(
@@ -5471,7 +5484,7 @@ const LOCAL_WRITER_TOOLS: &[&str] = &[
 
 #[test]
 fn every_tool_is_a_tracker_writer_an_assisted_only_a_local_writer_or_a_read_and_never_two() {
-    for tool in TOOLS {
+    for tool in every_row().filter(|tool| tool.name != "flush") {
         let classes = [
             (
                 "tracker writer",
@@ -5544,7 +5557,7 @@ fn an_assisted_workflow_refuses_every_tool_that_writes_the_tracker() {
         crate::harness::session::DEFAULT_RUNTIME,
         crate::harness::session::NAMELESS
     );
-    for tool in TOOLS {
+    for tool in every_row() {
         let writes = tools::TRACKER_WRITERS.contains(&tool.name);
         let takes_a_run = tool.arguments.iter().any(|a| a.name == "run_id");
         if !writes && !takes_a_run {
@@ -5603,10 +5616,7 @@ fn an_autonomous_workflow_never_refuses_for_being_assisted() {
         crate::harness::session::DEFAULT_RUNTIME,
         crate::harness::session::NAMELESS
     );
-    for tool in TOOLS
-        .iter()
-        .filter(|tool| tool.arguments.iter().any(|a| a.name == "run_id"))
-    {
+    for tool in every_row().filter(|tool| tool.arguments.iter().any(|a| a.name == "run_id")) {
         let ToolFailure::Refused(refusal) =
             run_tool(tool.name, &arguments_naming(tool, &nameless), Ok(&context))
                 .expect_err("a nameless run is not one to act under")
@@ -5774,7 +5784,7 @@ fn a_run_holding_a_review_claim_is_refused_every_other_writing_tool() {
     run.reviewed_pr = Some(7);
     run.repo_dir = Some(repo);
     crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
-    let writers = TOOLS.iter().filter(|tool| {
+    let writers = TOOLS.iter().chain(tools::INTERNAL).filter(|tool| {
         tool.writes
             && !tools::PULL_REVIEW_TOOLS.contains(&tool.name)
             && (!tools::is_local_store(tool.name) || tool.name == "deliver")
@@ -5986,7 +5996,9 @@ fn a_read_that_needs_the_tracker_says_which_tools_this_one_admits_and_not_a_sett
     assert!(!said.contains("Workflow: assisted"), "{said}");
     assert!(!said.contains("Workflow assisted"), "{said}");
     assert!(
-        said.contains("review_tier") && said.contains("assist"),
+        said.contains("review_read (view tier or target)")
+            && said.contains("assist")
+            && !said.contains("review_tier"),
         "{said}"
     );
 }
@@ -6291,7 +6303,7 @@ fn assist_after_a_verified_stamp_leaves_no_renewal_window_for_a_write() {
 
 #[test]
 fn no_effect_but_the_assisted_decision_leaves_a_stamp_on_an_assisted_pointer() {
-    for tool in TOOLS.iter().filter(|tool| {
+    for tool in every_row().filter(|tool| {
         !matches!(
             tool.effect,
             PointerEffect::None | PointerEffect::Forget | PointerEffect::Swear
@@ -6367,8 +6379,7 @@ fn an_unreadable_contract_does_not_refuse_the_tracker_writers_for_being_assisted
         crate::harness::session::DEFAULT_RUNTIME,
         crate::harness::session::NAMELESS
     );
-    for tool in TOOLS
-        .iter()
+    for tool in every_row()
         .filter(|tool| tools::TRACKER_WRITERS.contains(&tool.name))
         .filter(|tool| tool.arguments.iter().any(|a| a.name == "run_id"))
     {
@@ -6965,7 +6976,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 59_796;
+const TOOLS_LIST_CEILING: usize = 55_146;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -9706,7 +9717,6 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
         .collect();
     let core: std::collections::BTreeSet<&str> = [
         "claim",
-        "start_branch",
         "publish_review",
         "collect_review_input",
         "deliver",
@@ -9722,6 +9732,25 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
             assert!(tool.get("_meta").is_none(), "{tool}");
         }
     }
+}
+
+const ALWAYS_LOADED_CEILING: usize = 11_937;
+
+#[test]
+fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
+    let listed = result(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    let bytes: usize = listed["tools"]
+        .as_array()
+        .expect("a tool list")
+        .iter()
+        .filter(|tool| tool["_meta"]["anthropic/alwaysLoad"] == true)
+        .map(|tool| tool.to_string().len())
+        .sum();
+    assert!(
+        bytes <= ALWAYS_LOADED_CEILING,
+        "the always-loaded schemas are {bytes} bytes against a ceiling of \
+         {ALWAYS_LOADED_CEILING}: every turn pays them, so trim one or raise this in a reviewed edit"
+    );
 }
 
 #[test]
@@ -10065,7 +10094,7 @@ fn a_held_release_spend_without_its_receipt_is_not_refused_for_the_receipt() {
 }
 
 #[test]
-fn a_computable_verdict_and_an_approval_are_routed_through_deliver_only_where_it_delivers() {
+fn a_computable_verdict_and_an_approval_are_routed_through_deliver_whether_or_not_it_merges() {
     let receipt = json!({"epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"});
     let status = |reason: &str, operation: &str| {
         json!({
@@ -10080,9 +10109,9 @@ fn a_computable_verdict_and_an_approval_are_routed_through_deliver_only_where_it
             },
         })
     };
-    for (reason, operation) in [
-        ("verdict-computable", "record_computed_verdict"),
-        ("approved", "release_ci"),
+    for (reason, operation, until) in [
+        ("verdict-computable", "record_computed_verdict", "verdict"),
+        ("approved", "release_ci", "ci"),
     ] {
         let mut routed = status(reason, operation);
         super::route_through_deliver("review_status", &mut routed, || true);
@@ -10097,13 +10126,15 @@ fn a_computable_verdict_and_an_approval_are_routed_through_deliver_only_where_it
         super::route_through_deliver("publish_review", &mut embedded, || true);
         assert_eq!(embedded["review_status"]["next"]["operation"], "deliver");
 
-        let mut kept = status(reason, operation);
-        super::route_through_deliver("review_status", &mut kept, || false);
+        let mut stopping = status(reason, operation);
+        super::route_through_deliver("review_status", &mut stopping, || false);
+        assert_eq!(stopping["next"]["operation"], "deliver", "{stopping}");
         assert_eq!(
-            kept,
-            status(reason, operation),
-            "a run deliver hands back was rerouted"
+            stopping["next"]["arguments"],
+            json!({"issue": 5, "until": until}),
+            "a run that does not merge was sent to the full delivery"
         );
+        assert_eq!(stopping["next"]["reason_code"], reason);
     }
 
     let mut other = status("correction-due", "publish_review");

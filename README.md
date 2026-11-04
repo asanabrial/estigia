@@ -6,7 +6,7 @@
   <a href="https://github.com/asanabrial/estigia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/asanabrial/estigia/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
   <a href="https://www.rust-lang.org"><img alt="Rust 1.97+" src="https://img.shields.io/badge/rust-1.97%2B-orange.svg" /></a>
-  <a href="#the-tools"><img alt="MCP: 43 tools" src="https://img.shields.io/badge/MCP-43%20tools-purple.svg" /></a>
+  <a href="#the-tools"><img alt="MCP: 37 tools" src="https://img.shields.io/badge/MCP-37%20tools-purple.svg" /></a>
   <a href="#install"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" /></a>
   <a href="https://glama.ai/mcp/servers/asanabrial/estigia"><img alt="Glama MCP server" src="https://glama.ai/mcp/servers/asanabrial/estigia/badges/score.svg" /></a>
 </p>
@@ -234,16 +234,16 @@ What `REPLACE` and `OVERWRITE` mean is in [`docs/what-it-writes.md`](docs/what-i
 ## A harness, not a document
 
 The contract under `skill/` is text an agent may ignore, so Estigia holds the tools: a `PreToolUse`
-gate, a `Stop` hook, a `pre-push` hook under git, and forty-three operations with schemas below. The local store is the
+gate, a `Stop` hook, a `pre-push` hook under git, and thirty-seven operations with schemas below. The local store is the
 authority; the tracker keeps a projection that never decides. The diagram, the loop plugins and the
 gate's rules are in [what it writes](docs/what-it-writes.md#the-gate-the-hooks-and-the-loop-plugins).
 
 ## The tools
 
-Forty-three operations, table-driven. Thirty-seven map to operations the binding must provide;
+Thirty-seven operations, table-driven. Thirty-one map to operations the binding must provide;
 `send_message`, `ask`, `wait`, `inbox` and `list_sessions` are answered by the local store and `deliver` composes
 the rest with the merge gate, outside the binding. `tools/list` carries each schema and a
-`readOnlyHint`. The eight delivery tools (`claim`, `start_branch`, `publish_review`,
+`readOnlyHint`. The seven delivery tools (`claim`, `publish_review`,
 `collect_review_input`, `deliver`, `release`, `transition`, `review_status`) carry `_meta["anthropic/alwaysLoad"]`; every tool takes
 `compact` ([cost](docs/review-cost.md#what-the-tool-menu-itself-costs)):
 
@@ -252,8 +252,6 @@ read   verify_claim
 read   list_state
 read   review_status
 read   review_read
-read   review_tier
-read   target
 read   tasks
 read   list_sessions
 WRITE  claim
@@ -283,20 +281,18 @@ WRITE  republish_review
 WRITE  handoff_review
 WRITE  record_review_finding
 WRITE  record_disposition
-WRITE  launch_review_input
 WRITE  collect_review_input
-WRITE  record_computed_verdict
 WRITE  escalate_review
 WRITE  record_spend
-WRITE  release_ci
 WRITE  deliver
-WRITE  run_checks
 ```
 
 `where`, `feed`, `status` and `flush` are commands of `estigia` rather than tools; asking for one of them, or for a
-name the surface dropped, answers what replaces it.
+name the surface dropped, answers what replaces it. `review_read` also reads the review tier (`view: tier`) and the
+delivery target (`view: target`); `collect_review_input` also starts a reviewer (`launch`) and runs the declared checks
+(`checks`); `deliver` stops after the verdict or the CI release with `until`.
 
-Forty-three tools. The contract names seventeen operations every binding must map; the tools absorbed some
+Thirty-seven tools. The contract names seventeen operations every binding must map; the tools absorbed some
 under a surviving name ([why](docs/github-binding.md#why-the-transport-is-in-this-process-and-why-the-server-is-hand-written)).
 Arguments are in each tool's schema.
 

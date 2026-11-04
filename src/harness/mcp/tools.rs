@@ -274,7 +274,7 @@ const INLINE_PAYLOAD: Argument = Argument::optional(
     "inline_payload",
     "boolean",
     "Carry the payload's full diff text in the answer; default false. It can make the \
-     answer too large to return, and `launch_review_input` needs none. Ask at publication \
+     answer too large to return, and a `launch: true` call needs none. Ask at publication \
      time: publishing again mints a new epoch.",
 );
 
@@ -309,7 +309,6 @@ pub const PULL_REVIEW_ACTIONS: &[&str] =
 /// The delivery tools `tools/list` marks `anthropic/alwaysLoad`; every other tool stays deferred.
 pub const ALWAYS_LOADED: &[&str] = &[
     "claim",
-    "start_branch",
     "publish_review",
     "collect_review_input",
     "deliver",
@@ -1032,49 +1031,17 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
-        name: "launch_review_input",
-        contract_name: "launch_review_input",
-        description: "Start the reviewer for each slot `name` or `names` requests, each offered \
-                      by a `review_status` `collect`, returning before any has answered. The \
-                      diff is rebuilt from the `collect`'s receipt; the criteria are the issue's \
-                      body. The reviewer is the first installed `claude` or `codex` CLI in a \
-                      detached tool-less job under a 15 minute deadline, or the relay on an \
-                      OpenCode run with its plugin. Answers `{job, deadline_at}` per slot, or \
-                      `{launched: [...]}`; a batch reports a slot that cannot start. Requires a \
-                      live review claim; `collect_review_input` records the answer.",
-        operation: "launch-review-input",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            Argument::optional(
-                "name",
-                "string",
-                "One slot to launch: the `name` of an input `review_status` offered in a \
-                 `collect`. Give `names` instead to launch several.",
-            ),
-            Argument::optional(
-                "names",
-                "array",
-                "The slots to launch in one call, as an array of `name` values, each with its \
-                 own claim check. Give `name` or `names`, never both.",
-            ),
-        ],
-        effect: PointerEffect::Renew,
-        writes: true,
-    },
-    Tool {
         name: "collect_review_input",
         contract_name: "collect_review_input",
-        description: "Record what the reviewer `launch_review_input` started answered. Give \
-                      `names` for several slots or `name` for one; only the run that launched a \
-                      job collects it, and `review_status` must still be a `collect` offering \
-                      each slot. A running job is refused unless `wait_seconds` is given; a batch \
-                      reports a running slot rather than stopping. A lens's findings are checked \
-                      as `record_review_finding` checks them, and one bad finding rejects the \
-                      answer and writes nothing. A `refutation-batch` answer must name each \
-                      listed finding once and nothing else. A `review-validator` `fail` or \
-                      `unavailable` inspection is recorded, not rejected. A second call for a \
-                      recorded job writes nothing. Requires a live review claim.",
+        description: "Record what started reviewers answered: `name` or `names`, by the run that \
+                      launched them, for slots `review_status` offers. A running job is refused \
+                      unless `wait_seconds` is given; a batch reports it and goes on. A bad answer \
+                      or a repeat call writes nothing. `launch: true` starts each named slot's \
+                      reviewer as a detached job and returns at once; nothing launches without it. \
+                      `checks: true` runs the checks the base declares and records a receipt bound \
+                      to the published digest: `declared: false`, `cached` or `running` with \
+                      `ask_after`; the verdict and CI release refuse without a passing one. \
+                      Requires a live review claim.",
         operation: "collect-review-input",
         arguments: &[
             ISSUE,
@@ -1082,20 +1049,18 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "name",
                 "string",
-                "One slot to collect: the `name` given to `launch_review_input`. Give `names` \
-                 instead to collect several.",
+                "One slot `review_status` offered.",
             ),
             Argument::optional(
                 "names",
                 "array",
-                "The slots to collect in one call, as an array of `name` values, each with its \
-                 own claim check. Give `name` or `names`, never both.",
+                "Several slots in one call. Give `name` or `names`, never both.",
             ),
             Argument::optional(
                 "wait_seconds",
                 "integer",
                 "Seconds to wait for a running job before refusing `capture-running`; omitted \
-                 checks once. Capped at 900.",
+                 checks once. Capped at 900; with `checks`, at 50.",
             )
             .counting_from(1),
             Argument::optional(
@@ -1104,64 +1069,17 @@ pub const TOOLS: &[Tool] = &[
                 "Also record the computed verdict when no slot is running and `review_status` \
                  then reads `verdict-computable`; otherwise records nothing.",
             ),
-        ],
-        effect: PointerEffect::Renew,
-        writes: true,
-    },
-    Tool {
-        name: "record_computed_verdict",
-        contract_name: "review_computed_verdict",
-        description: "Compute the verdict an exact review transaction's finding ledger supports \
-                      and record it once; the caller supplies the receipt, not the outcome. \
-                      `approved` needs every licensed lens reported, no severe finding open or \
-                      escalated, and the publication lane cleared; `rejected` rests on a severe \
-                      finding that stands; `escalated` on one the ledger cannot settle. An \
-                      `incomplete` computation is refused. Recording again reads back the marker.",
-        operation: "review-computed-verdict",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            RECEIPT_EPOCH,
-            RECEIPT_PR,
-            RECEIPT_HEAD,
-            RECEIPT_BASE,
-            RECEIPT_DIGEST,
             Argument::optional(
-                "worktree",
-                "string",
-                "The checkout `base..head` is read from.",
+                "launch",
+                "boolean",
+                "Start each named slot's reviewer instead of collecting. Takes only `name` or \
+                 `names`.",
             ),
             Argument::optional(
-                "never_ran_evidence_file",
-                "string",
-                "Path to your own local verification that the lane's run never executed a step, \
-                 read only for an `approved` computation over `publication-lane-never-ran`. \
-                 Stored, not verified.",
+                "checks",
+                "boolean",
+                "Run the declared checks instead of collecting. Takes only `wait_seconds`.",
             ),
-        ],
-        effect: PointerEffect::Renew,
-        writes: true,
-    },
-    Tool {
-        name: "run_checks",
-        contract_name: "run_checks",
-        description: "Run the checks the base declares in `estigia.generated.toml` as a detached \
-                      job in this run's clean checkout and record a receipt bound to the \
-                      published digest. Answers `declared: false`, `cached`, or `running` with \
-                      `ask_after`: call again to collect. Output tails are in the answer, not the \
-                      receipt. The verdict and `release_ci` refuse without a passing receipt. \
-                      Requires a live review claim.",
-        operation: "run-checks",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            Argument::optional(
-                "wait_seconds",
-                "integer",
-                "Seconds to wait for the job before answering `running`; omitted answers at once. \
-                 Capped at 50.",
-            )
-            .counting_from(1),
         ],
         effect: PointerEffect::Renew,
         writes: true,
@@ -1417,31 +1335,14 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
-        name: "release_ci",
-        contract_name: "release_ci",
-        description: "Release one exact reviewed draft target to CI. Re-verifies the live review claim, the newest review transaction, the draft PR identity and a clean target before marking ready, then confirms by readback. A `warning` or `suggestion` never blocks it.",
-        operation: "release-ci",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            RECEIPT_EPOCH,
-            RECEIPT_PR,
-            RECEIPT_HEAD,
-            RECEIPT_BASE,
-            RECEIPT_DIGEST,
-            Argument::optional("worktree", "string", "The isolated checkout."),
-        ],
-        effect: PointerEffect::Renew,
-        writes: true,
-    },
-    Tool {
         name: "deliver",
         contract_name: "deliver",
-        description: "The tail after `publish_review` in one call: verdict, `release_ci`, CI, \
-                      merge through the `gh pr merge` gate's decision, topology readback, close \
-                      with generated evidence. Answers `delivered`, `pending` with `ask_after` \
-                      (call again; no landed write repeats) or `stopped` with `step`, `reason` \
-                      and any `next`; nothing is written past a stop.",
+        description: "The tail after `publish_review` in one call: computed verdict, CI release, \
+                      CI, merge through the `gh pr merge` gate's decision, topology readback, close \
+                      with generated evidence. `until` stops earlier, for a person who merges. \
+                      Answers `delivered`, `pending` with `ask_after` (call again; no landed write \
+                      repeats) or `stopped` with `step`, `reason` and any `next`; nothing is \
+                      written past a stop.",
         operation: "deliver",
         arguments: &[
             ISSUE,
@@ -1462,6 +1363,18 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "Path to your text appended to the generated evidence: the local suite command \
                  and result. Required when the CI lane reads `disabled` or `never-ran`.",
+            ),
+            Argument::optional(
+                "until",
+                "string",
+                "Stop after this step: `verdict` records it, `ci` also releases CI.",
+            )
+            .of(&["verdict", "ci"]),
+            Argument::optional(
+                "never_ran_evidence_file",
+                "string",
+                "Path to your verification that the lane's run never executed a step, for an \
+                 `approved` verdict over `publication-lane-never-ran`. Stored, not verified.",
             ),
         ],
         effect: PointerEffect::None,
@@ -1686,47 +1599,6 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
-        name: "review_tier",
-        contract_name: "review_tier",
-        description: "The review tier for one base/head pair, derived from the change alone: \
-                      `high` when a hot-path token, an adjacent `service`/`token` path pair, a \
-                      shell-source extension or an execute-bit flip is touched; `low` when at \
-                      least one path changed and every authored byte is proven passive prose \
-                      and nothing configures anything; `medium` otherwise, including a range \
-                      that changed no path (`nothing_measured`, never `low`). `lenses` is a \
-                      fixed allocation per tier: `medium` answers one lens, the `focus` argument's \
-                      (default `reliability`); `high` answers four lenses, `review-risk`, \
-                      `review-readback`, `review-readability` and `review-reliability`; `low` \
-                      answers zero. `parent_head` narrows a repair round's range. \
-                      Read-only, no claim.",
-        operation: "review-tier",
-        arguments: &[
-            Argument::required("base", "string", "The base commit-ish."),
-            Argument::required("head", "string", "The head commit-ish."),
-            Argument::optional(
-                "parent_head",
-                "string",
-                "The parent publication's head commit-ish, for a repair round. Read as a \
-                 narrower range when an ancestor of `head`, the base did not move and the range \
-                 touches a path; otherwise the whole `base..head`, with the reason.",
-            ),
-            Argument::optional(
-                "clearing_finding",
-                "string",
-                "The class of the review_finding that cleared the republish-over-an-approved-\
-                 receipt gate on the parent receipt. Read only with `parent_head`.",
-            )
-            .of(FINDING_CLASSES),
-            Argument::optional("worktree", "string", "The isolated checkout."),
-            FOCUS,
-            FOCUS_REASON,
-            RAISE,
-            RAISE_REASON,
-        ],
-        effect: PointerEffect::None,
-        writes: false,
-    },
-    Tool {
         name: "review_read",
         contract_name: "review_read",
         description: "One read of a review transaction, chosen by `view`. `transaction` is the \
@@ -1735,14 +1607,32 @@ pub const TOOLS: &[Tool] = &[
                       recorded against the receipt, `verdict` the verdict the ledger computes, \
                       `membership` whether a candidate file is a genuine subset of the payload, \
                       `inspect` what a correction changed over its parent, `spend` every \
-                      measurement of one phase. Read-only, no claim.",
+                      measurement of one phase. `tier` is the review tier for one base/head \
+                      pair, derived from the change alone: `high` when a hot-path token, an \
+                      adjacent `service`/`token` path pair, a shell-source extension or an \
+                      execute-bit flip is touched; `low` when at least one path changed and \
+                      every authored byte is proven passive prose and nothing configures \
+                      anything; `medium` otherwise, including a range that changed no path \
+                      (`nothing_measured`, never `low`). `lenses` is a fixed allocation per \
+                      tier: `medium` answers one lens, the `focus` argument's (default \
+                      `reliability`); `high` answers four lenses, `review-risk`, \
+                      `review-readback`, `review-readability` and `review-reliability`; `low` \
+                      answers zero. `target` is the delivery target of a \
+                      base: base, head, digest, path count. `tier` and `target` read git alone \
+                      and take no `issue`. Read-only, no claim.",
         operation: "review-read",
         arguments: &[
-            ISSUE,
+            Argument::optional(
+                "issue",
+                "integer",
+                "Issue number. Every view but `tier` and `target` needs it.",
+            )
+            .counting_from(1),
             Argument::required(
                 "view",
                 "string",
-                "Which read: transaction, findings, verdict, membership, inspect or spend.",
+                "Which read: transaction, findings, verdict, membership, inspect, spend, tier \
+                 or target.",
             )
             .of(&[
                 "transaction",
@@ -1751,6 +1641,8 @@ pub const TOOLS: &[Tool] = &[
                 "membership",
                 "inspect",
                 "spend",
+                "tier",
+                "target",
             ]),
             Argument::optional(
                 "epoch",
@@ -1797,12 +1689,13 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "head",
                 "string",
-                "`verdict` only: the full published head SHA.",
+                "`verdict`: the full published head SHA. `tier`: the head commit-ish, required.",
             ),
             Argument::optional(
                 "base",
                 "string",
-                "`verdict` only: the full published base SHA.",
+                "`verdict`: the full published base SHA. `tier`: the base commit-ish, required. \
+                 `target`: the base SHA, required.",
             ),
             Argument::optional(
                 "digest",
@@ -1823,6 +1716,213 @@ pub const TOOLS: &[Tool] = &[
             )
             .of(SPEND_PHASES),
             Argument::optional("worktree", "string", "The isolated checkout."),
+            Argument::optional(
+                "parent_head",
+                "string",
+                "`tier` only: the parent publication's head commit-ish, for a repair round. \
+                 Read as a narrower range when an ancestor of `head`, the base did not move \
+                 and the range touches a path; otherwise the whole `base..head`, with the \
+                 reason.",
+            ),
+            Argument::optional(
+                "clearing_finding",
+                "string",
+                "`tier` only: the class of the review_finding that cleared the republish-over-\
+                 an-approved-receipt gate on the parent receipt. Read only with `parent_head`.",
+            )
+            .of(FINDING_CLASSES),
+            Argument::optional(
+                "focus",
+                "string",
+                "`tier` only: the lens a `medium` change runs: risk, resilience, readability \
+                 or reliability (default); `high` runs all four.",
+            )
+            .of(REVIEW_FOCUSES),
+            Argument::optional("focus_reason", "string", "`tier` only: why that focus; needs `focus`."),
+            Argument::optional(
+                "raise",
+                "string",
+                "`tier` only: a risk the diff cannot show. Raises the tier to `high`, never \
+                 lowers it.",
+            )
+            .of(RISK_ITEMS),
+            Argument::optional(
+                "raise_reason",
+                "string",
+                "`tier` only: why the `raise` applies; required with it.",
+            ),
+            Argument::optional(
+                "recorded_base",
+                "string",
+                "`target` only: the base SHA the review was bound to. Given, classify how the \
+                 base has moved (none, compatible, overlapping, conflicting or unknown) instead \
+                 of answering the target.",
+            ),
+            Argument::optional(
+                "native_start",
+                "string",
+                "`target` only: a reviewer's target to compare.",
+            ),
+            Argument::optional(
+                "manifest",
+                "boolean",
+                "`target` only: add the path/mode/blob manifest, to save for `native_start` or \
+                 to read a difference path by path.",
+            ),
+        ],
+        effect: PointerEffect::None,
+        writes: false,
+    },
+];
+
+/// Operations a name on the menu or the CLI still runs through this table and no agent
+/// is offered. [`find`] reads them; `tools/list` does not, and [`RETIRED`] answers for
+/// them on `tools/call`.
+pub const INTERNAL: &[Tool] = &[
+    Tool {
+        name: "launch_review_input",
+        contract_name: "launch_review_input",
+        description: "Start the reviewer for each slot `name` or `names` requests, each offered \
+                      by a `review_status` `collect`, returning before any has answered. The \
+                      diff is rebuilt from the `collect`'s receipt; the criteria are the issue's \
+                      body. The reviewer is the first installed `claude` or `codex` CLI in a \
+                      detached tool-less job under a 15 minute deadline, or the relay on an \
+                      OpenCode run with its plugin. Answers `{job, deadline_at}` per slot, or \
+                      `{launched: [...]}`; a batch reports a slot that cannot start. Requires a \
+                      live review claim; `collect_review_input` records the answer.",
+        operation: "launch-review-input",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::optional(
+                "name",
+                "string",
+                "One slot to launch: the `name` of an input `review_status` offered in a \
+                 `collect`. Give `names` instead to launch several.",
+            ),
+            Argument::optional(
+                "names",
+                "array",
+                "The slots to launch in one call, as an array of `name` values, each with its \
+                 own claim check. Give `name` or `names`, never both.",
+            ),
+        ],
+        effect: PointerEffect::Renew,
+        writes: true,
+    },
+    Tool {
+        name: "record_computed_verdict",
+        contract_name: "review_computed_verdict",
+        description: "Compute the verdict an exact review transaction's finding ledger supports \
+                      and record it once; the caller supplies the receipt, not the outcome. \
+                      `approved` needs every licensed lens reported, no severe finding open or \
+                      escalated, and the publication lane cleared; `rejected` rests on a severe \
+                      finding that stands; `escalated` on one the ledger cannot settle. An \
+                      `incomplete` computation is refused. Recording again reads back the marker.",
+        operation: "review-computed-verdict",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
+            Argument::optional(
+                "worktree",
+                "string",
+                "The checkout `base..head` is read from.",
+            ),
+            Argument::optional(
+                "never_ran_evidence_file",
+                "string",
+                "Path to your own local verification that the lane's run never executed a step, \
+                 read only for an `approved` computation over `publication-lane-never-ran`. \
+                 Stored, not verified.",
+            ),
+        ],
+        effect: PointerEffect::Renew,
+        writes: true,
+    },
+    Tool {
+        name: "run_checks",
+        contract_name: "run_checks",
+        description: "Run the checks the base declares in `estigia.generated.toml` as a detached \
+                      job in this run's clean checkout and record a receipt bound to the \
+                      published digest. Answers `declared: false`, `cached`, or `running` with \
+                      `ask_after`: call again to collect. Output tails are in the answer, not the \
+                      receipt. The verdict and `release_ci` refuse without a passing receipt. \
+                      Requires a live review claim.",
+        operation: "run-checks",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::optional(
+                "wait_seconds",
+                "integer",
+                "Seconds to wait for the job before answering `running`; omitted answers at once. \
+                 Capped at 50.",
+            )
+            .counting_from(1),
+        ],
+        effect: PointerEffect::Renew,
+        writes: true,
+    },
+    Tool {
+        name: "release_ci",
+        contract_name: "release_ci",
+        description: "Release one exact reviewed draft target to CI. Re-verifies the live review claim, the newest review transaction, the draft PR identity and a clean target before marking ready, then confirms by readback. A `warning` or `suggestion` never blocks it.",
+        operation: "release-ci",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
+            Argument::optional("worktree", "string", "The isolated checkout."),
+        ],
+        effect: PointerEffect::Renew,
+        writes: true,
+    },
+    Tool {
+        name: "review_tier",
+        contract_name: "review_tier",
+        description: "The review tier for one base/head pair, derived from the change alone: \
+                      `high` when a hot-path token, an adjacent `service`/`token` path pair, a \
+                      shell-source extension or an execute-bit flip is touched; `low` when at \
+                      least one path changed and every authored byte is proven passive prose \
+                      and nothing configures anything; `medium` otherwise, including a range \
+                      that changed no path (`nothing_measured`, never `low`). `lenses` is a \
+                      fixed allocation per tier: `medium` answers one lens, the `focus` argument's \
+                      (default `reliability`); `high` answers four lenses, `review-risk`, \
+                      `review-readback`, `review-readability` and `review-reliability`; `low` \
+                      answers zero. `parent_head` narrows a repair round's range. \
+                      Read-only, no claim.",
+        operation: "review-tier",
+        arguments: &[
+            Argument::required("base", "string", "The base commit-ish."),
+            Argument::required("head", "string", "The head commit-ish."),
+            Argument::optional(
+                "parent_head",
+                "string",
+                "The parent publication's head commit-ish, for a repair round. Read as a \
+                 narrower range when an ancestor of `head`, the base did not move and the range \
+                 touches a path; otherwise the whole `base..head`, with the reason.",
+            ),
+            Argument::optional(
+                "clearing_finding",
+                "string",
+                "The class of the review_finding that cleared the republish-over-an-approved-\
+                 receipt gate on the parent receipt. Read only with `parent_head`.",
+            )
+            .of(FINDING_CLASSES),
+            Argument::optional("worktree", "string", "The isolated checkout."),
+            FOCUS,
+            FOCUS_REASON,
+            RAISE,
+            RAISE_REASON,
         ],
         effect: PointerEffect::None,
         writes: false,
@@ -1854,12 +1954,6 @@ pub const TOOLS: &[Tool] = &[
         effect: PointerEffect::None,
         writes: false,
     },
-];
-
-/// Operations a name on the menu or the CLI still runs through this table and no agent
-/// is offered. [`find`] reads them; `tools/list` does not, and [`RETIRED`] answers for
-/// them on `tools/call`.
-pub const INTERNAL: &[Tool] = &[
     Tool {
         name: "pr_review_claim",
         contract_name: "pull request review claim",
@@ -2011,6 +2105,34 @@ pub const RETIRED: &[(&str, &str)] = &[
         "`publish_review` refuses a closing keyword with `closing-keyword-live`, and \
          `deliver` reads whether the merge would close the issue",
     ),
+    (
+        "review_tier",
+        "call `review_read` with `view: tier`, which takes the same `base`, `head` and optional \
+         arguments and no `issue`",
+    ),
+    (
+        "target",
+        "call `review_read` with `view: target`, which takes the same `base` and optional \
+         arguments and no `issue`",
+    ),
+    (
+        "launch_review_input",
+        "call `collect_review_input` with `launch: true` and the same `name` or `names`",
+    ),
+    (
+        "run_checks",
+        "call `collect_review_input` with `checks: true` and the same `wait_seconds`",
+    ),
+    (
+        "record_computed_verdict",
+        "call `deliver` with `until: verdict`, and `never_ran_evidence_file` where the lane never \
+         ran",
+    ),
+    (
+        "release_ci",
+        "call `deliver` with `until: ci`, which records the verdict if it is owed and releases \
+         the draft to CI",
+    ),
 ];
 
 /// What replaces a retired name, when it is one.
@@ -2051,10 +2173,23 @@ pub fn unexposed_reason(name: &str) -> Option<&'static str> {
 /// became true, and the transport has no reason to care whose run asked.
 /// `create`'s `repo` is the other kind: this server reads it to choose the
 /// repository the transport is pointed at, so the transport never sees it.
+/// So are the arguments of `collect_review_input` and `review_read` that choose the row
+/// the call is carried out by.
 pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("assist", "several"),
     ("create", "repo"),
     ("claim", "state"),
+    ("collect_review_input", "launch"),
+    ("collect_review_input", "checks"),
+    ("review_read", "parent_head"),
+    ("review_read", "clearing_finding"),
+    ("review_read", "focus"),
+    ("review_read", "focus_reason"),
+    ("review_read", "raise"),
+    ("review_read", "raise_reason"),
+    ("review_read", "recorded_base"),
+    ("review_read", "native_start"),
+    ("review_read", "manifest"),
     ("handoff", "deadline_seconds"),
     ("transition", "run_id"),
     ("draft_pr", "run_id"),

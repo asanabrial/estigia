@@ -420,6 +420,49 @@ fn low_delivery(at: &std::path::Path) -> (String, String) {
     (base, head)
 }
 
+/// What `deliver` reads of a run's pointer to record a verdict for one exact receipt, as the tool
+/// that recorded it by hand was handed the receipt: the receipt itself, and the checkout.
+fn hold_receipt(
+    run: &mut estigia::harness::session::Run,
+    repo: &std::path::Path,
+    (epoch, head, base, digest): (&str, &str, &str, &str),
+) {
+    run.review_transaction = Some(estigia::transport::claim::ReviewTransaction {
+        epoch: epoch.to_owned(),
+        pr: 7,
+        head: head.to_owned(),
+        base: base.to_owned(),
+        digest: digest.to_owned(),
+    });
+    run.worktree = Some(repo.to_path_buf());
+}
+
+/// The `tools/call` that records the verdict and stops: `deliver` with `until`.
+fn deliver_until(
+    until: &str,
+    run_id: &str,
+    never_ran_evidence_file: Option<&std::path::Path>,
+) -> String {
+    let mut arguments = serde_json::json!({"issue": 12, "run_id": run_id, "until": until});
+    if let Some(file) = never_ran_evidence_file {
+        arguments["never_ran_evidence_file"] = serde_json::json!(file.display().to_string());
+    }
+    serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": { "name": "deliver", "arguments": arguments }
+    })
+    .to_string()
+}
+
+/// Whether `deliver` handed back at the step that records the verdict, and the text it said so in.
+fn stopped_at_the_verdict(response: &serde_json::Value) -> bool {
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    serde_json::from_str::<serde_json::Value>(text)
+        .is_ok_and(|answer| answer["delivered"] == false && answer["stopped"]["step"] == "verdict")
+}
+
 /// The bytes a plain `git diff` produces for `base..head` under the same
 /// pinned flags `pinned_diff_args` uses, with the comparison fenced from every
 /// configuration and attribute source outside the repository. The ambient side
@@ -1320,11 +1363,11 @@ fn first_dropped(value: &serde_json::Value) -> Option<&str> {
 /// which is the point: the judgement belongs at the edit.
 const INLINE_PAYLOAD_NEXT: &str = "transition --to review, hand each judge the `payload` from \
      this answer rather than a checkout to search, record each lens report and the computed \
-     verdict, then release_ci with this exact receipt";
+     verdict, then release CI with this exact receipt";
 
 const OMITTED_PAYLOAD_NEXT: &str = "ask for start_review on the publication, or transition \
-     --to review, launch_review_input and collect_review_input for each slot review_status \
-     offers, record_computed_verdict, then release_ci with this exact receipt";
+     --to review, collect_review_input with launch: true and then without it for each slot \
+     review_status offers, then deliver with until: ci for this exact receipt";
 
 fn correction_budget_sha(at: &std::path::Path, what: &str) -> String {
     let out = Command::new("git")

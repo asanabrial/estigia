@@ -334,7 +334,10 @@ fn generated_claude_hook_refuses_a_hand_launch_of_a_binary_launched_reviewer() {
         ],
         &payload,
     );
-    assert!(denied.contains("launch_review_input"), "{denied}");
+    assert!(
+        denied.contains("`collect_review_input` with `launch: true`"),
+        "{denied}"
+    );
     assert!(!denied.contains("estigia setup"), "{denied}");
 
     let agents = repository.path().join(".claude/agents");

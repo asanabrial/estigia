@@ -27,6 +27,7 @@ Load the analyst reference whenever the run is the analyst or the combined analy
 - Keep exactly one of `analysis`, `ready`, `in-progress`, `review`, `blocked`, or `done`. The binding's workflow state is authoritative; every configured projection is updated and read back, and `done` is explicit before tracker closure.
 - A claimed task reaches `done` or a state that names its exact exit condition and discharger; it never enters an ownerless, conditionless queue.
 - The selected binding MUST map `ensure_states`, `create`, `list_state`, `claim`, `reclaim`, `verify_claim`, `heartbeat`, `transition`, `comment`, `unassign`, `publish_review`, `republish_review`, `handoff_review`, `review_finding`, `review_computed_verdict`, `review_disposition`, and `release_ci`. Run executable reversible operations instead of reconstructing them; bindings MUST declare unsupported capabilities and fail closed.
+- `deliver` with `until` carries the verdict and the CI release.
 - Issue acceptance criteria, routed domain rules, and repository rules define done. Never invent missing gates or reinterpret the issue silently.
 - Aim for no more than the `Change size` row of the operator table below, in changed lines per pull request, but treat size as reviewability guidance rather than a gate. A larger coherent change is valid when splitting would reduce safety or review quality; the developer records why before review and the independent reviewer assesses that rationale without relaxing any quality gate. **The candidate is the publication**, not a commit, so no review is due before one; the lever is this row, and [repository delivery](references/repository-delivery.md) states the rule where review-unit sizing lives.
 
@@ -95,7 +96,8 @@ and are not calls, states or agents:
    applies — the default, not a flag.
 4. **Verify.** Deterministic evidence, then the review that *Renew before publishing*, in the
    numbered list below, acquires. When the repository declares checks, they run before the first
-   lens: `start_review` calls `run_checks` and launches no lens while the receipt is red or running.
+   lens: `start_review` runs them (`collect_review_input` with `checks`) and launches no lens while
+   the receipt is red or running.
 5. **Deliver.** That list's delivery and close. A body or commit says `Refs #<n>`, never a closing keyword; the merge
    is the bare `gh pr merge <pr> --merge --match-head-commit <head-sha>`, alone on its line, from
    the primary checkout.
@@ -118,10 +120,10 @@ authority nor independence.
    CI ordering and the force-push rule. Ask for `start_review` on the publication to transition, read
    `review_status` and launch every slot it offers in one call, unless
    the lane is red; `with_review` brings the tier and status alone. Then follow `review_status`'s
-   `next` until it stops: `launch_review_input` and `collect_review_input` for every slot it offers
-   (`names` batches either; `record_verdict` on the collect records the verdict once
-   `review_status` names it); then `deliver`, or `record_computed_verdict` and `release_ci` where
-   it names those. Call `escalate_review` when a spent correction leaves the decision
+   `next` until it stops: `collect_review_input` for every slot it offers, with `launch: true` to
+   start its reviewer and without it to record the answer (`names` batches either; `record_verdict`
+   on the collect records the verdict once `review_status` names it); then `deliver`, with `until`
+   where it names that. Call `escalate_review` when a spent correction leaves the decision
    to a person, and `handoff_review` when this run cannot obtain the required distinct context.
    [Blind judges](policies/blind-judges.md) owns the settlement order, the refutation batch, the
    targeted validator, the one-correction rule, the classification of findings and the release

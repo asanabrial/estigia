@@ -158,12 +158,17 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `pr_review_submit` joins: its one road to GitHub | 53 | 65,787 |
 | `where`, `feed`, `status` and `flush` become commands alone; `check_closing_keywords` goes, `publish_review` runs its scan | 48 | 61,940 |
 | One `pr_review` with `action` replaces the six `pr_review_*` names | 43 | 59,796 |
+| `review_tier` and `target` become `review_read` views, `launch_review_input` and `run_checks` become `collect_review_input` arguments, `record_computed_verdict` and `release_ci` become `deliver`'s `until` | 37 | 55,146 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
 rest were absorbed by a surviving name reached through a parameter or a `view`. `TOOLS_LIST_CEILING` in
 `src/harness/mcp/tests.rs` bounds the list, and each change above moved it by exactly the measured
 difference. It is the largest list a process can answer, the unreadable-context one.
+
+A turn pays only for the `ALWAYS_LOADED` schemas on a host that honours the mark: 11,937 bytes, held by
+`ALWAYS_LOADED_CEILING`, since a name that absorbs another's arguments grows them while the menu shrinks. That is
+why `start_branch` left the mark when `claim` took `branch` and `base`.
 
 The list depends on the process's `GateContext`, fixed for the process, so `listChanged` stays false.
 Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool; under any other readable
@@ -191,8 +196,9 @@ name still dispatches and refuses with its own typed reason.
   2026-10-28 (15 sessions, 7,033 turns), `launch_review_input` was called twice, because
   `publish_review`'s `start_review` launches the slots. Over MCP, `review_status` now names `deliver`
   in place of `record_computed_verdict` and `release_ci` wherever `deliver` carries an approval to the
-  merge. Those three schemas, about 4 KB together, were unmarked; the run that needs one of them loads
-  it with one `ToolSearch`.
+  merge, and with `until` where it would not. Those three schemas, about 4 KB together, were unmarked;
+  they have left the menu altogether, their calls carried by arguments of `collect_review_input` and
+  `deliver`, which are marked.
 - **`compact: true`** omits `build` from an answer and drops from `review_status`'s `next.arguments`
   the receipt fields but `epoch`. A receipt-taking call that sends `epoch` and leaves out `pr`, `head`,
   `base` or `digest` has them filled by the server from this run's pointer when it holds that epoch's
@@ -202,8 +208,8 @@ name still dispatches and refuses with its own typed reason.
 - **`ensure_states`** says that while the git operation window is closed it answers `deferred` and
   writes nothing, and that a queued create, claim or transition creates the labels at the flush: a caller
   that reads `deferred` as the whole answer has no reason to wait for the flush.
-- **`target`** answers the brief form by default, so the manifest, about 100 bytes per tracked file,
-  is paid only by a call that passes `manifest`.
+- **`review_read` with `view: target`** answers the brief form by default, so the manifest, about 100
+  bytes per tracked file, is paid only by a call that passes `manifest`.
 - **`republish_review`** stays a tool of its own although its arguments equal `publish_review`'s: its
   name is the guard on a call that destroys remote history.
 
