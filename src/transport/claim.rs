@@ -3745,6 +3745,9 @@ fn unjudged_republish_refusal(
     worktree: Option<&std::path::Path>,
     issue: u64,
 ) -> Result<Option<serde_json::Value>, Failure> {
+    if checks::recorded_failed(context, comments, &parent.receipt, worktree) {
+        return Ok(None);
+    }
     let Ok((_, ledger)) = computed::computed_for(context, comments, &parent.receipt, worktree)
     else {
         return Ok(None);

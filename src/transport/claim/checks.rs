@@ -117,6 +117,22 @@ pub fn recorded_summary(
     )
 }
 
+/// Whether a finished job recorded the base's declared checks as failed for exactly these bytes.
+/// A job still running has recorded nothing, and an unreadable declaration answers `false`.
+pub(super) fn recorded_failed(
+    context: &Context,
+    comments: &[ownership::Comment],
+    receipt: &super::ReviewTransaction,
+    worktree: Option<&Path>,
+) -> bool {
+    let Ok(checks) = declared_at(worktree.unwrap_or(&context.repo_dir), &receipt.base) else {
+        return false;
+    };
+    !checks.is_empty()
+        && receipt_of(comments, &receipt.digest, &commands_digest(&checks))
+            .is_some_and(|recorded| !recorded.passed)
+}
+
 pub(super) fn patience_for(wait_seconds: u64) -> Duration {
     Duration::from_secs(wait_seconds.min(MAX_WAIT_SECONDS))
 }
