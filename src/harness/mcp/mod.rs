@@ -516,6 +516,38 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
     Ok(flags)
 }
 
+fn read_only_tracker_refusal(name: &str, context: &GateContext) -> Refusal {
+    let tracker = context.tracker.as_value();
+    if context.workflow == Some(crate::config::Workflow::Assisted) {
+        let admitted = tools::ASSISTED_ONLY
+            .iter()
+            .chain(tools::NEEDS_NO_TRANSPORT)
+            .copied()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Refusal::not_started(
+            "read-only-tracker-admits-only-assisted",
+            format!("`{tracker}` is read-only, so `{name}` cannot run against it"),
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::OperatorKnowledge,
+                format!("one of the tools this tracker admits: {admitted}"),
+            ),
+        );
+    }
+    Refusal::not_started(
+        "read-only-tracker-admits-only-assisted",
+        format!(
+            "`{tracker}` is read-only and admits only assisted work, so `{name}` cannot run \
+             against it"
+        ),
+        Resolution::no_command(
+            crate::outcome::NoCommandReason::OperatorKnowledge,
+            "`Tracker linear` is supported only under `Workflow: assisted`, where the issue is \
+             read and nothing is written; autonomous work needs a claim Linear cannot provide",
+        ),
+    )
+}
+
 fn status_tool(
     arguments: &Value,
     context: &GateContext,
@@ -792,29 +824,26 @@ fn run_tool_asking(
     }
 
     // Per operation, not per installation: a tracker without a
-    // transport must not refuse a host-bound tool, and the reverse. The two
+    // transport must not refuse a host-bound tool, and the reverse. The
     // assisted-only tools are exempt for a read-only tracker: they
     // read the issue through `transport::linear` and write nothing to it, so
     // `Tracker linear`'s absent tracking transport is not in their way.
     match tool.binds() {
+        tools::TransportBind::None
+            if context.tracker.is_read_only()
+                && context.workflow != Some(crate::config::Workflow::Assisted) =>
+        {
+            return Err(ToolFailure::Refused(Box::new(read_only_tracker_refusal(
+                name, context,
+            ))));
+        }
         tools::TransportBind::Tracker
             if context.tracker.transport().is_none()
                 && !(context.tracker.is_read_only() && tools::ASSISTED_ONLY.contains(&name)) =>
         {
             if context.tracker.is_read_only() {
-                return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
-                    "read-only-tracker-admits-only-assisted",
-                    format!(
-                        "`{}` is read-only and admits only assisted work, so `{name}` cannot run \
-                         against it",
-                        context.tracker.as_value()
-                    ),
-                    Resolution::no_command(
-                        crate::outcome::NoCommandReason::OperatorKnowledge,
-                        "`Tracker linear` is supported only under `Workflow: assisted`, where the \
-                         issue is read and nothing is written; autonomous work needs a claim \
-                         Linear cannot provide",
-                    ),
+                return Err(ToolFailure::Refused(Box::new(read_only_tracker_refusal(
+                    name, context,
                 ))));
             }
             return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
@@ -1415,6 +1444,7 @@ fn run_tool_asking(
     let named_repo = match tool.binds() {
         tools::TransportBind::RepositoryHost => context.repository_host.named_repo(),
         tools::TransportBind::Tracker => context.tracker.named_repo(),
+        tools::TransportBind::None => None,
     };
     let transport = crate::transport::Context::live(
         context.skill_root.clone(),

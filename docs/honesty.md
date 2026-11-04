@@ -3797,7 +3797,8 @@ pointer that leaves it names the document it points at.
   own file (`config set` and `config edit` refuse it without `--repo`, `config set --repo` where `Claim
   workflow` is not assisted, and `config set Workflow autonomous --repo` where `Tracker` is already Linear;
   `doctor` and run start refuse it). `assist` reads the issue's title and description with one constant
-  GraphQL query (`a_read_spawns_linear_api_with_the_query_and_sends_no_mutation`); `STATES_QUERY` and
+  GraphQL query (`a_read_spawns_linear_api_with_the_query_and_sends_no_mutation`); `where` reads a key's
+  state and URL with `STANDING_QUERY`, a finished issue included; `STATES_QUERY` and
   `MOVE_MUTATION` are sent only through `move_issue`, which `follow_state` calls only for a state the
   repository's `State names` row maps and only for a Linear key
   (`follow_state_moves_only_a_mapped_state_of_a_linear_issue`). A move is read back, reported under
@@ -4079,14 +4080,17 @@ for one seeded transition and to the unknown-repository refusal, not to every fi
 
 ## Where
 
-`estigia where` ([`where.md`](where.md)) is tested against a two-repository store and a stand-in tracker (eleven unit
+`estigia where` ([`where.md`](where.md)) is tested against a two-repository store and a stand-in tracker (fourteen unit
 tests for the answer, six for the resolver, three for `tasks` and the identity parser); the live `gh` reader is not
 exercised by any of them. What it does not measure:
 
 - **The holder is the registry's, not the timeline's.** A run on a runtime with no gate leaves no pointer, so an
   issue it holds shows no holder; the store's claim markers are not consulted for it.
-- **Linear is almost wholly unavailable.** `read_issue` returns title, description and state type, so a key
-  answers `unavailable` in every field and reaches no tracker.
+- **A Linear key is answered only in part.** `issue`, `workflow`, `holders` and `messages` are read; the
+  transitions, tasks, clauses, queued writes, pull request and review stay `unavailable`, because the local store
+  keys them by repository and number and a key has neither. `holders` matches the key alone, with no repository
+  check. The Linear read is measured against the stand-in CLI
+  (`a_finished_issue_is_read_as_closed_where_assist_would_refuse_it`), never the live API.
 - **The repository of a pointer is read from its checkout's `origin`.** A checkout with no GitHub `origin`
   contributes no candidate; a bare number held only there falls back to the caller's checkout.
 - **The tracker reads are two `gh` calls with no retry.** A rate limit or a missing login leaves `issue` and

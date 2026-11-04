@@ -157,6 +157,9 @@ pub enum TransportBind {
     Tracker,
     /// Pull requests, tags, CI lane, receipt-bound review writes — the host.
     RepositoryHost,
+    /// Neither: the tool reads Estigia's own store or git objects and sends nothing to a
+    /// tracker or a host.
+    None,
 }
 
 impl Tool {
@@ -165,6 +168,9 @@ impl Tool {
     /// Named rather than a field so a tool added later defaults to the
     /// tracker — the common case — and publication tools opt in here.
     pub fn binds(self) -> TransportBind {
+        if NEEDS_NO_TRANSPORT.contains(&self.name) {
+            return TransportBind::None;
+        }
         // Publication half of the host only. Receipt markers and handoff write
         // the issue timeline, which is the tracker's ledger — binding those to
         // the host left markers where claim/review_findings would not look when
@@ -2029,6 +2035,25 @@ pub const ASSISTED_ONLY: &[&str] = &[
     "ready_pr",
     "review_stages",
     "review_thread",
+];
+
+/// The tools that reach neither the tracker nor the repository host, so a tracker with no
+/// executable transport does not stand in their way.
+///
+/// `where` reads a key through `transport::linear` itself and reports what it cannot read as
+/// `unavailable`; `review_tier` and `target` read git objects; the rest read or write only the
+/// local store.
+pub const NEEDS_NO_TRANSPORT: &[&str] = &[
+    "send_message",
+    "ask",
+    "wait",
+    "inbox",
+    "list_sessions",
+    "feed",
+    "where",
+    "status",
+    "review_tier",
+    "target",
 ];
 
 /// The tools this server answers itself, never as one transport operation.

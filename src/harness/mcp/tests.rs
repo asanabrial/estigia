@@ -1453,9 +1453,22 @@ fn no_two_tools_answer_to_the_same_name() {
 /// Publication and receipt-bound review tools bind to the
 /// repository host; everything else to the tracker. A single top-of-run_tool
 /// check on the tracker is what made Linear refuse `claim` and `publish`
-/// alike.
+/// alike. The tools that read only Estigia's store or git objects bind to neither.
 #[test]
-fn publication_tools_bind_to_the_repository_host_and_the_rest_to_the_tracker() {
+fn publication_tools_bind_to_the_repository_host_the_local_ones_to_neither_and_the_rest_to_the_tracker()
+ {
+    let neither = [
+        "send_message",
+        "ask",
+        "wait",
+        "inbox",
+        "list_sessions",
+        "feed",
+        "where",
+        "status",
+        "review_tier",
+        "target",
+    ];
     let host = [
         "publish_review",
         "republish_review",
@@ -1469,6 +1482,8 @@ fn publication_tools_bind_to_the_repository_host_and_the_rest_to_the_tracker() {
     for tool in TOOLS {
         let expected = if host.contains(&tool.name) {
             super::tools::TransportBind::RepositoryHost
+        } else if neither.contains(&tool.name) {
+            super::tools::TransportBind::None
         } else {
             super::tools::TransportBind::Tracker
         };
@@ -1482,8 +1497,16 @@ fn publication_tools_bind_to_the_repository_host_and_the_rest_to_the_tracker() {
         );
     }
     assert!(
-        host.iter().all(|name| tools::find(name).is_some()),
-        "a host-bound name is not a tool this server exposes"
+        host.iter()
+            .chain(&neither)
+            .all(|name| tools::find(name).is_some()),
+        "a host-bound or unbound name is not a tool this server exposes"
+    );
+    assert!(
+        neither
+            .iter()
+            .all(|name| !tools::writes_the_tracker(name) && !tools::is_assisted_only(name)),
+        "a tool that needs no transport writes the tracker or is assisted-only"
     );
 }
 
@@ -5502,6 +5525,135 @@ fn assist_refuses_an_issue_whose_shape_does_not_match_the_tracker() {
         panic!("refused as malformed rather than by the rule");
     };
     assert_eq!(refusal.code, "assist-issue-does-not-match-the-tracker");
+}
+
+fn linear_context(root: &tempfile::TempDir, workflow: crate::config::Workflow) -> GateContext {
+    let mut context = bare_context(root, &root.path().join("repo"));
+    context.workflow = Some(workflow);
+    context.tracker = crate::config::Tracker::Linear {
+        team: "ABC".to_owned(),
+    };
+    context
+}
+
+const TRANSPORT_REFUSALS: [&str; 2] = [
+    "read-only-tracker-admits-only-assisted",
+    "tracker-has-no-transport",
+];
+
+fn refusal_code(failure: &ToolFailure) -> Option<&str> {
+    match failure {
+        ToolFailure::Refused(refusal) => Some(refusal.code),
+        _ => None,
+    }
+}
+
+#[test]
+fn where_with_a_key_answers_under_linear_and_assisted() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = linear_context(&root, crate::config::Workflow::Assisted);
+    let standing = serde_json::json!({
+        "matches": "EstigiaStanding",
+        "stdout": serde_json::json!({"data": {"issue": {
+            "url": "https://linear.app/team/issue/ABC-102",
+            "state": {"name": "In Progress", "type": "started"},
+        }}}).to_string(),
+    });
+    let answered = crate::test_env::with_scripted_gh(
+        crate::test_env::fake_cli_directory(&["linear"]).path(),
+        &crate::test_env::answers(&[standing]),
+        || run_tool("where", &json!({"reference": "ABC-102"}), Ok(&context)),
+    )
+    .unwrap_or_else(|failure| panic!("where was refused: {:?}", refusal_code(&failure)));
+    let said: Value = serde_json::from_str(
+        answered["content"][0]["text"]
+            .as_str()
+            .expect("a tool result carries text"),
+    )
+    .expect("the answer is JSON");
+    assert_eq!(said["issue"]["state"], "open", "{said}");
+    assert_eq!(said["workflow"]["state"], "In Progress", "{said}");
+}
+
+#[test]
+fn review_tier_is_not_refused_for_having_no_tracking_transport() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = linear_context(&root, crate::config::Workflow::Assisted);
+    let outcome = run_tool(
+        "review_tier",
+        &json!({"base": "main", "head": "HEAD"}),
+        Ok(&context),
+    );
+    if let Err(failure) = outcome {
+        assert!(
+            refusal_code(&failure).is_none_or(|code| !TRANSPORT_REFUSALS.contains(&code)),
+            "review_tier was refused for the tracking transport"
+        );
+    }
+}
+
+#[test]
+fn a_read_that_needs_the_tracker_says_which_tools_this_one_admits_and_not_a_setting_in_force() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = linear_context(&root, crate::config::Workflow::Assisted);
+    let verify = tools::find("verify_claim").expect("a listed tool");
+    let ToolFailure::Refused(refusal) = run_tool(
+        "verify_claim",
+        &arguments_naming(verify, "claude-abcd1234"),
+        Ok(&context),
+    )
+    .expect_err("a tracker read under a read-only tracker") else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "read-only-tracker-admits-only-assisted");
+    let said = refusal.to_string();
+    assert!(!said.contains("Workflow: assisted"), "{said}");
+    assert!(!said.contains("Workflow assisted"), "{said}");
+    assert!(said.contains("where") && said.contains("assist"), "{said}");
+}
+
+#[test]
+fn linear_under_autonomous_is_still_refused_and_names_the_setting() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = linear_context(&root, crate::config::Workflow::Autonomous);
+    for name in ["verify_claim", "where", "review_tier"] {
+        let tool = tools::find(name).expect("a listed tool");
+        let outcome = run_tool(
+            name,
+            &arguments_naming(tool, "claude-abcd1234"),
+            Ok(&context),
+        );
+        let failure = outcome.expect_err("Tracker linear under autonomous");
+        let ToolFailure::Refused(refusal) = failure else {
+            panic!("{name}: refused as malformed rather than by the rule");
+        };
+        assert_eq!(refusal.code, "read-only-tracker-admits-only-assisted");
+        assert!(
+            refusal.to_string().contains("Workflow: assisted"),
+            "{refusal}"
+        );
+    }
+}
+
+#[test]
+fn a_tool_that_writes_the_tracker_still_refuses_under_linear_and_assisted() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = linear_context(&root, crate::config::Workflow::Assisted);
+    let nameless = format!(
+        "{}-{}",
+        crate::harness::session::DEFAULT_RUNTIME,
+        crate::harness::session::NAMELESS
+    );
+    for name in tools::TRACKER_WRITERS {
+        let tool = tools::find(name).expect("a listed tool");
+        let failure = run_tool(name, &arguments_naming(tool, &nameless), Ok(&context))
+            .expect_err("an assisted workflow writes no tracker");
+        assert_eq!(
+            refusal_code(&failure),
+            Some("workflow-assisted-writes-no-tracker"),
+            "{name}"
+        );
+    }
 }
 
 #[test]
