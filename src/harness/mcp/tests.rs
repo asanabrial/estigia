@@ -1480,15 +1480,14 @@ fn publication_tools_bind_to_the_repository_host_the_local_ones_to_neither_and_t
         "judge_workspaces",
     ];
     for tool in TOOLS {
-        let expected = if host.contains(&tool.name)
-            || super::tools::PULL_REVIEW_TOOLS.contains(&tool.name)
-        {
-            super::tools::TransportBind::RepositoryHost
-        } else if neither.contains(&tool.name) {
-            super::tools::TransportBind::None
-        } else {
-            super::tools::TransportBind::Tracker
-        };
+        let expected =
+            if host.contains(&tool.name) || super::tools::PULL_REVIEW_TOOLS.contains(&tool.name) {
+                super::tools::TransportBind::RepositoryHost
+            } else if neither.contains(&tool.name) {
+                super::tools::TransportBind::None
+            } else {
+                super::tools::TransportBind::Tracker
+            };
         assert_eq!(
             tool.binds(),
             expected,
@@ -5633,7 +5632,7 @@ fn a_run_holding_a_review_claim_is_refused_every_other_writing_tool() {
     let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
     run.kind = crate::harness::session::RunKind::ReviewOnly;
     run.reviewed_pr = Some(7);
-    run.repo_dir = Some(repo.clone());
+    run.repo_dir = Some(repo);
     crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
     let writers = TOOLS.iter().filter(|tool| {
         tool.writes
