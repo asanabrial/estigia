@@ -4360,7 +4360,11 @@ fn prune(confirm: bool, base: &str, json: bool) -> Result<(), Refusal> {
     let context = crate::transport::Context::live(skill_root, repo_dir, None);
     let root = harness::prune::root_prefix(context.get("Worktree location"));
     let holdings = harness::session::state_root(None)
-        .map(|root| harness::session::holdings(&root))
+        .map(|root| {
+            let mut held = harness::session::holdings(&root);
+            held.extend(harness::session::review_holdings(&root));
+            held
+        })
         .unwrap_or_default();
     let view = harness::prune::View {
         context: &context,

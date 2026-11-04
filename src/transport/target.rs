@@ -476,7 +476,7 @@ fn supplied_manifest(path: &std::path::Path) -> Result<manifest::Manifest, Failu
 /// bound to nothing. Seven characters is git's own shortest abbreviation.
 ///
 /// **Its own function so it can be measured.**
-pub(super) fn is_object_id(oid: &str) -> bool {
+pub(crate) fn is_object_id(oid: &str) -> bool {
     oid.len() >= 7 && oid.chars().all(|c| c.is_ascii_hexdigit())
 }
 

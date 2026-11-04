@@ -135,6 +135,15 @@ pub struct Run {
     /// [`children`] by where a call lands.
     #[serde(default)]
     pub parent: Option<String>,
+    /// What kind of claim this pointer records. An unknown spelling fails the
+    /// parse, so a pointer no build can read denies rather than reading as a
+    /// run that holds nothing.
+    #[serde(default)]
+    pub kind: RunKind,
+    /// The pull request a [`RunKind::ReviewOnly`] run reviews. Never in
+    /// [`Run::issue`]: every reader of that field asks the tracker about an issue.
+    #[serde(default)]
+    pub reviewed_pr: Option<u64>,
     /// What this assisted run last pushed through `draft_pr`, and how many
     /// corrections that makes. On the pointer so a resumed run keeps the count.
     #[serde(default)]
@@ -150,6 +159,17 @@ pub struct AssistedPublication {
     pub head: String,
     /// New heads pushed after the first.
     pub corrections: u32,
+}
+
+/// What a run's pointer claims.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RunKind {
+    /// An issue, or nothing yet: the claim that delivers.
+    #[default]
+    Delivery,
+    /// One pull request this run did not build, reviewed and never changed.
+    ReviewOnly,
 }
 
 impl Run {
@@ -175,8 +195,15 @@ impl Run {
             branch: None,
             base: None,
             parent: None,
+            kind: RunKind::Delivery,
+            reviewed_pr: None,
             assisted_publication: None,
         }
+    }
+
+    /// Whether this pointer is a review-only claim on a pull request.
+    pub fn is_review_only(&self) -> bool {
+        self.kind == RunKind::ReviewOnly
     }
 
     /// What this run last pushed to `branch`, when it pushed to that branch at all.
@@ -1029,6 +1056,16 @@ fn records(root: &Path, kind: Record) -> Vec<Value> {
 /// Quiet about failure: an unreadable state directory is a machine with nothing
 /// to report.
 pub fn holdings(root: &Path) -> Vec<Run> {
+    pointers_where(root, |run| run.issue.is_some())
+}
+
+/// Every pointer holding a review-only claim. Apart from [`holdings`] because
+/// such a run holds no issue and is no evidence for anything that delivers.
+pub fn review_holdings(root: &Path) -> Vec<Run> {
+    pointers_where(root, Run::is_review_only)
+}
+
+fn pointers_where(root: &Path, wanted: impl Fn(&Run) -> bool) -> Vec<Run> {
     let Ok(entries) = fs::read_dir(root) else {
         return Vec::new();
     };
@@ -1040,7 +1077,7 @@ pub fn holdings(root: &Path) -> Vec<Run> {
             let run = pointer_at(&path)?;
             Some(run)
         })
-        .filter(|run| run.issue.is_some())
+        .filter(|run| wanted(run))
         .collect();
     // Oldest answer first: the ones most likely to be dead read first.
     runs.sort_by_key(|run| (run.verified_at, run.run_id.clone()));

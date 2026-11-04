@@ -118,6 +118,9 @@ pub enum PointerEffect {
     /// This run took an issue the team coordinates: the pointer records the
     /// issue, the branch and the isolated checkout, and nothing on the tracker.
     Assisted,
+    /// This run took a review-only claim on the pull request named in `pr`; the
+    /// pointer records it and the worktree the answer names, and no issue.
+    ReviewClaim,
 }
 
 /// One workflow operation, exposed as an MCP tool.
@@ -180,6 +183,7 @@ impl Tool {
             | "review_stages" | "review_thread" | "judge_workspaces" => {
                 TransportBind::RepositoryHost
             }
+            name if PULL_REVIEW_TOOLS.contains(&name) => TransportBind::RepositoryHost,
             _ => TransportBind::Tracker,
         }
     }
@@ -1665,6 +1669,45 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "pr_review_claim",
+        contract_name: "pull request review claim",
+        description: "Take a review-only claim on a pull request this run did not build: the \
+                      earliest unexpired claim wins, its head and merge base are captured, and a \
+                      detached worktree is made. Refuses a fork, a closed pull request and this \
+                      account's own. While held, every other writing tool, push, merge, file edit \
+                      in this repository and shell GitHub write is refused. Writes nothing to the \
+                      tracker.",
+        operation: "pr-review-claim",
+        arguments: &[
+            Argument::required("pr", "integer", "The pull request to review.").counting_from(1),
+            RUN_ID,
+            Argument::required(
+                "horizon",
+                "string",
+                "When this run expects to report, as 2026-08-01T18:00Z. Past it another run may \
+                 take the claim.",
+            ),
+            Argument::optional(
+                "worktree_root",
+                "string",
+                "Where the checkout is made, as for `start_branch`. Defaults to the configured \
+                 location.",
+            ),
+        ],
+        effect: PointerEffect::ReviewClaim,
+        writes: true,
+    },
+    Tool {
+        name: "pr_review_release",
+        contract_name: "pull request review release",
+        description: "Put down this run's review-only claim and remove its detached worktree. \
+                      Submits nothing.",
+        operation: "pr-review-release",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::Forget,
+        writes: true,
+    },
+    Tool {
         name: "draft_pr",
         contract_name: "draft pull request",
         description: "Publish an assisted run's branch, where the `Workflow` row is `assisted`, as \
@@ -2044,6 +2087,11 @@ pub const ASSISTED_ONLY: &[&str] = &[
     "review_stages",
     "review_thread",
 ];
+
+/// The tools of a review-only claim on a pull request. Not tracker writers and
+/// not assisted-only: they bind to the repository host, and they are what a
+/// pull request review has under every `Workflow` and every `Tracker`.
+pub const PULL_REVIEW_TOOLS: &[&str] = &["pr_review_claim", "pr_review_release"];
 
 /// The tools that reach neither the tracker nor the repository host, so a tracker with no
 /// executable transport does not stand in their way.

@@ -877,7 +877,7 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 18,397 | file on disk |
+  | `skill/bindings/github.md` | 18,515 | file on disk |
   | `skill/policies/blind-judges.md` | 42,675 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
@@ -4409,6 +4409,23 @@ the count cannot show:
 - **The 111 s is the longest MCP call this host was seen to hold, not its limit.** No other host was
   run, so raising `deliver`'s ceiling to 900 s leaves the shorter-host case unmeasured
   ([*What `deliver` does not see*](#what-deliver-does-not-see)).
+
+## The review-only claim
+
+- **A shell write is placed by where the session runs.** `harness::review_claim` reads a shell write
+  the way `harness::assisted` does, by the session's directory, so a write run from a directory
+  outside the repository that reaches into it by a path the gate cannot read is not seen. Boundaries
+  and remote writes do not depend on this: they are refused wherever they run. Nothing here is a
+  sandbox for an arbitrary network client.
+- **A tool with no `run_id` cannot be held to the claim.** The refusal of other writing tools reads
+  the pointer the call names. `comment` takes its `run_id` as optional, so a call that omits it is not
+  attributed to this run and not refused for it. Nothing tells the server which session called it.
+- **A dead holder holds until its horizon.** `pull_reviews` has no liveness of its own: a run that
+  crashed keeps the pull request until the horizon it declared, and its worktree stays as a detached
+  checkout `estigia prune` lists. No run takes it sooner, and no person command does either.
+- **Fork and self-approval are read, not proved.** `isCrossRepository` must read exactly `false` or the
+  claim is refused. That an author cannot approve their own pull request is GitHub's documented
+  behaviour and was not exercised live.
 
 ## Re-running a red lane
 

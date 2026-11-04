@@ -759,7 +759,8 @@ fn queue_paragraph(context: &GateContext, with_count: bool) -> String {
 fn orphan_paragraph(context: &GateContext) -> String {
     let transport =
         crate::transport::Context::live(context.skill_root.clone(), context.repo_dir.clone(), None);
-    let holdings = session::holdings(&context.state_root);
+    let mut holdings = session::holdings(&context.state_root);
+    holdings.extend(session::review_holdings(&context.state_root));
     super::changes::orphan_notice(&transport, &holdings)
         .map_or_else(String::new, |note| format!("\n\n{note}"))
 }

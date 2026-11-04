@@ -13,6 +13,11 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `review-thread-pr-unconfined` | There is not exactly one open PR or the thread does not belong to it. | Read the claimed branch's PR and use its thread ID. |
 | `review-thread-fix-unpublished` | The fix is not strictly after the thread's original commit and already on the published head, or ancestry is unknown. | Publish the correction first and supply its confirmed head and fix SHA. |
 | `review-thread-write-unconfirmed` | A reply or resolution may have landed without a confirming readback. | Read the thread before retrying. Preserve `reply_confirmed`; do not claim resolution completed. |
+| `pull-review-held` | Another run's unexpired claim holds this pull request. | Leave it to that run; its claim ends at its horizon. |
+| `pull-review-fork-refused` | The pull request is not read as coming from this repository. | A person reviews a fork's pull request. |
+| `pull-review-not-open` | The pull request is closed or merged. | Stop; nothing was created. |
+| `pull-review-own-pull-request` | This account opened the pull request. | Someone else reviews it. |
+| `head-moved` | The head is not the one read or the one reviewed. | `pr_review_release`, then a new `pr_review_claim`; no verdict carries across. |
 | `draft-pr-branch-not-checked-out` | The checkout does not have the pointer's branch checked out. | Return to the checkout/branch recorded by `assist`. |
 | `draft-pr-exists-ready` | A ready PR exists and correction policy is `refuse`. | A person decides the repository's correction policy; the run does not override it. |
 | `draft-pr-corrections-spent` | This run has pushed the corrections `Corrections per lineage` allows to this branch and the head is a new one; nothing was pushed. | Report what is left to the person, who decides whether to raise the row. |

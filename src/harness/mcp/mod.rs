@@ -1004,6 +1004,14 @@ fn run_tool_asking(
         }
     }
 
+    if let Some(named) = named.as_ref() {
+        let holding = session::load(&context.state_root, named.id);
+        let holds_several = !session::children(&context.state_root, named.id).is_empty();
+        if let Some(refusal) = review_claim_refusal(tool, arguments, &holding, holds_several) {
+            return Err(ToolFailure::Refused(Box::new(refusal)));
+        }
+    }
+
     match name {
         "send_message" => {
             return messaging::send_message(arguments, context, named.as_ref(), consent);
@@ -1993,6 +2001,7 @@ pub(crate) fn apply_effect(
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
     let repo_dir = context.repo_dir.clone();
+    let reviewed_pr = arguments.get("pr").and_then(Value::as_u64);
 
     // The checkout a resumed run adopted rather than built with
     // `start_branch`, resolved once out here — because it runs `git` and
@@ -2111,6 +2120,12 @@ pub(crate) fn apply_effect(
                 run.base = base.clone();
                 run.assisted = true;
             }
+            PointerEffect::ReviewClaim => {
+                run.kind = session::RunKind::ReviewOnly;
+                run.reviewed_pr = reviewed_pr;
+                run.repo_dir = Some(repo_dir.clone());
+                run.worktree = worktree.clone();
+            }
             PointerEffect::Isolated => {
                 run.worktree = worktree.clone();
                 // Also fills `repo_dir` when the pointer does not already
@@ -2130,6 +2145,75 @@ pub(crate) fn apply_effect(
     });
     *run = updated;
     on_disk
+}
+
+// A run holds one thing. Under a review-only claim every writing tool but its
+// own road and the local messaging is refused; holding an issue, no review
+// claim may be taken; and a second pull request is a second claim.
+fn review_claim_refusal(
+    tool: &tools::Tool,
+    arguments: &Value,
+    holding: &session::Run,
+    holds_several: bool,
+) -> Option<Refusal> {
+    let of_the_road = tools::PULL_REVIEW_TOOLS.contains(&tool.name);
+    if holding.is_review_only() {
+        let wanted = arguments.get("pr").and_then(Value::as_u64);
+        if tool.name == "pr_review_claim" && wanted != holding.reviewed_pr {
+            return Some(Refusal::not_started(
+                "review-claim-admits-no-write",
+                format!(
+                    "{} holds a review-only claim on #{} and cannot also take #{}",
+                    holding.run_id,
+                    holding.reviewed_pr.unwrap_or_default(),
+                    wanted.unwrap_or_default()
+                ),
+                Resolution::no_command(
+                    crate::outcome::NoCommandReason::OperatorKnowledge,
+                    "`pr_review_release` first",
+                ),
+            ));
+        }
+        let local = tools::is_local_store(tool.name) && tool.name != "deliver";
+        if tool.writes && !of_the_road && !local {
+            return Some(Refusal::not_started(
+                "review-claim-admits-no-write",
+                format!(
+                    "{} holds a review-only claim, which reviews and changes nothing, so `{}` \
+                     is not this run's to call",
+                    holding.run_id, tool.name
+                ),
+                Resolution::no_command(
+                    crate::outcome::NoCommandReason::OperatorKnowledge,
+                    "`pr_review_release`, which puts the claim down",
+                ),
+            ));
+        }
+        return None;
+    }
+    if tool.name == "pr_review_claim" && holds_several {
+        return Some(Refusal::not_started(
+            "already-holding",
+            format!(
+                "{} holds several assisted claims and cannot also take a review-only claim",
+                holding.run_id
+            ),
+            Resolution::run(format!("estigia release --run-id {}", holding.run_id)),
+        ));
+    }
+    if tool.name == "pr_review_claim"
+        && let Some(held) = &holding.issue
+    {
+        return Some(Refusal::not_started(
+            "already-holding",
+            format!(
+                "{} holds issue #{held} and cannot also take a review-only claim",
+                holding.run_id
+            ),
+            Resolution::run(format!("estigia release --run-id {}", holding.run_id)),
+        ));
+    }
+    None
 }
 
 /// A refusal as a tool result, carrying the same four things the hook's

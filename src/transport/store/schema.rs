@@ -318,4 +318,21 @@ pub(super) const MIGRATIONS: &[&str] = &[
     CREATE INDEX handoff_duties_accepted ON handoff_duties (accepted_by);
     CREATE INDEX handoff_duties_sender ON handoff_duties (sender);
     ",
+    "
+    CREATE TABLE pull_reviews (
+        repo_id INTEGER NOT NULL REFERENCES repos (id),
+        pr INTEGER NOT NULL,
+        run_id TEXT NOT NULL,
+        epoch TEXT NOT NULL,
+        head TEXT NOT NULL,
+        base_ref TEXT NOT NULL,
+        base_tip TEXT NOT NULL,
+        merge_base TEXT NOT NULL,
+        worktree TEXT NOT NULL,
+        claimed_at INTEGER NOT NULL,
+        horizon INTEGER NOT NULL,
+        PRIMARY KEY (repo_id, pr)
+    );
+    CREATE INDEX pull_reviews_run ON pull_reviews (run_id);
+    ",
 ];
