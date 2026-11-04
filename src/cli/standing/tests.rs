@@ -16,6 +16,7 @@ const MOVED: &str = "3333333333333333333333333333333333333333";
 struct Fake {
     issue: Result<Value, String>,
     pull: Result<Value, String>,
+    linear: Result<Value, String>,
     asked: RefCell<Vec<String>>,
 }
 
@@ -33,6 +34,11 @@ impl Tracker for Fake {
             .push(format!("pull {}/{}#{number}", repo.owner, repo.name));
         self.pull.clone()
     }
+
+    fn linear(&self, key: &str) -> Result<Value, String> {
+        self.asked.borrow_mut().push(format!("linear {key}"));
+        self.linear.clone()
+    }
 }
 
 fn tracker() -> Fake {
@@ -41,6 +47,9 @@ fn tracker() -> Fake {
         pull: Ok(json!({
             "number": 3, "url": "https://github.com/o/b/pull/3", "state": "OPEN",
             "headRefOid": MOVED, "baseRefOid": BASE,
+        })),
+        linear: Ok(json!({
+            "state": "In Progress", "closed": false, "url": "https://linear.app/t/issue/ENG-12",
         })),
         asked: RefCell::default(),
     }
@@ -257,6 +266,7 @@ fn a_field_that_cannot_be_read_says_so_and_is_never_filled_from_a_nearby_state()
     let fake = Fake {
         issue: Err("gh is not logged in".to_owned()),
         pull: Err("gh is not logged in".to_owned()),
+        linear: Err("not used".to_owned()),
         asked: RefCell::default(),
     };
     let said = rig().ask("77", &fake).expect("an answer");
@@ -308,20 +318,83 @@ fn a_repository_the_store_never_saw_is_unavailable_and_not_empty() {
     assert!(said["tasks"].get("total").is_none(), "{said}");
 }
 
+fn holding_a_key(rig: &Rig, key: &str) {
+    let claude = run_id("claude", "gamma");
+    let work = rig.directory.path().join("work-key");
+    checkout(&work, "git@github.com:o/c.git");
+    rig.sql(&format!(
+        "INSERT INTO sessions (run_id, runtime, session_id, repo_dir, started_at, last_seen)
+           VALUES ('{claude}', 'claude', 'gamma', '{}', {}, {});",
+        work.display(),
+        NOW - 2_000,
+        NOW - 30
+    ));
+    session::update(&rig.root(), &claude, |run| {
+        run.issue = Some(crate::identity::Identity::Key(key.to_owned()));
+        run.repo_dir = Some(work.clone());
+        run.worktree = Some(work.clone());
+    });
+}
+
 #[test]
-fn a_linear_key_is_answered_with_every_field_unavailable() {
+fn a_linear_key_is_answered_from_linear_and_the_local_holder() {
     let fake = tracker();
-    let said = rig().ask("eng-12", &fake).expect("an answer");
+    let rig = rig();
+    holding_a_key(&rig, "ENG-12");
+
+    let said = rig.ask("ENG-12", &fake).expect("an answer");
 
     assert_eq!(said["scope"]["tracker"], "linear", "{said}");
+    assert_eq!(said["issue"]["state"], "open", "{said}");
+    assert_eq!(said["workflow"]["state"], "In Progress", "{said}");
+    assert_eq!(said["holders"]["rows"][0]["runtime"], "claude", "{said}");
+    assert_eq!(said["holders"]["rows"][0]["branch"], "feature", "{said}");
+    assert!(said["pull_request"]["unavailable"].is_string(), "{said}");
+    assert_eq!(*fake.asked.borrow(), ["linear ENG-12"]);
+}
+
+#[test]
+fn a_finished_linear_issue_is_closed() {
+    let mut fake = tracker();
+    fake.linear = Ok(json!({"state": "Done", "closed": true, "url": "u"}));
+
+    let said = rig().ask("ENG-12", &fake).expect("an answer");
+
+    assert_eq!(said["issue"]["state"], "closed", "{said}");
+}
+
+#[test]
+fn a_linear_key_with_the_cli_missing_is_unavailable_and_keeps_the_local_holder() {
+    let mut fake = tracker();
+    fake.linear = Err("linear-cli-missing: install the linear CLI".to_owned());
+    let rig = rig();
+    holding_a_key(&rig, "ENG-12");
+
+    let said = rig.ask("ENG-12", &fake).expect("an answer");
+
+    for field in ["issue", "workflow"] {
+        assert!(
+            said[field]["unavailable"]
+                .as_str()
+                .is_some_and(|why| why.contains("linear-cli-missing")),
+            "{field}: {said}"
+        );
+    }
+    assert_eq!(said["holders"]["rows"][0]["runtime"], "claude", "{said}");
+}
+
+#[test]
+fn a_linear_key_held_by_nobody_has_no_holder_rows_and_never_reaches_github() {
+    let fake = tracker();
+
+    let said = rig().ask("ENG-12", &fake).expect("an answer");
+
+    assert_eq!(said["holders"]["rows"], json!([]), "{said}");
     assert!(
-        said["workflow"]["unavailable"]
-            .as_str()
-            .is_some_and(|why| why.contains("Linear")),
-        "{said}"
-    );
-    assert!(
-        fake.asked.borrow().is_empty(),
+        fake.asked
+            .borrow()
+            .iter()
+            .all(|asked| asked.starts_with("linear")),
         "a Linear key reached the GitHub tracker"
     );
 }

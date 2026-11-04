@@ -11,7 +11,7 @@ claim and sits behind no gate. Gaps are in [`honesty.md`](honesty.md), "Where".
 |---|---|
 | `owner/name#N` | That GitHub issue, used as given. Read as a GitHub reference, never as a tracker key. |
 | `N` or `#N` | An issue number whose repository is found by the resolver below. |
-| `ENG-123` | A Linear key. Every field answers `unavailable`: the Linear binding reads an issue's title, description and state type only. |
+| `ENG-123` | A Linear key. `issue` (open or closed, URL) and `workflow` (the state's name) are read through the `linear` CLI; `holders` and `messages` come from the local store; every other field answers `unavailable`. A missing CLI or credential makes `issue` and `workflow` `unavailable` with the reason and leaves the local fields intact. |
 
 ## Where a bare number lives
 
@@ -49,4 +49,6 @@ store holds with no state is `unavailable`, not a default.
 `where` takes `reference` and answers the same object as `estigia where --json`. It is read-only
 (`writes: false`, no pointer effect) and answered from the local store and the tracker, so it is on every
 runtime with a tool server; the CLI-only runtimes use the command. Refusals: `ambiguous-issue`,
-`where-reference-malformed` ([`refusal-classes.md`](refusal-classes.md)).
+`where-reference-malformed` ([`refusal-classes.md`](refusal-classes.md)). It binds to neither the tracker nor the
+repository host, so `Tracker linear` under `Workflow: assisted` answers it; the same holds for the other tools
+that read only Estigia's store or git (`NEEDS_NO_TRANSPORT` in `harness::mcp::tools`).
