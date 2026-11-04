@@ -735,14 +735,96 @@ fn an_unknown_issue_or_a_rejected_credential_is_not_an_absence() {
 }
 
 #[test]
-fn a_resumed_assist_moves_no_state() {
+fn a_resumed_assist_past_the_started_state_moves_nothing_and_names_what_it_read() {
+    for (name, kind) in [
+        ("In Progress", "started"),
+        ("In Review", "started"),
+        ("Done", "completed"),
+        ("Dropped", "canceled"),
+        ("Somewhere New", "a-type-linear-adds-later"),
+    ] {
+        let (answer, calls) = resumed(&[standing_of(name, kind)]);
+        assert_eq!(answer["linear_state"]["moved"], false, "{answer}");
+        assert_eq!(answer["linear_state"]["state"], name, "{answer}");
+        assert_eq!(answer["linear_state"]["state_type"], kind, "{answer}");
+        assert!(mutations(&calls).is_empty(), "{calls:?}");
+    }
+}
+
+#[test]
+fn a_resumed_assist_before_the_started_state_completes_the_move() {
+    for kind in ["triage", "backlog", "unstarted"] {
+        let mut entries = vec![standing_of("Todo", kind)];
+        entries.extend(a_move("Todo", accepted(), "In Progress"));
+        let (answer, calls) = resumed(&entries);
+        assert_eq!(answer["linear_state"]["moved"], true, "{answer}");
+        assert_eq!(answer["linear_state"]["state"], "In Progress", "{answer}");
+        assert_eq!(mutations(&calls).len(), 1, "{calls:?}");
+    }
+}
+
+#[test]
+fn a_resumed_assist_whose_read_fails_moves_nothing_and_says_so() {
+    let unreadable = serde_json::json!({
+        "matches": "EstigiaStanding",
+        "status": 1,
+        "stderr": "the network is down",
+    });
+    let no_type = serde_json::json!({
+        "matches": "EstigiaStanding",
+        "stdout": "{\"data\":{\"issue\":{\"url\":\"u\",\"state\":{\"name\":\"Todo\"}}}}",
+    });
+    for entry in [unreadable, no_type] {
+        let (answer, calls) = resumed(&[entry]);
+        assert_eq!(answer["linear_state"]["moved"], false, "{answer}");
+        assert_eq!(answer["linear_state"]["read_failed"], true, "{answer}");
+        assert!(answer["linear_state"].get("state").is_none(), "{answer}");
+        assert!(mutations(&calls).is_empty(), "{calls:?}");
+    }
+}
+
+#[test]
+fn a_resume_with_nothing_to_move_reads_nothing() {
+    let unmapped = through(&[], || {
+        follow_started(
+            &[],
+            &Identity::Key("ABC-102".to_owned()),
+            serde_json::json!({ "resumed_existing_worktree": true }),
+        )
+    });
+    let github = through(&[], || {
+        follow_started(
+            &[(STARTED.to_owned(), "In Progress".to_owned())],
+            &Identity::Number(102),
+            serde_json::json!({ "resumed_existing_worktree": true }),
+        )
+    });
+    for (answer, calls) in [unmapped, github] {
+        assert!(answer.get("linear_state").is_none(), "{answer}");
+        assert!(calls.is_empty(), "{calls:?}");
+    }
+}
+
+fn standing_of(name: &str, kind: &str) -> serde_json::Value {
+    serde_json::json!({
+        "matches": "EstigiaStanding",
+        "stdout": serde_json::json!({ "data": { "issue": {
+            "url": "u",
+            "state": { "name": name, "type": kind },
+        } } })
+        .to_string(),
+    })
+}
+
+fn resumed(entries: &[serde_json::Value]) -> (serde_json::Value, Vec<String>) {
     let names = vec![(STARTED.to_owned(), "In Progress".to_owned())];
-    let answer = follow_started(
-        &names,
-        &Identity::Key("ABC-102".to_owned()),
-        serde_json::json!({ "resumed_existing_worktree": true }),
-    );
-    assert!(answer.get("linear_state").is_none(), "{answer}");
+    through(entries, || {
+        follow_started(
+            &names,
+            &Identity::Key("ABC-102".to_owned()),
+            serde_json::json!({ "resumed_existing_worktree": true }),
+        )
+    })
 }
 
 #[test]
