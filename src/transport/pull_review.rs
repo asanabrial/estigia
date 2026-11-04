@@ -43,6 +43,17 @@ fn stop(reason: &str, detail: String, action: &str) -> Failure {
     }))
 }
 
+/// The review `run_id` holds, or a refusal naming that it holds none.
+pub(crate) fn held_by(store: &Store, run_id: &str) -> Result<PullReview, Failure> {
+    store.pull_review_of(run_id)?.ok_or_else(|| {
+        stop(
+            "pull-review-not-held",
+            format!("{run_id} holds no review-only claim"),
+            "`pr_review_claim` first; a claim another run displaced at its horizon is gone",
+        )
+    })
+}
+
 fn head_moved(pr: u64, detail: String) -> Failure {
     stop(
         "head-moved",
@@ -234,8 +245,9 @@ fn answer(held: &PullReview, resumed: bool) -> serde_json::Value {
 
 /// `pr-review-claim`: adjudicates the pull request and makes its detached worktree.
 ///
-/// Every read comes before any write, and a fork, a closed pull request or
-/// this account's own stops before the first. A head other than the one this
+/// A fork, a closed pull request or this account's own stops before anything
+/// is fetched. The fetch comes before the adjudication because the row names the
+/// merge base; a run that loses makes no worktree. A head other than the one this
 /// run already holds is `head-moved`, because a new review is a new claim.
 pub fn claim(
     context: &Context,
@@ -355,6 +367,8 @@ pub fn release(context: &Context, run_id: &str) -> Result<serde_json::Value, Fai
         "checkout": checkout,
     }))
 }
+
+pub mod panel;
 
 #[cfg(test)]
 mod tests;

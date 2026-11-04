@@ -144,7 +144,7 @@ impl ReviewFocus {
         }
     }
 
-    fn role(self) -> &'static str {
+    pub(crate) fn role(self) -> &'static str {
         match self {
             Self::Risk => crate::harness::roles::RESERVED_RISK,
             Self::Resilience => crate::harness::roles::RESERVED_READBACK,

@@ -18,6 +18,17 @@ pub(crate) struct PullReview {
     pub(crate) horizon: u64,
 }
 
+/// One reviewer a review-only claim started, and what it answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReviewSlot {
+    pub(crate) name: String,
+    pub(crate) dir: String,
+    pub(crate) pid: Option<u32>,
+    pub(crate) deadline_at: u64,
+    pub(crate) state: String,
+    pub(crate) answer: Option<String>,
+}
+
 const COLUMNS: &str =
     "pr, run_id, epoch, head, base_ref, base_tip, merge_base, worktree, claimed_at, horizon";
 
@@ -84,6 +95,13 @@ impl Store {
             )
             .map_err(unreadable(what))?;
         connection
+            .execute(
+                "DELETE FROM pull_review_slots
+                 WHERE epoch NOT IN (SELECT epoch FROM pull_reviews)",
+                [],
+            )
+            .map_err(unreadable(what))?;
+        connection
             .query_row(
                 &format!(
                     "SELECT {COLUMNS} FROM pull_reviews
@@ -111,9 +129,97 @@ impl Store {
 
     /// Puts down the review `run_id` holds, reporting whether there was one.
     pub(crate) fn drop_pull_review(&self, run_id: &str) -> Result<bool, Failure> {
-        self.connection()
+        let what = "put down a pull request review";
+        let connection = self.connection();
+        let removed = connection
             .execute("DELETE FROM pull_reviews WHERE run_id = ?1", [run_id])
-            .map(|removed| removed > 0)
-            .map_err(unreadable("put down a pull request review"))
+            .map_err(unreadable(what))?;
+        connection
+            .execute(
+                "DELETE FROM pull_review_slots
+                 WHERE epoch NOT IN (SELECT epoch FROM pull_reviews)",
+                [],
+            )
+            .map_err(unreadable(what))?;
+        Ok(removed > 0)
+    }
+
+    pub(crate) fn pull_review_slots(&self, epoch: &str) -> Result<Vec<ReviewSlot>, Failure> {
+        let what = "read a pull request review's reviewers";
+        let mut statement = self
+            .connection()
+            .prepare(
+                "SELECT name, dir, pid, deadline_at, state, answer FROM pull_review_slots
+                 WHERE epoch = ?1 ORDER BY name",
+            )
+            .map_err(unreadable(what))?;
+        statement
+            .query_map([epoch], |row| {
+                Ok(ReviewSlot {
+                    name: row.get(0)?,
+                    dir: row.get(1)?,
+                    pid: row
+                        .get::<_, Option<i64>>(2)?
+                        .and_then(|pid| u32::try_from(pid).ok()),
+                    deadline_at: u64::try_from(row.get::<_, i64>(3)?).unwrap_or_default(),
+                    state: row.get(4)?,
+                    answer: row.get(5)?,
+                })
+            })
+            .and_then(Iterator::collect)
+            .map_err(unreadable(what))
+    }
+
+    pub(crate) fn insert_pull_review_slot(
+        &self,
+        epoch: &str,
+        name: &str,
+        dir: &str,
+        deadline_at: u64,
+    ) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "INSERT INTO pull_review_slots (epoch, name, dir, deadline_at, state)
+                 VALUES (?1, ?2, ?3, ?4, 'running')
+                 ON CONFLICT (epoch, name) DO UPDATE SET
+                    dir = excluded.dir, pid = NULL, deadline_at = excluded.deadline_at,
+                    state = 'running', answer = NULL
+                 WHERE pull_review_slots.state = 'abandoned'",
+                rusqlite::params![epoch, name, dir, int(deadline_at)],
+            )
+            .map(|_| ())
+            .map_err(unreadable("record a pull request reviewer"))
+    }
+
+    pub(crate) fn mark_pull_review_slot_spawned(
+        &self,
+        epoch: &str,
+        name: &str,
+        pid: u32,
+    ) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "UPDATE pull_review_slots SET pid = ?3 WHERE epoch = ?1 AND name = ?2",
+                rusqlite::params![epoch, name, i64::from(pid)],
+            )
+            .map(|_| ())
+            .map_err(unreadable("record a pull request reviewer's process"))
+    }
+
+    pub(crate) fn settle_pull_review_slot(
+        &self,
+        epoch: &str,
+        name: &str,
+        state: &str,
+        answer: Option<&str>,
+    ) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "UPDATE pull_review_slots SET state = ?3, answer = ?4
+                 WHERE epoch = ?1 AND name = ?2",
+                rusqlite::params![epoch, name, state, answer],
+            )
+            .map(|_| ())
+            .map_err(unreadable("record a pull request reviewer's answer"))
     }
 }

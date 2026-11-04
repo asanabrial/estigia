@@ -33,8 +33,10 @@ pub use capture::{
 pub(crate) fn failure_refusal(failure: &Failure) -> Refusal {
     capture::refusal_of(failure)
 }
+pub(crate) use capture::{REFUTATION_BATCH, jobs_dir, reviewer_failure};
 pub use checks::{RunChecks, recorded_summary as checks_receipt_summary, run_checks};
 pub(crate) use close::verified_delivery;
+pub(crate) use computed::{Settled, settle_severe};
 pub use recover::{RecoverReview, host_repo_of, recover_review};
 pub use status::review_status;
 pub(crate) use status::{Judged, current_review_transaction, repo_of, review_judged};

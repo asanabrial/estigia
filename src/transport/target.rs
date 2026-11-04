@@ -232,11 +232,30 @@ pub(crate) fn review_payload_declared_at(
     payload_declared_at(at, base, head, authority, REVIEW_PAYLOAD_CEILING)
 }
 
+/// The payload with every path's hunks, for bytes nobody will regenerate.
+pub(crate) fn review_payload_whole(
+    at: &std::path::Path,
+    base: &str,
+    head: &str,
+) -> Result<ReviewPayload, Failure> {
+    payload_with(at, base, head, None, REVIEW_PAYLOAD_CEILING)
+}
+
 fn payload_declared_at(
     at: &std::path::Path,
     base: &str,
     head: &str,
     authority: &str,
+    ceiling: usize,
+) -> Result<ReviewPayload, Failure> {
+    payload_with(at, base, head, Some(authority), ceiling)
+}
+
+fn payload_with(
+    at: &std::path::Path,
+    base: &str,
+    head: &str,
+    authority: Option<&str>,
     ceiling: usize,
 ) -> Result<ReviewPayload, Failure> {
     if !is_object_id(base) || !is_object_id(head) {
@@ -256,7 +275,10 @@ fn payload_declared_at(
         .iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))
         .collect();
-    let entries = super::generated::manifest_entries(at, authority, base, head, &envs)?;
+    let entries = match authority {
+        Some(authority) => super::generated::manifest_entries(at, authority, base, head, &envs)?,
+        None => Vec::new(),
+    };
     let excluded: Vec<String> = entries
         .iter()
         .map(|entry| format!(":(top,exclude,literal){}", entry.path))

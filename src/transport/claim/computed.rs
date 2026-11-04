@@ -8,11 +8,11 @@ use super::validator::{
     VALIDATOR_ROLE, ValidatorState, owes_validator, range_delta_unisolable, validator_state,
 };
 use super::{
-    LaneClearance, OperationKind, ReviewFinding, ReviewTransaction, VISIBILITY_ATTEMPTS,
-    approved_receipt_stands, corrections_remain, first_protocol_markers, first_severe_findings,
-    operation_marker, protocol_body, receipt_write_failed, record_approved_receipt,
-    refutation_outcomes, reject_operation_kind_conflict, require_cleared_publication_lane,
-    require_operation_id, require_recorded_receipt, review_receipt, timeline, verify_claim,
+    LaneClearance, OperationKind, ReviewTransaction, VISIBILITY_ATTEMPTS, approved_receipt_stands,
+    corrections_remain, first_protocol_markers, first_severe_findings, operation_marker,
+    protocol_body, receipt_write_failed, record_approved_receipt, refutation_outcomes,
+    reject_operation_kind_conflict, require_cleared_publication_lane, require_operation_id,
+    require_recorded_receipt, review_receipt, timeline, verify_claim,
 };
 use crate::transport::tier::{REVIEW_FOCUSES, ReviewFocus, RiskLevel, tier_level};
 use crate::transport::{Context, Failure, ownership};
@@ -369,7 +369,11 @@ pub fn computed_verdict(
     let mut escalated = Vec::new();
     let mut follow_ups = Vec::new();
     for (id, finding) in first_severe_findings(comments, receipt) {
-        match settle(&finding, outcomes.get(&id).map(String::as_str)) {
+        match settle_severe(
+            finding.evidence_class.as_deref(),
+            finding.causal_disposition.as_deref(),
+            outcomes.get(&id).map(String::as_str),
+        ) {
             Settled::Open => open.push(id),
             Settled::Escalated(reason) => escalated.push(Escalation {
                 id,
@@ -449,18 +453,22 @@ pub fn computed_verdict(
     }
 }
 
-enum Settled {
+pub(crate) enum Settled {
     Open,
     Escalated(&'static str),
     FollowUp,
     Dropped,
 }
 
-fn settle(finding: &ReviewFinding, refuted: Option<&str>) -> Settled {
-    let Some(evidence_class) = finding.evidence_class.as_deref() else {
+pub(crate) fn settle_severe(
+    evidence_class: Option<&str>,
+    causal: Option<&str>,
+    refuted: Option<&str>,
+) -> Settled {
+    let Some(evidence_class) = evidence_class else {
         return Settled::Escalated("evidence-class-missing");
     };
-    let Some(causal) = finding.causal_disposition.as_deref() else {
+    let Some(causal) = causal else {
         return Settled::Escalated("causal-disposition-missing");
     };
     if evidence_class == "insufficient" {

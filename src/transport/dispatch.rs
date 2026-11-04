@@ -1699,6 +1699,20 @@ fn run_operation(
             context.get("worktree location"),
         ),
         "pr-review-release" => super::pull_review::release(context, run_id()?),
+        "pr-review-status" => super::pull_review::panel::status(context, run_id()?),
+        "pr-review-launch" => super::pull_review::panel::launch(context, run_id()?),
+        "pr-review-collect" => super::pull_review::panel::collect(
+            context,
+            run_id()?,
+            f.get("wait-seconds")
+                .unwrap_or("0")
+                .parse::<u64>()
+                .map_err(|_| {
+                    Failure::ConfigDefect(serde_json::json!({
+                        "ok": false, "reason": "malformed-argument", "argument": "--wait-seconds",
+                    }))
+                })?,
+        ),
         "assist" => {
             let issue = identity()?;
             let started = super::branch::assist(
