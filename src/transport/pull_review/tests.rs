@@ -116,6 +116,16 @@ fn claiming(
     run_id: &str,
     view: serde_json::Value,
 ) -> Result<serde_json::Value, crate::transport::Failure> {
+    claiming_at(rig, run_id, view, NOW, HORIZON)
+}
+
+fn claiming_at(
+    rig: &Rig,
+    run_id: &str,
+    view: serde_json::Value,
+    now: &str,
+    horizon: &str,
+) -> Result<serde_json::Value, crate::transport::Failure> {
     let trees = rig.root.path().join("trees/<repo>/<branch>");
     let trees = trees.to_string_lossy().into_owned();
     let script = crate::test_env::answers(&[view, viewer()]);
@@ -126,9 +136,9 @@ fn claiming(
             &ClaimRequest {
                 pr: 7,
                 run_id,
-                horizon: HORIZON,
+                horizon,
                 worktree_root: Some(&trees),
-                now: NOW,
+                now,
             },
             None,
         )
@@ -230,6 +240,83 @@ fn a_head_that_moved_under_this_runs_claim_is_head_moved() {
     let view = pr_view(&rig, serde_json::json!({ "headRefOid": moved }));
     let failure = claiming(&rig, RUN, view).expect_err("a moved head");
     assert_eq!(reason(&failure), "head-moved");
+}
+
+const NEXT_DAY: &str = "2026-11-05T10:00:00Z";
+const NEXT_HORIZON: &str = "2026-11-05T18:00Z";
+
+fn moved_head(rig: &Rig) -> String {
+    let moved = git(
+        &rig.origin,
+        &[
+            "-c",
+            "user.name=Estigia test",
+            "-c",
+            "user.email=estigia@example.invalid",
+            "commit-tree",
+            "-m",
+            "moved",
+            &format!("{}^{{tree}}", rig.base),
+            "-p",
+            &rig.head,
+        ],
+    );
+    git(&rig.origin, &["update-ref", "refs/pull/7/head", &moved]);
+    git(&rig.origin, &["update-ref", "refs/heads/topic", &moved]);
+    moved
+}
+
+#[test]
+fn a_claim_renewed_past_its_horizon_on_a_moved_head_checks_out_the_new_bytes() {
+    let rig = rig();
+    let first = claiming(&rig, RUN, pr_view(&rig, serde_json::json!({}))).expect("the claim");
+    let worktree = PathBuf::from(first["worktree"].as_str().expect("a path"));
+    assert!(worktree.join("change.txt").is_file());
+    let moved = moved_head(&rig);
+    let view = pr_view(&rig, serde_json::json!({ "headRefOid": moved }));
+    let again = claiming_at(&rig, RUN, view, NEXT_DAY, NEXT_HORIZON).expect("the renewal");
+    assert_eq!(again["head"], moved.as_str());
+    assert_eq!(again["resumed_existing_worktree"], false);
+    assert_eq!(git(&worktree, &["rev-parse", "HEAD"]), moved);
+    assert!(
+        !worktree.join("change.txt").exists(),
+        "the old bytes stayed"
+    );
+}
+
+#[test]
+fn a_resumed_checkout_with_edits_in_it_is_made_again() {
+    let rig = rig();
+    let first = claiming(&rig, RUN, pr_view(&rig, serde_json::json!({}))).expect("the claim");
+    let worktree = PathBuf::from(first["worktree"].as_str().expect("a path"));
+    std::fs::write(worktree.join("change.txt"), "not the reviewed bytes\n").expect("an edit");
+    let again = claiming(&rig, RUN, pr_view(&rig, serde_json::json!({}))).expect("the renewal");
+    assert_eq!(again["resumed_existing_worktree"], false);
+    assert_eq!(
+        std::fs::read_to_string(worktree.join("change.txt")).expect("the file"),
+        "the reviewed bytes\n"
+    );
+}
+
+#[test]
+fn another_run_past_the_horizon_takes_the_claim_with_its_own_checkout() {
+    let rig = rig();
+    let first = claiming(&rig, RUN, pr_view(&rig, serde_json::json!({}))).expect("the claim");
+    let second = claiming_at(
+        &rig,
+        OTHER,
+        pr_view(&rig, serde_json::json!({})),
+        NEXT_DAY,
+        NEXT_HORIZON,
+    )
+    .expect("the takeover");
+    assert_eq!(second["run_id"], OTHER);
+    assert_ne!(second["worktree"], first["worktree"]);
+    assert!(PathBuf::from(second["worktree"].as_str().expect("a path")).is_dir());
+    assert!(
+        PathBuf::from(first["worktree"].as_str().expect("a path")).is_dir(),
+        "the displaced run's checkout is prune's to report, not this claim's to remove"
+    );
 }
 
 #[test]

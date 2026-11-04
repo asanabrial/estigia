@@ -200,6 +200,22 @@ fn add_detached(context: &Context, worktree: &str, head: &str) -> Result<(), Fai
     .map(|_| ())
 }
 
+fn holds_exactly(checkout: &std::path::Path, head: &str) -> bool {
+    let at_head = run(
+        &["git", "rev-parse", "HEAD"],
+        Some(checkout),
+        How::tolerated(),
+    )
+    .is_ok_and(|output| output.status == 0 && output.stdout.trim() == head);
+    at_head
+        && run(
+            &["git", "status", "--porcelain"],
+            Some(checkout),
+            How::tolerated(),
+        )
+        .is_ok_and(|output| output.status == 0 && output.stdout.trim().is_empty())
+}
+
 fn answer(held: &PullReview, resumed: bool) -> serde_json::Value {
     serde_json::json!({
         "ok": true,
@@ -280,8 +296,12 @@ pub fn claim(
             ),
         ));
     }
-    if std::path::Path::new(&held.worktree).is_dir() {
-        return Ok(answer(&held, true));
+    let checkout = std::path::Path::new(&held.worktree);
+    if checkout.is_dir() {
+        if holds_exactly(checkout, &held.head) {
+            return Ok(answer(&held, true));
+        }
+        remove_worktree(context, &held.worktree);
     }
     if let Err(failure) = add_detached(context, &worktree_text, &held.head) {
         store.drop_pull_review(request.run_id)?;
@@ -290,8 +310,8 @@ pub fn claim(
     Ok(answer(&held, false))
 }
 
-/// Removes the detached worktree `review` names. A removal that failed is a
-/// leftover `prune` names, reported rather than hidden.
+/// Removes a review's detached worktree. A removal that failed is a leftover
+/// `prune` names, reported rather than hidden.
 pub(crate) fn remove_worktree(context: &Context, worktree: &str) -> serde_json::Value {
     if !std::path::Path::new(worktree).exists() {
         let _ = run(
