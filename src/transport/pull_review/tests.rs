@@ -214,6 +214,10 @@ fn a_head_that_moved_under_this_runs_claim_is_head_moved() {
     let moved = git(
         &rig.origin,
         &[
+            "-c",
+            "user.name=Estigia test",
+            "-c",
+            "user.email=estigia@example.invalid",
             "commit-tree",
             "-m",
             "moved",
