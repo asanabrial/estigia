@@ -101,6 +101,27 @@ about an issue, and it is what keeps this claim out of `holders_for_action`, so 
 evidence in it. Merging stays outside this claim: it is delivery, and a skill that merges does so
 afterwards, under `Merge by`.
 
+The panel is `pr_review_launch`, `pr_review_collect` and `pr_review_status`, which follow the same
+route as ordinary review without its ledger: the tier sizes the panel, `prompt::build` and detached,
+tool-less jobs read the change, and `settle_severe` decides each severe finding, with an inferential
+one going to the refuter first. Their answers are rows on this claim and stay local. Four things differ
+because the author is somebody else:
+
+- **The range is the merge base through the head.** Diffing the two ends as given would inflate the
+  change with everything the target gained since it branched.
+- **Nothing is withheld as generated.** Ordinary review hides a declared generated file because the
+  verdict regenerates it, and regenerating here would execute the reviewed bytes. A large lockfile
+  therefore counts against the ceiling.
+- **The criteria are the fixed lenses plus the tracker's issue when one can be read,** from the pull
+  request's closing references under GitHub and a team key in the head branch under Linear. The pull
+  request's description is never requested: its author wrote it, and a reviewer must not take criteria
+  from the thing reviewed.
+- **A tier of zero lenses is raised to one,** since a verdict sent to someone else rests on a reader.
+
+A change over `REVIEW_PAYLOAD_CEILING` answers `reviewed: false` with no verdict and offers only the
+release: no review ran, and that is not a clean result. A host relay is refused
+(`pull-review-needs-a-detached-reviewer`), because its jobs are recorded against an issue.
+
 ## Regression evidence
 
 `src/transport/draft/tests.rs` holds the real bare-remote matrix for draft/ready follow-ups with

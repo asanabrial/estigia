@@ -13,6 +13,9 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `review-thread-pr-unconfined` | There is not exactly one open PR or the thread does not belong to it. | Read the claimed branch's PR and use its thread ID. |
 | `review-thread-fix-unpublished` | The fix is not strictly after the thread's original commit and already on the published head, or ancestry is unknown. | Publish the correction first and supply its confirmed head and fix SHA. |
 | `review-thread-write-unconfirmed` | A reply or resolution may have landed without a confirming readback. | Read the thread before retrying. Preserve `reply_confirmed`; do not claim resolution completed. |
+| `pull-review-not-held` | This run holds no review-only claim, or another run displaced it at its horizon. | `pr_review_claim` first. |
+| `pull-review-needs-a-detached-reviewer` | The only reviewer here is a host relay. | Install the `claude` or `codex` CLI, or leave this review to a person. |
+| `pull-review-escalated` | The panel's answers cannot settle a severe finding. | `pr_review_release`, and report the findings to a person. |
 | `pull-review-held` | Another run's unexpired claim holds this pull request. | Leave it to that run; its claim ends at its horizon. |
 | `pull-review-fork-refused` | The pull request is not read as coming from this repository. | A person reviews a fork's pull request. |
 | `pull-review-not-open` | The pull request is closed or merged. | Stop; nothing was created. |

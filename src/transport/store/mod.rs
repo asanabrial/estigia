@@ -51,7 +51,7 @@ pub(crate) use ledger::{forget_scratch_store, ledger_opens, local_bodies};
 pub(crate) use messages::{Message, MessageListing, MessageSent, MessageShape};
 pub(crate) use needs_person::Need;
 pub(crate) use outbox::{OutboxKind, OutboxRow, OutboxState};
-pub(crate) use pull_reviews::PullReview;
+pub(crate) use pull_reviews::{PullReview, ReviewSlot};
 pub(crate) use records::{Recorded, TaskChange, TaskRow};
 pub(crate) use sessions::{SessionRow, SessionSeen};
 pub(crate) use snapshot::{age_in_words, snapshot_age, snapshots_dir};

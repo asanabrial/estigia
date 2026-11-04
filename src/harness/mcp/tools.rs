@@ -1708,6 +1708,48 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "pr_review_status",
+        contract_name: "pull request review status",
+        description: "Where this run's review-only claim stands: the lenses the change licenses, \
+                      their answers, the computed verdict and the one next step. A change over \
+                      the payload ceiling answers `reviewed: false` and no verdict: no review \
+                      ran, which is not clean.",
+        operation: "pr-review-status",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::None,
+        writes: false,
+    },
+    Tool {
+        name: "pr_review_launch",
+        contract_name: "pull request review launch",
+        description: "Start every reviewer `pr_review_status` offers, detached and tool-less, over \
+                      the merge base through the reviewed head. Criteria are the fixed lenses and \
+                      the tracker's issue when one can be read; the pull request's description is \
+                      never handed over.",
+        operation: "pr-review-launch",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "pr_review_collect",
+        contract_name: "pull request review collect",
+        description: "Record every reviewer that has answered, waiting for the rest up to \
+                      `wait_seconds`, and answer what `pr_review_status` answers.",
+        operation: "pr-review-collect",
+        arguments: &[
+            RUN_ID,
+            Argument::optional(
+                "wait_seconds",
+                "integer",
+                "Seconds to wait for a running reviewer; omitted checks once. Capped at 900.",
+            )
+            .counting_from(1),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
         name: "draft_pr",
         contract_name: "draft pull request",
         description: "Publish an assisted run's branch, where the `Workflow` row is `assisted`, as \
@@ -2091,7 +2133,13 @@ pub const ASSISTED_ONLY: &[&str] = &[
 /// The tools of a review-only claim on a pull request. Not tracker writers and
 /// not assisted-only: they bind to the repository host, and they are what a
 /// pull request review has under every `Workflow` and every `Tracker`.
-pub const PULL_REVIEW_TOOLS: &[&str] = &["pr_review_claim", "pr_review_release"];
+pub const PULL_REVIEW_TOOLS: &[&str] = &[
+    "pr_review_claim",
+    "pr_review_release",
+    "pr_review_status",
+    "pr_review_launch",
+    "pr_review_collect",
+];
 
 /// The tools that reach neither the tracker nor the repository host, so a tracker with no
 /// executable transport does not stand in their way.

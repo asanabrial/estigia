@@ -6829,7 +6829,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 63_592;
+const TOOLS_LIST_CEILING: usize = 65_149;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

@@ -85,7 +85,7 @@ pub(super) const REFUTATION_ANSWER_SCOPED: &[&str] = &[
     "refutation-includes-deterministic-finding",
 ];
 
-const REFUTATION_BATCH: &str = "refutation-batch";
+pub(crate) const REFUTATION_BATCH: &str = "refutation-batch";
 
 /// What `launch_review_input` and `collect_review_input` are asked: the issue, the run and the input
 /// they name.
@@ -514,7 +514,7 @@ fn reviewer_stop(code: &str, detail: String, action: &str) -> Failure {
     }
 }
 
-fn reviewer_failure(refusal: Refusal) -> Failure {
+pub(crate) fn reviewer_failure(refusal: Refusal) -> Failure {
     let action = match &refusal.resolution {
         Resolution::Run { command } => command.clone(),
         Resolution::NoCommand { detail, .. } => detail.clone(),
@@ -751,7 +751,7 @@ pub(super) fn prepare_with(
     })
 }
 
-pub(super) fn jobs_dir() -> Result<std::path::PathBuf, Failure> {
+pub(crate) fn jobs_dir() -> Result<std::path::PathBuf, Failure> {
     Ok(store_path()?.with_file_name("jobs"))
 }
 

@@ -335,4 +335,16 @@ pub(super) const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX pull_reviews_run ON pull_reviews (run_id);
     ",
+    "
+    CREATE TABLE pull_review_slots (
+        epoch TEXT NOT NULL,
+        name TEXT NOT NULL,
+        dir TEXT NOT NULL,
+        pid INTEGER,
+        deadline_at INTEGER NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('running', 'answered', 'abandoned')),
+        answer TEXT,
+        PRIMARY KEY (epoch, name)
+    );
+    ",
 ];
