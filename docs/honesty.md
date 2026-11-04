@@ -3274,10 +3274,23 @@ pointer that leaves it names the document it points at.
     delays `none`, never hastens it. A repository whose CI is external and reports late, with no workflow
     file, can read `none`; declaring that CI as a `check:` stage closes it. A bot with no check of its own
     cannot be waited for: only a declared `check:<name>@<login>` can be, so a repository with such a bot
-    must declare it. `Corrections per lineage` is stated by the skill for the assisted loop and counted by
-    no tool, since `draft_pr` writes nothing it could count from; and nothing makes a run call
-    `review_stages` after `ready_pr`. The answers name it, and a `Stop` hook that holds the session open is
-    not built. Held against a fake `gh` by `src/transport/stages/tests/no_ci.rs`.
+    must declare it. Nothing makes a run call `review_stages` after `ready_pr`. The answers name it, and a
+    `Stop` hook that holds the session open is not built. Held against a fake `gh` by
+    `src/transport/stages/tests/no_ci.rs`.
+  - **`draft_pr` counts corrections on the run pointer, so the count is only as durable as the pointer.**
+    The first head a run lands is the original and each different head after it a correction, a pushed merge
+    of the base included, because a merge can carry any edit and nothing here tells a clean one from another;
+    the same head again is a retry and counts nothing. A new head past `Corrections per lineage` is
+    `draft-pr-corrections-spent` before any host call. What it does not hold: `release` removes the pointer,
+    so a run that releases and calls `assist` again starts at zero; a second run on the same branch from
+    another machine has its own count; the first head of an adopted branch reads as an original although the
+    branch already had a pull request; a failed call is counted from the checkout's remote-tracking ref, which
+    a clone whose fetch refspec omits the branch does not update, and such a failure is not counted; and a
+    pointer that will not write answers `corrections_not_recorded` instead of holding the next call. The way
+    past it, raising the row with `estigia config set`, is refused to an agent by the gate's substring match,
+    with the limits that matching has everywhere. Held by
+    `draft_pr_counts_each_new_head_and_refuses_the_one_past_the_row` and its neighbours in
+    `src/harness/mcp/tests.rs`.
   - **Coordination is left to the team**: nothing reads another person's claim, assignee or label, `assist`
     refuses a second run on one branch on this machine only, and Estigia cannot tell that the person, not the
     agent, named the issue.

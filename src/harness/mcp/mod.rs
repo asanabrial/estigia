@@ -1515,6 +1515,14 @@ fn run_tool_asking(
             flags.push("--issue".to_owned());
             flags.push(issue.to_string());
         }
+        if tool.operation == "draft-pr"
+            && let Some(published) = run.published_on(branch)
+        {
+            flags.push("--published-head".to_owned());
+            flags.push(published.head.clone());
+            flags.push("--corrections-spent".to_owned());
+            flags.push(published.corrections.to_string());
+        }
     }
 
     if tool.operation == "run-checks"
@@ -1578,6 +1586,9 @@ fn run_tool_asking(
         });
         answered =
             crate::transport::dispatch::dispatch(&transport, tool.operation, &flags, &now_stamp());
+    }
+    if tool.operation == "draft-pr" {
+        count_assisted_push(&mut answered, &transport, &context.state_root, &mut run);
     }
     let answer = match answered {
         Ok(value) => tracker::Answer {
@@ -1853,6 +1864,37 @@ fn held_spend_receipt(run: &session::Run, issue: u64, spend: &str) -> Option<Str
 
 /// Turns the transport's dispatch answer into the MCP refusal and applies
 /// the local consequence of an uncertain publication.
+/// Counts the head a `draft_pr` call landed, including one that failed after its push.
+fn count_assisted_push(
+    answered: &mut Result<Value, crate::transport::Failure>,
+    transport: &crate::transport::Context,
+    state_root: &std::path::Path,
+    run: &mut session::Run,
+) {
+    let (Some(branch), Some(worktree)) = (run.branch.clone(), run.worktree.clone()) else {
+        return;
+    };
+    let landed = match answered {
+        Ok(value) => value.get("head").and_then(Value::as_str).map(str::to_owned),
+        Err(_) => crate::transport::draft::tracked_head(&worktree, &branch),
+    };
+    let Some(head) = landed else {
+        return;
+    };
+    let (after, recorded) = session::updated(state_root, &run.run_id, |run| {
+        run.record_assisted_push(&branch, &head);
+    });
+    if let Ok(value) = answered {
+        value["corrections_spent"] = json!(after.published_on(&branch).map(|p| p.corrections));
+        value["corrections_allowed"] =
+            json!(crate::transport::claim::corrections_per_lineage(transport));
+        if !recorded {
+            value["corrections_not_recorded"] = json!(true);
+        }
+    }
+    *run = after;
+}
+
 fn refusal_from_answer(
     tool: &Tool,
     answer: &tracker::Answer,

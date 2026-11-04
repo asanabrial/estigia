@@ -255,6 +255,7 @@ const REFUSED: &[&str] = &[
     "disposition-unexpected-filed-issue",
     "disposition-unknown-finding",
     "draft-pr-branch-not-checked-out",
+    "draft-pr-corrections-spent",
     "draft-pr-exists-ready",
     "draft-pr-run-not-assisted",
     "empty-changelog-entry",

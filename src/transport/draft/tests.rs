@@ -109,6 +109,33 @@ impl Rig {
                 corrections,
                 ready_by,
                 self_review,
+                published_head: None,
+                corrections_spent: 0,
+                corrections_allowed: 3,
+            },
+            &mut |_| {},
+        )
+    }
+
+    fn call_after(
+        &self,
+        published_head: &str,
+        corrections_spent: u32,
+    ) -> Result<serde_json::Value, Failure> {
+        let body = self.body("Words.");
+        draft_with_sleep(
+            &self.context,
+            &Draft {
+                branch: "issue-12",
+                worktree: self.repo(),
+                title: "A title",
+                body_file: &body,
+                corrections: Corrections::Refuse,
+                ready_by: crate::config::Party::Person,
+                self_review: false,
+                published_head: Some(published_head),
+                corrections_spent,
+                corrections_allowed: 1,
             },
             &mut |_| {},
         )
