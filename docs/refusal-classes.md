@@ -82,8 +82,8 @@ replay advice that goes with it (`Refusal::classed`), and a refusal whose outcom
 
 - `checks-target-moved`: the checkout changed while a declared-checks job ran, so its result is for
   bytes nobody is reviewing and nothing is recorded;
-- `capture-result-stale`: the receipt a reviewer was launched against is no longer the one
-  `review_status` offers, so its answer is for bytes nobody is reviewing;
+- `capture-result-stale`: the receipt a reviewer was launched against is no longer the one the
+  review stands on, so its answer is for bytes nobody is reviewing;
 - every `*-operation-conflict`, `*-metadata-mismatch`, `*-operation-no-longer-current` and
   `claim-operation-expired`: another writer, or the passage of time, moved the operation. Also
   `already-owned-by-different-operation`, `operation-id-kind-conflict` and

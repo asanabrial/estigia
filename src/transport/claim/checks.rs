@@ -156,7 +156,7 @@ fn runner_lost(detail: &str) -> Failure {
     }))
 }
 
-fn job_id(issue: u64, digest: &str, commands: &str) -> String {
+pub(super) fn job_id(issue: u64, digest: &str, commands: &str) -> String {
     let short = |text: &str| text.chars().take(16).collect::<String>();
     format!("checks-{issue}-{}-{}", short(digest), short(commands))
 }
