@@ -126,6 +126,21 @@ pub struct Run {
     /// checked out.
     #[serde(default)]
     pub branch: Option<String>,
+    /// What this assisted run last pushed through `draft_pr`, and how many
+    /// corrections that makes. On the pointer so a resumed run keeps the count.
+    #[serde(default)]
+    pub assisted_publication: Option<AssistedPublication>,
+}
+
+/// One branch's publication under an assisted run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssistedPublication {
+    /// The branch that was pushed.
+    pub branch: String,
+    /// The head that landed last.
+    pub head: String,
+    /// New heads pushed after the first.
+    pub corrections: u32,
 }
 
 impl Run {
@@ -149,7 +164,30 @@ impl Run {
             reviewed_head: None,
             assisted: false,
             branch: None,
+            assisted_publication: None,
         }
+    }
+
+    /// What this run last pushed to `branch`, when it pushed to that branch at all.
+    pub fn published_on(&self, branch: &str) -> Option<&AssistedPublication> {
+        self.assisted_publication
+            .as_ref()
+            .filter(|published| published.branch == branch)
+    }
+
+    /// Records that `head` landed on `branch`: the first head is the original,
+    /// each different one is a correction, and the same head again is nothing.
+    pub fn record_assisted_push(&mut self, branch: &str, head: &str) {
+        let corrections = match self.published_on(branch) {
+            Some(published) if published.head == head => return,
+            Some(published) => published.corrections.saturating_add(1),
+            None => 0,
+        };
+        self.assisted_publication = Some(AssistedPublication {
+            branch: branch.to_owned(),
+            head: head.to_owned(),
+            corrections,
+        });
     }
 
     /// The issue number, when this run holds an issue and its tracker numbers
