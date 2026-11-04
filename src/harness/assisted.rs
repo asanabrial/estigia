@@ -151,15 +151,31 @@ pub(super) fn standing(run: &Run) -> Result<String, String> {
 pub(super) fn remote_write(action: &Action, observed: &Observed) -> Option<String> {
     match action {
         Action::Remote { command } => Some(command.clone()),
-        Action::Write { .. } => {
-            let command = observed.command.as_ref()?;
-            let Established::Known(literal) = &command.literal else {
-                return None;
-            };
-            super::operation_window::remote_write_target(&super::shell_code(literal))
-        }
+        Action::Write { .. } => remote_write_in_the_line(observed),
         Action::Boundary { .. } | Action::Untouched => None,
     }
+}
+
+fn remote_write_in_the_line(observed: &Observed) -> Option<String> {
+    let command = observed.command.as_ref()?;
+    let Established::Known(literal) = &command.literal else {
+        return None;
+    };
+    super::operation_window::remote_write_target(&super::shell_code(literal))
+}
+
+fn remote_write_unverified(command: &str) -> Refusal {
+    Refusal::not_started(
+        "assisted-remote-write-unverified",
+        format!(
+            "`{command}` writes to GitHub with no verified pull request, thread or pushed fix \
+             in this run"
+        ),
+        way_out(
+            "the typed tools: `review_thread` for replies and resolutions, `ready_pr` to mark \
+             ready, `draft_pr` to publish; anything else by a person",
+        ),
+    )
 }
 
 /// The one of a session's several claims a call lands in.
@@ -359,17 +375,7 @@ pub(super) fn decision(
         return deny(refusal);
     }
     if let Some(command) = remote_write(action, observed) {
-        return deny(Refusal::not_started(
-            "assisted-remote-write-unverified",
-            format!(
-                "`{command}` writes to GitHub with no verified pull request, thread or pushed fix \
-                 in this run"
-            ),
-            way_out(
-                "the typed tools: `review_thread` for replies and resolutions, `ready_pr` to mark \
-                 ready, `draft_pr` to publish; anything else by a person",
-            ),
-        ));
+        return deny(remote_write_unverified(&command));
     }
 
     let Some(worktree) = run.worktree.clone() else {
@@ -471,6 +477,9 @@ pub(super) fn decision(
                     .to_owned(),
                 way_out("the `draft_pr` tool, which pushes the run's branch and opens the draft"),
             ));
+        }
+        if let Some(written) = remote_write_in_the_line(observed) {
+            return deny(remote_write_unverified(&written));
         }
         if command == "git push" {
             let wanted = format!("refs/heads/{branch}");
