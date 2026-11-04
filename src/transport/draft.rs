@@ -36,6 +36,12 @@ pub struct Draft<'a> {
     pub ready_by: crate::config::Party,
     /// Whether `Self review` is on, which is the review a ready mark waits for.
     pub self_review: bool,
+    /// The head this run last pushed to the branch, when it pushed one.
+    pub published_head: Option<&'a str>,
+    /// Corrections this run has already pushed to the branch.
+    pub corrections_spent: u32,
+    /// `Corrections per lineage`.
+    pub corrections_allowed: usize,
 }
 
 /// `draft-pr` — see the module.
@@ -244,6 +250,9 @@ fn draft_with_sleep(
         corrections,
         ready_by,
         self_review,
+        published_head,
+        corrections_spent,
+        corrections_allowed,
     } = *what;
 
     let checked_out = run(
@@ -292,6 +301,26 @@ fn draft_with_sleep(
         .stdout
         .trim()
         .to_owned();
+    if published_head.is_some_and(|published| published != head)
+        && corrections_spent as usize >= corrections_allowed
+    {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "draft-pr-corrections-spent",
+            "branch": branch,
+            "head": head,
+            "published_head": published_head,
+            "corrections_spent": corrections_spent,
+            "corrections_allowed": corrections_allowed,
+            "action": format!(
+                "`{branch}` has had the {corrections_allowed} correction(s) `Corrections per \
+                 lineage` allows, and this head would be another \u{2014} nothing was pushed; \
+                 report what is left to the person, who may allow more with `estigia config set \
+                 \"Corrections per lineage\" \"{}\"`",
+                corrections_allowed + 1
+            ),
+        })));
+    }
     let existing = open_prs(context, branch)?;
     if existing.len() > 1 {
         return Err(Failure::Stop(serde_json::json!({
@@ -437,6 +466,20 @@ fn draft_with_sleep(
         }
     }
     Err(unconfirmed(branch, &head, Some(number), &seen))
+}
+
+/// The head the checkout last saw land on `branch` at origin, which a failed
+/// `draft_pr` may have pushed before it failed.
+pub fn tracked_head(worktree: &std::path::Path, branch: &str) -> Option<String> {
+    let tracked = format!("refs/remotes/origin/{branch}");
+    run(
+        &["git", "rev-parse", "--verify", "--quiet", &tracked],
+        Some(worktree),
+        How::tolerated(),
+    )
+    .ok()
+    .filter(|answer| answer.status == 0)
+    .map(|answer| answer.stdout.trim().to_owned())
 }
 
 fn agrees(seen: &serde_json::Value, branch: &str, head: &str, draft: bool) -> bool {

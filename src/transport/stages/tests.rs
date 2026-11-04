@@ -634,6 +634,9 @@ fn a_ready_pr_followup_publishes_then_resolves_and_restarts_ci_on_the_new_head()
                 corrections: crate::config::Corrections::PushReady,
                 ready_by: Party::Person,
                 self_review: false,
+                published_head: None,
+                corrections_spent: 0,
+                corrections_allowed: 3,
             },
         )
     })

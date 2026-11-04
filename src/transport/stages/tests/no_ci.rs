@@ -64,6 +64,76 @@ fn read(
     (answer, logged(&log))
 }
 
+fn read_with_workflow_answer(mut answer: serde_json::Value) -> Result<serde_json::Value, Failure> {
+    let (_root, context) = rig();
+    let bin = crate::test_env::scripted_gh();
+    answer["matches"] = serde_json::json!("expression=");
+    let answers = crate::test_env::answers(&[
+        serde_json::json!({ "matches": "pr list", "stdout": r#"[{"number":7}]"# }),
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": r#"{"owner":{"login":"example"},"name":"repo"}"#,
+        }),
+        answer,
+        serde_json::json!({ "matches": "api graphql", "stdout": graphql(&quiet()) }),
+    ]);
+    let stages = stages("none");
+    crate::test_env::with_scripted_gh(bin.path(), &answers, || {
+        stages_with_sleep(
+            &context,
+            &Stages {
+                branch: "issue-12",
+                stages: &stages,
+                ready_by: Party::Agent,
+                merge_by: Party::Person,
+                request: false,
+                expected_head: Some("abc"),
+                wait_seconds: 5,
+                now_secs: published_at() + 600,
+            },
+            &mut |_| {},
+        )
+    })
+}
+
+#[test]
+fn an_unreadable_workflow_listing_refuses_and_never_reads_none() {
+    for (case, answer) in [
+        (
+            "the call fails",
+            serde_json::json!({ "status": 1, "stderr": "boom" }),
+        ),
+        (
+            "the answer carries errors",
+            serde_json::json!({
+                "stdout": r#"{"data":{"repository":{"object":null}},"errors":[{"message":"no"}]}"#,
+            }),
+        ),
+        (
+            "the answer names no repository",
+            serde_json::json!({ "stdout": r#"{"data":{"repository":null}}"# }),
+        ),
+    ] {
+        let failure = read_with_workflow_answer(answer)
+            .expect_err(&format!("{case}: an unreadable head was answered"));
+        assert!(
+            matches!(failure, Failure::Read(_)),
+            "{case}: {}",
+            failure.detail()
+        );
+    }
+}
+
+#[test]
+fn only_a_yaml_entry_in_the_workflows_directory_is_a_workflow() {
+    let (answer, _) = read(&quiet(), &["README.md", "ci.yml.disabled"], "none", 600, 0);
+    assert_eq!(answer["ci"], "none", "{answer}");
+    for file in ["ci.yml", "ci.yaml"] {
+        let (answer, _) = read(&quiet(), &["README.md", file], "none", 600, 0);
+        assert_eq!(answer["ci"], "missing", "{file}: {answer}");
+    }
+}
+
 #[test]
 fn an_empty_rollup_with_no_workflow_and_no_check_stage_reads_none_after_the_grace_period() {
     let (answer, _) = read(&quiet(), &[], "none", 121, 10);
