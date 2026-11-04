@@ -384,6 +384,7 @@ const REFUSED: &[&str] = &[
     "nothing-to-reclaim",
     "nothing-to-unassign",
     "operation-has-no-tool",
+    "tool-retired",
     "out-of-phase",
     "outbox-bypass",
     "payload-line-not-found",

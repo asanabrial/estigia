@@ -877,11 +877,11 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 18,753 | file on disk |
+  | `skill/bindings/github.md` | 18,723 | file on disk |
   | `skill/policies/blind-judges.md` | 42,867 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,450 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,333 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -1216,11 +1216,10 @@ pointer that leaves it names the document it points at.
   A body saying `close #464` closed #464 on merge; publication now refuses every reference, but the
   standalone check still returns before scanning when the delivered issue has no closing PR, missing
   a body that closes only another issue. These limits have no behavioural test named here.
-- **The follow-up's single-sourcing is named, not observed.** `mandatory_follow_up`
-  (`src/transport/commands.rs`) and the branch-link follow-up (`src/transport/claim.rs`) both interpolate
-  `closing::FOLLOW_UP`, and each call site's test compares the emitted text to the constant's value rather
-  than its source: re-inlining a byte-identical copy at the `check_closing_keywords` site leaves both green
-  (measured). What is held is the transition: deleting `transition --to done` from `FOLLOW_UP` reddens
+- **The follow-up's single-sourcing is named, not observed.** The branch-link follow-up
+  (`src/transport/claim.rs`) and `review_status` (`src/transport/claim/status.rs`) both interpolate
+  `closing::FOLLOW_UP`, and a test compares the emitted text to the constant's value rather than its
+  source, so a byte-identical copy at either site would leave it green. What is held is the transition: deleting `transition --to done` from `FOLLOW_UP` reddens
   `follow_up_names_both_the_transition_and_the_release`.
 - **Nothing enumerates the refusals that write before they refuse, and nothing can.**
   `Answer::already_wrote` selects `translate`'s `Committed` arm only for `"world": "committed"`.

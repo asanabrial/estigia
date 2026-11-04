@@ -620,7 +620,7 @@ claim of its own.
 
 ## A run's self-reported status
 
-`estigia status set "<line>" [--phase <phase>]` and the `status` MCP tool write one line saying what a run
+`estigia status set "<line>" [--phase <phase>]` writes one line saying what a run
 is doing and what comes next, keyed by run id, so a run holding no issue can set one. The line is a single
 line of at most 200 bytes: whitespace and control characters collapse to single spaces, a comment opener
 is escaped, a token-shaped word (a known credential prefix, or thirty-two or more letters, digits, `_` and

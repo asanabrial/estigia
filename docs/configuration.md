@@ -145,8 +145,7 @@ read back; `estigia flush --status` lists the queue and sends nothing, and `esti
 starts the flush in the background and returns. While the window is open and writes are queued, every
 operation that writes to GitHub and every publication runs the flush first and is refused
 `outbox-pending` when the queue does not drain. A publication refused because the window is closed says
-how many writes are queued and that `estigia flush` runs when the window opens. The same operation is the
-`flush` tool, with `read_only` for the listing.
+how many writes are queued and that `estigia flush` runs when the window opens; `--status` lists the queue.
 
 The gate holds the agent's own hand to the same window. While it is closed, an agent's shell line
 that merges, tags, creates or readies a pull request, changes a release, or creates, comments on,

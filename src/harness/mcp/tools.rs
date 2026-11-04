@@ -617,27 +617,6 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
-        name: "status",
-        contract_name: "status",
-        description: "Set this run's self-reported status: one line saying what it is doing and \
-                      what comes next. Local to the store; never a claim renewal, transition, \
-                      review or evidence, and it reaches no tracker. Two writes within a minute \
-                      leave one.",
-        operation: "status",
-        arguments: &[
-            RUN_ID,
-            Argument::required(
-                "text",
-                "string",
-                "The line. Cut at 200 bytes, one line, token-shaped words redacted.",
-            ),
-            Argument::optional("phase", "string", "The coarse phase.")
-                .of(crate::harness::status::PHASES),
-        ],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
         name: "handoff",
         contract_name: "handoff",
         description: "Hand an issue to another runtime: records the handoff in this machine's \
@@ -719,82 +698,6 @@ pub const TOOLS: &[Tool] = &[
                 "`status` adds each run's self-reported line, never evidence, or its task.",
             ),
         ],
-        effect: PointerEffect::None,
-        writes: false,
-    },
-    Tool {
-        name: "feed",
-        contract_name: "feed",
-        description: "What happened across sessions while you were away: the local store's \
-                      transitions, marker entries and messages, oldest first, in a bounded \
-                      page over the last 24 hours unless `since` says otherwise. The same rows \
-                      as `estigia feed --json`. Read-only.",
-        operation: "feed",
-        arguments: &[
-            Argument::optional(
-                "repository",
-                "string",
-                "Only this repository, as `owner/name`; one the store does not hold is \
-                 refused `feed-repo-unknown`.",
-            ),
-            Argument::optional("runtime", "string", "Only events of runs on this runtime."),
-            Argument::optional(
-                "run",
-                "string",
-                "Only events of this run, or messages to or from it.",
-            ),
-            Argument::optional(
-                "issue",
-                "integer",
-                "Only this issue; messages carry no issue and are left out.",
-            )
-            .counting_from(1),
-            Argument::optional(
-                "kind",
-                "string",
-                "Only this kind: `transition`, `message`, or a marker kind such as `claim`.",
-            ),
-            Argument::optional(
-                "since",
-                "string",
-                "Start of the window: a duration (`90m`, `6h`, `2d`) or a UTC time.",
-            ),
-            Argument::optional(
-                "bodies",
-                "boolean",
-                "Include the first 200 characters of each entry or message body.",
-            ),
-            Argument::optional(
-                "limit",
-                "integer",
-                "The most events this page answers. Defaults to 50; a value above 500 is \
-                 refused.",
-            )
-            .counting_from(1),
-            Argument::optional(
-                "cursor",
-                "string",
-                "The `next_cursor` of the page before; give the same selectors again.",
-            ),
-        ],
-        effect: PointerEffect::None,
-        writes: false,
-    },
-    Tool {
-        name: "where",
-        contract_name: "where",
-        description: "Where one issue stands, in one read-only answer: repository, open or closed, \
-                      workflow state and transitions, holder with worktree and branch, pull \
-                      request, review verdict with the head and base it is bound to, tasks, \
-                      `blocked-until`, the holder's messages, queued writes. A field that cannot \
-                      be read says `unavailable` and why. Same as `estigia where --json`.",
-        operation: "where",
-        arguments: &[Argument::required(
-            "reference",
-            "string",
-            "`owner/name#N`, a number or a tracker key; a number held in several repositories \
-             is refused `ambiguous-issue`.",
-        )],
         effect: PointerEffect::None,
         writes: false,
     },
@@ -1371,22 +1274,6 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
-        name: "flush",
-        contract_name: "flush",
-        description: "Send the GitHub writes queued while the git operation window was closed, \
-                      oldest first, stopping at the first one it cannot read back. Refuses while \
-                      the destination's window is closed. With `read_only`, lists the queue and \
-                      sends nothing.",
-        operation: "flush",
-        arguments: &[Argument::optional(
-            "read_only",
-            "boolean",
-            "List the queue and send nothing.",
-        )],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
         name: "create",
         contract_name: "create",
         description: "File a finding. Creates every label before attaching it, then projects the \
@@ -1853,20 +1740,6 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
-        name: "check_closing_keywords",
-        contract_name: "check closing keywords",
-        description: "Scan the branch and its commit messages for keywords that would close the \
-                      issue on merge. Read-only; run it before delivery.",
-        operation: "check-closing-keywords",
-        arguments: &[
-            ISSUE,
-            Argument::optional("base", "string", "The base ref, so commits can be scanned."),
-            Argument::optional("branch", "string", "The branch to scan."),
-        ],
-        effect: PointerEffect::None,
-        writes: false,
-    },
-    Tool {
         name: "review_tier",
         contract_name: "review_tier",
         description: "The review tier for one base/head pair, derived from the change alone: \
@@ -2037,6 +1910,62 @@ pub const TOOLS: &[Tool] = &[
     },
 ];
 
+/// Operations a name on the menu or the CLI still runs through this table and no agent
+/// is offered. [`find`] reads them; `tools/list` does not, and [`RETIRED`] answers for
+/// them on `tools/call`.
+pub const INTERNAL: &[Tool] = &[Tool {
+    name: "flush",
+    contract_name: "flush",
+    description: "Send the GitHub writes queued while the git operation window was closed, \
+                      oldest first, stopping at the first one it cannot read back. Refuses while \
+                      the destination's window is closed. With `read_only`, lists the queue and \
+                      sends nothing.",
+    operation: "flush",
+    arguments: &[Argument::optional(
+        "read_only",
+        "boolean",
+        "List the queue and send nothing.",
+    )],
+    effect: PointerEffect::None,
+    writes: true,
+}];
+
+/// Names taken off the menu, each with what an agent does instead.
+///
+/// A caller on an older skill gets this answer rather than the list of every name.
+pub const RETIRED: &[(&str, &str)] = &[
+    (
+        "where",
+        "run `estigia where <reference> --json`, which answers the same object",
+    ),
+    (
+        "feed",
+        "run `estigia feed --json`, which answers the same page",
+    ),
+    (
+        "status",
+        "run `estigia status set <text>`, which writes the same line",
+    ),
+    (
+        "flush",
+        "run `estigia flush`, or `estigia flush --status` to list the queue; a write that \
+         needs the queue sent sends it first",
+    ),
+    (
+        "check_closing_keywords",
+        "`publish_review` refuses a closing keyword with `closing-keyword-live`, and \
+         `deliver` reads whether the merge would close the issue",
+    ),
+];
+
+/// What replaces a retired name, when it is one.
+pub fn retired(name: &str) -> Option<&'static str> {
+    RETIRED
+        .iter()
+        .find(|(retired, _)| *retired == name)
+        .map(|(_, replacement)| *replacement)
+}
+
 /// Operations the contract requires that Estigia deliberately does not expose
 /// as a tool of their own.
 ///
@@ -2117,7 +2046,6 @@ pub const TRACKER_WRITERS: &[&str] = &[
     "comment",
     "create",
     "ensure_states",
-    "flush",
     "handoff",
     "handoff_review",
     "record_review_finding",
@@ -2168,9 +2096,6 @@ pub const NEEDS_NO_TRANSPORT: &[&str] = &[
     "wait",
     "inbox",
     "list_sessions",
-    "feed",
-    "where",
-    "status",
     "review_tier",
     "target",
 ];
@@ -2186,9 +2111,6 @@ pub const LOCAL_STORE_TOOLS: &[&str] = &[
     "wait",
     "inbox",
     "list_sessions",
-    "feed",
-    "where",
-    "status",
     "deliver",
 ];
 
@@ -2209,7 +2131,7 @@ pub fn is_assisted_only(name: &str) -> bool {
 
 /// The tool a name refers to.
 pub fn find(name: &str) -> Option<&'static Tool> {
-    TOOLS.iter().find(|tool| tool.name == name)
+    TOOLS.iter().chain(INTERNAL).find(|tool| tool.name == name)
 }
 
 impl Tool {

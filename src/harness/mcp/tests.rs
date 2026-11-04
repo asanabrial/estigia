@@ -1018,6 +1018,131 @@ fn every_unexposed_operation_refuses_with_its_reason_and_the_contract_location()
     }
 }
 
+/// The refusal is for an identity whose **every** recording is
+/// `severe`. The description said "a severe finding ... naming one is refused"
+/// without that qualifier, so a reader could take the one batch that clears
+/// `release_ci` for a mixed-class identity to be forbidden.
+#[test]
+fn the_record_disposition_description_qualifies_the_severe_refusal() {
+    let tool = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "record_disposition")
+        .expect("the tool is listed");
+    assert!(
+        tool.description.contains("every recording is `severe`"),
+        "the description refuses a severe finding without the qualifier the rest of the \
+         contract carries: {}",
+        tool.description
+    );
+    assert!(
+        tool.description.contains("non-severe recording"),
+        "the description does not say a mixed-class identity is answered for its non-severe \
+         recording: {}",
+        tool.description
+    );
+}
+
+#[test]
+fn the_tool_surface_is_exactly_the_names_it_keeps() {
+    let mut exposed: Vec<&str> = TOOLS.iter().map(|tool| tool.name).collect();
+    exposed.sort_unstable();
+    let mut kept = vec![
+        "ask",
+        "assist",
+        "blocked_until",
+        "claim",
+        "collect_review_input",
+        "comment",
+        "create",
+        "deliver",
+        "draft_pr",
+        "ensure_states",
+        "escalate_review",
+        "handoff",
+        "handoff_review",
+        "heartbeat",
+        "inbox",
+        "judge_workspaces",
+        "launch_review_input",
+        "list_sessions",
+        "list_state",
+        "pr_review_claim",
+        "pr_review_collect",
+        "pr_review_launch",
+        "pr_review_release",
+        "pr_review_status",
+        "pr_review_submit",
+        "publish_review",
+        "ready_pr",
+        "record_computed_verdict",
+        "record_disposition",
+        "record_review_finding",
+        "record_spend",
+        "release",
+        "release_ci",
+        "republish_review",
+        "review_read",
+        "review_stages",
+        "review_status",
+        "review_thread",
+        "review_tier",
+        "run_checks",
+        "send_message",
+        "start_branch",
+        "target",
+        "task",
+        "tasks",
+        "transition",
+        "verify_claim",
+        "wait",
+    ];
+    kept.sort_unstable();
+    assert_eq!(exposed, kept);
+}
+
+#[test]
+fn a_retired_name_answers_what_replaces_it_and_is_not_advertised() {
+    let listed = result(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    let listed = listed["tools"].as_array().expect("a list of tools");
+    for (name, replacement) in tools::RETIRED {
+        assert!(
+            !listed.iter().any(|tool| tool["name"] == *name),
+            "`{name}` is retired and advertised anyway"
+        );
+        let response = result(json!({
+            "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+            "params": {"name": name, "arguments": {}}
+        }));
+        assert_eq!(response["isError"], true, "`{name}` did not refuse");
+        let text = response["content"][0]["text"]
+            .as_str()
+            .expect("a text result");
+        assert!(
+            text.contains(replacement),
+            "`{name}` refused without what replaces it: {text}"
+        );
+    }
+}
+
+#[test]
+fn an_internal_operation_still_runs_and_no_agent_is_offered_it() {
+    let listed = result(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    let listed = listed["tools"].as_array().expect("a list of tools");
+    for tool in tools::INTERNAL {
+        assert!(tools::find(tool.name).is_some(), "{}", tool.name);
+        assert!(
+            !listed.iter().any(|row| row["name"] == tool.name),
+            "`{}` is internal and advertised anyway",
+            tool.name
+        );
+        assert!(
+            tools::retired(tool.name).is_some(),
+            "`{}` is internal and `tools/call` would still run it",
+            tool.name
+        );
+    }
+}
+
 /// A name that exists only to refuse refuses every call, whatever
 /// arguments it is handed — no argument reaches a dispatch that could act.
 #[test]
@@ -1139,7 +1264,10 @@ fn every_executable_operation_the_binding_documents_is_exposed_or_declared() {
     );
 
     for operation in operations {
-        let exposed = TOOLS.iter().any(|tool| tool.operation == operation);
+        let exposed = TOOLS
+            .iter()
+            .chain(tools::INTERNAL)
+            .any(|tool| tool.operation == operation);
         let declared = NOT_RUN.iter().any(|(name, _)| *name == operation);
         assert!(
             exposed || declared,
@@ -1463,9 +1591,6 @@ fn publication_tools_bind_to_the_repository_host_the_local_ones_to_neither_and_t
         "wait",
         "inbox",
         "list_sessions",
-        "feed",
-        "where",
-        "status",
         "review_tier",
         "target",
     ];
@@ -1863,9 +1988,7 @@ fn a_boolean_goes_out_as_a_bare_flag_or_not_at_all() {
         Err(ToolFailure::Malformed(_))
     ));
 
-    let closing = tools::find("check_closing_keywords").expect("a declared tool");
-    let sent =
-        super::flags_for(closing, &json!({"issue": 12, "base": "main"})).expect("well formed");
+    let sent = super::flags_for(tool, &json!({"base": "main"})).expect("well formed");
     assert!(
         sent.windows(2).any(|pair| pair == ["--base", "main"]),
         "a string argument stopped carrying its value: {sent:?}"
@@ -5053,30 +5176,6 @@ fn the_start_branch_template_names_the_sibling_it_makes() {
     );
 }
 
-/// The refusal is for an identity whose **every** recording is
-/// `severe`. The description said "a severe finding ... naming one is refused"
-/// without that qualifier, so a reader could take the one batch that clears
-/// `release_ci` for a mixed-class identity to be forbidden.
-#[test]
-fn the_record_disposition_description_qualifies_the_severe_refusal() {
-    let tool = super::tools::TOOLS
-        .iter()
-        .find(|tool| tool.name == "record_disposition")
-        .expect("the tool is listed");
-    assert!(
-        tool.description.contains("every recording is `severe`"),
-        "the description refuses a severe finding without the qualifier the rest of the \
-         contract carries: {}",
-        tool.description
-    );
-    assert!(
-        tool.description.contains("non-severe recording"),
-        "the description does not say a mixed-class identity is answered for its non-severe \
-         recording: {}",
-        tool.description
-    );
-}
-
 std::thread_local! {
     static MCP_AT: std::cell::Cell<u16> = const { std::cell::Cell::new(0) };
 }
@@ -5312,14 +5411,11 @@ fn verify_claim_carries_the_closing_pin_from_the_arguments_to_the_transport() {
 
 const READ_TOOLS: &[&str] = &[
     "list_sessions",
-    "feed",
-    "where",
     "tasks",
     "verify_claim",
     "review_status",
     "review_read",
     "list_state",
-    "check_closing_keywords",
     "review_tier",
     "target",
 ];
@@ -5332,7 +5428,6 @@ const LOCAL_WRITER_TOOLS: &[&str] = &[
     "ask",
     "wait",
     "inbox",
-    "status",
     "run_checks",
 ];
 
@@ -5819,33 +5914,6 @@ fn refusal_code(failure: &ToolFailure) -> Option<&str> {
 }
 
 #[test]
-fn where_with_a_key_answers_under_linear_and_assisted() {
-    let root = tempfile::tempdir().expect("a temporary root");
-    let context = linear_context(&root, crate::config::Workflow::Assisted);
-    let standing = serde_json::json!({
-        "matches": "EstigiaStanding",
-        "stdout": serde_json::json!({"data": {"issue": {
-            "url": "https://linear.app/team/issue/ABC-102",
-            "state": {"name": "In Progress", "type": "started"},
-        }}}).to_string(),
-    });
-    let answered = crate::test_env::with_scripted_gh(
-        crate::test_env::fake_cli_directory(&["linear"]).path(),
-        &crate::test_env::answers(&[standing]),
-        || run_tool("where", &json!({"reference": "ABC-102"}), Ok(&context)),
-    )
-    .unwrap_or_else(|failure| panic!("where was refused: {:?}", refusal_code(&failure)));
-    let said: Value = serde_json::from_str(
-        answered["content"][0]["text"]
-            .as_str()
-            .expect("a tool result carries text"),
-    )
-    .expect("the answer is JSON");
-    assert_eq!(said["issue"]["state"], "open", "{said}");
-    assert_eq!(said["workflow"]["state"], "In Progress", "{said}");
-}
-
-#[test]
 fn review_tier_is_not_refused_for_having_no_tracking_transport() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = linear_context(&root, crate::config::Workflow::Assisted);
@@ -5879,14 +5947,17 @@ fn a_read_that_needs_the_tracker_says_which_tools_this_one_admits_and_not_a_sett
     let said = refusal.to_string();
     assert!(!said.contains("Workflow: assisted"), "{said}");
     assert!(!said.contains("Workflow assisted"), "{said}");
-    assert!(said.contains("where") && said.contains("assist"), "{said}");
+    assert!(
+        said.contains("review_tier") && said.contains("assist"),
+        "{said}"
+    );
 }
 
 #[test]
 fn linear_under_autonomous_is_still_refused_and_names_the_setting() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = linear_context(&root, crate::config::Workflow::Autonomous);
-    for name in ["verify_claim", "where", "review_tier"] {
+    for name in ["verify_claim", "review_tier"] {
         let tool = tools::find(name).expect("a listed tool");
         let outcome = run_tool(
             name,
@@ -6856,7 +6927,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 65_787;
+const TOOLS_LIST_CEILING: usize = 61_940;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7860,72 +7931,6 @@ mod send_message {
             assert!(matches!(failure, ToolFailure::Malformed(_)), "{failure}");
         }
         assert_eq!(rig.rows_to(RECIPIENT), 0);
-    }
-
-    #[test]
-    fn the_feed_tool_answers_the_rows_the_cli_does() {
-        let rig = Rig::new();
-        rig.hold(12, SENDER);
-        let root = rig.context().state_root;
-        rusqlite::Connection::open(store::beside(&root))
-            .expect("the store opens")
-            .execute_batch(&format!(
-                "INSERT INTO transitions (repo_id, issue, at, run_id, from_state, to_state)
-                 SELECT id, 12, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), '{SENDER}',
-                        'in-progress', 'review'
-                 FROM repos WHERE owner = 'asanabrial' AND name = 'estigia';"
-            ))
-            .expect("a transition seeds");
-        let arguments = json!({"kind": "transition", "issue": 12});
-
-        let tool = answered(run_tool("feed", &arguments, Ok(&rig.context())).expect("a page"));
-        let cli = crate::cli::feed::page(&arguments, &root, crate::harness::session::now_seconds())
-            .expect("a page");
-
-        assert_eq!(tool["events"].as_array().map(Vec::len), Some(1), "{tool}");
-        assert_eq!(tool["events"], cli["events"]);
-        assert_eq!(tool["events"][0]["to"], "review", "{tool}");
-        assert_eq!(tool["cannot_see"], cli["cannot_see"]);
-    }
-
-    #[test]
-    fn the_where_tool_answers_a_number_from_the_repository_the_store_holds_it_in() {
-        let rig = Rig::new();
-        rig.hold(12, SENDER);
-
-        let tool = answered(
-            run_tool("where", &json!({"reference": "12"}), Ok(&rig.context())).expect("an answer"),
-        );
-
-        assert_eq!(tool["scope"]["repo"], "asanabrial/estigia", "{tool}");
-        assert_eq!(tool["scope"]["basis"], "candidate", "{tool}");
-        assert!(tool["issue"]["unavailable"].is_string() || tool["issue"]["state"].is_string());
-    }
-
-    #[test]
-    fn the_where_tool_is_read_only_and_unbound_to_a_claim() {
-        let tool = TOOLS
-            .iter()
-            .find(|tool| tool.name == "where")
-            .expect("declared");
-
-        assert!(!tool.writes);
-        assert!(matches!(tool.effect, tools::PointerEffect::None));
-        assert!(tools::is_local_store("where"));
-    }
-
-    #[test]
-    fn the_feed_tool_refuses_a_repository_the_store_does_not_hold() {
-        let rig = Rig::new();
-        let refused = run_tool(
-            "feed",
-            &json!({"repository": "nobody/nothing"}),
-            Ok(&rig.context()),
-        );
-        let Err(super::ToolFailure::Refused(refusal)) = refused else {
-            panic!("an unknown repository was answered: {refused:?}");
-        };
-        assert_eq!(refusal.code, "feed-repo-unknown", "{refusal:?}");
     }
 
     #[test]
@@ -10019,31 +10024,6 @@ fn a_held_release_spend_without_its_receipt_is_not_refused_for_the_receipt() {
         Err(other) => format!("{other:?}"),
     };
     assert!(!text.contains("--spend has no"), "{text}");
-}
-
-#[test]
-fn the_status_tool_records_a_self_reported_line_without_a_claim_or_a_tracker() {
-    let root = tempfile::tempdir().expect("a temporary root");
-    let repo_dir = root.path().join("repo");
-    std::fs::create_dir_all(&repo_dir).expect("a checkout");
-    let context = bare_context(&root, &repo_dir);
-
-    let answered = run_tool(
-        "status",
-        &json!({"run_id": "claude-abcd1234", "text": "reading\nthe gate", "phase": "verifying"}),
-        Ok(&context),
-    )
-    .expect("the status records");
-
-    let text = answered["content"][0]["text"].as_str().expect("text");
-    let answer: Value = serde_json::from_str(text).expect("json");
-    assert_eq!(answer["status"], "reading the gate", "{answer}");
-    assert_eq!(answer["phase"], "verifying", "{answer}");
-    assert_eq!(answer["self_reported"], true, "{answer}");
-    assert!(
-        tools::is_local_store("status") && !tools::writes_the_tracker("status"),
-        "status must be a local-store tool that never writes the tracker"
-    );
 }
 
 #[test]

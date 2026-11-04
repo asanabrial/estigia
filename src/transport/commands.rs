@@ -63,7 +63,6 @@ pub const SCRIPTED: &[&str] = &[
     "run-checks",
     "unassign",
     "changelog-notes",
-    "check-closing-keywords",
     // Read-only, and performed here all the same: both have rows in the GitHub
     // binding's operations table.
     "expected-target",
@@ -2220,73 +2219,6 @@ pub(super) fn assess_autoclose(
         "other_issue_keywords": elsewhere,
         "linked_prs": refs,
     }))
-}
-
-/// `check-closing-keywords` — run again before merging.
-///
-/// Auto-close bypasses `transition`: no state move, no mirror, labels frozen
-/// wherever they were. Reading one's own prose is how a keyword slips through,
-/// so this checks it mechanically — and the branch's commit messages can
-/// introduce one after the body is already clean, which is why it is run twice.
-///
-/// A **keyword** is a hard stop, because the text is the author's to fix. A
-/// **branch link** is not, because it is what the recommended linking command
-/// does — and a gate that always fires is a gate that gets ignored. It is
-/// reported with the follow-up it mandates instead.
-pub fn check_closing_keywords(
-    context: &Context,
-    issue: u64,
-    base: Option<&str>,
-    branch: Option<&str>,
-) -> Result<serde_json::Value, Failure> {
-    let verdict = assess_autoclose(context, issue, base, branch)?;
-    let cause = verdict.get("cause").and_then(serde_json::Value::as_str);
-
-    if cause == Some("closing-keyword") {
-        let action = [
-            "remove the keyword — use `Refs #<n>` — then re-run; the value can lag",
-            "a few seconds",
-        ]
-        .join(" ");
-        let mut payload = serde_json::json!({ "ok": false, "reason": "closing-keyword-live" });
-        merge_into(&mut payload, &verdict);
-        payload["action"] = serde_json::json!(action);
-        return Err(Failure::Stop(payload));
-    }
-
-    let elsewhere = verdict
-        .get("other_issue_keywords")
-        .and_then(serde_json::Value::as_array)
-        .is_some_and(|keywords| !keywords.is_empty());
-    if elsewhere {
-        let action = [
-            "remove the keyword — use `Refs #<n>` — then re-run; it would auto-close another",
-            "issue on merge and skip that issue's transition and mirror",
-        ]
-        .join(" ");
-        let mut payload = serde_json::json!({
-            "ok": false,
-            "reason": "closing-keyword-live",
-            "cause": "closing-keyword-elsewhere",
-        });
-        merge_into(&mut payload, &verdict);
-        payload["cause"] = serde_json::json!("closing-keyword-elsewhere");
-        payload["action"] = serde_json::json!(action);
-        return Err(Failure::Stop(payload));
-    }
-
-    let mut result = serde_json::json!({ "ok": true, "issue": issue });
-    merge_into(&mut result, &verdict);
-    if cause == Some("branch-link") {
-        let warning = [
-            "this issue WILL auto-close on merge because `gh issue develop` linked the branch,",
-            "not because of any keyword — no edit removes it",
-        ]
-        .join(" ");
-        result["warning"] = serde_json::json!(warning);
-        result["mandatory_follow_up"] = serde_json::json!(super::closing::FOLLOW_UP);
-    }
-    Ok(result)
 }
 
 /// Copies one object's keys onto another, the way the Python's `**verdict` does.

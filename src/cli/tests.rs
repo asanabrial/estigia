@@ -1035,6 +1035,9 @@ fn inventory() -> Vec<Refusal> {
     for (name, reason) in crate::harness::mcp::NOT_EXPOSED {
         refusals.push(crate::harness::mcp::operation_has_no_tool(name, reason));
     }
+    for (name, replacement) in crate::harness::mcp::tools::RETIRED {
+        refusals.push(crate::harness::mcp::tool_retired(name, replacement));
+    }
 
     for code in [
         "workflow-not-assisted",

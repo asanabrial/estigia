@@ -964,12 +964,6 @@ fn run_operation(
             f.on("include-heading"),
             f.path("out"),
         ),
-        "check-closing-keywords" => super::commands::check_closing_keywords(
-            context,
-            issue()?,
-            f.get("base"),
-            f.get("branch"),
-        ),
         "review-tier" => {
             if f.get("parent-head").is_none() && f.get("clearing-finding").is_some() {
                 return Err(flag_without_its_mode(

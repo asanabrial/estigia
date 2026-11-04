@@ -140,7 +140,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | Operation | Command |
 |---|---|
 | `ensure_states` | `SCRIPT ensure-states` |
-| `flush` | `SCRIPT flush` |
+| `flush` | `estigia flush`, a command and no tool; `--status` lists the queue |
 | `create` | `SCRIPT create` |
 | `list_state` | `SCRIPT list-state` |
 | `claim` | `SCRIPT claim` — see *Claim* in github/operations.md |
@@ -171,7 +171,6 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `deliver` | the `deliver` tool, which calls the operations above and the merge gate rather than one `SCRIPT` operation — see *Delivering in one call* in github/operations.md |
 | `run_checks` | `SCRIPT run-checks` — see *Running declared checks* in github/operations.md |
 | `review_tier` | `SCRIPT review-tier` — see *Deriving the review tier* in github/operations.md |
-| `check closing keywords` | `SCRIPT check-closing-keywords` |
 | `unassign` | `SCRIPT unassign` — see *Releasing an issue* in github/operations.md |
 | assisted checkout | `SCRIPT assist` |
 | pull request review claim | `SCRIPT pr-review-claim` |
@@ -236,8 +235,8 @@ which is not a label event: it moves no `status:*` label. The auto-close is the 
 bookkeeping, never the workflow's `close`, and the state machine does not know it happened. Run the transition afterwards and the end state is correct; skip it because
 "the issue is already closed" and the issue stays CLOSED wearing its old `status:*` label.
 
-`check-closing-keywords` reports the cause, not just the symptom: a keyword is a hard stop (exit
-`1`), a branch link is reported with the follow-up it mandates and does not block. `publish-review`'s
+`publish-review` reports the cause, not just the symptom: a keyword is a hard stop, a branch link
+is recorded with the follow-up it mandates and does not block. `publish-review`'s
 own answer no longer carries that follow-up — it stays on the `published` marker and in
 `review_read` with `view: transaction`.
 

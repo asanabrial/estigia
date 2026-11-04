@@ -367,6 +367,9 @@ fn call(
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| "tools/call needs a name".to_owned())?;
+    if let Some(replacement) = tools::retired(name) {
+        return Ok(refusal_result(&tool_retired(name, replacement)));
+    }
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
     match run_tool_asking(name, &arguments, context, consent) {
         Ok(result) => Ok(result),
@@ -548,32 +551,6 @@ fn read_only_tracker_refusal(name: &str, context: &GateContext) -> Refusal {
     )
 }
 
-fn status_tool(
-    arguments: &Value,
-    context: &GateContext,
-    named: Option<&NamedRun<'_>>,
-) -> Result<Value, ToolFailure> {
-    let run = named.ok_or_else(|| {
-        ToolFailure::Malformed("`run_id` is this run's id; status needs it".to_owned())
-    })?;
-    let text = arguments
-        .get("text")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ToolFailure::Malformed("`text` is a string; status needs it".to_owned()))?;
-    let phase = match arguments.get("phase") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(phase)) => Some(phase.as_str()),
-        Some(_) => {
-            return Err(ToolFailure::Malformed(
-                "`phase` is one of the listed phase words".to_owned(),
-            ));
-        }
-    };
-    crate::harness::status::set(&context.state_root, run.id, text, phase)
-        .map(|answer| messaging::text_result(answer.to_string()))
-        .map_err(|refusal| ToolFailure::Refused(Box::new(refusal)))
-}
-
 /// The run a tool call names, read from the argument rather than from the
 /// flag it renders to.
 struct NamedRun<'a> {
@@ -753,6 +730,18 @@ pub fn operation_has_no_tool(name: &str, reason: &str) -> Refusal {
             crate::outcome::NoCommandReason::OperatorKnowledge,
             "the operation itself, performed by hand from the contract section named above \
              rather than through this server",
+        ),
+    )
+}
+
+/// The refusal a name taken off the menu answers with on `tools/call`.
+pub fn tool_retired(name: &str, replacement: &str) -> Refusal {
+    Refusal::not_started(
+        "tool-retired",
+        format!("`{name}` is no longer a tool: {replacement}"),
+        Resolution::no_command(
+            crate::outcome::NoCommandReason::OperatorKnowledge,
+            "what the sentence above names, instead of this tool",
         ),
     )
 }
@@ -1020,9 +1009,6 @@ fn run_tool_asking(
         "wait" => return messaging::wait(arguments, context, named.as_ref(), consent),
         "inbox" => return messaging::inbox(arguments, context, named.as_ref()),
         "list_sessions" => return messaging::list_sessions(arguments, context),
-        "feed" => return messaging::feed(arguments, context),
-        "where" => return messaging::standing(arguments, context),
-        "status" => return status_tool(arguments, context, named.as_ref()),
         "deliver" => return deliver::deliver(arguments, context, named.as_ref()),
         _ => {}
     }
