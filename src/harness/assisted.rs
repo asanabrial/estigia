@@ -5,12 +5,12 @@
 //! ownership marker inside the run's worktree and the branch it has checked
 //! out. `docs/honesty.md` says what that cannot tell.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config::Workflow;
 use crate::outcome::{Established, NoCommandReason, Observed, Refusal, Resolution};
 
-use super::session::Run;
+use super::session::{self, Run};
 use super::{Action, Aside, Decision, GateContext, Sensitivity, names_no_write_path};
 
 enum Landing {
@@ -162,6 +162,150 @@ fn remote_write(action: &Action, observed: &Observed) -> Option<String> {
     }
 }
 
+/// The one of a session's several claims a call lands in.
+pub(super) struct Landed {
+    pub(super) run: Run,
+    /// Where a `git -C` runs, which the call's context has to say instead of
+    /// the session's directory.
+    pub(super) runs_in: Option<PathBuf>,
+}
+
+/// The child of `parent` this call lands in: a write tool by its absolute
+/// target, a shell call by the one `git -C` it is or else by its directory, and
+/// a shell call that moves directory any other way by nothing. Zero or several
+/// matches are `None`, which leaves the call to the parent's policy.
+pub(super) fn landed_child(
+    state_root: &Path,
+    parent: &str,
+    repo_dir: &Path,
+    action: &Action,
+    literal: Option<&str>,
+) -> Option<Landed> {
+    if matches!(action, Action::Untouched) {
+        return None;
+    }
+    let (landing, runs_in) = match literal {
+        Some(literal) => match single_git_directory(literal) {
+            Some(directory) => {
+                let placed = crate::paths::placed(&repo_dir.join(directory))?;
+                (placed.clone(), Some(placed))
+            }
+            None if super::changes_directory(literal) => return None,
+            None => (repo_dir.to_path_buf(), None),
+        },
+        None => match action {
+            Action::Write { target } if Path::new(target).is_absolute() => {
+                (crate::paths::placed(Path::new(target))?, None)
+            }
+            _ => (repo_dir.to_path_buf(), None),
+        },
+    };
+    let mut covering = session::children(state_root, parent)
+        .into_iter()
+        .filter(|child| {
+            child
+                .worktree
+                .as_deref()
+                .is_some_and(|worktree| crate::paths::covers(worktree, &landing))
+        });
+    let run = covering.next()?;
+    covering.next().is_none().then_some(Landed { run, runs_in })
+}
+
+/// The directory of a call that is exactly one `git -C <plain path> <subcommand>`.
+fn single_git_directory(literal: &str) -> Option<String> {
+    let words = simple_command_words(literal)?;
+    let [git, dash_c, directory, subcommand, rest @ ..] = words.as_slice() else {
+        return None;
+    };
+    if git != "git"
+        || dash_c != "-C"
+        || subcommand.starts_with('-')
+        || rest.iter().any(|word| super::names_another_directory(word))
+    {
+        return None;
+    }
+    super::plain_directory(directory)
+}
+
+// The words of a line that can only be one simple command: nothing outside
+// quotes that separates, redirects, substitutes or escapes, and nothing inside
+// double quotes that substitutes.
+fn simple_command_words(line: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    let mut word: Option<String> = None;
+    let mut quote = None;
+    for character in line.trim().chars() {
+        match (quote, character) {
+            (Some('"'), '$' | '`' | '\\') => return None,
+            (Some(open), _) if open == character => quote = None,
+            (Some(_), _) => word.get_or_insert_default().push(character),
+            (None, '\'' | '"') => {
+                quote = Some(character);
+                word.get_or_insert_default();
+            }
+            (None, ' ' | '\t') => words.extend(word.take()),
+            (None, _) if "\n\r;&|<>()$`\\#".contains(character) => return None,
+            (None, _) => word.get_or_insert_default().push(character),
+        }
+    }
+    if quote.is_some() {
+        return None;
+    }
+    words.extend(word);
+    Some(words)
+}
+
+// A merge here moves the claimed branch and nothing else: the base into the
+// worktree that has it checked out, or the end of a merge already started.
+fn merges_the_base(
+    run: &Run,
+    action: &Action,
+    observed: &Observed,
+    repo_dir: &Path,
+    worktree: &Path,
+) -> bool {
+    let Action::Boundary {
+        command,
+        is_exact_integration_merge: true,
+        runs_in,
+        ..
+    } = action
+    else {
+        return false;
+    };
+    let in_the_worktree = match runs_in {
+        super::RunsIn::Session => true,
+        super::RunsIn::Named(directory) => crate::paths::placed(&repo_dir.join(directory))
+            .is_some_and(|placed| crate::paths::covers(worktree, &placed)),
+        super::RunsIn::Unestablished => false,
+    };
+    let (Some(base), Some(command_line)) = (
+        run.base.as_deref(),
+        observed.command.as_ref().map(|seen| &seen.literal),
+    ) else {
+        return false;
+    };
+    let Established::Known(literal) = command_line else {
+        return false;
+    };
+    if command != "git merge" || !in_the_worktree {
+        return false;
+    }
+    let (flags, targets): (Vec<&str>, Vec<&str>) = literal
+        .split_ascii_whitespace()
+        .skip_while(|word| *word != "merge")
+        .skip(1)
+        .partition(|word| word.starts_with('-'));
+    match targets.as_slice() {
+        [] => flags
+            .iter()
+            .any(|flag| matches!(*flag, "--continue" | "--abort")),
+        [target] => *target == base || target.strip_prefix("origin/") == Some(base),
+        _ => false,
+    }
+}
+
 pub(super) fn decision(
     context: &GateContext,
     run: &mut Run,
@@ -307,11 +451,16 @@ pub(super) fn decision(
                 way_out("the typed `review_thread` tool for review replies and resolutions"),
             ));
         }
-        if super::is_delivery(action) {
+        if super::is_delivery(action)
+            && !merges_the_base(run, action, observed, &context.repo_dir, &worktree)
+        {
             return deny(Refusal::not_started(
                 "assisted-does-not-deliver",
                 format!("`{command}` delivers, and an assisted run delivers nothing"),
-                way_out("a person landing the work, outside this run"),
+                way_out(
+                    "a person landing the work, outside this run; a merge of this branch's own \
+                     base, spelled as one bare `git merge`, is the one merge admitted here",
+                ),
             ));
         }
         if command == "gh pr create" {

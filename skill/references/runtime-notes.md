@@ -38,6 +38,11 @@ it — says the same. The assisted row in [decision gates](decision-gates.md) ow
 path (`assist`, work in its worktree, `draft_pr`, report the URL, stop); it needs no claim and no
 heartbeat, so the team-mechanics, identity and renewal sections below do not apply to it.
 
+A plainly launched Claude Code subagent reports its parent's session id and the primary checkout as
+its directory, whatever its commands `cd` into, so under several assisted claims it reaches its
+worktree by a write tool's absolute path or one bare `git -C <worktree> …`; a `cwd` on the launch is
+ignored. Subagents share the parent's MCP server, so keep `review_stages` waits short.
+
 How far that path goes is the repository's *Delivery* rows. Where `Self review` is `on`, the run
 reviews its own change in a context that did not write it before the pull request is marked ready;
 `draft_pr` never opens it. Where `Ready by` is `agent`, the run then marks its draft ready with

@@ -126,6 +126,15 @@ pub struct Run {
     /// checked out.
     #[serde(default)]
     pub branch: Option<String>,
+    /// The base an assisted run's branch was started from: the one ref its
+    /// worktree may merge in.
+    #[serde(default)]
+    pub base: Option<String>,
+    /// The session run this assisted claim is one of several for. A child is an
+    /// ordinary single-claim pointer; the hook reaches it through
+    /// [`children`] by where a call lands.
+    #[serde(default)]
+    pub parent: Option<String>,
 }
 
 impl Run {
@@ -149,6 +158,8 @@ impl Run {
             reviewed_head: None,
             assisted: false,
             branch: None,
+            base: None,
+            parent: None,
         }
     }
 
@@ -471,6 +482,11 @@ pub fn load(root: &Path, run_id: &str) -> Run {
 
 /// Writes this run's pointer.
 pub fn store(root: &Path, run: &Run) -> Result<bool, Refusal> {
+    let _held = pointers_locked(root);
+    store_locked(root, run)
+}
+
+fn store_locked(root: &Path, run: &Run) -> Result<bool, Refusal> {
     let path = pointer_path(root, &run.run_id);
     // Not written in place: `fs::write` truncates first, so a reader arriving
     // mid-write would see a partial file, which `load` answers with an
@@ -523,10 +539,42 @@ pub fn store(root: &Path, run: &Run) -> Result<bool, Refusal> {
 
 /// How many times a change is re-applied against a pointer that moved.
 ///
-/// Two, because the writers are a hook and a tool rather than a crowd: losing
-/// twice in a row means something is storing continuously, and a third read
-/// would be as likely to lose as the second.
+/// Holding the lock, the first attempt wins. The second is for a lock that could
+/// not be had in [`POINTERS_LOCK_WAIT`], where the revision check is all there is.
 const UPDATE_ATTEMPTS: usize = 2;
+
+const POINTERS_LOCK: &str = "pointers.lock";
+
+/// Reading a pointer and writing it back takes a moment, so a longer wait means
+/// a stopped holder, and a gate call must not hang on one.
+const POINTERS_LOCK_WAIT: Duration = Duration::from_secs(2);
+
+/// The one file every pointer write locks.
+pub fn pointers_lock_path(root: &Path) -> PathBuf {
+    root.join(POINTERS_LOCK)
+}
+
+// One file for every pointer: it is never removed, so no two writers can hold
+// different locks under one name. Dropping the handle unlocks it.
+fn pointers_locked(root: &Path) -> Option<fs::File> {
+    fs::create_dir_all(root).ok()?;
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(pointers_lock_path(root))
+        .ok()?;
+    let started = std::time::Instant::now();
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Some(file),
+            Err(fs::TryLockError::WouldBlock) if started.elapsed() < POINTERS_LOCK_WAIT => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(_) => return None,
+        }
+    }
+}
 
 /// Applies a change to this run's pointer, against the newest one on disk.
 ///
@@ -542,6 +590,7 @@ pub fn update(root: &Path, run_id: &str, change: impl FnMut(&mut Run)) -> Run {
 /// write that failed must be distinguishable from one that landed, because the
 /// tracker write did happen and an unknown result is not clearance.
 pub fn updated(root: &Path, run_id: &str, mut change: impl FnMut(&mut Run)) -> (Run, bool) {
+    let _held = pointers_locked(root);
     let mut run = load(root, run_id);
     for _ in 0..UPDATE_ATTEMPTS {
         // An unreadable pointer is not a fresh one, and writing over it would
@@ -550,7 +599,7 @@ pub fn updated(root: &Path, run_id: &str, mut change: impl FnMut(&mut Run)) -> (
             return (run, false);
         }
         change(&mut run);
-        match store(root, &run) {
+        match store_locked(root, &run) {
             Ok(true) => return (run, true),
             Err(_) => return (run, false),
             Ok(false) => run = load(root, run_id),
@@ -563,6 +612,7 @@ pub fn updated(root: &Path, run_id: &str, mut change: impl FnMut(&mut Run)) -> (
 
 /// Forgets this run's pointer. The claim on the tracker is untouched.
 pub fn forget(root: &Path, run_id: &str) {
+    let _held = pointers_locked(root);
     let _ = fs::remove_file(pointer_path(root, run_id));
 }
 
@@ -991,6 +1041,21 @@ fn pointer_at(path: &Path) -> Option<Run> {
     (path.file_stem()?.to_str()? == run.run_id).then_some(run)
 }
 
+/// The id of one of `parent`'s several assisted claims, stable across a retry.
+pub fn child_run_id(parent: &str, issue: &crate::identity::Identity, branch: &str) -> String {
+    run_id(runtime_of(parent), &format!("{parent}:{issue}:{branch}"))
+}
+
+/// The assisted claims `parent` holds through child pointers. A pointer that
+/// cannot be read is nobody's child, so a call that would land in it stays on
+/// the parent's policy.
+pub fn children(root: &Path, parent: &str) -> Vec<Run> {
+    holdings(root)
+        .into_iter()
+        .filter(|run| run.parent.as_deref() == Some(parent))
+        .collect()
+}
+
 /// A span of seconds, in the largest unit that still says something. Under
 /// three quarters of a minute is `just now` rather than `0 min ago`.
 pub fn age(seconds: u64) -> String {
@@ -1059,6 +1124,49 @@ impl Silence {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_writers_do_not_lose_a_pointer_update() {
+        const WRITERS: usize = 16;
+        let root = tempfile::tempdir().expect("a state root");
+        store(root.path(), &Run::new("claude-crowd".to_owned())).expect("the pointer writes");
+        let start = std::sync::Barrier::new(WRITERS);
+        let landed = std::thread::scope(|scope| {
+            let writers: Vec<_> = (0..WRITERS)
+                .map(|writer| {
+                    let (start, root) = (&start, root.path());
+                    scope.spawn(move || {
+                        start.wait();
+                        updated(root, "claude-crowd", |run| {
+                            run.roles.insert(format!("role-{writer:02}"));
+                        })
+                        .1
+                    })
+                })
+                .collect();
+            writers
+                .into_iter()
+                .map(|writer| writer.join().expect("the writer finishes"))
+                .collect::<Vec<bool>>()
+        });
+        assert!(landed.iter().all(|landed| *landed), "{landed:?}");
+        let roles = load(root.path(), "claude-crowd").roles;
+        assert_eq!(roles.len(), WRITERS, "{roles:?}");
+    }
+
+    #[test]
+    fn a_child_run_id_is_stable_minted_and_distinct_per_issue_and_branch() {
+        use crate::identity::Identity::Number;
+        let first = child_run_id("claude-abcd1234", &Number(1), "a");
+        assert_eq!(first, child_run_id("claude-abcd1234", &Number(1), "a"));
+        assert_ne!(first, child_run_id("claude-abcd1234", &Number(2), "a"));
+        assert_ne!(first, child_run_id("claude-abcd1234", &Number(1), "b"));
+        assert_ne!(first, child_run_id("claude-ffff0000", &Number(1), "a"));
+        assert!(matches!(
+            run_id_shape(&first),
+            RunIdShape::Named { runtime: "claude" }
+        ));
+    }
 
     #[test]
     fn a_pointer_written_under_the_old_receipt_key_still_loads_and_is_rewritten_under_the_new() {
@@ -1995,6 +2103,7 @@ mod tests {
             .flatten()
             .map(|entry| entry.file_name())
             .filter(|name| name.to_string_lossy() != "claude-racing00.json")
+            .filter(|name| name.to_string_lossy() != POINTERS_LOCK)
             .collect();
         assert!(stray.is_empty(), "left behind: {stray:?}");
     }

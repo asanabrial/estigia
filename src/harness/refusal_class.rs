@@ -469,6 +469,7 @@ const REFUSED: &[&str] = &[
     "setting-shadowed-by-local-file",
     "setting-unknown",
     "setup-prevalidation-failed",
+    "several-claims-not-on-this-host",
     "several-irreversible-fragments-on-one-line",
     "several-runs-hold-this-checkout",
     "resume-liveness-unknown",

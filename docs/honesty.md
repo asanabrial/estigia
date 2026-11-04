@@ -3210,6 +3210,30 @@ pointer that leaves it names the document it points at.
     stopped for a routine write (`issue_requirement` reads the worktree as claimed, whichever session writes
     there; a `git push` from it is held by `Unclaimed write policy` wherever it runs), and an unclaimed shell
     write to the repository's own `estigia.local.md` can set `assisted`.
+  - **One session can hold several assisted claims, one child run per worktree**
+    ([`several-assisted-claims.md`](several-assisted-claims.md)). Measured on Claude Code 2.1.318 from the raw
+    `PreToolUse` payload of real subagents, in a throwaway repository with a logging hook: a subagent's
+    `session_id` is its parent's; it adds `agent_id`, distinct per subagent, and `agent_type`, its role; and
+    `cwd` is the session's directory on every call, including the call after one whose command did `cd`. Only
+    `isolation: "worktree"` changes it, to a fresh worktree under `.claude/worktrees/`. A `cwd` argument on the
+    launch is accepted and ignored: the subagent's `pwd` printed the primary checkout. Parent and subagent
+    calls reached one MCP server process, by its pid. So a shell call by a plainly launched subagent can only
+    be placed by its own text, which is why one `git -C` is read. What this does not hold:
+    - **A worker for A editing B by absolute path is decided under B.** The landing is attributed correctly, and
+      the gate cannot see that the wrong worker wrote it. `agent_id` would tell the workers apart, and nothing
+      ties it to a claim.
+    - **A shell call physically inside one child's worktree is decided under that child** unless its line moves
+      directory by a word the gate reads. `sed -i ../B/x` from inside A still lands in B under A's claim; a
+      session in A always had this hole, and under fan-out it is a wrong-issue write.
+    - **`git -C A <subcommand>` is judged under A and not read further**, so a subcommand that writes outside A
+      by its own arguments is attributed to A.
+    - **A child's pointer that cannot be read is nobody's child**, so a call landing there falls to the session's
+      `Unclaimed write policy`. Under `off` that admits it.
+    - **`git pull` is admitted inside a worktree whatever it names**, while `git merge` is admitted only for the
+      run's base. The narrower reading is the second; nothing here proves what a pull brought in.
+    - **The pointer lock is bounded**: a writer that cannot have it within two seconds falls back to the revision
+      check, which can lose an update to another writer in that same moment
+      (`concurrent_writers_do_not_lose_a_pointer_update` measures sixteen writers holding it).
   - **`assist` adopts an existing branch only through linkage the tracker records.** A branch origin already
     has is taken only when it heads exactly one open pull request that the host links to the issue: for a
     number, a closing reference on the pull request (`closingIssuesReferences`) or the branch in the issue's

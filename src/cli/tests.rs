@@ -295,6 +295,15 @@ fn inventory() -> Vec<Refusal> {
                  `Tracker linear`",
             ),
         ),
+        Refusal::not_started(
+            "several-claims-not-on-this-host",
+            "`assist` with `several` was asked for by a run on a host whose hook cannot reach \
+             several claims",
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "`assist` without `several`, or one session per issue",
+            ),
+        ),
         nothing_configured(&[]),
         crate::config::Config::read_folding_retired_workers(
             "| Setting | Value here | Skill default |\n|---|---|---|\n\
