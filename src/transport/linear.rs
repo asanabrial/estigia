@@ -83,6 +83,8 @@ pub struct Standing {
     pub url: String,
     /// The workflow state's name, as the team spells it.
     pub state: String,
+    /// The state's type, which a team's own state names map onto; empty when none was read.
+    pub state_type: String,
     /// Whether the state's type is `completed` or `canceled`.
     pub closed: bool,
 }
@@ -111,15 +113,12 @@ pub fn read_standing(identity: &Identity) -> Result<Standing, Failure> {
             .to_owned()
     };
     let state = issue.get("state");
+    let state_type = text(state.and_then(|state| state.get("type")));
     Ok(Standing {
         url: text(issue.get("url")),
         state: text(state.and_then(|state| state.get("name"))),
-        closed: matches!(
-            state
-                .and_then(|state| state.get("type"))
-                .and_then(serde_json::Value::as_str),
-            Some("completed" | "canceled")
-        ),
+        closed: matches!(state_type.as_str(), "completed" | "canceled"),
+        state_type,
     })
 }
 
@@ -338,17 +337,60 @@ pub fn follow_state(
     answer
 }
 
-/// [`follow_state`] for an `assist` answer: the started state, on a first call
-/// only. A resume must not move an issue back from wherever it has reached.
+/// [`follow_state`] for an `assist` answer: the started state on a first call, and on a resume
+/// only while Linear reads the issue's state type as before started. A resume that moves nothing
+/// names the state it read, or says the read failed, under `linear_state`.
 pub fn follow_started(
     names: &[(String, String)],
     identity: &Identity,
-    answer: serde_json::Value,
+    mut answer: serde_json::Value,
 ) -> serde_json::Value {
-    if answer["resumed_existing_worktree"] == true {
+    if answer["resumed_existing_worktree"] != true {
+        return follow_state(names, Some(identity), STARTED, answer);
+    }
+    let mapped = names.iter().any(|(state, _)| state == STARTED);
+    if !mapped || !matches!(identity, Identity::Key(_)) {
         return answer;
     }
-    follow_state(names, Some(identity), STARTED, answer)
+    let unmoved = match read_standing(identity).and_then(|standing| {
+        if standing.state_type.is_empty() {
+            Err(Failure::Read(format!(
+                "{identity} read back with no state type"
+            )))
+        } else {
+            Ok(standing)
+        }
+    }) {
+        Ok(standing)
+            if matches!(
+                standing.state_type.as_str(),
+                "triage" | "backlog" | "unstarted"
+            ) =>
+        {
+            return follow_state(names, Some(identity), STARTED, answer);
+        }
+        Ok(standing) => serde_json::json!({
+            "ok": true,
+            "moved": false,
+            "state": standing.state,
+            "state_type": standing.state_type,
+        }),
+        Err(failure) => {
+            let mut envelope = failure.envelope();
+            envelope["moved"] = serde_json::Value::Bool(false);
+            envelope["read_failed"] = serde_json::Value::Bool(true);
+            envelope["action"] = serde_json::Value::String(
+                "the issue's state was not read, so it was left alone; read it in Linear before \
+                 saying where it stands"
+                    .to_owned(),
+            );
+            envelope
+        }
+    };
+    if let Some(object) = answer.as_object_mut() {
+        object.insert("linear_state".to_owned(), unmoved);
+    }
+    answer
 }
 
 /// Sends one operation through the CLI and answers Linear's JSON, or the stop

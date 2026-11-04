@@ -53,7 +53,10 @@ maps a state, as `in-progress=In Progress, review=In Review, done=Done` does, th
 once the pull request reads back ready, and `review_stages` to the `done` name when it reads the
 pull request merged. Each move reads the issue's state and its team's states
 (`query EstigiaStates`), sends one `mutation EstigiaMove` (`issueUpdate` with the state's id) and reads
-the state back. An issue already there is not moved again (`moved: false`).
+the state back. An issue already there is not moved again (`moved: false`). A resumed `assist` reads the
+state type (`query EstigiaStanding`) and moves only from `triage`, `backlog` or `unstarted`; otherwise
+`linear_state` names the `state` and `state_type` it read with `moved: false`, or carries
+`read_failed: true` when the read failed, and nothing moves.
 
 The move is reported under `linear_state` beside the tool's own answer, never folded into it: the
 checkout, the ready pull request or the merge happened whatever Linear answered. The answer's
