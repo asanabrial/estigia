@@ -2555,9 +2555,10 @@ fn retire_when(
 ///
 /// The common git directory is shared by every linked worktree, so its parent
 /// is the main working tree — outside the target whenever the target is a linked
-/// worktree, which is the only thing [`retire_checkout`] is ever handed. `None`
-/// when git cannot answer; the caller falls back to the claim's own `repo_dir`.
-fn retirement_cwd(target: &std::path::Path) -> Option<std::path::PathBuf> {
+/// worktree, and equal to it when the target is the main one. `None` when git
+/// cannot answer; [`retire_checkout`] falls back to the claim's own `repo_dir`
+/// and the sweep fails its read rather than guessing.
+pub(crate) fn retirement_cwd(target: &std::path::Path) -> Option<std::path::PathBuf> {
     let output = run(
         &["git", "rev-parse", "--git-common-dir"],
         Some(target),

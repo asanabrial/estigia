@@ -231,11 +231,20 @@ fn observe_worktrees(
     states: &mut BTreeMap<u64, Option<bool>>,
 ) -> Result<Vec<Observed>, Failure> {
     let registered = branch::registered_worktrees(view.context)?;
-    let main = branch::normalise_path(&view.context.repo_dir);
+    let main = branch::retirement_cwd(&view.context.repo_dir)
+        .map(|main| branch::normalise_path(&main))
+        .ok_or_else(|| {
+            Failure::Read(
+                "`git rev-parse --git-common-dir` answered nothing, so the sweep cannot tell the \
+                 main checkout from a linked one"
+                    .to_owned(),
+            )
+        })?;
+    let here = branch::normalise_path(&view.context.repo_dir);
     let mut observed = Vec::new();
     let mut refreshed = None;
     for (key, entry) in &registered {
-        if *key == main {
+        if *key == main || *key == here {
             continue;
         }
         let branch = entry.branch.clone();
@@ -788,8 +797,8 @@ fn confirm_worktree_after(
 }
 
 /// Removes a checkout git registered but no branch owns — a judge's directory,
-/// which `retire_checkout` refuses because it is not on a branch. Run from the
-/// main checkout, never from inside the target.
+/// which `retire_checkout` refuses because it is not on a branch. Run outside
+/// the target, never from inside it.
 fn remove_detached_worktree(view: &View<'_>, path: &Path) -> serde_json::Value {
     let name = path.display().to_string();
     let removal = run(
