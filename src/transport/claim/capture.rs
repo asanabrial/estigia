@@ -556,16 +556,22 @@ pub(super) fn offered_role(status: &serde_json::Value, name: &str) -> Result<Rol
             "capture one of the inputs `review_status` offers".to_owned(),
         ));
     }
-    if name == REFUTATION_BATCH {
-        return Ok(Role::Refuter);
-    }
-    match Role::from_name(name) {
-        Some(role) if role.is_lens() || role == Role::Validator => Ok(role),
-        _ => Err(not_offered(
+    collectable_role(name).ok_or_else(|| {
+        not_offered(
             name,
             format!("`{name}` is offered, and it is not an input this tool launches"),
             "capture it with the tool `review_status` names for it".to_owned(),
-        )),
+        )
+    })
+}
+
+fn collectable_role(name: &str) -> Option<Role> {
+    if name == REFUTATION_BATCH {
+        return Some(Role::Refuter);
+    }
+    match Role::from_name(name) {
+        Some(role) if role.is_lens() || role == Role::Validator => Some(role),
+        _ => None,
     }
 }
 
@@ -597,6 +603,33 @@ fn receipt_of(status: &serde_json::Value) -> Result<ReviewTransaction, Failure> 
                 .to_owned(),
         ))
     }
+}
+
+/// The receipt the review stands on, read from the status answer's own binding rather than from
+/// what `next` offers: a step the checks hold carries no receipt, and the answer is still due.
+fn live_receipt(status: &serde_json::Value) -> Option<ReviewTransaction> {
+    let named = &status["receipt"];
+    let receipt = ReviewTransaction {
+        epoch: text(named, "epoch"),
+        pr: named["pr"].as_u64().unwrap_or_default(),
+        head: text(named, "head"),
+        base: text(named, "base"),
+        digest: text(named, "digest"),
+    };
+    receipt.is_complete().then_some(receipt)
+}
+
+/// The role a job's own name carries and the receipt the review still stands on, or `None` when
+/// the review has moved off the job's receipt or the name is not this tool's to collect.
+fn still_binds(
+    status: &serde_json::Value,
+    name: &str,
+    job: &Job,
+) -> Option<(Role, ReviewTransaction)> {
+    let role = collectable_role(name)?;
+    live_receipt(status)
+        .filter(|receipt| same_receipt(receipt, job))
+        .map(|receipt| (role, receipt))
 }
 
 fn lens_reads_delta(lineage: &PublicationLineage, receipt: &ReviewTransaction) -> bool {
@@ -986,9 +1019,10 @@ fn live_relay_job(run_id: &str, name: &str) -> Result<Job, Failure> {
 ///
 /// The same binding and staleness rules `collect_review_input` applies, with the
 /// answer handed over directly rather than read from a job's `result.json`: the
-/// job's receipt is held against the one `review_status` offers now, and an
-/// answer for a receipt the review has moved past is refused `capture-result-stale`
-/// with nothing recorded. A job already admitted answers again and writes nothing.
+/// answer is bound to the receipt the review stands on, so an answer for a receipt
+/// the review has moved past is refused `capture-result-stale` with nothing
+/// recorded, and one whose receipt is still that one is admitted whatever step
+/// `review_status` offers next. A job already admitted answers again and writes nothing.
 pub fn relay_admit(
     context: &Context,
     run_id: &str,
@@ -1041,9 +1075,7 @@ pub fn relay_admit(
         "running" | "admitting" => {}
         _ => return Err(job_missing(name)),
     }
-    let role = offered_role(&status, name);
-    let current = receipt_of(&status).ok().filter(|r| same_receipt(r, &job));
-    let (Ok(role), Some(receipt)) = (role, current) else {
+    let Some((role, receipt)) = still_binds(&status, name, &job) else {
         leave(&ledger, &job, &job.state, "stale")?;
         return Err(result_stale(&job));
     };
@@ -1127,10 +1159,11 @@ fn same_receipt(current: &ReviewTransaction, job: &Job) -> bool {
 
 /// Records the answer of the job a `launch_review_input` started, once it has one.
 ///
-/// Only the launching run collects. `review_status` is read again and must still be a `collect`
-/// offering `input.name` against the job's own receipt, or the job is marked `stale` and nothing is
-/// recorded. A job still running is refused `capture-running`; `input.wait_seconds` above zero
-/// waits that many seconds for it first, re-checking each second, and is capped at
+/// Only the launching run collects. `review_status` is read again and the answer is bound to the
+/// receipt the review stands on, never to the step it offers next: a job whose own receipt is still
+/// that one is recorded whatever `next` names, and one the review has moved past is marked `stale`
+/// with nothing recorded. A job still running is refused `capture-running`; `input.wait_seconds`
+/// above zero waits that many seconds for it first, re-checking each second, and is capped at
 /// `MAX_WAIT_SECONDS` and at the point the job would be abandoned (`deadline_at` plus its grace).
 /// One past its deadline and a
 /// minute's grace has its process group killed and is abandoned. A runner that died is
@@ -1174,9 +1207,7 @@ pub(super) fn collect_with(
         "running" | "admitting" => {}
         _ => return Err(job_missing(input.name)),
     }
-    let role = offered_role(&status, input.name);
-    let current = receipt_of(&status).ok().filter(|r| same_receipt(r, &job));
-    let (Ok(role), Some(receipt)) = (role, current) else {
+    let Some((role, receipt)) = still_binds(&status, input.name, &job) else {
         leave(&ledger, &job, &job.state, "stale")?;
         return Err(result_stale(&job));
     };

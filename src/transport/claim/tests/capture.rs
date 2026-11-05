@@ -9,11 +9,15 @@ use crate::reviewer::Recording;
 use crate::reviewer::job::{JobStatus, OnThread, Spawner, job_status};
 use crate::reviewer::result::{Criterion, Finding, Outcome, RoleResult, Validation};
 use crate::reviewer::{Adapter, Invocation, ReviewerCode};
+#[cfg(unix)]
+use crate::transport::claim::capture::jobs_dir;
 use crate::transport::claim::capture::{
     ANSWER_SCOPED, Batch, CaptureInput, Check, Lens, MAX_WAIT_SECONDS, REFUTATION_ANSWER_SCOPED,
     after_a_write, collect_with, launch_with, offered_role, patience_for, prepare_with,
     record_lens_answer, record_refuter_answer, record_validator_answer, take_slot,
 };
+#[cfg(unix)]
+use crate::transport::generated::checks::{commands_digest, declared_at};
 use crate::transport::store::NewJob;
 use crate::transport::store::{forget_scratch_store, store_path};
 
@@ -524,6 +528,94 @@ fn capturable_as(run_id: &'static str) -> World {
     world_of(|receipt, payload| vec![live_claim(run_id), published_with_payload(receipt, payload)])
 }
 
+#[cfg(unix)]
+const DECLARED_CHECK: &str = "[[check]]\nname = \"declared\"\ncommand = [\"true\"]\n\n";
+
+#[cfg(unix)]
+fn put(path: &std::path::Path, text: &str) {
+    crate::paths::replace_atomically(path, text).expect("a fixture file");
+}
+
+#[cfg(unix)]
+/// A world whose base declares a check, so `review_status` is held by the checks while one runs.
+fn declared_world() -> World {
+    let root = tempfile::tempdir().expect("a directory");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("the src directory");
+    git(&repo, &["init", "--quiet", "-b", "main"]);
+    git(&repo, &["config", "user.email", "estigia@example.invalid"]);
+    git(&repo, &["config", "user.name", "Estigia test"]);
+    git(
+        &repo,
+        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
+    );
+    put(&repo.join("src/foo.rs"), "fn main() {}\n");
+    put(&repo.join("estigia.generated.toml"), DECLARED_CHECK);
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "--quiet", "-m", "base"]);
+    let base = head_of(&repo);
+    put(&repo.join("src/foo.rs"), "fn main() { /* now */ }\n");
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "--quiet", "-m", "head"]);
+    let receipt = ReviewTransaction {
+        head: head_of(&repo),
+        base,
+        ..ledger_receipt()
+    };
+    let payload = crate::transport::target::review_payload(&repo, &receipt.base, &receipt.head)
+        .expect("the change has a payload");
+    let comments = vec![
+        live_claim("claude-a"),
+        published_with_payload(&receipt, &payload.digest),
+    ];
+    let context = Context {
+        repo: Some("fixture/repo".to_owned()),
+        ..context_at(&repo)
+    };
+    stored(&context, &comments);
+    World {
+        _root: root,
+        context,
+        receipt,
+        comments,
+    }
+}
+
+/// A check job holding its lock, which is how `review_status` reads the checks as running. The
+/// lock is the production one, so a status that stops noticing a running job fails here.
+#[cfg(unix)]
+fn running_check(world: &World) -> std::fs::File {
+    let checks = declared_at(&world.context.repo_dir, &world.receipt.base)
+        .expect("the base's declared checks");
+    let commands = commands_digest(&checks);
+    let dir = jobs_dir()
+        .expect("the jobs directory")
+        .join(super::super::checks::job_id(
+            42,
+            &world.receipt.digest,
+            &commands,
+        ));
+    crate::transport::check_job::write_job(
+        &dir,
+        &world.context.repo_dir,
+        &world.receipt.digest,
+        &commands,
+        &checks,
+    )
+    .expect("a check job manifest");
+    crate::reviewer::job::begin(&dir).expect("the check job's lock")
+}
+
+#[cfg(unix)]
+fn next_step(world: &World) -> serde_json::Value {
+    let bin = crate::test_env::scripted_gh();
+    let script = script_for(world, lane_read_answers());
+    let context = named(&world.context);
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        review_status(&context, 42).expect("a status")["next"].clone()
+    })
+}
+
 struct Stub {
     answer: Result<Vec<u8>, Refusal>,
     seen: Arc<Mutex<Vec<Invocation>>>,
@@ -950,6 +1042,64 @@ fn a_publication_whose_recorded_payload_is_not_the_one_rebuilt_is_refused_before
 
     assert_eq!(refused_as(&outcome), "reviewer-payload-mismatch");
     assert!(launched.is_empty());
+    nothing_was_written(&world);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_lens_launched_before_the_checks_is_collected_while_they_run() {
+    let world = declared_world();
+    let (launched, _) = launch(
+        &world,
+        RELIABILITY_LENS,
+        answer_of(&[answered_finding("a-valid-one", "src/foo.rs:1")]),
+    );
+    let launched = launched.unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    wait_until_done(&launched);
+    let _running = running_check(&world);
+    assert_eq!(next_step(&world)["reason_code"], "checks-running");
+
+    let outcome = collect(&world, RELIABILITY_LENS);
+
+    assert!(outcome.is_ok(), "{outcome:?}");
+    assert_eq!(job_state(&world, &launched), "admitted");
+    let (findings, reports) = on_the_timeline(&world);
+    assert_eq!(findings.len(), 1);
+    assert_eq!(reports, [RELIABILITY_LENS]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_lens_launched_on_a_receipt_the_review_moved_past_is_still_stale_while_the_checks_run() {
+    let world = declared_world();
+    let (launched, _) = launch(
+        &world,
+        RELIABILITY_LENS,
+        answer_of(&[answered_finding("a-valid-one", "src/foo.rs:1")]),
+    );
+    let launched = launched.unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    wait_until_done(&launched);
+    let _running = running_check(&world);
+    let receipt = ReviewTransaction {
+        epoch: op(77),
+        ..world.receipt.clone()
+    };
+    let payload = crate::transport::target::review_payload(
+        &world.context.repo_dir,
+        &receipt.base,
+        &receipt.head,
+    )
+    .expect("a payload");
+    open_ledger_result(&world)
+        .and_then(|ledger| {
+            ledger.append(&published_with_payload(&receipt, &payload.digest).body, NOW)
+        })
+        .expect("a newer publication lands while the reviewer runs");
+
+    let outcome = collect(&world, RELIABILITY_LENS);
+
+    assert_eq!(refused_as(&outcome), "capture-result-stale");
+    assert_eq!(job_state(&world, &launched), "stale");
     nothing_was_written(&world);
 }
 

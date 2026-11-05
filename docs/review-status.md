@@ -58,7 +58,10 @@ adds the transition to `review` and the launch of every slot that first status o
   only a read. `kind` stays `collect`. A job of another epoch, or one already admitted, abandoned or
   stale, holds nothing. A name `status` does not offer, or one that is none of a lens, `refutation-batch` and
 `review-validator`, is refused `capture-input-not-offered` by a launch before any
-reviewer starts, so `status` is what decides what may be captured. A hand-recorded lens report, refutation or
+reviewer starts, so `status` is what decides what may be launched. A collect is bound to the job's own
+receipt instead: when the review still stands on it the answer is recorded whatever step `status` offers
+next, which is what lets a lens launched before `run_checks` be collected while the checks run.
+A hand-recorded lens report, refutation or
 validator result is refused `recorded-by-capture-only`, so a slot
 `status` offers is cleared by `collect_review_input`, launching or collecting, and by nothing else. With neither `claude` nor
 `codex` on `PATH` the collect refuses `reviewer-cli-missing`; the review then moves by
@@ -96,7 +99,7 @@ what `deliver` and `record_verdict` read.
 | Approved, CI released, base advanced past the reviewed base, and GitHub still computing the mergeability | `stop` | `mergeability-unknown` | ask again once GitHub has answered; `UNKNOWN` (in `mergeable` or `mergeStateStatus`) is never read as clean |
 | Merged | `stop` | `delivered` | the run holding the receipt completes the delivery with `closing::FOLLOW_UP`: `transition --to done`, then `release`, which is last and not optional |
 | Pull request head or base is not the receipt's (a base that advanced cleanly over an approved, ready receipt is the two rows above, not this one) | `stop` | `pull-request-moved` | `publish_review` deliberately — a genuinely unjudged receipt and an approval already answered by a finding fall through to it — except a lineage whose corrections are all spent (`escalate_review`) or a fresh approval with no cause after its verdict (`record_review_finding`, then publish) |
-| A lens has not reported and the base's declared checks are running | `collect` | `checks-running` | no input; `ask_after` is a Unix second to ask again at |
+| A lens has not reported and the base's declared checks are running | `collect` | `checks-running` | no input; `ask_after` is a Unix second to ask again at. A lens launched before the checks keeps its slot and is collected against this same receipt while they run |
 | A lens has not reported and the declared checks failed for this digest | `stop` | `checks-failed` | correct what they name and `republish_review` |
 | Computable approval over a lane that is red, never ran or is unfinished | `stop` | the lane's own `publication-lane-*` code | the lane's own action |
 | Computable approval over a red lane, first time on the epoch, the failing log not naming a path in the diff | `stop` | `publication-lane-red` | adds `rerun` (`run_id`, `command`: `gh run rerun <run-id> --failed`); the offer is recorded in the store against the epoch; later answers on the epoch say the head needs a correction |
