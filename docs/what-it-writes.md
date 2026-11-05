@@ -1576,9 +1576,11 @@ its answer. It deletes every remote head the run recorded starting, too, because
 `start_branch` linked is not always the branch published and GitHub's own auto-delete removes only the
 latter. `estigia prune` clears what no delivery owned: it lists the merged or closed branches and
 checkouts, keeps any a live claim holds or that carries commits the remote does not have, and removes
-the rest only on `--confirm`. It also finds clean orphan checkouts whose remote branch is gone and
-whose commits remain on another remote ref; [the pruning rules](#explicit-orphan-pruning) describe
-that additional route and its conservative ownership checks.
+the rest only on `--confirm`. The main checkout is never a candidate, from whichever checkout the
+command runs, and neither is the checkout it runs in. It also finds clean orphan checkouts whose
+remote branch is gone and whose commits remain on another remote ref;
+[the pruning rules](#explicit-orphan-pruning) describe that additional route and its conservative
+ownership checks.
 
 ## What `~/.estigia/` holds, and what each uninstall step leaves
 

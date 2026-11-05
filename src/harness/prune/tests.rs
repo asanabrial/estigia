@@ -795,6 +795,63 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
 }
 
 #[test]
+fn a_sweep_from_a_linked_checkout_never_lists_the_main_one() {
+    let (root, clone, trees) = sweep_fixture();
+    let skill = root.path().join("skill");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    let here = trees.join("issue-2-open");
+    let context = crate::transport::Context::live(skill, here.clone(), None);
+
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(trees.as_path()),
+        ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
+    };
+    let script = crate::test_env::answers(&[
+        crate::test_env::open_but_unmatched_issue(1),
+        crate::test_env::open_but_unmatched_issue(2),
+        crate::test_env::closed_issue(3),
+        crate::test_env::open_but_unmatched_issue(4),
+        serde_json::json!({ "matches": "pr list", "stdout": "[]", "status": 0 }),
+    ]);
+    let bin = crate::test_env::scripted_gh();
+    let swept = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        sweep(&view).expect("the sweep reads the fixture")
+    });
+
+    let names = |path: &std::path::Path| {
+        let key = crate::transport::branch::normalise_path(path);
+        swept
+            .iter()
+            .filter(|entry| entry.kind == Kind::Worktree)
+            .filter(|entry| {
+                crate::transport::branch::normalise_path(std::path::Path::new(&entry.name)) == key
+            })
+            .collect::<Vec<_>>()
+    };
+
+    assert!(
+        names(&clone).is_empty(),
+        "the main checkout was listed from a linked one: {swept:?}"
+    );
+    assert!(
+        names(&here).is_empty(),
+        "the checkout the sweep ran in was listed: {swept:?}"
+    );
+    let merged = swept
+        .iter()
+        .find(|entry| entry.kind == Kind::Worktree && entry.name.ends_with("issue-1-merged"))
+        .unwrap_or_else(|| panic!("the merged checkout was not listed at all: {swept:?}"));
+    assert!(
+        merged.delete,
+        "a merged checkout stopped being sweepable from another checkout"
+    );
+}
+
+#[test]
 fn a_live_review_claim_keeps_its_detached_checkout_and_a_leftover_one_is_swept() {
     let (root, clone, trees) = sweep_fixture();
     let skill = root.path().join("skill");
