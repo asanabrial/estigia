@@ -61,6 +61,7 @@ pub(crate) mod outbox;
 pub mod ownership;
 pub mod pull_review;
 pub(crate) mod scope;
+mod ssh_fallback;
 pub mod stages;
 pub mod store;
 pub mod target;
@@ -497,6 +498,27 @@ pub(crate) fn run_with_stdin(
 }
 
 fn run_with_env_and_mode(
+    args: &[&str],
+    cwd: Option<&Path>,
+    how: How,
+    envs: &[(&str, &str)],
+    mode: EnvMode,
+) -> Result<Output, Failure> {
+    if !ssh_fallback::is_network_call(args) {
+        return attempt(args, cwd, how, envs, mode);
+    }
+    let mut envs = envs.to_vec();
+    envs.push(ssh_fallback::UNTRANSLATED);
+    let first = attempt(args, cwd, how, &envs, mode);
+    let Some(repeated) = ssh_fallback::repeated(args, &first) else {
+        return first;
+    };
+    envs.push(ssh_fallback::NO_PROMPT);
+    let second = attempt(&repeated, cwd, how, &envs, mode);
+    ssh_fallback::settled(first, second)
+}
+
+fn attempt(
     args: &[&str],
     cwd: Option<&Path>,
     how: How,

@@ -74,6 +74,22 @@ state other than `done`. The check reads GitHub, so it also runs when the tracke
 cannot read refuses the `done` rather than recording it unverified. The same check serves the CLI and the
 `transition` tool, because both reach one transport operation.
 
+## When SSH to GitHub never connects
+
+Every `git` network call this crate makes names `origin`, so a repository whose `origin` is SSH depends on SSH
+alone, while `gh` and HTTPS may be working with a credential the machine already holds. `run_with_env_and_mode`
+therefore repeats a `git push`, `fetch`, `ls-remote` or `pull` once over HTTPS when its first attempt failed with
+git's `Could not read from remote repository` beside a message that the connection never opened (`NEVER_OPENED` in
+`src/transport/ssh_fallback.rs`). Git prints that line only for a failed initial contact, so nothing was sent and
+repeating a write is safe, and it translates the line, so these four verbs run under `LC_ALL=C`. A failure after contact, such as a rejected push, runs once. So does a refused host key:
+it may be the one failure somebody needs to see.
+
+The repeat uses `-c` options, not configuration: `insteadOf` rewrites `git@github.com:` and `ssh://git@github.com/`,
+and `gh auth git-credential` answers for `https://github.com`. `origin`, its refs and the pre-push hook stay as they
+are, and nothing is written to the repository. When both attempts fail the answer carries both messages and keeps
+its kind; a repeat that outlives its deadline is an ambiguous write, as any other is. What this does not reach is in
+[`honesty.md`](honesty.md#the-https-repeat).
+
 ## Why the transport is in this process, and why the server is hand-written
 
 `src/transport/` is the transport, and it is the only one. It began as `skill/scripts/github.py`,
