@@ -901,10 +901,10 @@ fn a_gate_question_by_run_id_writes_nothing() {
     )
     .expect("the pointer is written");
     let before = std::fs::read(&pointer).expect("the pointer is read back");
-    let input = serde_json::json!({"command": "git merge --ff-only origin/main"}).to_string();
+    let input = serde_json::json!({"command": "gh pr create --fill"}).to_string();
 
     forget_store(home);
-    let (out, err, _) = run_with_tracker(
+    let (out, err, ok) = run_with_tracker(
         home,
         repo,
         bin,
@@ -924,9 +924,10 @@ fn a_gate_question_by_run_id_writes_nothing() {
         !answer.contains("outside"),
         "the fixture's pointer does not cover the checkout, so this measures nothing: {answer}"
     );
+    assert!(ok, "the question exited non-zero on an allow: {answer}");
     assert!(
-        answer.contains("git merge"),
-        "the question answered nothing about the command it was asked: {answer}"
+        answer.contains("allow"),
+        "the question did not answer the allow it asks about: {answer}"
     );
     assert!(
         decisions(home).is_empty(),
@@ -939,7 +940,36 @@ fn a_gate_question_by_run_id_writes_nothing() {
         "a question asked by run id moved the run pointer"
     );
 
-    // A run id nothing holds leaves no pointer behind either.
+    // The person-only refusal is the third recording site: decided before any
+    // pointer is read, and still silent on this road.
+    let personal =
+        serde_json::json!({"command": "echo x > ~/.estigia/stand-down.json"}).to_string();
+    let (said, error, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer("in-progress"),
+        &[
+            "gate",
+            "Bash",
+            "--run-id",
+            "claude-abcd1234",
+            "--input",
+            &personal,
+        ],
+        "",
+    );
+    assert!(
+        !ok && format!("{said}{error}").contains("stand-down-is-for-a-person"),
+        "{said}{error}"
+    );
+    assert!(
+        decisions(home).is_empty(),
+        "a person-only refusal reached the ledger from a question: {}",
+        decisions(home)
+    );
+
+    // A run id nothing holds leaves no pointer behind either, and no row.
     let unknown = "claude-nosuch0000";
     forget_store(home);
     let (out, err, _) = run_with_tracker(
@@ -951,6 +981,11 @@ fn a_gate_question_by_run_id_writes_nothing() {
         "",
     );
     let _ = format!("{out}{err}");
+    assert!(
+        decisions(home).is_empty(),
+        "a question about a run nobody holds was written to the ledger: {}",
+        decisions(home)
+    );
     assert!(
         !runs.join(format!("{unknown}.json")).exists(),
         "a question about a run nobody holds created its pointer"
