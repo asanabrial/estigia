@@ -288,6 +288,7 @@ pub(super) const TUI_SETTINGS: &[Setting] = &[
     Setting::Tracker,
     Setting::RepositoryHost,
     Setting::IssueRequirement,
+    Setting::UnclaimedGithubWrites,
     Setting::Integration,
     Setting::Worktree,
     Setting::DeliveryPreset,

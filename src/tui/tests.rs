@@ -3226,7 +3226,7 @@ fn a_row_this_repository_already_customises_is_marked_apart_from_one_just_moved(
     app.page = Page::Options;
     assert!(!app.changed(Setting::ChangeSize), "nothing has moved yet");
 
-    let painted = paint(&app, 96, 40);
+    let painted = paint(&app, 96, 44);
     assert!(
         painted.contains('\u{00b7}'),
         "an installed row that differs from the default is drawn as untouched: {painted}"
@@ -3239,7 +3239,7 @@ fn a_row_this_repository_already_customises_is_marked_apart_from_one_just_moved(
     // Now move one, and the two marks are both on screen and different.
     walk_to(&mut app, Setting::Integration);
     answer(&mut app, "trunk");
-    let painted = paint(&app, 96, 40);
+    let painted = paint(&app, 96, 44);
     assert!(
         painted.contains('*') && painted.contains('\u{00b7}'),
         "{painted}"

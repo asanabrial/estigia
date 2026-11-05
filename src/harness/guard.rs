@@ -709,8 +709,23 @@ fn adjudicate_pushing(
         };
     }
     if matches!(action, Action::Remote { .. }) {
+        let unclaimed = holders_of(&context.state_root, repo_dir).is_empty()
+            && session::unreadable_holdings(&context.state_root).is_empty();
+        let held = unclaimed
+            .then(|| {
+                super::issue_requirement::decision(context, action, how, literal, write_targets)
+            })
+            .flatten()
+            .filter(|decision| matches!(decision, Decision::Ask(_) | Decision::Deny(_)));
         return Adjudication {
-            decision: Decision::Outside(super::Aside::NotWatched),
+            decision: match held {
+                Some(held) => super::standdown::over(
+                    held,
+                    context.stand_down.as_ref(),
+                    session::now_seconds(),
+                ),
+                None => Decision::Outside(super::Aside::NotWatched),
+            },
             holder: None,
         };
     }

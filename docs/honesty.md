@@ -2784,7 +2784,7 @@ pointer that leaves it names the document it points at.
     started and a stage name matching no check look the same; an advisory check never holds them. Held
     against a fake `gh` by `src/transport/stages/tests.rs`.
 - **No other setting is read by nobody.**
-  An operator sets thirty-one rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets thirty-two rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
   `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. The four rows that
   had exactly one answer (`Delivery route`, `Review delegation`, `Merge strategy`, `Review protocol`) were
@@ -3103,13 +3103,34 @@ pointer that leaves it names the document it points at.
   `an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_the_checkout_changed`,
   `a_write_placed_inside_the_checkout_is_still_asked_under_watch` and
   `the_shell_call_that_changed_a_watched_checkout_is_reported_as_soon_as_it_ran`. What it does not hold:
-  - **A boundary is not held, under any value, and only the writes beside it are.** The classifier answers with
-    a line's strongest command, so `gh pr merge 3; git worktree remove /x` once ran unasked while the same removal
-    alone was asked, measured on a real run. `harness::write_beside_a_boundary` now reads the line again, and
-    `a_write_beside_a_boundary_is_put_to_the_person_under_watch` holds it. Still open, under `watch` and `required`
-    alike: an unclaimed `gh pr merge`, `git merge`, `git tag`, release or `gh api` mutation runs with no question,
-    and `Merge by` is not read on this path. A write beside a boundary is found by the same fragment lists as one
-    alone, so a command they do not name is not found here either.
+  - **A boundary is held as a commit is, unless the repository says `Unclaimed GitHub writes: allowed`, and
+    `Merge by` is not read on this path.** An unclaimed `gh pr merge`, `git merge`, `git pull`, `git tag`,
+    release, `gh api` mutation or declared irreversible command is asked under `watch` and refused under
+    `required`, and so is `Action::Remote` (`gh pr review`, `gh pr comment`), through
+    `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`. It is **asked,
+    never watched**: a boundary reaches other people and leaves no trace in the checkout to compare, so the
+    `watch` that lets an unplaceable local write run does not apply. `allowed` is the operator's own
+    declaration that a skill writing through `gh api`, `gh pr review` and `gh pr merge` unclaimed is not to
+    be stopped on each call; it drops no question on a commit, a push, a branch or a worktree command, and a
+    write carried beside a boundary stays held under both values (`harness::write_beside_a_boundary`, the
+    classifier answering with a line's strongest command, which once let `gh pr merge 3; git worktree remove
+    /x` run unasked). **What this costs:** a person's own `git merge`, `git pull` or `git tag` in a session
+    that holds no claim is asked too; under `held` a skill that reviews and then merges meets one question
+    per merge; and a pull request approved at the exact head does not clear it, because the skills that
+    need this road do not take it. A command the fragment lists do not name is not found, and a GraphQL
+    mutation behind a shell variable still passes. A call launched outside every repository is left alone,
+    as a push is, and the git operation window's own refusals are unchanged. Held by
+    `an_unclaimed_github_write_is_put_to_the_person_under_watch`,
+    `an_unclaimed_github_write_is_refused_under_required`, `an_unclaimed_github_write_passes_when_the_policy_is_off`,
+    `a_github_read_passes_under_every_value`, `an_unclaimed_github_write_is_held_through_the_gate_command_too`,
+    `allowed_lets_the_github_writes_pass_under_watch_and_required` and `allowed_still_holds_what_the_policy_holds`.
+  - **An assisted run cannot carry a GitHub write past the claim beside an admitted boundary.** `git pull;
+    gh pr review 3 --approve` and a declared boundary followed by a GitHub write are refused
+    `assisted-remote-write-unverified`, checked only after `assisted-does-not-deliver`,
+    `assisted-publishes-through-draft-pr` and `assisted-api-mutation-unverified` have answered, so a merge
+    still names the delivery. Held by `an_admitted_boundary_does_not_carry_a_remote_write_past_the_claim`
+    and `the_specific_assisted_refusals_answer_before_the_remote_write`. The write is found by the same
+    fragment lists as one alone.
   - **A GitHub tracker that names no repository infers one from the remote, so zero remotes is a tracker
     that cannot name an issue.** A write landing only in such repositories is not held (no ask, no deny) and
     the SessionStart text says there is nothing to claim. The read is `git remote` in the repository each
@@ -3129,7 +3150,7 @@ pointer that leaves it names the document it points at.
     never asked. Every other agent is refused with the same code (an `ask` a host ignores is an allow), and
     the gate never learns whether the person approved, so it **asks on every such write**.
   - **A write the hook does not intercept is not held** (a tool no matcher wakes for, a script or formatter
-    whose shell line names no git fragment, another clone), and **only a routine write and a `git push` are
+    whose shell line names no git fragment, another clone), and **only a routine write, a boundary and a GitHub write are
     held**: a push is held as a commit is (`an_unclaimed_push_is_held_as_an_unclaimed_commit_is`), while an
     unclaimed run writing `.git/estigia/estigia.local.md` through a shell line is not stopped by this row and
     can set it to `off`.

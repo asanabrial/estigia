@@ -57,6 +57,7 @@ fn new_rig() -> Rig {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(Workflow::Assisted),
         window: Duration::ZERO,
