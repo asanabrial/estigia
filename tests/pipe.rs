@@ -816,6 +816,27 @@ fn issue_answer(state: &str) -> String {
         .expect("the script serialises")
 }
 
+/// [`issue_answer`] whose claim names `run_id`, for a test whose identity is derived
+/// from a session rather than written into the shared fixture.
+fn issue_answer_held_by(run_id: &str, state: &str) -> String {
+    let mut entry = issue_view_entry(state);
+    let mut issue: serde_json::Value =
+        serde_json::from_str(entry["stdout"].as_str().expect("the view")).expect("json");
+    let claim = issue["comments"][0]["body"]
+        .as_str()
+        .expect("the fixture claims the issue");
+    issue["comments"][0]["body"] = serde_json::json!(
+        claim
+            .replace("run-id=claude-abcd1234", &format!("run-id={run_id}"))
+            .replace(
+                "Claimed by claude-abcd1234",
+                &format!("Claimed by {run_id}")
+            )
+    );
+    entry["stdout"] = serde_json::json!(issue.to_string());
+    serde_json::to_string(&serde_json::json!([entry])).expect("the script serialises")
+}
+
 /// [`issue_view_entry`], with a `ci-release` marker for the receipt the merge
 /// pipe tests put in the pointer, under the given epoch.
 fn released_issue_view_entry(state: &str, epoch: &str, head: &str) -> serde_json::Value {

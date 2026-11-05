@@ -816,13 +816,179 @@ fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
         );
     }
 
+    // The adapter road still records: `--session-id` with `--runtime` is what Pi's
+    // extension passes, and it is the control that stops this from being a change
+    // that simply stops writing every road down.
+    let derived = estigia::harness::session::run_id("claude-code", "abcd1234");
+    std::fs::write(
+        home.join(".estigia")
+            .join("runs")
+            .join(format!("{derived}.json")),
+        serde_json::to_string(&serde_json::json!({
+            "run_id": derived,
+            "issue": 12,
+            "revision": 1,
+            "state": "in-progress",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "reviewed_head": serde_json::Value::Null,
+        }))
+        .expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+    forget_store(home);
+    let input = serde_json::json!({"command": "git merge --ff-only origin/main"}).to_string();
+    let (allowed, refused, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer_held_by(&derived, "in-progress"),
+        &[
+            "gate",
+            "Bash",
+            "--session-id",
+            "abcd1234",
+            "--runtime",
+            "claude-code",
+            "--input",
+            &input,
+        ],
+        "",
+    );
+    assert!(
+        ok,
+        "the adapter road stopped allowing the fast-forward: {allowed}{refused}"
+    );
+
     let ledger = decisions(home);
     assert!(
         ledger.lines().any(|line| {
             let entry: serde_json::Value = serde_json::from_str(line).expect("a ledger entry");
-            entry["verdict"] == "allow" && entry["subject"] == "git merge"
+            entry["verdict"] == "allow"
+                && entry["subject"] == "git merge"
+                && entry["run_id"] == serde_json::json!(derived)
         }),
-        "the allowed fast-forward is absent from the ledger: {ledger}"
+        "the adapter road stopped writing the decision down: {ledger}"
+    );
+}
+
+/// A question asked with `--run-id` answers, and records nothing.
+///
+/// The road exists so a person or an agent can ask what the gate would decide.
+/// It used to write a `decisions` row for every answer and, on an allow, the run
+/// pointer — one probe session left 2,437 rows and a pointer at revision 162,
+/// and those rows are what `doctor`'s `silence` row and every reading of the
+/// denial rate counted.
+#[test]
+fn a_gate_question_by_run_id_writes_nothing() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let runs = home.join(".estigia").join("runs");
+    std::fs::create_dir_all(&runs).expect("the state directory");
+    let pointer = runs.join("claude-abcd1234.json");
+    std::fs::write(
+        &pointer,
+        serde_json::to_string(&serde_json::json!({
+            "run_id": "claude-abcd1234",
+            "issue": 12,
+            "revision": 1,
+            "state": "in-progress",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "reviewed_head": serde_json::Value::Null,
+        }))
+        .expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+    let before = std::fs::read(&pointer).expect("the pointer is read back");
+    let input = serde_json::json!({"command": "gh pr create --fill"}).to_string();
+
+    forget_store(home);
+    let (out, err, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer("in-progress"),
+        &[
+            "gate",
+            "Bash",
+            "--run-id",
+            "claude-abcd1234",
+            "--input",
+            &input,
+        ],
+        "",
+    );
+    let answer = format!("{out}{err}");
+    assert!(
+        !answer.contains("outside"),
+        "the fixture's pointer does not cover the checkout, so this measures nothing: {answer}"
+    );
+    assert!(ok, "the question exited non-zero on an allow: {answer}");
+    assert!(
+        answer.contains("allow"),
+        "the question did not answer the allow it asks about: {answer}"
+    );
+    assert!(
+        decisions(home).is_empty(),
+        "a question asked by run id was written to the ledger: {}",
+        decisions(home)
+    );
+    assert_eq!(
+        std::fs::read(&pointer).expect("the pointer is still there"),
+        before,
+        "a question asked by run id moved the run pointer"
+    );
+
+    // The person-only refusal is the third recording site: decided before any
+    // pointer is read, and still silent on this road.
+    let personal =
+        serde_json::json!({"command": "echo x > ~/.estigia/stand-down.json"}).to_string();
+    let (said, error, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer("in-progress"),
+        &[
+            "gate",
+            "Bash",
+            "--run-id",
+            "claude-abcd1234",
+            "--input",
+            &personal,
+        ],
+        "",
+    );
+    assert!(
+        !ok && format!("{said}{error}").contains("stand-down-is-for-a-person"),
+        "{said}{error}"
+    );
+    assert!(
+        decisions(home).is_empty(),
+        "a person-only refusal reached the ledger from a question: {}",
+        decisions(home)
+    );
+
+    // A run id nothing holds leaves no pointer behind either, and no row.
+    let unknown = "claude-nosuch0000";
+    forget_store(home);
+    let (out, err, _) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer("in-progress"),
+        &["gate", "Bash", "--run-id", unknown, "--input", &input],
+        "",
+    );
+    let _ = format!("{out}{err}");
+    assert!(
+        decisions(home).is_empty(),
+        "a question about a run nobody holds was written to the ledger: {}",
+        decisions(home)
+    );
+    assert!(
+        !runs.join(format!("{unknown}.json")).exists(),
+        "a question about a run nobody holds created its pointer"
     );
 }
 

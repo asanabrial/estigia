@@ -3441,7 +3441,9 @@ pointer that leaves it names the document it points at.
   a compound line through which no data reaches execution.
 - **Decisions are written down; the reasoning behind them is not.** Every allow and deny is appended to the
   local store's `decisions` table with the run, the tool, **what the decision was about**, the verdict and the
-  refusal code. `Outside` is not recorded (a record per tool call of every session that never swore would bury
+  refusal code. A call identified only by `--run-id` — `estigia gate`, the question a person or an agent
+  asks — answers and records nothing and touches no run pointer, because that road is how the gate is
+  probed and it once wrote 75% of every recorded denial. `Outside` is not recorded (a record per tool call of every session that never swore would bury
   the ones that matter) and the write is best-effort (a refusal that could not be written down is still a
   refusal). **A payload Estigia cannot parse does not stop the call, and says so**: the hook stands aside
   (a schema this build does not know could wrap `Read` as easily as `Write`) and writes `payload-unreadable`
