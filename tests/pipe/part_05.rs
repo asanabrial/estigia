@@ -251,8 +251,11 @@ fn review_handoff_orders_evidence_release_and_pointer_clear() {
 fn the_ledger_names_the_boundary_the_gate_let_through() {
     let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let derived = estigia::harness::session::run_id("claude-code", "abcd1234");
+    let answers = issue_answer_held_by(&derived, "in-progress");
+
     let run = serde_json::json!({
-        "run_id": "claude-abcd1234",
+        "run_id": derived,
         "issue": 12,
         "revision": 1,
         "state": "in-progress",
@@ -262,7 +265,7 @@ fn the_ledger_names_the_boundary_the_gate_let_through() {
     std::fs::write(
         home.join(".estigia")
             .join("runs")
-            .join("claude-abcd1234.json"),
+            .join(format!("{derived}.json")),
         serde_json::to_string(&run).expect("the pointer serialises"),
     )
     .expect("the pointer is written");
@@ -275,12 +278,14 @@ fn the_ledger_names_the_boundary_the_gate_let_through() {
         home,
         repo,
         bin,
-        &issue_answer("in-progress"),
+        &answers,
         &[
             "gate",
             "Bash",
-            "--run-id",
-            "claude-abcd1234",
+            "--session-id",
+            "abcd1234",
+            "--runtime",
+            "claude-code",
             "--input",
             r#"{"command":"git push --force origin main"}"#,
         ],
@@ -291,12 +296,14 @@ fn the_ledger_names_the_boundary_the_gate_let_through() {
         home,
         repo,
         bin,
-        &issue_answer("in-progress"),
+        &answers,
         &[
             "gate",
             "Write",
-            "--run-id",
-            "claude-abcd1234",
+            "--session-id",
+            "abcd1234",
+            "--runtime",
+            "claude-code",
             "--input",
             r#"{"file_path":"src/main.rs"}"#,
         ],

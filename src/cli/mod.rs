@@ -519,6 +519,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
                 identity.as_deref(),
                 cli.json,
                 asks_through(*can_ask, runtime.as_deref()),
+                !(parent_session_id.is_none() && run_id.is_some()),
             )
         }
 
@@ -7517,6 +7518,7 @@ fn show_gate(
     run_id: Option<&str>,
     json: bool,
     asks: bool,
+    records: bool,
 ) -> Result<(), Refusal> {
     let parsed: serde_json::Value = serde_json::from_str(input).map_err(|error| {
         Refusal::not_started(
@@ -7547,7 +7549,10 @@ fn show_gate(
     // Before the role road, which decides a call carrying an `agent_type` and would
     // otherwise answer it, through a stand-down, without this rule asked.
     if let Some(denied) = harness::person_only::deny(&action) {
-        if let Some(run_id) = run_id.filter(|run_id| !run_id.is_empty()) {
+        if let Some(run_id) = run_id
+            .filter(|run_id| !run_id.is_empty())
+            .filter(|_| records)
+        {
             harness::hook::note(
                 &context,
                 run_id,
@@ -7618,7 +7623,7 @@ fn show_gate(
         Some(run_id) => {
             let mut run = harness::session::load(&context.state_root, run_id);
             let decided = harness::gate_observing(&context, &mut run, &action, how, &observed);
-            if matches!(decided, harness::Decision::Allow(_)) {
+            if records && matches!(decided, harness::Decision::Allow(_)) {
                 // What the hook does on the same branch: a decision never written down
                 // is a window that never applies. Best effort.
                 let _ = harness::session::store(&context.state_root, &run);
@@ -7662,8 +7667,9 @@ fn show_gate(
     };
     let decision = gate_answer(decision, asks);
     // Recorded: for one adapter this **is** the gate, and `doctor`'s silence check
-    // reads the same ledger.
-    if !recorded.is_empty() {
+    // reads the same ledger. A question asked by `--run-id` answers and writes
+    // nothing, here or at the pointer above.
+    if records && !recorded.is_empty() {
         let subject = action.subject();
         harness::hook::note(
             &context,

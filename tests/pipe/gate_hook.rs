@@ -3135,8 +3135,10 @@ fn a_refused_person_only_call_is_in_the_ledger_on_the_gate_road() {
         &[
             "gate",
             "Bash",
-            "--run-id",
-            "claude-aaaa1111",
+            "--session-id",
+            "aaaa1111",
+            "--runtime",
+            "claude-code",
             "--input",
             payload,
         ],

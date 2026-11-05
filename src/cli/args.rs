@@ -585,7 +585,9 @@ pub enum Command {
     /// Ask the gate what it would decide, without an agent in the way.
     ///
     /// The harness made legible: same code path as the hook, printed instead of
-    /// returned. For working out why a write was refused.
+    /// returned. For working out why a write was refused. A call identified by
+    /// `--run-id` answers and records nothing; `--session-id` with `--runtime`
+    /// is the adapter road and records as the hook does.
     Gate {
         /// The tool name, as the agent would send it.
         tool: String,
