@@ -57,6 +57,7 @@ the section links below provide navigation rather than a subject index.
 - [The release builds; CI tests](#the-release-builds-ci-tests)
 - [The waits audit](#the-waits-audit)
 - [Re-running a red lane](#re-running-a-red-lane)
+- [The HTTPS repeat](#the-https-repeat)
 - [The token-efficiency programme](#the-token-efficiency-programme)
 
 The last run, **The review tier, the lens and the finding** has its own
@@ -4475,6 +4476,21 @@ the count cannot show:
   proof the change is sound.
 - **One re-run per epoch, whatever the cause.** A second flake on the same epoch is a correction and a new
   epoch, paid again.
+
+## The HTTPS repeat
+
+[`github-binding.md`](github-binding.md#when-ssh-to-github-never-connects) says what a refused SSH connection does
+now. What it does not reach:
+
+- **A `git` the agent runs in its own shell.** Estigia does not start it, so it stays on SSH alone.
+- **Hosts other than `github.com`.** The rewrite matches nothing else, so the repeat fails as the first attempt did.
+- **The identity.** The repeat authenticates as the active `gh` account, which may not be the owner of the SSH key.
+  Nothing compares them.
+- **Whether it happened.** A repeat that lands answers like a first attempt, and nothing reports that SSH failed.
+  An intermittent refusal stays invisible until both roads fail.
+
+The tests drive a stand-in `git` that scripts both attempts, plus one real `git` against a refusing `GIT_SSH_COMMAND`
+for the message it prints. The repeat itself was run against GitHub once, by hand, and no test does.
 
 ## The token-efficiency programme
 
