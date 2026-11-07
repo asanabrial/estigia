@@ -7843,6 +7843,24 @@ mod send_message {
     }
 
     #[test]
+    fn the_question_opens_on_the_narrowest_grant() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "hello"),
+            choose(1, "deny"),
+        ]);
+        let choice = &questions(&output)[0]["params"]["requestedSchema"]["properties"]["choice"];
+        assert_eq!(choice["default"], json!("allow_once"));
+        assert!(
+            choice["enum"]
+                .as_array()
+                .is_some_and(|choices| choices.contains(&json!("allow_session"))),
+            "{choice}"
+        );
+    }
+
+    #[test]
     fn allow_once_records_one_row_from_the_sender_and_the_next_send_asks_again() {
         let rig = Rig::new();
         let output = rig.serve(&[

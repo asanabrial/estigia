@@ -455,7 +455,10 @@ about before any row is written, through MCP elicitation (protocol `2025-06-18`)
   recorded.
 - Otherwise the server sends `elicitation/create` with a message naming the sender, the recipient in the
   addressable form (`estigia-1 (run id), opencode in estigia, holds #96, seen just now`), and the text, and a
-  schema with one required string `choice`: `allow_once`, `allow_session` or `deny`.
+  schema with one required string `choice`: `allow_once`, `allow_session` or `deny`. It defaults to `allow_once`,
+  the narrowest grant, so `Accept` sends this one message and `Decline` refuses it; with no default the field
+  opens unset and the client will not submit until a choice is made. `allow_session` is offered but never
+  preselected, because one keystroke would then admit every later message from that sender.
 - `accept` with `allow_once` sends. `accept` with `allow_session` sends and remembers the grant, keyed by the
   sender's run id, until that server process exits (one MCP server process is one agent session). Everything else
   is refused with `message-not-allowed` and nothing is recorded: `deny`, `decline`, `cancel`, an unknown choice, an
@@ -483,6 +486,11 @@ What was measured, on Claude Code 2.1.300 (2026-10-15):
   recipient, the issue it holds and the text. The enum rendered as a single select field listing the three
   `enumNames`. Choosing *Allow once* and accepting recorded the row, and the recipient took it at its next
   `PreToolUse`.
+
+On Claude Code 2.1.319 (2026-11-07), against a probe server sending this schema with and without the default:
+without it the field opened as `not set` and `Accept` was held with `This field is required`; with it the field
+opened on *Allow once* and `Accept` answered `{"action":"accept","content":{"choice":"allow_once"}}`. A client
+that ignores the default and accepts with no choice is still refused `message-not-allowed`.
 
 ### Waking an idle Claude Code session
 
