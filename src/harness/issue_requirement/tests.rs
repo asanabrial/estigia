@@ -244,6 +244,69 @@ fn a_write_into_a_nested_checkout_that_has_a_remote_is_still_held() {
     }
 }
 
+fn hook_session_start(context: &GateContext) {
+    let input = Input {
+        session_id: "abcd1234".to_owned(),
+        cwd: context.repo_dir.display().to_string(),
+        ..Input::default()
+    };
+    hook::run_as(
+        Dialect::ClaudeCode,
+        Some("claude-code"),
+        Event::SessionStart,
+        &input,
+        Some(context),
+    );
+}
+
+fn told(answer: &serde_json::Value) -> Option<&str> {
+    answer["hookSpecificOutput"]["additionalContext"].as_str()
+}
+
+#[test]
+fn a_hold_that_began_after_the_session_started_is_told_to_the_agent_on_every_ask() {
+    let (repo, _root, context) = rig_without_a_remote(IssueRequirement::Watch);
+    hook_session_start(&context);
+    crate::test_env::add_github_remote(repo.path());
+    for _ in 0..2 {
+        let answer = hook_answer(&context, Dialect::ClaudeCode, "claude-code");
+        assert_eq!(
+            answer["hookSpecificOutput"]["permissionDecision"], "ask",
+            "{answer}"
+        );
+        let text = told(&answer).unwrap_or_default();
+        assert!(
+            text.contains("Claim an issue first, filing one with `create`"),
+            "{answer}"
+        );
+    }
+}
+
+#[test]
+fn a_refused_unclaimed_write_carries_no_extra_text() {
+    let (repo, _root, context) = rig_without_a_remote(IssueRequirement::Required);
+    hook_session_start(&context);
+    crate::test_env::add_github_remote(repo.path());
+    let answer = hook_answer(&context, Dialect::ClaudeCode, "claude-code");
+    assert_eq!(
+        answer["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{answer}"
+    );
+    assert_eq!(told(&answer), None, "{answer}");
+}
+
+#[test]
+fn a_hold_the_session_start_already_announced_is_not_told_again() {
+    let (_repo, _root, context) = rig(IssueRequirement::Watch);
+    hook_session_start(&context);
+    let answer = hook_answer(&context, Dialect::ClaudeCode, "claude-code");
+    assert_eq!(
+        answer["hookSpecificOutput"]["permissionDecision"], "ask",
+        "{answer}"
+    );
+    assert_eq!(told(&answer), None, "{answer}");
+}
+
 #[test]
 fn a_session_in_a_checkout_with_no_remote_is_told_nothing_is_gated() {
     for requirement in [IssueRequirement::Watch, IssueRequirement::Required] {

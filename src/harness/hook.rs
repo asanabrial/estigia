@@ -14,6 +14,7 @@
 //!    indistinguishable from a lost claim race. Only the gate denies.
 
 use std::io::{BufRead, BufReader, Read};
+use std::path::PathBuf;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -770,6 +771,107 @@ pub fn session_start_response(context: &GateContext, run: &session::Run) -> Valu
     session_start_body(context, run, true)
 }
 
+/// What a run holding no claim is told about the issue requirement in force here.
+struct UnclaimedHold {
+    text: String,
+    /// The repository whose writes the text says are held, when it says any are.
+    held_in: Option<PathBuf>,
+}
+
+fn unclaimed_hold(
+    context: &GateContext,
+    requirement: crate::config::IssueRequirement,
+) -> UnclaimedHold {
+    use super::issue_requirement::Scope;
+    let scope = super::issue_requirement::scope_of(&context.repo_dir);
+    if let Scope::Repository(root) = &scope
+        && !super::issue_requirement::names_an_issue(context, root)
+    {
+        return UnclaimedHold {
+            text: "This run holds no issue. The tracker names no repository and this checkout \
+                   has no git remote, so there is nothing here to file or claim one in: Estigia \
+                   gates no write here, and no commit or push is refused for want of a claim. \
+                   Reads are not gated."
+                .to_owned(),
+            held_in: None,
+        };
+    }
+    let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
+        "Take a local claim with `assist` in a worktree first, which gives the isolated checkout \
+         to write in."
+    } else {
+        "Claim an issue first, filing one with `create` when none covers the change, then work \
+         through `start_branch`."
+    };
+    let held = match requirement {
+        crate::config::IssueRequirement::Required => {
+            "Estigia refuses every repository write until one is claimed"
+        }
+        _ => {
+            "each repository write is put to the person until one is claimed, \
+              and refused on a host that cannot ask"
+        }
+    };
+    match scope {
+        Scope::Repository(root) => UnclaimedHold {
+            text: format!(
+                "This run holds no issue, and `Unclaimed write policy` is `{}` in this \
+                 repository: {held}. {way_in} Reads are not gated.",
+                requirement.as_value()
+            ),
+            held_in: Some(root),
+        },
+        Scope::Outside => UnclaimedHold {
+            text: format!(
+                "This run holds no issue. This directory is not inside a repository Estigia \
+                 can place, so no issue requirement applies to a write that lands here: \
+                 `Unclaimed write policy` is `{}` for a write that lands in a repository Estigia \
+                 can place, and there {held}. Reads are not gated.",
+                requirement.as_value()
+            ),
+            held_in: None,
+        },
+        Scope::Unknown => UnclaimedHold {
+            text: format!(
+                "This run holds no issue. `Unclaimed write policy` is `{}` here, but whether \
+                 this directory is inside a repository could not be established, so every \
+                 write from it is held rather than exempted: {held}. Reads are not gated.",
+                requirement.as_value()
+            ),
+            held_in: None,
+        },
+    }
+}
+
+/// The repository whose hold an unclaimed run's `SessionStart` announces, when it announces one.
+fn announced_at_start(context: &GateContext, run: &session::Run) -> Option<PathBuf> {
+    if run.unreadable || run.issue.is_some() {
+        return None;
+    }
+    let requirement = super::issue_requirement::in_force(context)?;
+    unclaimed_hold(context, requirement).held_in
+}
+
+/// The hold paragraph for an agent `SessionStart` did not tell it, beside an `ask` for an
+/// unclaimed write; repeated on every such `ask`, because a person's No drops it unread.
+fn hold_news(context: &GateContext, run: &session::Run, decision: &Decision) -> Option<String> {
+    let Decision::Ask(refusal) = decision else {
+        return None;
+    };
+    if refusal.code != super::issue_requirement::CODE || run.unreadable || run.issue.is_some() {
+        return None;
+    }
+    let requirement = super::issue_requirement::in_force(context)?;
+    let hold = unclaimed_hold(context, requirement);
+    let root = hold.held_in?;
+    (!run.announced_holds.contains(&root)).then(|| {
+        format!(
+            "Estigia: what this session was told when it started no longer holds here. {}",
+            hold.text
+        )
+    })
+}
+
 fn session_start_body(context: &GateContext, run: &session::Run, with_count: bool) -> Value {
     // Unreadable is not absent: what the run holds is unknown, not nothing.
     let held = if run.unreadable {
@@ -789,57 +891,7 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                 state_clause(run.state.as_deref())
             ),
             None if let Some(requirement) = super::issue_requirement::in_force(context) => {
-                let scope = super::issue_requirement::scope_of(&context.repo_dir);
-                let names_nothing = match &scope {
-                    super::issue_requirement::Scope::Repository(root) => {
-                        !super::issue_requirement::names_an_issue(context, root)
-                    }
-                    _ => false,
-                };
-                if names_nothing {
-                    "This run holds no issue. The tracker names no repository and this checkout \
-                     has no git remote, so there is nothing here to file or claim one in: Estigia \
-                     gates no write here, and no commit or push is refused for want of a claim. \
-                     Reads are not gated."
-                        .to_owned()
-                } else {
-                    let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
-                        "Take a local claim with `assist` in a worktree first, which gives the \
-                         isolated checkout to write in."
-                    } else {
-                        "Claim an issue first, filing one with `create` when none covers the \
-                         change, then work through `start_branch`."
-                    };
-                    let held = match requirement {
-                        crate::config::IssueRequirement::Required => {
-                            "Estigia refuses every repository write until one is claimed"
-                        }
-                        _ => {
-                            "each repository write is put to the person until one is claimed, \
-                              and refused on a host that cannot ask"
-                        }
-                    };
-                    match scope {
-                        super::issue_requirement::Scope::Repository(_) => format!(
-                            "This run holds no issue, and `Unclaimed write policy` is `{}` in this \
-                             repository: {held}. {way_in} Reads are not gated.",
-                            requirement.as_value()
-                        ),
-                        super::issue_requirement::Scope::Outside => format!(
-                            "This run holds no issue. This directory is not inside a repository Estigia \
-                             can place, so no issue requirement applies to a write that lands here: \
-                             `Unclaimed write policy` is `{}` for a write that lands in a repository Estigia \
-                             can place, and there {held}. Reads are not gated.",
-                            requirement.as_value()
-                        ),
-                        super::issue_requirement::Scope::Unknown => format!(
-                            "This run holds no issue. `Unclaimed write policy` is `{}` here, but whether \
-                             this directory is inside a repository could not be established, so every \
-                             write from it is held rather than exempted: {held}. Reads are not gated.",
-                            requirement.as_value()
-                        ),
-                    }
-                }
+                unclaimed_hold(context, requirement).text
             }
             None if super::unclaimed::applies(context, &context.repo_dir) => {
                 let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
@@ -1314,7 +1366,13 @@ pub fn run_as(
                     None,
                 );
             }
-            let run = session::load(&context.state_root, &run_id);
+            let mut run = session::load(&context.state_root, &run_id);
+            if !input.session_id.trim().is_empty()
+                && let Some(root) = announced_at_start(context, &run)
+                && run.announced_holds.insert(root)
+            {
+                let _ = session::store(&context.state_root, &run);
+            }
             session_start_response(context, &run)
         }
         Event::SessionEnd => {
@@ -1660,11 +1718,15 @@ pub fn run_as(
                 &decision,
                 &[],
             );
-            let answer = response_in(dialect, &decision);
-            if let Some(recipient) = mail_recipient(dialect, host, input) {
-                return with_mail(context, dialect, &recipient, answer);
+            let mut answer = response_in(dialect, &decision);
+            let Some(recipient) = mail_recipient(dialect, host, input) else {
+                return answer;
+            };
+            if let Some(news) = hold_news(context, &run, &decision) {
+                answer["hookSpecificOutput"]["additionalContext"] = json!(news);
+                return answer;
             }
-            answer
+            with_mail(context, dialect, &recipient, answer)
         }
     }
 }

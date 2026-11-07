@@ -148,6 +148,9 @@ pub struct Run {
     /// corrections that makes. On the pointer so a resumed run keeps the count.
     #[serde(default)]
     pub assisted_publication: Option<AssistedPublication>,
+    /// The repositories whose hold on an unclaimed write this run's `SessionStart` announced.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub announced_holds: BTreeSet<PathBuf>,
 }
 
 /// One branch's publication under an assisted run.
@@ -198,6 +201,7 @@ impl Run {
             kind: RunKind::Delivery,
             reviewed_pr: None,
             assisted_publication: None,
+            announced_holds: BTreeSet::new(),
         }
     }
 
