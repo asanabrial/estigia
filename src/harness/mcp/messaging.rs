@@ -261,6 +261,7 @@ fn requested_schema() -> Value {
                     "Allow for this session",
                     "Deny",
                 ],
+                "default": ALLOW_ONCE,
             }
         },
         "required": ["choice"],
