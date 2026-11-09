@@ -969,10 +969,16 @@ fn a_gate_question_by_run_id_writes_nothing() {
         decisions(home)
     );
 
-    // A run id nothing holds leaves no pointer behind either, and no row.
+    // The policy is off so the unheld probe answers `outside`, not a refusal.
     let unknown = "claude-nosuch0000";
     forget_store(home);
-    let (out, err, _) = run_with_tracker(
+    run_in(
+        home,
+        repo,
+        &["config", "set", "Unclaimed write policy", "off", "--repo"],
+        "",
+    );
+    let (out, err, ok) = run_with_tracker(
         home,
         repo,
         bin,
@@ -980,7 +986,15 @@ fn a_gate_question_by_run_id_writes_nothing() {
         &["gate", "Bash", "--run-id", unknown, "--input", &input],
         "",
     );
-    let _ = format!("{out}{err}");
+    let answer = format!("{out}{err}");
+    assert!(
+        ok,
+        "a question about a run nobody holds did not exit the way an outside answer does: {answer}"
+    );
+    assert!(
+        answer.contains("outside"),
+        "a question about a run nobody holds did not answer outside: {answer}"
+    );
     assert!(
         decisions(home).is_empty(),
         "a question about a run nobody holds was written to the ledger: {}",

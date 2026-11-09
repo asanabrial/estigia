@@ -825,14 +825,20 @@ fn issue_answer_held_by(run_id: &str, state: &str) -> String {
     let claim = issue["comments"][0]["body"]
         .as_str()
         .expect("the fixture claims the issue");
-    issue["comments"][0]["body"] = serde_json::json!(
-        claim
-            .replace("run-id=claude-abcd1234", &format!("run-id={run_id}"))
-            .replace(
-                "Claimed by claude-abcd1234",
-                &format!("Claimed by {run_id}")
-            )
+    let renamed_run = claim.replace("run-id=claude-abcd1234", &format!("run-id={run_id}"));
+    assert_ne!(
+        renamed_run, claim,
+        "the fixture's claim no longer names run-id=claude-abcd1234: {claim}"
     );
+    let renamed_claim = renamed_run.replace(
+        "Claimed by claude-abcd1234",
+        &format!("Claimed by {run_id}"),
+    );
+    assert_ne!(
+        renamed_claim, renamed_run,
+        "the fixture's claim no longer says Claimed by claude-abcd1234: {claim}"
+    );
+    issue["comments"][0]["body"] = serde_json::json!(renamed_claim);
     entry["stdout"] = serde_json::json!(issue.to_string());
     serde_json::to_string(&serde_json::json!([entry])).expect("the script serialises")
 }
