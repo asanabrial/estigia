@@ -14,6 +14,10 @@ const NOW: &str = "2026-11-04T10:00:00Z";
 const HORIZON: &str = "2099-11-04T18:00Z";
 const LENS: &str = "review-reliability";
 
+fn clock() -> u64 {
+    crate::harness::session::now_seconds().expect("a clock")
+}
+
 struct Rig {
     root: tempfile::TempDir,
     head: String,
@@ -228,7 +232,7 @@ fn the_panel_reads_the_merge_base_through_the_head_and_nothing_the_target_gained
     assert_eq!(held["base_tip"], rig.tip.as_str());
     let seen = Seen::default();
     let launched = gh(&rig, || {
-        launch_with(&rig.context, RUN, &spawner(&[], &seen), 1_000)
+        launch_with(&rig.context, RUN, &spawner(&[], &seen), clock())
     })
     .expect("the launch");
     assert_eq!(launched["criteria"], "fixed-and-tracker");
@@ -250,7 +254,7 @@ fn the_tracker_issue_is_criteria_and_the_pull_request_description_is_never_asked
     claimed(&rig);
     let seen = Seen::default();
     gh(&rig, || {
-        launch_with(&rig.context, RUN, &spawner(&[], &seen), 1_000)
+        launch_with(&rig.context, RUN, &spawner(&[], &seen), clock())
     })
     .expect("the launch");
     collect(&rig);
@@ -276,7 +280,7 @@ fn a_deterministic_severe_finding_requests_changes() {
             &rig.context,
             RUN,
             &spawner(&[(LENS, &answer)], &seen),
-            1_000,
+            clock(),
         )
     })
     .expect("the launch");
@@ -293,14 +297,14 @@ fn an_inferential_severe_finding_goes_to_the_refuter_before_any_verdict() {
         serde_json::json!({ "outcomes": [{ "id": "maybe", "outcome": "refuted" }] }).to_string();
     let lens_then_refuter = spawner(&[(LENS, &answer), ("review-refuter", &refuted)], &seen);
     gh(&rig, || {
-        launch_with(&rig.context, RUN, &lens_then_refuter, 1_000)
+        launch_with(&rig.context, RUN, &lens_then_refuter, clock())
     })
     .expect("the lens");
     let waiting = collect(&rig);
     assert_eq!(waiting["verdict"], "incomplete", "{waiting}");
     assert_eq!(waiting["next"]["names"][0], "refutation-batch");
     gh(&rig, || {
-        launch_with(&rig.context, RUN, &lens_then_refuter, 1_001)
+        launch_with(&rig.context, RUN, &lens_then_refuter, clock() + 1)
     })
     .expect("the refuter");
     assert_eq!(collect(&rig)["verdict"], "approved");
@@ -314,9 +318,12 @@ fn every_next_step_names_an_action_pr_review_takes() {
     let answer = severe("maybe", "inferential");
     let unsettled = serde_json::json!({ "outcomes": [] }).to_string();
     let reviewers = spawner(&[(LENS, &answer), ("review-refuter", &unsettled)], &seen);
-    gh(&rig, || launch_with(&rig.context, RUN, &reviewers, 1_000)).expect("the lens");
+    gh(&rig, || launch_with(&rig.context, RUN, &reviewers, clock())).expect("the lens");
     let waiting = collect(&rig);
-    gh(&rig, || launch_with(&rig.context, RUN, &reviewers, 1_001)).expect("the refuter");
+    gh(&rig, || {
+        launch_with(&rig.context, RUN, &reviewers, clock() + 1)
+    })
+    .expect("the refuter");
     let escalated = collect(&rig);
     assert_eq!(escalated["verdict"], "escalated", "{escalated}");
     assert_eq!(escalated["next"]["action"], "release", "{escalated}");
@@ -352,7 +359,7 @@ fn a_change_over_the_ceiling_answers_that_no_review_ran_and_no_verdict() {
     assert_eq!(collected["next"]["kind"], "stop", "{collected}");
     let seen = Seen::default();
     let failure = gh(&rig, || {
-        launch_with(&rig.context, RUN, &spawner(&[], &seen), 1_000)
+        launch_with(&rig.context, RUN, &spawner(&[], &seen), clock())
     })
     .expect_err("no launch over the ceiling");
     assert!(
@@ -377,7 +384,7 @@ fn a_declared_generated_file_still_reaches_the_reader() {
     claimed(&rig);
     let seen = Seen::default();
     gh(&rig, || {
-        launch_with(&rig.context, RUN, &spawner(&[], &seen), 1_000)
+        launch_with(&rig.context, RUN, &spawner(&[], &seen), clock())
     })
     .expect("the launch");
     collect(&rig);
@@ -399,7 +406,7 @@ fn an_answer_that_will_not_parse_leaves_the_slot_to_launch_again() {
             &rig.context,
             RUN,
             &spawner(&[(LENS, "not json")], &seen),
-            1_000,
+            clock(),
         )
     })
     .expect("the launch");
@@ -407,7 +414,7 @@ fn an_answer_that_will_not_parse_leaves_the_slot_to_launch_again() {
     assert_eq!(answer["verdict"], "incomplete");
     assert_eq!(answer["next"]["kind"], "launch");
     gh(&rig, || {
-        launch_with(&rig.context, RUN, &spawner(&[], &seen), 1_001)
+        launch_with(&rig.context, RUN, &spawner(&[], &seen), clock() + 1)
     })
     .expect("the second launch");
     assert_eq!(collect(&rig)["verdict"], "approved");
@@ -419,7 +426,7 @@ fn releasing_forgets_the_reviewers_answers() {
     claimed(&rig);
     let seen = Seen::default();
     gh(&rig, || {
-        launch_with(&rig.context, RUN, &spawner(&[], &seen), 1_000)
+        launch_with(&rig.context, RUN, &spawner(&[], &seen), clock())
     })
     .expect("the launch");
     collect(&rig);
