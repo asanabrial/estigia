@@ -2111,8 +2111,9 @@ pointer that leaves it names the document it points at.
   body whose first `##` heading outside a code fence is not `## Description for dumb humans` followed by a
   `> [!NOTE]` alert, or that lacks a required heading or has them out of order, before it calls `gh`. The
   required headings are the `##` lines of the fenced block in `skill/assets/analyst-issue-template.md`
-  (extracted by `build.rs`, so the file is the only list); the `###` sub-sections are not enforced, and
-  the check is structural, not about the prose beneath. `gh issue create`/`new`, `gh api` posting to an
+  (extracted by `build.rs`, so the file is the only list); the `###` sub-sections are not enforced (a
+  test only checks the template asks for closed decisions, the mismatch action and self-sufficiency),
+  and the check is structural, not about the prose beneath. `gh issue create`/`new`, `gh api` posting to an
   `/issues` path and a GraphQL `createIssue` are refused `issue-creation-outside-flow` whoever holds the
   checkout, naming `create` and its `repo` argument. Matching is on substrings of the command line, so a
   line that merely mentions the command is refused, `gh` after `sudo` is matched, and an alias or script
