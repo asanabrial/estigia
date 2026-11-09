@@ -20052,6 +20052,54 @@ fn a_payload_rebuild_over_a_manifest_matches_the_recorded_digest() {
     assert_eq!(answer["payload_digest"], payload.digest, "{answer}");
 }
 
+#[test]
+fn a_payload_over_the_ceiling_is_not_refused_when_the_tier_licenses_no_lens() {
+    let root = tempfile::tempdir().expect("a directory");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("the repository directory");
+    git(&repo, &["init", "--quiet", "-b", "main"]);
+    git(&repo, &["config", "user.email", "estigia@example.invalid"]);
+    git(&repo, &["config", "user.name", "Estigia test"]);
+    let prose: String = (0..9000)
+        .map(|row| format!("passive prose line {row:05} with padding padding padding\n"))
+        .collect();
+    std::fs::write(repo.join("notes.md"), "old\n").expect("content");
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "--quiet", "-m", "base"]);
+    let base = head_of(&repo);
+    std::fs::write(repo.join("notes.md"), &prose).expect("content");
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "--quiet", "-m", "head"]);
+    let head = head_of(&repo);
+    let context = context_at(&repo);
+
+    let refusal = super::super::target::review_payload(&repo, &base, &head)
+        .expect_err("the bounded payload refuses");
+    assert_eq!(refusal.envelope()["reason"], "review-payload-too-large");
+    let payload = super::too_large_without_reader(&context, &repo, &base, &head, refusal)
+        .expect("a tier with no lens has no reader for the payload");
+    assert!(
+        payload.text.len() > super::super::target::REVIEW_PAYLOAD_CEILING,
+        "{}",
+        payload.text.len()
+    );
+    assert!(payload.text.contains("+passive prose line 00000"));
+
+    git(&repo, &["reset", "--quiet", "--hard", &base]);
+    let code: String = (0..9000)
+        .map(|row| format!("let value_{row} = {row}; // padding padding padding padding padding\n"))
+        .collect();
+    std::fs::write(repo.join("code.rs"), &code).expect("content");
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "--quiet", "-m", "code"]);
+    let code_head = head_of(&repo);
+    let refusal = super::super::target::review_payload(&repo, &base, &code_head)
+        .expect_err("the bounded payload refuses");
+    let refused = super::too_large_without_reader(&context, &repo, &base, &code_head, refusal)
+        .expect_err("a tier with a lens keeps the ceiling");
+    assert_eq!(refused.envelope()["reason"], "review-payload-too-large");
+}
+
 mod capture;
 mod checks;
 mod status;

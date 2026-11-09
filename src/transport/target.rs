@@ -17,6 +17,8 @@ use super::{
     run_with_isolated_env,
 };
 
+mod summary;
+
 /// Emits the target: the exact base through `HEAD`, plus the uncommitted
 /// worktree, as a manifest with one digest.
 ///
@@ -220,7 +222,7 @@ pub(crate) fn review_payload_bounded(
     head: &str,
     ceiling: usize,
 ) -> Result<ReviewPayload, Failure> {
-    payload_declared_at(at, base, head, base, ceiling)
+    payload_declared_at(at, base, head, base, Some(ceiling))
 }
 
 pub(crate) fn review_payload_declared_at(
@@ -229,7 +231,7 @@ pub(crate) fn review_payload_declared_at(
     head: &str,
     authority: &str,
 ) -> Result<ReviewPayload, Failure> {
-    payload_declared_at(at, base, head, authority, REVIEW_PAYLOAD_CEILING)
+    payload_declared_at(at, base, head, authority, Some(REVIEW_PAYLOAD_CEILING))
 }
 
 /// The payload with every path's hunks, for bytes nobody will regenerate.
@@ -238,7 +240,16 @@ pub(crate) fn review_payload_whole(
     base: &str,
     head: &str,
 ) -> Result<ReviewPayload, Failure> {
-    payload_with(at, base, head, None, REVIEW_PAYLOAD_CEILING)
+    payload_with(at, base, head, None, Some(REVIEW_PAYLOAD_CEILING))
+}
+
+/// The same payload without a byte ceiling.
+pub(crate) fn review_payload_without_ceiling(
+    at: &std::path::Path,
+    base: &str,
+    head: &str,
+) -> Result<ReviewPayload, Failure> {
+    payload_declared_at(at, base, head, base, None)
 }
 
 fn payload_declared_at(
@@ -246,7 +257,7 @@ fn payload_declared_at(
     base: &str,
     head: &str,
     authority: &str,
-    ceiling: usize,
+    ceiling: Option<usize>,
 ) -> Result<ReviewPayload, Failure> {
     payload_with(at, base, head, Some(authority), ceiling)
 }
@@ -256,7 +267,7 @@ fn payload_with(
     base: &str,
     head: &str,
     authority: Option<&str>,
-    ceiling: usize,
+    ceiling: Option<usize>,
 ) -> Result<ReviewPayload, Failure> {
     if !is_object_id(base) || !is_object_id(head) {
         return Err(Failure::Read(
@@ -302,25 +313,72 @@ fn payload_with(
             "git diff produced bytes that are not UTF-8".to_owned(),
         ));
     }
-    let mut text = output.stdout;
+    let summary::Summary {
+        mut text,
+        moves,
+        deletions,
+        saved,
+    } = summary::summarise(&output.stdout);
     for entry in &entries {
         text.push_str(&entry.block());
     }
     let size = text.len();
-    if size > ceiling {
-        return Err(Failure::Stop(serde_json::json!({
-            "ok": false,
-            "reason": "review-payload-too-large",
-            "bytes": size,
-            "ceiling": ceiling,
-            "action": "the change is too large to review as one unit. Split it; do not truncate \
-                       the payload and do not hand a judge a partial view",
-        })));
+    if let Some(ceiling) = ceiling
+        && size > ceiling
+    {
+        return Err(payload_too_large(size, ceiling, moves, deletions, saved));
     }
     Ok(ReviewPayload {
         digest: super::ownership::sha256_hex(text.as_bytes()),
         text,
     })
+}
+
+fn payload_too_large(
+    size: usize,
+    ceiling: usize,
+    moves: usize,
+    deletions: usize,
+    saved: usize,
+) -> Failure {
+    Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "review-payload-too-large",
+        "bytes": size,
+        "ceiling": ceiling,
+        "manifested": {
+            "moves": moves,
+            "deletions": deletions,
+            "bytes_saved": saved,
+        },
+        "options": [
+            {
+                "option": "split",
+                "call": "publish_review",
+                "detail": "publish the change in slices, each under the ceiling, one call per \
+                           slice; `republish_review` instead for a slice whose history was \
+                           rewritten",
+            },
+            {
+                "option": "verbatim-move",
+                "call": "publish_review",
+                "detail": "when the change moves text between paths, make each moved range \
+                           byte-identical to its source; the payload then shows it as a \
+                           digest-verified manifest line instead of both copies, and \
+                           `republish_review` is the call when the history was rewritten",
+            },
+        ],
+        "action": format!(
+            "the change is too large to review as one unit even after every verbatim move \
+             and whole-file deletion was replaced by a digest-verified manifest line, \
+             which saved {saved} bytes across {moves} moves and {deletions} deletions. \
+             Publish it in slices under the ceiling, one `publish_review` per slice, or, \
+             when part of it is a move, make each moved range byte-identical to its source \
+             so it is shown as a manifest line; `republish_review` replaces \
+             `publish_review` for either route when the history was rewritten. Do not \
+             truncate the payload and do not hand a judge a partial view"
+        ),
+    }))
 }
 
 pub(crate) fn merge_base(at: &std::path::Path, one: &str, two: &str) -> Result<String, Failure> {

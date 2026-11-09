@@ -12,7 +12,9 @@ regenerates byte-identically. The two ship together: a manifest without the gate
 skip review. `review_read` with `view: verdict` also carries the result as `generated_files`; it
 executes nothing unless the caller passes `reproduce: true`, because the command is repository code
 that may use the network and a read needs no claim. Without it each touched declared path reads
-`not-run`. [`honesty.md`](honesty.md) says what that leaves open.
+`not-run`. [`honesty.md`](honesty.md) says what that leaves open. The payload also carries two
+manifest lines this document does not own: `# estigia-moved` for a verbatim move between paths and
+`# estigia-deleted` for a whole-file deletion, neither of which a declared command regenerates.
 
 ## The declaration
 
