@@ -1612,3 +1612,37 @@ fn a_transition_to_blocked_records_the_clause_it_carries() {
     assert_eq!(answer["blocked_until"]["recorded"], true, "{answer}");
     assert_eq!(answer["blocked_until"]["clauses"], 1, "{answer}");
 }
+
+/// A clause whose issue does not parse refuses; it does not become a plain
+/// transition that records nothing.
+#[test]
+fn a_malformed_until_issue_refuses_instead_of_vanishing() {
+    let root = tempfile::tempdir().expect("a scratch root");
+    let flags: Vec<String> = [
+        "--issue",
+        "12",
+        "--to",
+        "blocked",
+        "--until-issue",
+        "ENG-14",
+        "--until-state",
+        "done",
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+
+    let refused = super::dispatch(
+        &context(root.path()),
+        "transition",
+        &flags,
+        "2026-01-01T00:00Z",
+    )
+    .expect_err("a clause naming a key as an issue was dropped");
+    assert_eq!(
+        refused.envelope()["reason"],
+        "malformed-argument",
+        "{}",
+        refused.envelope()
+    );
+}

@@ -977,10 +977,19 @@ fn run_operation(
         "transition" => {
             let issue = issue()?;
             let to = f.need("to", operation)?;
+            let until_issue = match f.get("until-issue") {
+                Some(raw) => Some(raw.trim().parse::<u64>().map_err(|_| {
+                    capture_argument_defect(
+                        operation,
+                        "--until-issue",
+                        "an issue number, and this is not one; leaving it out is no clause",
+                    )
+                })?),
+                None => None,
+            };
             let clause = super::commands::transition_clause(
                 to,
-                f.get("until-issue")
-                    .and_then(|number| number.trim().parse::<u64>().ok()),
+                until_issue,
                 f.get("until-state"),
                 f.on("clear"),
             )?;
@@ -995,7 +1004,8 @@ fn run_operation(
                         clause.until_state,
                         clause.clear,
                         now,
-                    )?;
+                    )
+                    .unwrap_or_else(|failure| failure.envelope());
                     Ok(merged_step(answer, "blocked_until", recorded))
                 }
             }
