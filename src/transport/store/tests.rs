@@ -698,6 +698,44 @@ fn a_failure_the_clock_could_not_date_is_stored_as_unknown() {
 }
 
 #[test]
+fn a_snapshot_failure_with_no_clock_is_stored_as_unknown() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let store = Store::open(&path).expect("opens");
+    std::fs::write(directory.path().join("snapshots"), "not a directory")
+        .expect("a file where the snapshots directory goes");
+
+    store.snapshot(&path, 0);
+
+    let failures = store.record_failures().expect("reads");
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].kind, "snapshot");
+    assert_eq!(
+        failures[0].last_at, None,
+        "a snapshot failure with no clock was stored as 1970"
+    );
+}
+
+#[test]
+fn an_undated_failure_after_a_dated_one_keeps_the_row_undated() {
+    let (_directory, store) = open();
+    store
+        .note_record_failure(super::Record::Decision, Some(100))
+        .expect("a dated failure");
+    store
+        .note_record_failure(super::Record::Decision, None)
+        .expect("an undated failure");
+
+    let failures = store.record_failures().expect("reads");
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].count, 2);
+    assert_eq!(
+        failures[0].last_at, None,
+        "an undated failure inherited a date the store did not record"
+    );
+}
+
+#[test]
 fn opening_a_ledger_writes_a_snapshot_when_none_is_recent() {
     let directory = tempfile::tempdir().expect("a temporary directory");
     let path = directory.path().join("state.db");
