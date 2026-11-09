@@ -3597,6 +3597,21 @@ mod tests {
     }
 
     #[test]
+    fn the_issue_template_asks_for_what_an_implementer_cannot_decide() {
+        let template = include_str!("../skill/assets/analyst-issue-template.md");
+        for asked in [
+            "### Decisions taken",
+            "### If this does not match",
+            "The implementer has this issue and the repository, and nothing else.",
+        ] {
+            assert!(
+                template.contains(asked),
+                "the template never asks for {asked:?}"
+            );
+        }
+    }
+
+    #[test]
     fn the_contract_carries_the_resolved_configuration() {
         let rendered = rendered(&FILES[0], &Config::default());
         assert_eq!(FILES[0].path, CONTRACT);
