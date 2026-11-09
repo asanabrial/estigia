@@ -1902,7 +1902,7 @@ fn job_state(store: &Store, id: &str) -> String {
 
 fn set_modified(path: &std::path::Path, modified: u64) {
     let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(modified);
-    std::fs::File::open(path)
+    super::open_directory(path)
         .expect("the job directory")
         .set_times(std::fs::FileTimes::new().set_modified(stamp))
         .expect("the directory mtime");

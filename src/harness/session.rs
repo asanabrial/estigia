@@ -1942,7 +1942,7 @@ mod tests {
         std::fs::create_dir_all(&old).expect("a job directory");
         let now = now_seconds().expect("a clock");
         let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(now - 31 * 24 * 60 * 60);
-        std::fs::File::open(&old)
+        crate::transport::store::open_directory(&old)
             .expect("the job directory")
             .set_times(std::fs::FileTimes::new().set_modified(stamp))
             .expect("the directory mtime");
