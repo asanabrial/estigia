@@ -1690,8 +1690,12 @@ pub fn store(home: Option<&Path>) -> Check {
 
 /// The records the store could not write down and counted instead.
 ///
-/// A count that only grows describes appends that already failed, not whether
-/// a run can claim now, so it is reported and never blocks.
+/// A count describes appends that already failed, not whether a run can claim
+/// now, so it is reported and never blocks. A snapshot that has succeeded since
+/// has already deleted its row; one whose last failure is older than the record
+/// retention is not a current fault either, and the daily pass deletes it. A row
+/// with no recorded time stays broken: its age is unknown, and an unknown result
+/// is not clearance.
 pub fn store_records(home: Option<&Path>) -> Check {
     use crate::transport::store::Store;
     let about =
@@ -1717,29 +1721,8 @@ pub fn store_records(home: Option<&Path>) -> Check {
             ),
         ),
         Ok(failures) => {
-            let missed: u64 = failures.iter().map(|(_, count)| count).sum();
-            if missed == 0 {
-                Health::Fine {
-                    detail: "no record was ever counted instead of written".to_owned(),
-                }
-            } else {
-                let kinds = failures
-                    .iter()
-                    .map(|(kind, count)| format!("{count} {kind}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                Health::broken(
-                    format!(
-                        "{missed} record(s) could not be written down and were counted instead: \
-                         {kinds}"
-                    ),
-                    Resolution::no_command(
-                        NoCommandReason::OperatorKnowledge,
-                        "why the append failed — a decision that could not be written down is \
-                         not on the record, and this is where it is counted",
-                    ),
-                )
-            }
+            let now = crate::harness::session::now_seconds().unwrap_or_default();
+            counted_failures(&failures, now)
         }
     };
     Check {
@@ -1747,6 +1730,92 @@ pub fn store_records(home: Option<&Path>) -> Check {
         about,
         health,
     }
+}
+
+/// What the counted failures mean, fed the current time so the age bound is
+/// testable without waiting a month.
+fn counted_failures(failures: &[crate::transport::store::RecordFailure], now: u64) -> Health {
+    if failures.is_empty() {
+        return Health::Fine {
+            detail: "no record was ever counted instead of written".to_owned(),
+        };
+    }
+    let retention = crate::harness::session::RECORD_RETENTION_DAYS * 24 * 60 * 60;
+    let cutoff = now.saturating_sub(retention);
+    let current: Vec<&crate::transport::store::RecordFailure> = failures
+        .iter()
+        .filter(|failure| failure.last_at.is_none_or(|at| at >= cutoff))
+        .collect();
+    if current.is_empty() {
+        return Health::Fine {
+            detail: format!(
+                "every counted failure is older than the {}-day record retention, and the \
+                 records around it are gone as well",
+                crate::harness::session::RECORD_RETENTION_DAYS
+            ),
+        };
+    }
+    let stamp = |failure: &crate::transport::store::RecordFailure| {
+        failure.last_at.map_or_else(
+            || "when the last one happened is unknown".to_owned(),
+            |at| {
+                format!(
+                    "the most recent at {}",
+                    crate::harness::session::stamp_of(at)
+                )
+            },
+        )
+    };
+    let sentences: Vec<String> = current
+        .iter()
+        .map(|failure| match failure.kind.as_str() {
+            "snapshot" => {
+                let mut sentence = format!("{} snapshot(s) could not be written", failure.count);
+                match failure.last_at {
+                    Some(at) => sentence.push_str(&format!(
+                        ", and no snapshot has succeeded since: the last failure at {}",
+                        crate::harness::session::stamp_of(at)
+                    )),
+                    None => sentence.push_str(", and the store did not record when"),
+                }
+                if let Some(why) = failure.last_error.as_deref().filter(|why| !why.is_empty()) {
+                    sentence.push_str(&format!(": {why}"));
+                }
+                sentence
+            }
+            kind => {
+                let noun = match kind {
+                    "decisions" => "decision record(s)",
+                    "roles" => "role record(s)",
+                    other => {
+                        return format!(
+                            "{} {other} record(s) could not be written down and were counted \
+                         instead, {}",
+                            failure.count,
+                            stamp(failure)
+                        );
+                    }
+                };
+                format!(
+                    "{} {noun} could not be written down and were counted instead, {}",
+                    failure.count,
+                    stamp(failure)
+                )
+            }
+        })
+        .collect();
+    let only_snapshots = current.iter().all(|failure| failure.kind == "snapshot");
+    let resolution = if only_snapshots {
+        "why the snapshot could not be written \u{2014} until one succeeds the newest copy is \
+         older than that failure; a later successful snapshot clears this row"
+    } else {
+        "why the append failed \u{2014} a record that could not be written down is not on the \
+         record, and this is where it is counted"
+    };
+    Health::broken(
+        sentences.join("; "),
+        Resolution::no_command(NoCommandReason::OperatorKnowledge, resolution),
+    )
 }
 
 /// Run pointers on this machine that are there and cannot be read.
@@ -3118,19 +3187,36 @@ pub fn silence(found: &Ungated) -> Check {
         .map_or_else(String::new, |(_, why)| {
             format!("\n                      {why}")
         });
+    let indent = " ".repeat(22);
+    let when = if last == 0 {
+        "at a time the store did not record".to_owned()
+    } else {
+        format!("at {}", crate::harness::session::stamp_of(last))
+    };
+    let ages_out = if last == 0 {
+        format!(
+            "\n{indent}the newest undecided call carries no date, so when it ages out is unknown"
+        )
+    } else {
+        format!(
+            "\n{indent}the newest ages out of this report on {}",
+            crate::harness::session::stamp_of(
+                last.saturating_add(crate::harness::session::RECORD_RETENTION_DAYS * 24 * 60 * 60)
+            )
+        )
+    };
     Check {
         name: "silence",
         about: "whether any call reached the gate and went undecided",
         health: Health::broken(
             format!(
-                "{} call(s) went through ungated, the most recent {} at {}: \
-                 {what}{unminted}{latest}",
+                "{} call(s) went through ungated, the most recent {} {when}: \
+                 {what}{unminted}{latest}{ages_out}",
                 ungated.len(),
                 found.source.as_deref().map_or_else(
                     || "from an agent no line names".to_owned(),
                     |who| format!("from {who}"),
                 ),
-                crate::harness::session::stamp_of(last)
             ),
             Resolution::no_command(
                 crate::outcome::NoCommandReason::OperatorKnowledge,
@@ -6131,9 +6217,10 @@ mod tests {
         );
 
         // And a line from a build that had nothing to say still reads as one
-        // sentence. Half of any real ledger is older than this feature, and a
-        // check that appended an empty reason to every one of them would be
-        // noise on exactly the machines that already have a problem.
+        // sentence plus the one this check adds. Half of any real ledger is
+        // older than this feature, and a check that appended an empty reason to
+        // every one of them would be noise on exactly the machines that already
+        // have a problem.
         let bare = silence(&Ungated {
             calls: vec![("payload-unreadable".to_owned(), 30)],
             latest: Some(
@@ -6144,9 +6231,15 @@ mod tests {
         let Health::Broken { detail, .. } = &bare.health else {
             panic!("reported fine");
         };
+        let lines: Vec<&str> = detail.lines().collect();
+        assert_eq!(
+            lines.len(),
+            2,
+            "an old line with nothing to add grew more than the aged-out sentence: {detail:?}"
+        );
         assert!(
-            !detail.contains('\n'),
-            "an old line with nothing to add still grew a second line: {detail:?}"
+            lines[1].contains("ages out"),
+            "the only added line is not when the call ages out: {detail:?}"
         );
     }
 
@@ -7077,6 +7170,133 @@ mod tests {
             ),
             other => panic!("a silent divergence stayed silent: {other:?}"),
         }
+    }
+
+    const COUNTED_AT: u64 = 1_800_000_000;
+
+    fn counted(
+        kind: &str,
+        count: u64,
+        last_at: Option<u64>,
+        last_error: Option<&str>,
+    ) -> crate::transport::store::RecordFailure {
+        crate::transport::store::RecordFailure {
+            kind: kind.to_owned(),
+            count,
+            last_at,
+            last_error: last_error.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn a_counted_failure_inside_the_retention_is_broken_with_its_date() {
+        let at = COUNTED_AT - 86_400;
+        let health =
+            super::counted_failures(&[counted("decisions", 2, Some(at), None)], COUNTED_AT);
+        let super::Health::Broken { detail, .. } = health else {
+            panic!("a counted failure from yesterday was reported fine");
+        };
+        assert!(
+            detail.contains("2 decision record(s)"),
+            "how many is not said: {detail}"
+        );
+        assert!(
+            detail.contains(&crate::harness::session::stamp_of(at)),
+            "when the last one was is not said: {detail}"
+        );
+    }
+
+    #[test]
+    fn a_counted_failure_older_than_the_retention_stops_being_broken() {
+        let days = crate::harness::session::RECORD_RETENTION_DAYS;
+        let boundary = COUNTED_AT - days * 86_400;
+        assert!(
+            super::counted_failures(&[counted("decisions", 1, Some(boundary), None)], COUNTED_AT)
+                .is_broken(),
+            "a failure exactly at the retention boundary was read as older than it"
+        );
+        let old = COUNTED_AT - (days + 1) * 86_400;
+        assert!(
+            !super::counted_failures(&[counted("decisions", 1, Some(old), None)], COUNTED_AT)
+                .is_broken(),
+            "a failure whose records have already aged out is still reported as a current fault"
+        );
+    }
+
+    #[test]
+    fn a_counted_failure_with_no_recorded_time_stays_broken() {
+        assert!(
+            super::counted_failures(&[counted("decisions", 1, None, None)], COUNTED_AT).is_broken(),
+            "a failure whose age is unknown was reported as clearance"
+        );
+    }
+
+    #[test]
+    fn a_failed_snapshot_is_described_as_one_and_keeps_its_reason() {
+        let health = super::counted_failures(
+            &[counted(
+                "snapshot",
+                1,
+                Some(COUNTED_AT - 60),
+                Some("could not create /home/x/.estigia/snapshots: the disk was full"),
+            )],
+            COUNTED_AT,
+        );
+        let super::Health::Broken { detail, .. } = health else {
+            panic!("a failed snapshot was reported fine");
+        };
+        assert!(
+            detail.contains("snapshot"),
+            "the kind is not named: {detail}"
+        );
+        assert!(
+            !detail.contains("decision"),
+            "a snapshot failure is described as a decision: {detail}"
+        );
+        assert!(
+            detail.contains("the disk was full"),
+            "the reason the snapshot failed is not in the report: {detail}"
+        );
+    }
+
+    #[test]
+    fn the_silence_says_when_the_newest_undecided_call_ages_out() {
+        let at = 1_785_904_685;
+        let check = silence(&Ungated {
+            calls: vec![("payload-absent".to_owned(), at)],
+            ..Ungated::default()
+        });
+        assert!(
+            check.health.is_broken(),
+            "an ungated call stopped being broken"
+        );
+        let super::Health::Broken { detail, .. } = &check.health else {
+            panic!("an ungated call stopped being broken");
+        };
+        let aged_out = at + crate::harness::session::RECORD_RETENTION_DAYS * 24 * 60 * 60;
+        assert!(
+            detail.contains(&crate::harness::session::stamp_of(aged_out)),
+            "when the newest one ages out is not said: {detail}"
+        );
+    }
+
+    #[test]
+    fn an_undated_undecided_call_is_not_given_a_date() {
+        let check = silence(&Ungated {
+            calls: vec![("payload-absent".to_owned(), 0)],
+            ..Ungated::default()
+        });
+        let super::Health::Broken { detail, .. } = &check.health else {
+            panic!("an ungated call stopped being broken");
+        };
+        assert!(
+            detail.contains("did not record") && detail.contains("carries no date"),
+            "an undated call is not reported as undated: {detail}"
+        );
+        assert!(
+            !detail.contains("1970"),
+            "an undated call was given the epoch as its date: {detail}"
+        );
     }
 
     const STALLED_FIXTURE: &str = "harness::doctor::tests::a_stalled_program_fixture";

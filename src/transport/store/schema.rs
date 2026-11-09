@@ -347,4 +347,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (epoch, name)
     );
     ",
+    "
+    ALTER TABLE record_failures ADD COLUMN last_at INTEGER;
+    ALTER TABLE record_failures ADD COLUMN last_error TEXT;
+    ",
 ];

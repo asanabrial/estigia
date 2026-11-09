@@ -39,7 +39,7 @@ pub(crate) use asks::MessageTake;
 pub(crate) use calls::count_into as with_store_at;
 pub(crate) use calls::counting;
 pub(super) use calls::note;
-pub(crate) use decisions::Record;
+pub(crate) use decisions::{Record, RecordFailure};
 pub(crate) use duties::Duty;
 pub(crate) use feed::{FeedRow, FeedWindow, MESSAGE, TRANSITION};
 pub(crate) use handoffs::HandoffRow;

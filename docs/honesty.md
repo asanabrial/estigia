@@ -3372,8 +3372,10 @@ pointer that leaves it names the document it points at.
 - **Five of the twenty-one are about the past.** `LOOKS_BACK` excludes `silence`, `stale-run-pointer`,
   `prune`, `gate-version` and `store-records` from readiness: undecided past calls, another run's
   pointer, orphaned branches, a stale diagnostic binary and appends that already failed do not prove
-  a fresh claim impossible. `store-records` reads a counter that only grows, so one transient
-  snapshot failure would otherwise keep `doctor` refusing on a store every claim opens. The store
+  a fresh claim impossible. `store-records` reads counted append failures; a successful snapshot
+  deletes the `snapshot` row, and a counted failure whose last occurrence is older than the thirty-day
+  record retention is not broken and the daily pass deletes it. A row whose last occurrence the store
+  did not record stays broken, because its age is unknown and an unknown is not clearance. The store
   row is not exempt: an unreadable authority prevents claiming now. This classification is a policy boundary,
   not proof that the historical problems were repaired.
 - **The claim and review families decide from the local workflow store and write only to it; GitHub carries
@@ -3420,7 +3422,8 @@ pointer that leaves it names the document it points at.
   loses store-only identities, clauses, tasks, in-flight claims and review history. Reimport cannot
   recover what GitHub never held, even while its projection still names the run. On the write path,
   `VACUUM INTO` takes a snapshot when none exists or the newest is at least 24 hours old, keeping
-  three in `~/.estigia/snapshots/`. Failures are counted, not fatal, and restoration is manual.
+  three in `~/.estigia/snapshots/`. Failures are counted with when they last happened and the reason
+  the last one gave, not fatal; a later successful snapshot clears the snapshot row. Restoration is manual.
   Doctor reports age, not a verified restore. Append-only triggers do not resist an OS user
   able to drop them. `store-unwritable` rejects detected network mounts on macOS/Linux, not Windows.
   `foreign-projection` refuses unexplained GitHub owners across stores; reclaim overrides it.

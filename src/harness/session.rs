@@ -902,7 +902,7 @@ fn append_waiting(root: &Path, kind: Record, entry: &Value, wait: Duration) {
         return;
     };
     if store.add_record(kind, entry).is_err() {
-        let _ = store.note_record_failure(kind);
+        let _ = store.note_record_failure(kind, now_seconds());
     }
 }
 
@@ -969,6 +969,7 @@ pub fn maintain(root: &Path) {
     }
     let cutoff = now.saturating_sub(RECORD_RETENTION_DAYS * 24 * 60 * 60);
     let _ = store.prune_records(cutoff);
+    let _ = store.prune_failures(cutoff);
     let _ = store.cap_decisions(DECISIONS_PER_REPOSITORY, crate::harness::doctor::UNDECIDED);
     let jobs = crate::transport::store::jobs_beside(&path);
     let _ = store.bound_jobs(&jobs, now);
@@ -996,6 +997,7 @@ fn rotated(path: &Path) -> PathBuf {
 fn import_legacy(store: &Store, root: &Path) {
     let mut batch: Vec<(Record, Vec<Value>)> = Vec::new();
     let mut files: Vec<PathBuf> = Vec::new();
+    let now = now_seconds();
     for (path, kind) in legacy_files(root) {
         match fs::read_to_string(&path) {
             Ok(text) => {
@@ -1009,7 +1011,7 @@ fn import_legacy(store: &Store, root: &Path) {
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => {
-                let _ = store.note_record_failure(kind);
+                let _ = store.note_record_failure(kind, now);
                 return;
             }
         }
@@ -1023,7 +1025,7 @@ fn import_legacy(store: &Store, root: &Path) {
         Ok(false) => {}
         Err(_) => {
             for (kind, _) in &batch {
-                let _ = store.note_record_failure(*kind);
+                let _ = store.note_record_failure(*kind, now);
             }
         }
     }
@@ -2076,7 +2078,7 @@ mod tests {
                 .record_failures()
                 .expect("the failures read")
                 .iter()
-                .any(|(kind, count)| kind == "decisions" && *count == 1),
+                .any(|failure| failure.kind == "decisions" && failure.count == 1),
             "a failed import was not counted"
         );
     }

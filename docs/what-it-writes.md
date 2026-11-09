@@ -178,7 +178,9 @@ Five invariants, and the tests are named after them:
    The write path also snapshots the store with SQLite's `VACUUM INTO` into
    `~/.estigia/snapshots/` when the newest snapshot is a day old or older, keeping the newest
    three; `doctor`'s `store` row reports the newest's age. A snapshot is for a
-   person to restore by hand, not one Estigia reads back.
+   person to restore by hand, not one Estigia reads back. A snapshot that succeeds deletes any
+   counted snapshot failure; one that fails is counted with when it happened and the reason, and
+   the daily pass drops counted failures older than the record retention.
    Removal names the store, its `-wal` and `-shm` and `snapshots/`, and takes them with the last agent, wherever that agent was installed: a global install writes one
    file under `~/.estigia/roots/` naming the Claude, XDG and `APPDATA` roots it resolved, so an
    `uninstall` under one `CLAUDE_CONFIG_DIR` still sees an install under another and leaves the
