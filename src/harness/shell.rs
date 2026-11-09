@@ -449,14 +449,14 @@ fn segments(command: &str) -> Vec<&str> {
         .collect()
 }
 
-/// Whether a `>` outside quotes opens a file.
+/// Whether the line redirects into a file, and the target when the scan read one.
 ///
 /// Quote-aware because `echo "a > b"` writes nothing, and descriptor-aware
 /// because `2>&1` opens nothing. A target that is `/dev/null`, `/dev/stdout`,
 /// `/dev/stderr` or `/dev/fd/<n>` opens nothing either. Everything else that reaches a bare `>` is a
 /// file being created or truncated. A line that ends inside a quote that hid a `>` is read as a
 /// write.
-fn redirects_into_a_file(command: &str) -> bool {
+fn redirect_file(command: &str) -> Option<Option<String>> {
     let bytes = command.as_bytes();
     let mut quote: Option<u8> = None;
     let mut ansi = false;
@@ -580,7 +580,12 @@ fn redirects_into_a_file(command: &str) -> bool {
                 if !duplicates {
                     match discarded_target(bytes, after) {
                         Some(end) => index = end,
-                        None => return true,
+                        None => {
+                            let named = target_word(bytes, after)
+                                .map(|(word, _)| word.to_owned())
+                                .filter(|word| !word.is_empty());
+                            return Some(named);
+                        }
                     }
                 } else {
                     index = after + 2;
@@ -590,7 +595,20 @@ fn redirects_into_a_file(command: &str) -> bool {
         }
     }
 
-    quote.is_some() && hid_an_arrow
+    if quote.is_some() && hid_an_arrow {
+        return Some(None);
+    }
+    None
+}
+
+/// Whether a `>` outside quotes opens a file.
+fn redirects_into_a_file(command: &str) -> bool {
+    redirect_file(command).is_some()
+}
+
+/// The file a command line's first redirect opens, when the line names it.
+pub fn redirect_destination(command: &str) -> Option<String> {
+    redirect_file(command).flatten()
 }
 
 const DISCARDING_TARGETS: [&str; 3] = ["/dev/null", "/dev/stdout", "/dev/stderr"];

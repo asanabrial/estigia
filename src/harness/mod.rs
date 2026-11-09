@@ -2344,13 +2344,19 @@ pub fn classify_observing(
             // control-surface match is never shadowed by a narrower question
             // answered after it.
             let boundary = names_a_boundary(&lowercased);
+            let target = if spelling == shell::REDIRECT {
+                let line = command.literal.as_deref().unwrap_or(command.text.as_str());
+                shell::redirect_destination(line).unwrap_or_else(|| spelling.clone())
+            } else {
+                spelling.clone()
+            };
             // `writes_a_file` was handed `view`, not `normalized` — the two
             // differ whenever `without_leading_options` strips a pre-subcommand
             // option, and when a data span was blanked — so this arm reports the
             // string it actually searched rather than the shared value built
             // above for the fragment-list arms.
             let observed = CommandObserved {
-                matched: Established::Known(spelling.clone()),
+                matched: Established::Known(spelling),
                 against: Established::Known(view.clone()),
                 literal,
                 boundary_source: None,
@@ -2359,7 +2365,7 @@ pub fn classify_observing(
                 write_targets: Vec::new(),
             };
             return (
-                Action::Write { target: spelling },
+                Action::Write { target },
                 if boundary {
                     Sensitivity::Boundary
                 } else {

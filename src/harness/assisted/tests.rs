@@ -843,4 +843,62 @@ fn a_refused_write_tool_names_its_target_and_a_refused_shell_write_names_where_i
     );
 }
 
+#[test]
+fn a_redirect_names_the_file_it_opens_and_places_the_write_by_it() {
+    let mut rig = new_rig();
+    rig.context.repo_dir = rig.repo.path().to_path_buf();
+    let worktree = rig.worktree.display().to_string();
+    let scratch = tempfile::tempdir().expect("a directory in no repository");
+    let target = scratch.path().join("probe.txt");
+    let line = format!(
+        "cd \"{worktree}\" && just setup >\"{}\" 2>&1",
+        target.display()
+    );
+    let (action, _, _) =
+        crate::harness::classify_observing("Bash", &serde_json::json!({ "command": line }), &[]);
+    assert_eq!(
+        action,
+        Action::Write {
+            target: target.display().to_string()
+        },
+        "{line}"
+    );
+    let decision = decide_line(&mut rig, &line);
+    assert!(
+        matches!(decision, Decision::Outside(Aside::OutsideTheClaim)),
+        "{decision:?}"
+    );
+}
+
+#[test]
+fn a_redirect_inside_the_worktree_is_admitted_from_the_base_checkout() {
+    let mut rig = new_rig();
+    rig.context.repo_dir = rig.repo.path().to_path_buf();
+    let worktree = rig.worktree.display().to_string();
+    let line = format!("cd \"{worktree}\" && just setup >\"{worktree}/setup.log\" 2>&1");
+    let decision = decide_line(&mut rig, &line);
+    assert!(matches!(decision, Decision::Allow(_)), "{decision:?}");
+}
+
+#[test]
+fn a_redirect_into_the_base_checkout_names_the_file_it_would_write() {
+    let mut rig = new_rig();
+    rig.context.repo_dir = rig.repo.path().to_path_buf();
+    let worktree = rig.worktree.display().to_string();
+    let target = rig.repo.path().join("setup.log");
+    let line = format!(
+        "cd \"{worktree}\" && just setup >\"{}\" 2>&1",
+        target.display()
+    );
+    let Decision::Deny(refusal) = decide_line(&mut rig, &line) else {
+        panic!("a redirect into the base checkout was not refused");
+    };
+    assert_eq!(refusal.code, "assisted-outside-the-worktree");
+    assert!(
+        refusal.message.contains(&target.display().to_string()),
+        "{}",
+        refusal.message
+    );
+}
+
 mod several;

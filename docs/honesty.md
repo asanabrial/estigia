@@ -3226,7 +3226,12 @@ pointer that leaves it names the document it points at.
   only inside its worktree on its branch. A write tool's absolute path is placed by that path, whatever
   directory the session runs in: inside the run's repository it is judged against the worktree, in another
   repository it is that checkout's, and anywhere else (a session scratchpad) it is outside the claim, and a
-  refusal names that path. A shell write names no path, so it is placed by the session's directory, and
+  refusal names that path. A shell write is placed by its first literal redirect destination when the
+  line names one, as a write tool's path is: inside the worktree it is admitted, in the base checkout
+  the refusal names that file, and outside every repository it is outside the claim
+  (`a_redirect_inside_the_worktree_is_admitted_from_the_base_checkout`,
+  `a_redirect_into_the_base_checkout_names_the_file_it_would_write`). A shell write with no placeable
+  redirect names no path, so it is placed by the session's directory, and
   `cd <worktree> && sed -i …` from the primary checkout is refused `assisted-outside-the-worktree` naming
   where the call runs (`harness::assisted`,
   `a_shell_write_from_the_base_checkout_is_still_placed_by_where_it_runs`). A write tool whose paths live in its body and a shell command
