@@ -969,11 +969,22 @@ fn a_gate_question_by_run_id_writes_nothing() {
         decisions(home)
     );
 
-    // A run id nothing holds leaves no pointer behind either, and no row. It is
-    // refused as an unclaimed write, not answered `outside`: the fixture's
-    // contract watches unclaimed writes and this caller cannot carry the ask.
+    // The unclaimed-write policy is turned off so a run holding nothing answers
+    // `outside` rather than the policy's refusal: the road under test is the
+    // question, not the policy. A run id nothing holds then leaves no pointer
+    // behind either, and no row.
     let unknown = "claude-nosuch0000";
     forget_store(home);
+    let (out, err, ok) = run_in(
+        home,
+        repo,
+        &["config", "set", "Unclaimed write policy", "off", "--repo"],
+        "",
+    );
+    assert!(
+        ok,
+        "the fixture's unclaimed write policy could not be turned off: {out}{err}"
+    );
     let (out, err, ok) = run_with_tracker(
         home,
         repo,
@@ -984,12 +995,12 @@ fn a_gate_question_by_run_id_writes_nothing() {
     );
     let answer = format!("{out}{err}");
     assert!(
-        !ok,
-        "a question about a run nobody holds did not exit the way a refusal does: {answer}"
+        ok,
+        "a question about a run nobody holds did not exit the way an outside answer does: {answer}"
     );
     assert!(
-        answer.contains("issue-required"),
-        "a question about a run nobody holds did not answer the unclaimed-write refusal: {answer}"
+        answer.contains("outside"),
+        "a question about a run nobody holds did not answer outside: {answer}"
     );
     assert!(
         decisions(home).is_empty(),
