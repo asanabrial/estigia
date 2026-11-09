@@ -33,6 +33,15 @@ fn the_template_filled_as_written_is_accepted() {
 /// Mutation: restore `<!-- issue-flow: analysis run-id=<run-id> -->` to the
 /// template's fenced block, and this reddens.
 #[test]
+fn a_body_without_the_new_subsections_is_accepted() {
+    let body = filled()
+        .replace("### Decisions taken", "Decisions:")
+        .replace("### If this does not match", "Mismatch:")
+        .replace("### Order", "Order:");
+    check(&body).expect("the new subsections are guidance, not required headings");
+}
+
+#[test]
 fn the_shipped_template_carries_no_control_marker() {
     let body = filled().replace("<run-id>", "claude-abcd1234");
     let markers = crate::transport::markers::parse(&body).len();
