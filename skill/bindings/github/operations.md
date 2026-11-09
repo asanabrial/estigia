@@ -72,7 +72,15 @@ The text is what can make an answer too large for the MCP surface to return, and
 inside the ordinary range rather than at the large end: answers carrying 73,272 and 145,756 payload
 bytes were refused, one carrying 36,288 was not. Exceeding `REVIEW_PAYLOAD_CEILING` (262144 bytes)
 refuses `review-payload-too-large` before any remote write; the payload is never truncated, whether
-it was asked for or not. `next` names only the sequence that follows — transition to `review`, the
+it was asked for or not. Before the ceiling is measured, a run of removed lines byte-identical to a
+run of added lines in another path becomes one `# estigia-moved` line on each side, and a whole-file
+deletion becomes one `# estigia-deleted` line, each carrying the line ranges and the SHA-256 of the
+bytes it stands for; a hunk that lost lines is recounted, and a substitution is used only where the
+line is smaller than the bytes it replaces. A publication whose derived tier licenses zero lenses
+materialises the payload without the ceiling, because no lens reads it; one that also asks
+`--inline-payload` keeps the refusal, since the text would have to travel in the answer. The refusal carries
+`manifested` (moves, deletions, bytes saved) and `options` naming the split and verbatim-move routes
+with the call for each. `next` names only the sequence that follows — transition to `review`, the
 verdicts, `release_ci` with this receipt — and offers no second place to fetch the text: a republish
 mints a new epoch and invalidates every verdict recorded against the first, so `--inline-payload` is
 asked for at publication time or not at all. **It then starts the publication lane set**: every

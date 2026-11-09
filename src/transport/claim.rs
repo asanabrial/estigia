@@ -7648,7 +7648,12 @@ pub fn review_payload_membership(
     };
 
     let at = worktree.unwrap_or(&context.repo_dir);
-    let payload = super::target::review_payload(at, &resolved.base, &resolved.head)?;
+    let payload = match super::target::review_payload(at, &resolved.base, &resolved.head) {
+        Ok(payload) => payload,
+        Err(refusal) => {
+            too_large_without_reader(context, at, &resolved.base, &resolved.head, refusal)?
+        }
+    };
 
     if payload.digest != recorded_payload_digest {
         return Err(Failure::Stop(serde_json::json!({
@@ -7720,6 +7725,22 @@ pub fn review_payload_membership(
         "candidate_lines": candidate_lines.len(),
         "omitted": omitted,
     }))
+}
+
+fn too_large_without_reader(
+    context: &Context,
+    at: &std::path::Path,
+    base: &str,
+    head: &str,
+    refusal: Failure,
+) -> Result<super::target::ReviewPayload, Failure> {
+    if let Failure::Stop(stopped) = &refusal
+        && stopped["reason"] == "review-payload-too-large"
+        && super::tier::tier_level(context, base, head, Some(at))? == super::tier::RiskLevel::Low
+    {
+        return super::target::review_payload_without_ceiling(at, base, head);
+    }
+    Err(refusal)
 }
 
 /// The receipt currency and distinctness a refutation must satisfy.
@@ -8748,7 +8769,13 @@ fn publish_with_sleep(
         })));
     }
 
-    let payload = super::target::review_payload(at, payload_base, payload_head)?;
+    let payload = match super::target::review_payload(at, payload_base, payload_head) {
+        Ok(payload) => payload,
+        Err(refusal) if !declared.raises() && !inline_payload => {
+            too_large_without_reader(context, at, payload_base, payload_head, refusal)?
+        }
+        Err(failure) => return Err(failure),
+    };
 
     // The closing-keyword refusal, where it can be true. A `Stop` here reads
     // *nothing was written*, and a run believing that leaves the branch and PR

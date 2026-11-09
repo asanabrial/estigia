@@ -194,6 +194,27 @@ fn an_oversize_review_payload_is_refused_not_truncated() {
             .is_some_and(|action| action.contains("too large to review as one unit")),
         "the refusal must name the change as too large: {envelope}"
     );
+    let options = envelope["options"]
+        .as_array()
+        .expect("the refusal names the options it leaves");
+    assert!(
+        options.iter().any(|option| {
+            option["option"] == "split"
+                && option["call"] == "publish_review"
+                && option["detail"]
+                    .as_str()
+                    .is_some_and(|detail| detail.contains("republish_review"))
+        }),
+        "the refusal must name the split route and the call for it: {envelope}"
+    );
+    assert!(
+        options.iter().any(|option| {
+            option["option"] == "verbatim-move" && option["call"] == "publish_review"
+        }),
+        "the refusal must name the verbatim-move route: {envelope}"
+    );
+    assert_eq!(envelope["manifested"]["moves"], 0);
+    assert_eq!(envelope["manifested"]["deletions"], 0);
 }
 
 #[test]
@@ -974,4 +995,137 @@ fn the_target_operation_answers_the_brief_form_unless_the_manifest_is_asked_for(
         "asking for the manifest did not return it: {full}"
     );
     assert_eq!(brief["digest"], full["digest"]);
+}
+
+fn carried(text: &str, prefix: &str) -> Vec<serde_json::Value> {
+    text.lines()
+        .filter_map(|line| line.strip_prefix(prefix))
+        .map(|json| serde_json::from_str(json).expect("a manifest line carries JSON"))
+        .collect()
+}
+
+#[test]
+fn a_verbatim_move_of_a_large_block_publishes_under_the_ceiling_as_manifests() {
+    let root = generated_repo();
+    let at = root.path();
+    let moved = bulk(BULK_ROWS);
+    let base = commit_all(
+        at,
+        &[("a.txt", Some(&moved)), ("b.txt", Some("x\n"))],
+        "base",
+    );
+    let head = commit_all(
+        at,
+        &[
+            ("a.txt", Some("x\n")),
+            ("b.txt", Some(&format!("x\n{moved}"))),
+        ],
+        "head",
+    );
+
+    let payload = review_payload(at, &base, &head).expect("a payload under the ceiling");
+
+    assert!(
+        payload.text.len() < REVIEW_PAYLOAD_CEILING,
+        "{}",
+        payload.text.len()
+    );
+    assert!(
+        !payload.text.contains("-line 00000") && !payload.text.contains("+line 00000"),
+        "the moved bytes are still hunks: {}",
+        payload.text.len()
+    );
+    let carried = carried(&payload.text, summary::MOVED_PREFIX);
+    assert_eq!(carried.len(), 2, "{}", payload.text);
+    assert_eq!(carried[0]["from"], "a.txt");
+    assert_eq!(carried[0]["from-lines"], format!("1-{BULK_ROWS}"));
+    assert_eq!(carried[0]["to"], "b.txt");
+    assert_eq!(carried[0]["to-lines"], format!("2-{}", BULK_ROWS + 1));
+    assert_eq!(carried[0]["bytes"], moved.len());
+    assert_eq!(
+        carried[0]["sha256"],
+        crate::transport::ownership::sha256_hex(moved.as_bytes()),
+        "the manifest does not carry the digest of the bytes it elides"
+    );
+    let again = review_payload(at, &base, &head).expect("the same ends");
+    assert_eq!(again.digest, payload.digest);
+}
+
+#[test]
+fn a_whole_file_deletion_of_a_large_file_publishes_under_the_ceiling_as_a_manifest() {
+    let root = generated_repo();
+    let at = root.path();
+    let gone = bulk(BULK_ROWS);
+    let base = commit_all(
+        at,
+        &[("gone.txt", Some(&gone)), ("keep.txt", Some("base\n"))],
+        "base",
+    );
+    let head = commit_all(
+        at,
+        &[("gone.txt", None), ("keep.txt", Some("head\n"))],
+        "head",
+    );
+
+    let payload = review_payload(at, &base, &head).expect("a payload under the ceiling");
+
+    assert!(
+        payload.text.len() < REVIEW_PAYLOAD_CEILING,
+        "{}",
+        payload.text.len()
+    );
+    assert!(payload.text.contains("deleted file mode 100644\n"));
+    assert!(
+        !payload.text.contains("-line 00000"),
+        "the deleted bytes are still hunks"
+    );
+    let carried = carried(&payload.text, summary::DELETED_PREFIX);
+    assert_eq!(carried.len(), 1, "{}", payload.text);
+    assert_eq!(carried[0]["path"], "gone.txt");
+    assert_eq!(carried[0]["lines"], format!("1-{BULK_ROWS}"));
+    assert_eq!(carried[0]["bytes"], gone.len());
+    assert_eq!(
+        carried[0]["sha256"],
+        crate::transport::ownership::sha256_hex(gone.as_bytes())
+    );
+}
+
+#[test]
+fn an_edited_move_stays_as_hunks_and_counts_against_the_ceiling() {
+    let root = generated_repo();
+    let at = root.path();
+    let moved = bulk(BULK_ROWS);
+    let edited = moved.replacen("line 00001", "line 00001 edited", 1);
+    let base = commit_all(
+        at,
+        &[("a.txt", Some(&moved)), ("b.txt", Some("x\n"))],
+        "base",
+    );
+    let head = commit_all(
+        at,
+        &[
+            ("a.txt", Some("x\n")),
+            ("b.txt", Some(&format!("x\n{edited}"))),
+        ],
+        "head",
+    );
+
+    let payload =
+        review_payload_bounded(at, &base, &head, usize::MAX).expect("an unbounded payload");
+
+    assert!(
+        carried(&payload.text, summary::MOVED_PREFIX).is_empty(),
+        "an edited move was summarised as verbatim"
+    );
+    assert!(
+        payload.text.contains("+line 00000"),
+        "{}",
+        payload.text.len()
+    );
+    assert!(
+        payload.text.contains("-line 00000"),
+        "{}",
+        payload.text.len()
+    );
+    assert!(payload.text.contains("+line 00001 edited padding"));
 }

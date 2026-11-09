@@ -822,6 +822,10 @@ pointer that leaves it names the document it points at.
   `payload-digest` on the published marker. The answer carries `payload_bytes` and `payload_digest`
   always and the text only when `--inline-payload` asks. Overflow of `REVIEW_PAYLOAD_CEILING` (262,144
   bytes) refuses `review-payload-too-large` before any remote write; the payload is never truncated.
+  A receipt whose derived tier licenses zero lenses, published without `--inline-payload`, is the
+  exception: no lens reads the text, so the payload is materialised without the ceiling and the
+  answer stays digest and size only. The refusal
+  reports what was already elided and names the split and verbatim-move routes with the call for each.
   Estigia cannot prove the orchestrator asked for those bytes or handed them to a judge; the judgment-day
   policy asks for the payload first, which is prose nothing enforces. One real publication of 145,756
   bytes was refused by the host's own result cap at 151,889 characters, not by this ceiling
@@ -841,6 +845,18 @@ pointer that leaves it names the document it points at.
   the wrong pair; the operation takes object ids from the marker. A **Rust** consumer can call
   `estigia::transport::target::review_payload` (`pub`; `pinned_diff_args` and
   `review_payload_bounded` are `pub(crate)`). Nothing crosses this sentence against the code.
+
+  Two substitutions run over that text before any digest: a run of removed lines byte-identical to a
+  run of added lines in another path becomes one `# estigia-moved` line on each side (source and
+  destination line ranges and the SHA-256 of the elided bytes), and a whole-file deletion becomes one
+  `# estigia-deleted` line (path, range, SHA-256); a hunk that lost lines is recounted. Each is used
+  only where the line is smaller than the bytes it replaces, so an ordinary small deletion or move
+  stays a hunk, and an edited move matches nothing and stays hunks on both sides. **The payload is
+  complete in description, not in content**: a judge never reads the moved bytes, and never reads a
+  deleted file at all; a person who holds the repository can recover either from the base or head blob
+  by the line ranges and digest the manifest names, and nothing in the review transaction makes the
+  judge do so. `review_payload_membership` applies the same substitutions, and the same zero-lens
+  exemption to the ceiling, deriving the tier from the receipt's ends.
 
   `review_payload_membership` reads a candidate reviewer-facing text from a path, recomputes the payload
   as `publish_review` did, and reconciles the digest against the marker's `payload-digest` **before**
