@@ -619,6 +619,9 @@ fn a_record_nothing_can_read_stops_every_tool_that_names_a_run() {
                 },
             );
         }
+        if tool.name == "comment" {
+            arguments.insert("kind".to_owned(), json!("heartbeat"));
+        }
         arguments.insert("run_id".to_owned(), json!("claude-torn0a1b2c3d"));
 
         let failure = run_tool(tool.name, &Value::Object(arguments), Ok(&context))
@@ -714,6 +717,9 @@ fn a_record_that_will_not_open_stops_every_tool_that_names_a_run() {
                         .map_or_else(|| json!("x"), |choices| json!(choices[0])),
                 },
             );
+        }
+        if tool.name == "comment" {
+            arguments.insert("kind".to_owned(), json!("heartbeat"));
         }
         arguments.insert("run_id".to_owned(), json!("claude-shut0a1b2c3d"));
 
@@ -9772,14 +9778,6 @@ fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
         "the always-loaded schemas are {bytes} bytes against a ceiling of \
          {ALWAYS_LOADED_CEILING}: every turn pays them, so trim one or raise this in a reviewed edit"
     );
-    for tool in listed["tools"]
-        .as_array()
-        .expect("a tool list")
-        .iter()
-        .filter(|tool| tool["_meta"]["anthropic/alwaysLoad"] == true)
-    {
-        eprintln!("SIZE {} {}", tool["name"], tool.to_string().len());
-    }
 }
 
 #[test]
@@ -10212,4 +10210,37 @@ fn the_release_tool_under_assisted_names_the_local_release_for_an_assisted_point
         refusal.resolution,
         Resolution::run("estigia release --run-id claude-abcd1234")
     );
+}
+
+#[test]
+fn a_comment_kind_is_refused_without_the_mode_that_accepts_it() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&repo_dir).expect("the repository");
+    let context = bare_context(&root, &repo_dir);
+
+    for (kind, expect_state) in [
+        ("heartbeat", None),
+        ("progress", None),
+        ("blocked", None),
+        ("note", Some("in-progress")),
+        ("blocker", Some("in-progress")),
+        ("diagnosis", Some("in-progress")),
+    ] {
+        let mut arguments = json!({
+            "issue": 5,
+            "body_file": root.path().join("body.md").to_string_lossy(),
+            "kind": kind,
+        });
+        if let Some(state) = expect_state {
+            arguments["expect_state"] = json!(state);
+            arguments["run_id"] = json!("claude-abcd1234");
+        }
+        let Err(ToolFailure::Malformed(said)) =
+            super::run_tool("comment", &arguments, Ok(&context))
+        else {
+            panic!("{kind} with expect_state={expect_state:?} was not refused as malformed");
+        };
+        assert!(said.contains(kind), "{said}");
+    }
 }
