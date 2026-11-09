@@ -454,8 +454,14 @@ pointer that leaves it names the document it points at.
   file makes the runner refuse to start (read from `take_lock`, never reproduced), and a job whose lock
   file does not exist yet reads as lost. `review_status` does not know which run asked, so a finished job
   another run launched is named for `collect_review_input`, which that run refuses
-  `capture-job-other-run`. A job directory is never removed except `result.json` after admission, so
-  `~/.estigia/jobs/` grows.
+  `capture-job-other-run`. `result.json` is removed after admission; the directory itself only by
+  the daily bound in `maintain` — past thirty days by its own modification time, and beyond five
+  hundred finished directories per repository, newest first. A directory the table holds no row for
+  (a check job, a pull-review panel job) is removed by age only and never by the count, and a
+  directory whose row names another path is not touched. **Not proven:** the age is the directory's
+  mtime, so anything that rewrites a file in it makes it young again; `review_jobs` rows are never
+  deleted, so the table grows with every launch; and the `running` sweep is the lock probe, not
+  proof the runner is gone.
 
 ## Node, CI and the actions that run the suite
 

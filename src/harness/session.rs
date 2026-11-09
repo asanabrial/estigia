@@ -869,6 +869,15 @@ pub const RECORD_RETENTION_DAYS: u64 = 30;
 /// How many decisions one repository keeps, newest first, beside the age limit.
 pub const DECISIONS_PER_REPOSITORY: u64 = 10_000;
 
+/// How long a job directory is kept, by its own modification time.
+pub const JOB_RETENTION_DAYS: u64 = 30;
+
+/// How many finished job directories one repository keeps, newest first.
+pub const JOBS_PER_REPOSITORY: usize = 500;
+
+/// How long past its deadline a `running` job with no held lock may stand.
+pub(crate) const JOB_SETTLE_SECONDS: u64 = 24 * 60 * 60;
+
 /// How long a decision append waits on the store's lock before giving up.
 const APPEND_WAIT: Duration = Duration::from_secs(5);
 
@@ -936,9 +945,10 @@ const LEGACY_IMPORTED: &str = "legacy-imported";
 const LAST_PRUNE: &str = "last-prune";
 const PRUNE_INTERVAL: u64 = 24 * 60 * 60;
 
-/// Imports any legacy JSONL history once, then prunes by age at most once a day.
+/// Imports any legacy JSONL history once, then runs the daily bounds and the
+/// running-job sweep at most once a day.
 ///
-/// Called from `SessionStart` so neither ever lands on a write's critical path.
+/// Called from `SessionStart` so none of it lands on a write's critical path.
 /// Best effort: a store that will not open is reported by `doctor`, never a
 /// reason to fail a session that has not decided anything yet.
 pub fn maintain(root: &Path) {
@@ -960,6 +970,8 @@ pub fn maintain(root: &Path) {
     let cutoff = now.saturating_sub(RECORD_RETENTION_DAYS * 24 * 60 * 60);
     let _ = store.prune_records(cutoff);
     let _ = store.cap_decisions(DECISIONS_PER_REPOSITORY, crate::harness::doctor::UNDECIDED);
+    let jobs = crate::transport::store::jobs_beside(&path);
+    let _ = store.bound_jobs(&jobs, now);
     let _ = store.set_meta(LAST_PRUNE, &now.to_string());
 }
 
@@ -1917,6 +1929,29 @@ mod tests {
                 .min(),
             Some(3),
             "the daily pass kept a different end of the repository"
+        );
+    }
+
+    #[test]
+    fn maintain_bounds_the_job_directories() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let state = root.path().join("runs");
+        std::fs::create_dir_all(&state).expect("the state directory");
+        let jobs = root.path().join("jobs");
+        let old = jobs.join("checks-old");
+        std::fs::create_dir_all(&old).expect("a job directory");
+        let now = now_seconds().expect("a clock");
+        let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(now - 31 * 24 * 60 * 60);
+        std::fs::File::open(&old)
+            .expect("the job directory")
+            .set_times(std::fs::FileTimes::new().set_modified(stamp))
+            .expect("the directory mtime");
+
+        maintain(&state);
+
+        assert!(
+            !old.exists(),
+            "the daily pass left a job directory past the age limit"
         );
     }
 

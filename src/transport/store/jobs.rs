@@ -1,9 +1,14 @@
 use rusqlite::{Connection, OptionalExtension};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use super::ledger::Tx;
 use super::{Repo, Store, int, unreadable};
+use crate::harness::session::{JOB_RETENTION_DAYS, JOB_SETTLE_SECONDS, JOBS_PER_REPOSITORY};
 use crate::reviewer::Receipt;
 use crate::transport::Failure;
+
+const TERMINAL_STATES: [&str; 3] = ["admitted", "stale", "abandoned"];
 
 const COLUMNS: &str = "id, run_id, name, epoch, pr, head, base, digest, payload_digest, offered, \
                        attempt, pid, started_at, deadline_at, dir, state";
@@ -142,6 +147,109 @@ impl Store {
             .optional()
             .map_err(unreadable("read a relay review job"))
     }
+
+    /// Bounds the job directories under `jobs_root` and settles `running` rows
+    /// no lock can still be holding.
+    pub(crate) fn bound_jobs(&self, jobs_root: &Path, now: u64) -> Result<(), Failure> {
+        for job in self.bound_job_rows()? {
+            if job.state != "running" || job.deadline_at.saturating_add(JOB_SETTLE_SECONDS) >= now {
+                continue;
+            }
+            if matches!(
+                crate::reviewer::job::job_status(Path::new(&job.dir)),
+                Ok(crate::reviewer::job::JobStatus::Running)
+            ) {
+                continue;
+            }
+            self.abandon_running_job(&job.id)?;
+        }
+        let rows = self.bound_job_rows()?;
+        let by_dir: HashMap<String, &BoundJob> =
+            rows.iter().map(|job| (job.dir.clone(), job)).collect();
+        let Ok(entries) = std::fs::read_dir(jobs_root) else {
+            return Ok(());
+        };
+        let mut by_repo: HashMap<i64, Vec<(PathBuf, u64)>> = HashMap::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.parent() != Some(jobs_root)
+                || !entry.file_type().is_ok_and(|kind| kind.is_dir())
+            {
+                continue;
+            }
+            let Some(modified) = entry
+                .metadata()
+                .ok()
+                .and_then(|meta| meta.modified().ok())
+                .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|elapsed| elapsed.as_secs())
+            else {
+                continue;
+            };
+            let row = by_dir.get(path.to_string_lossy().as_ref()).copied();
+            let terminal = row.is_some_and(|row| TERMINAL_STATES.contains(&row.state.as_str()));
+            if (row.is_none() || terminal)
+                && now.saturating_sub(modified) >= JOB_RETENTION_DAYS * 24 * 60 * 60
+            {
+                let _ = std::fs::remove_dir_all(&path);
+                continue;
+            }
+            if let Some(row) = row.filter(|_| terminal) {
+                by_repo
+                    .entry(row.repo_id)
+                    .or_default()
+                    .push((path, modified));
+            }
+        }
+        for mut dirs in by_repo.into_values() {
+            dirs.sort_by_key(|(_, modified)| std::cmp::Reverse(*modified));
+            for (path, _) in dirs.into_iter().skip(JOBS_PER_REPOSITORY) {
+                let _ = std::fs::remove_dir_all(&path);
+            }
+        }
+        Ok(())
+    }
+
+    fn bound_job_rows(&self) -> Result<Vec<BoundJob>, Failure> {
+        let mut statement = self
+            .connection()
+            .prepare("SELECT id, repo_id, dir, state, deadline_at FROM review_jobs")
+            .map_err(unreadable("read the review jobs"))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(BoundJob {
+                    id: row.get(0)?,
+                    repo_id: row.get(1)?,
+                    dir: row.get(2)?,
+                    state: row.get(3)?,
+                    deadline_at: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                })
+            })
+            .map_err(unreadable("read the review jobs"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(unreadable("read the review jobs"))?;
+        Ok(rows)
+    }
+
+    fn abandon_running_job(&self, id: &str) -> Result<bool, Failure> {
+        self.connection()
+            .execute(
+                "UPDATE review_jobs SET state = 'abandoned' WHERE id = ?1 AND state = 'running'",
+                [id],
+            )
+            .map(|changed| changed == 1)
+            .map_err(unreadable("settle a running review job"))
+    }
+}
+
+/// One row the daily bound reads: the directory it names and what may be
+/// removed from it.
+struct BoundJob {
+    id: String,
+    repo_id: i64,
+    dir: String,
+    state: String,
+    deadline_at: u64,
 }
 
 impl Tx<'_> {

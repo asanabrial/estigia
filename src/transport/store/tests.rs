@@ -1851,6 +1851,217 @@ fn the_jobs_root_sits_beside_the_store() {
     );
 }
 
+const JOB_DAY: u64 = 86_400;
+
+fn job_repository(store: &Store, owner: &str) -> i64 {
+    store
+        .connection()
+        .execute(
+            "INSERT INTO repos (host, owner, name) VALUES ('github.com', ?1, 'repo')",
+            [owner],
+        )
+        .expect("a repository row");
+    store.connection().last_insert_rowid()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bound_job(
+    store: &Store,
+    id: &str,
+    repo_id: i64,
+    dir: &std::path::Path,
+    state: &str,
+    deadline_at: u64,
+) {
+    store
+        .connection()
+        .execute(
+            "INSERT INTO review_jobs (id, repo_id, issue, run_id, name, epoch, pr, head, base,
+                digest, payload_digest, offered, started_at, deadline_at, dir, state)
+             VALUES (?1, ?2, 7, 'run', 'review-reliability', 'epoch', 1, 'head', 'base',
+                'digest', 'payload', '{}', 10, ?3, ?4, ?5)",
+            rusqlite::params![
+                id,
+                repo_id,
+                super::int(deadline_at),
+                dir.to_string_lossy(),
+                state
+            ],
+        )
+        .expect("a review job row");
+}
+
+fn job_state(store: &Store, id: &str) -> String {
+    store
+        .connection()
+        .query_row("SELECT state FROM review_jobs WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })
+        .expect("the job state")
+}
+
+fn directory_at(path: &std::path::Path, modified: u64) {
+    std::fs::create_dir_all(path).expect("a job directory");
+    let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(modified);
+    std::fs::File::open(path)
+        .expect("the job directory")
+        .set_times(std::fs::FileTimes::new().set_modified(stamp))
+        .expect("the directory mtime");
+}
+
+#[test]
+fn an_admitted_job_directory_past_the_age_limit_is_removed() {
+    let (directory, store) = open();
+    let jobs = directory.path().join("jobs");
+    std::fs::create_dir_all(&jobs).expect("the jobs root");
+    let now = 40 * JOB_DAY;
+    let job = jobs.join("old");
+    directory_at(&job, now - 31 * JOB_DAY);
+    let repo = job_repository(&store, "a");
+    bound_job(&store, "old", repo, &job, "admitted", now);
+
+    store.bound_jobs(&jobs, now).expect("bounds");
+
+    assert!(!job.exists(), "an admitted job over the age limit stayed");
+    assert_eq!(
+        job_state(&store, "old"),
+        "admitted",
+        "the directory bound took the row with it"
+    );
+}
+
+#[test]
+fn a_running_job_with_a_held_lock_keeps_its_row_and_directory() {
+    let (directory, store) = open();
+    let jobs = directory.path().join("jobs");
+    std::fs::create_dir_all(&jobs).expect("the jobs root");
+    let now = 40 * JOB_DAY;
+    let job = jobs.join("held");
+    directory_at(&job, now - 31 * JOB_DAY);
+    let repo = job_repository(&store, "a");
+    bound_job(&store, "held", repo, &job, "running", now - 2 * JOB_DAY);
+    let _lock = crate::reviewer::job::take_lock(&job).expect("the live runner's lock");
+
+    store.bound_jobs(&jobs, now).expect("bounds");
+
+    assert!(job.exists(), "a held job directory was removed");
+    assert_eq!(
+        job_state(&store, "held"),
+        "running",
+        "a held running job was settled"
+    );
+}
+
+#[test]
+fn a_running_job_past_its_deadline_with_no_lock_is_abandoned() {
+    let (directory, store) = open();
+    let jobs = directory.path().join("jobs");
+    std::fs::create_dir_all(&jobs).expect("the jobs root");
+    let now = 40 * JOB_DAY;
+    let job = jobs.join("dead");
+    directory_at(&job, now - JOB_DAY);
+    let repo = job_repository(&store, "a");
+    bound_job(&store, "dead", repo, &job, "running", now - 2 * JOB_DAY);
+
+    store.bound_jobs(&jobs, now).expect("bounds");
+
+    assert_eq!(
+        job_state(&store, "dead"),
+        "abandoned",
+        "a runnerless job past its deadline stayed running"
+    );
+    assert!(job.exists(), "a recent abandoned directory was removed");
+}
+
+#[test]
+fn a_directory_with_no_row_survives_the_cap_and_goes_by_age() {
+    let (directory, store) = open();
+    let jobs = directory.path().join("jobs");
+    std::fs::create_dir_all(&jobs).expect("the jobs root");
+    let now = crate::harness::session::now_seconds().expect("a clock");
+    for n in 0..crate::harness::session::JOBS_PER_REPOSITORY + 1 {
+        directory_at(&jobs.join(format!("checks-{n}")), now);
+    }
+
+    store.bound_jobs(&jobs, now).expect("bounds");
+
+    assert_eq!(
+        std::fs::read_dir(&jobs).expect("the jobs root").count(),
+        crate::harness::session::JOBS_PER_REPOSITORY + 1,
+        "the cap removed a directory that names no repository"
+    );
+
+    let old = jobs.join("checks-0");
+    directory_at(&old, now - 31 * JOB_DAY);
+    store.bound_jobs(&jobs, now).expect("bounds");
+    assert!(
+        !old.exists(),
+        "a rowless directory over the age limit stayed"
+    );
+}
+
+#[test]
+fn a_row_whose_directory_is_outside_the_jobs_root_removes_nothing() {
+    let (directory, store) = open();
+    let jobs = directory.path().join("jobs");
+    std::fs::create_dir_all(&jobs).expect("the jobs root");
+    let elsewhere = directory.path().join("elsewhere");
+    let now = 40 * JOB_DAY;
+    directory_at(&elsewhere, now - 31 * JOB_DAY);
+    let repo = job_repository(&store, "a");
+    bound_job(&store, "outside", repo, &elsewhere, "admitted", now);
+
+    store.bound_jobs(&jobs, now).expect("bounds");
+
+    assert!(
+        elsewhere.exists(),
+        "a directory outside the jobs root was removed"
+    );
+}
+
+#[test]
+fn the_oldest_directories_of_one_repository_go_and_another_repository_keeps_its_own() {
+    let (directory, store) = open();
+    let jobs = directory.path().join("jobs");
+    std::fs::create_dir_all(&jobs).expect("the jobs root");
+    let now = 40 * JOB_DAY;
+    let mine = job_repository(&store, "a");
+    let other = job_repository(&store, "b");
+    for n in 0..crate::harness::session::JOBS_PER_REPOSITORY + 1 {
+        let job = jobs.join(format!("mine-{n:04}"));
+        directory_at(&job, now - 20 * JOB_DAY + n as u64);
+        bound_job(&store, &format!("mine-{n:04}"), mine, &job, "admitted", now);
+    }
+    for n in 0..3 {
+        let job = jobs.join(format!("other-{n}"));
+        directory_at(&job, now - 2 * JOB_DAY + n);
+        bound_job(&store, &format!("other-{n}"), other, &job, "abandoned", now);
+    }
+
+    store.bound_jobs(&jobs, now).expect("bounds");
+
+    let kept: Vec<String> = std::fs::read_dir(&jobs)
+        .expect("the jobs root")
+        .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+        .collect();
+    assert_eq!(
+        kept.iter().filter(|name| name.starts_with("mine-")).count(),
+        crate::harness::session::JOBS_PER_REPOSITORY,
+        "the cap kept a different number of one repository's directories"
+    );
+    assert!(
+        !kept.contains(&"mine-0000".to_owned()),
+        "the cap kept the oldest directory of the busiest repository"
+    );
+    assert_eq!(
+        kept.iter()
+            .filter(|name| name.starts_with("other-"))
+            .count(),
+        3,
+        "the cap reached another repository's directories"
+    );
+}
+
 #[test]
 fn a_fresh_store_carries_the_task_table_and_an_older_one_gains_it() {
     let (directory, store) = open();

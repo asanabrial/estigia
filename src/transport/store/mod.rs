@@ -158,9 +158,14 @@ fn handle_identity(path: &Path) -> String {
     )
 }
 
+/// Where job directories live when the store itself is at `store_path`.
+pub(crate) fn jobs_beside(store_path: &Path) -> PathBuf {
+    store_path.with_file_name("jobs")
+}
+
 /// Where review job directories live: `<home>/.estigia/jobs`, beside `state.db`.
 pub fn jobs_root(home: Option<&Path>) -> Result<PathBuf, Failure> {
-    Ok(default_path(home)?.with_file_name("jobs"))
+    Ok(jobs_beside(&default_path(home)?))
 }
 
 /// Opens the store for reading alone when its file exists, and answers `None`
