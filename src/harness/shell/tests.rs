@@ -1259,6 +1259,24 @@ fn a_redirect_to_a_stream_is_not_a_write_and_any_other_target_is() {
 }
 
 #[test]
+fn a_redirect_names_the_file_it_opens() {
+    for (line, target) in [
+        ("just setup >/tmp/x 2>&1", Some("/tmp/x")),
+        ("just setup 2> \"err.log\"", Some("err.log")),
+        ("cd \"$W\" && just setup >> '/tmp/out'", Some("/tmp/out")),
+        ("just setup >/dev/null 2>&1", None),
+        ("just setup 2>&1 | tail -3", None),
+        ("just setup >", None),
+    ] {
+        assert_eq!(
+            super::redirect_destination(line),
+            target.map(str::to_owned),
+            "{line}"
+        );
+    }
+}
+
+#[test]
 fn a_read_only_line_has_its_data_blanked() {
     for (command, fragment) in [
         ("echo 'git push'", "git push"),

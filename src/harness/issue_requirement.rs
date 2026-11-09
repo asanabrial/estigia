@@ -240,7 +240,8 @@ fn no_shell_landing_can_name_an_issue(
     if super::shell::runs_a_program_after_pre(line) {
         return false;
     }
-    if super::shell::writes_a_file(&line.to_ascii_lowercase()).as_deref() != Some(target) {
+    let spelling = super::shell::writes_a_file(&line.to_ascii_lowercase());
+    if spelling.as_deref() != Some(target) && spelling.as_deref() != Some(super::shell::REDIRECT) {
         return match scope {
             Scope::Repository(root) => !names_an_issue(context, root),
             _ => false,
@@ -524,7 +525,8 @@ fn shell_write(context: &GateContext, target: &str, line: &str, scope: &Scope) -
     {
         return Placement::Unplaceable;
     }
-    if super::shell::writes_a_file(&line.to_ascii_lowercase()).as_deref() != Some(target) {
+    let spelling = super::shell::writes_a_file(&line.to_ascii_lowercase());
+    if spelling.as_deref() != Some(target) && spelling.as_deref() != Some(super::shell::REDIRECT) {
         return Placement::Inside;
     }
     // `rg --pre` runs a program the redirect targets cannot bound, so it is held
