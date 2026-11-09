@@ -403,7 +403,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             repo_dir,
             address,
         } => sessions_command(
-            action.as_ref(),
+            action.as_deref(),
             *all,
             *limit,
             cursor.as_deref(),

@@ -239,7 +239,7 @@ pub enum Command {
 
         /// What to do beyond listing.
         #[command(subcommand)]
-        action: Option<SessionsAction>,
+        action: Option<Box<SessionsAction>>,
     },
 
     /// List this run's mail, or with `--sent` what it sent, without consuming
