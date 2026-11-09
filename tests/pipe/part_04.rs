@@ -969,10 +969,12 @@ fn a_gate_question_by_run_id_writes_nothing() {
         decisions(home)
     );
 
-    // A run id nothing holds leaves no pointer behind either, and no row.
+    // A run id nothing holds leaves no pointer behind either, and no row. It is
+    // refused as an unclaimed write, not answered `outside`: the fixture's
+    // contract watches unclaimed writes and this caller cannot carry the ask.
     let unknown = "claude-nosuch0000";
     forget_store(home);
-    let (out, err, _) = run_with_tracker(
+    let (out, err, ok) = run_with_tracker(
         home,
         repo,
         bin,
@@ -980,7 +982,15 @@ fn a_gate_question_by_run_id_writes_nothing() {
         &["gate", "Bash", "--run-id", unknown, "--input", &input],
         "",
     );
-    let _ = format!("{out}{err}");
+    let answer = format!("{out}{err}");
+    assert!(
+        !ok,
+        "a question about a run nobody holds did not exit the way a refusal does: {answer}"
+    );
+    assert!(
+        answer.contains("issue-required"),
+        "a question about a run nobody holds did not answer the unclaimed-write refusal: {answer}"
+    );
     assert!(
         decisions(home).is_empty(),
         "a question about a run nobody holds was written to the ledger: {}",
