@@ -59,6 +59,27 @@ pub(crate) use snapshot::{age_in_words, snapshot_age, snapshots_dir};
 pub(crate) use statuses::StatusEntry;
 pub(crate) use taken_decisions::TakenDecision;
 
+/// A directory opened for its times by the tests. Windows refuses a plain open
+/// and asks for attribute access rather than the read/write a file would take.
+#[cfg(test)]
+pub(crate) fn open_directory(path: &Path) -> std::io::Result<std::fs::File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        const FILE_READ_ATTRIBUTES: u32 = 0x0080;
+        const FILE_WRITE_ATTRIBUTES: u32 = 0x0100;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        std::fs::OpenOptions::new()
+            .access_mode(FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::File::open(path)
+    }
+}
+
 const BUSY_WAIT: Duration = Duration::from_millis(5000);
 
 /// The repository a row belongs to, as the host reports it.
@@ -158,9 +179,14 @@ fn handle_identity(path: &Path) -> String {
     )
 }
 
+/// Where job directories live when the store itself is at `store_path`.
+pub(crate) fn jobs_beside(store_path: &Path) -> PathBuf {
+    store_path.with_file_name("jobs")
+}
+
 /// Where review job directories live: `<home>/.estigia/jobs`, beside `state.db`.
 pub fn jobs_root(home: Option<&Path>) -> Result<PathBuf, Failure> {
-    Ok(default_path(home)?.with_file_name("jobs"))
+    Ok(jobs_beside(&default_path(home)?))
 }
 
 /// Opens the store for reading alone when its file exists, and answers `None`

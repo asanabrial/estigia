@@ -191,8 +191,14 @@ Five invariants, and the tests are named after them:
    directory holds the manifest, the prompt, the runner's lock and logs, its `result.json`, and a
    `usage.json` carrying the reviewer CLI's own counters when it reported any. A check job, started
    by `run_checks` through `__check-job`, leaves a directory with its own
-   manifest, lock, logs and result ([`generated-files.md`](generated-files.md)). Nothing removes either yet;
-   [`honesty.md`](honesty.md) says what is not wired.
+   manifest, lock, logs and result ([`generated-files.md`](generated-files.md)). The daily pass in
+   `SessionStart` bounds them: past thirty days by the directory's own modification time, and beyond
+   five hundred finished review job directories per repository, newest first. A directory with no
+   `review_jobs` row — a check job, a pull-review panel job — is removed by age only and never by the
+   count, a running job keeps its directory, and a row's directory is removed only when its row is
+   `admitted`, `stale` or `abandoned`. The same pass settles a `running` row that is more than a day
+   past its deadline and whose lock is not held, to `abandoned`; the row itself is never deleted.
+   What this does not prove is in [`honesty.md`](honesty.md).
 
    A third leave is temporary: five adapters share `~/.agents/skills`, so taking one of them out
    leaves the skill for the agents that remain, and it goes with the last of them (a retired agent still installed counts as one that

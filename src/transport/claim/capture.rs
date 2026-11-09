@@ -785,7 +785,7 @@ pub(super) fn prepare_with(
 }
 
 pub(crate) fn jobs_dir() -> Result<std::path::PathBuf, Failure> {
-    Ok(store_path()?.with_file_name("jobs"))
+    Ok(crate::transport::store::jobs_beside(&store_path()?))
 }
 
 static LAUNCHES: AtomicU64 = AtomicU64::new(0);
