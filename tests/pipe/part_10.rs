@@ -2545,11 +2545,12 @@ fn a_frozen_genesis_manifest_too_large_to_record_is_refused_before_the_push() {
     );
 }
 
-/// A successor's `start_branch` is refused by name, not by git's own text.
+/// A successor's checkout is refused by name, not by git's own text.
 ///
 /// Driven as a process because the defect is in the wiring: the unit test beside
 /// `branch_pinned_elsewhere` proves the decision, and would stay green if the
-/// call into `start_branch` were deleted. This is the half that cannot.
+/// call into the checkout were deleted. This is the half that cannot. The claim
+/// lands; the refusal is the `start_branch` half of its answer.
 #[test]
 fn a_successor_is_told_which_checkout_holds_the_branch() {
     let rig = tracker_rig();
@@ -2612,7 +2613,8 @@ fn a_successor_is_told_which_checkout_holds_the_branch() {
             "matches": "issue view",
             "stdout": serde_json::json!({
                 "state": "OPEN",
-                "labels": [{"name": "status:in-progress"}],
+                "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+                "assignees": [{"login": "fixture"}],
                 "comments": [{
                     "id": "IC_1",
                     "createdAt": "2026-01-01T00:00Z",
@@ -2647,13 +2649,14 @@ fn a_successor_is_told_which_checkout_holds_the_branch() {
         "id": 1,
         "method": "tools/call",
         "params": {
-            "name": "start_branch",
+            "name": "claim",
             "arguments": {
                 "issue": 12,
                 "run_id": run_id,
+                "horizon": "2099-01-01T00:00Z",
+                "state": "in-progress",
                 "branch": branch,
                 "base": "main",
-                "expect_state": "in-progress",
                 "worktree_root": trees.path().display().to_string(),
             },
         },
@@ -2683,16 +2686,21 @@ fn a_successor_is_told_which_checkout_holds_the_branch() {
         .unwrap_or_default()
         .to_owned();
     assert_eq!(
-        answered["result"]["isError"], true,
-        "a branch another checkout holds was not refused at all: {text}"
+        answered["result"]["isError"], false,
+        "the claim landed; only the checkout it carried failed: {text}"
     );
-    assert!(
-        text.contains("branch-checked-out-elsewhere"),
+    let body: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("not a tool answer: {text:?}"));
+    let checkout = &body["start_branch"];
+    assert_eq!(
+        checkout["reason"], "branch-checked-out-elsewhere",
         "the refusal did not name itself; git's own text is not a reason a caller can \
          branch on: {text}"
     );
     assert!(
-        text.contains("left-behind-by-another-run"),
+        checkout["path"]
+            .as_str()
+            .is_some_and(|path| path.contains("left-behind-by-another-run")),
         "the refusal did not say which checkout holds the branch: {text}"
     );
 }

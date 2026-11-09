@@ -27,7 +27,7 @@ a root where they do; do not treat it as an orphan.
    registry entry that keeps refusing the path; `prune` is what clears that.
 5. **Remove a proven-stale lock** by deleting the file named in the stop payload. It is a plain JSON
    file under `<common-git-dir>/issue-flow/branch-locks/`. Only after step 3.
-6. **Re-run `start-branch` unchanged.** It is idempotent: it re-reads everything and either creates
+6. **Re-run `claim` with the same `branch` and `base` unchanged.** It is idempotent: it re-reads everything and either creates
    the checkout or tells you what still refuses it. A lock naming your OWN run is your own retry and
    never blocks you — it is *adopted*, so the attempt that succeeds is also the one that releases
    it. A run that merely stepped past its own leftover lock would leave nobody entitled to remove
@@ -45,8 +45,8 @@ and that is usually the end of it. The one hard case is a checkout at the legacy
 is exactly what would prove who it belongs to, and starting a sibling beside it would leave two live
 checkouts of one branch. (Registered at all: a legacy checkout left detached carries no branch in the
 registry and stops this just the same, reporting `occupied_by_branch: null`. An earlier version of
-this sentence said a detached one does not stop it, which is measurably untrue.) `start-branch` stops
-with `legacy-worktree-registered` and neither removes nor writes into it. Push or preserve its work,
+this sentence said a detached one does not stop it, which is measurably untrue.) `claim` with
+`branch` and `base` stops with `legacy-worktree-registered` and neither removes nor writes into it. Push or preserve its work,
 `git worktree remove` it, then re-run — steps 1, 2 and 4 above. An unregistered leftover directory at
 the legacy path blocks nothing, because the sibling is a different directory.
 
@@ -78,5 +78,5 @@ run already owns.
 **A fresh worktree does not have the files git never tracked.** Everything gitignored — environment
 files, secrets, credentials, local settings — is simply absent, and the failure it produces is
 confusing rather than obvious: the tool starts normally and then dies on a variable it has never had
-trouble with, in a tree that looks identical to the one that works. `start_branch` says so in its
+trouble with, in a tree that looks identical to the one that works. `claim` says so in its
 answer; copying them across is still yours to do.

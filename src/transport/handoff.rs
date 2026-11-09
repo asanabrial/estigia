@@ -141,8 +141,7 @@ pub(crate) fn project_labels(context: &Context, issue: u64, runtime: &str) -> Re
     }
     let wrote = edit.len() > 4;
     if wrote {
-        let borrowed: Vec<&str> = edit.iter().map(String::as_str).collect();
-        super::run(&borrowed, Some(&context.repo_dir), super::How::write())?;
+        commands::edit_labels(context, &edit)?;
     }
     settle(context, issue, &projected, wrote)
 }

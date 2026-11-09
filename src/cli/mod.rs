@@ -5133,7 +5133,8 @@ fn guard_caveats(adjudicates: bool) -> Vec<&'static str> {
     if adjudicates {
         caveats.extend([
             "with no claim on a checkout, this refuses every push and the agent gate refuses",
-            "every commit there \u{2014} claim an issue, then work from `start_branch`'s checkout",
+            "every commit there \u{2014} claim an issue, then work from the checkout `claim` with \
+             `branch` and `base` makes",
             "(under `Workflow: assisted` the way in is `assist` in a worktree).",
         ]);
     } else {
@@ -6836,7 +6837,7 @@ fn goal_identity(
 /// renews the run's claim.
 ///
 /// A write the gate sees, so the run pointer has to name this run's issue and
-/// the transport's `heartbeat` renews before it posts. `kind` is one of
+/// the transport's `comment` renews before it records. `kind` is one of
 /// [`crate::transport::markers::RENEWAL_KINDS`]; the text is staged exactly as
 /// [`claim`] stages its body.
 fn goal_activity(
@@ -6896,7 +6897,7 @@ fn goal_activity(
     })?;
     let path = staged.display().to_string();
     let answer = tool(
-        "heartbeat",
+        "comment",
         &serde_json::json!({
             "issue": issue,
             "run_id": identity,

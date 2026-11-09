@@ -92,8 +92,8 @@ pub fn not_claimed(assisted: bool) -> Refusal {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
          commit and push from"
     } else {
-        "an issue claimed with `claim`, then a branch started with `start_branch`, which \
-         gives the isolated checkout to commit and push from"
+        "an issue claimed with `claim`, then a branch started with `claim`'s `branch` and `base`, \
+         which gives the isolated checkout to commit and push from"
     };
     Refusal::not_started(
         CODE,

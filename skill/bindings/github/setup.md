@@ -1,10 +1,6 @@
 ## Setup
 
-`SCRIPT ensure-states` creates the six state labels. `gh` refuses to attach a label that does not
-exist, and the error arrives at issue creation — the analyst's last step, after all the analysis is
-done. That is why `create` creates every label first and attaches second: the domain names its own
-priority scale and rule book, so no setup script can have created them in advance. Label creation is
-idempotent, so it costs one call and removes the failure mode entirely.
+A label a write needs is created at that write: `gh` refuses to attach a label that does not exist, and the error arrives at issue creation — the analyst's last step, after all the analysis is done. That is why `create` creates every label first and attaches second, and why any label write creates a missing label and retries once. The domain names its own priority scale and rule book, so no setup script can have created them in advance. Label creation is idempotent, so it costs one call and removes the failure mode entirely.
 
 Attribution labels are created on demand by `claim` and `create`, so the set stays exactly as wide as
 the runtimes actually in use. Labels are what make attribution *queryable*:

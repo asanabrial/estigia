@@ -275,7 +275,7 @@ run, it is clean, and the delivering merge contains its head; the answer lists t
 `sibling_checkouts`, kept ones with their reason. A retried release
 that finds its own marker already on the issue attempts the same retirement, so a release that posted
 its marker and then failed before cleanup does not leave a delivered checkout behind. The delivering
-run also deletes every **remote** head it recorded starting: `start_branch` writes a `branch` marker
+run also deletes every **remote** head it recorded starting: `claim` with `branch` and `base` writes a `branch` marker
 naming it, and `release` deletes each recorded head and reads the remote back, because GitHub's
 `delete_branch_on_merge` removes only the pull request's own head — a branch delivered through
 another, or pushed under a different name, is never touched by the host. Each deletion is read back:
@@ -298,7 +298,7 @@ nothing that carries unpublished work is ever swept to make the listing shorter.
 **A reviewer's directory is not a checkout, and `release` does not remove it.** The isolation rule
 gives each Judgment Day judge a directory of its own, one per judge per review round. Estigia does not spawn
 the judge: the orchestrating context creates each directory and is the only context that could remove it.
-`release` reaches only the checkout `start_branch` created for the delivering run's own branch. Sweep
+`release` reaches only the checkout the delivering run's claim created for its own branch. Sweep
 reviewer directories by hand once the judge that wrote one has returned its findings,
 or let `estigia prune` list them — a detached checkout no branch owns is one of its cases — and only
 after the same check `release` applies to its own checkout: `git status --porcelain` is empty and

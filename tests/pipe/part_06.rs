@@ -1380,7 +1380,7 @@ fn an_unplaceable_write_target_is_reported_as_dropped_rather_than_nothing_named(
     );
 }
 
-/// One long-lived MCP server survives its own `start_branch`.
+/// One long-lived MCP server survives its own `claim` checkout.
 ///
 /// The whole of the defect, driven as a process because that is the shape the
 /// defect has: an MCP server's directory is fixed for its lifetime, and no unit
@@ -1393,7 +1393,7 @@ fn an_unplaceable_write_target_is_reported_as_dropped_rather_than_nothing_named(
 /// 2026-08-17 against the live tracker during a GitHub outage, and it is the
 /// state the run that filed the issue was left in. From there the dispatch
 /// guard's precondition — a run with no coverage has nothing to be outside of —
-/// lets `start_branch` through, and the worktree it records becomes the run's
+/// lets `claim` through, and the worktree it records becomes the run's
 /// *only* covered directory. The next call from the same server is refused
 /// `run-id-names-another-checkout`, and repeating it cannot help, because a
 /// server's working directory does not change when a child command uses another.
@@ -1440,7 +1440,8 @@ fn one_server_survives_the_isolation_it_created() {
             "matches": "issue view",
             "stdout": serde_json::json!({
                 "state": "OPEN",
-                "labels": [{"name": "status:in-progress"}],
+                "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+                "assignees": [{"login": "fixture"}],
                 "comments": [{
                     "id": "IC_1",
                     "createdAt": "2026-01-01T00:00Z",
@@ -1499,7 +1500,7 @@ fn one_server_survives_the_isolation_it_created() {
         .to_string()
     };
     // Both down one pipe, into one process, in arrival order — which is the only
-    // way to pose "the server that called `start_branch` becomes its own next
+    // way to pose "the server that called `claim` becomes its own next
     // refusal".
     //
     // Written and read **one at a time** rather than both at once, so the pointer
@@ -1540,13 +1541,14 @@ fn one_server_survives_the_isolation_it_created() {
         "{}",
         request(
             1,
-            "start_branch",
+            "claim",
             serde_json::json!({
                 "issue": 12,
                 "run_id": run_id,
+                "horizon": "2099-01-01T00:00Z",
+                "state": "in-progress",
                 "branch": branch,
                 "base": "main",
-                "expect_state": "in-progress",
                 "worktree_root": trees.path().display().to_string(),
             }),
         )
@@ -3797,8 +3799,8 @@ fn a_session_started_in_a_herdr_pane_records_it_and_one_started_outside_carries_
 
 /// `claim` with `branch` and `base` is the claim and the checkout in one call.
 ///
-/// The pointer must name the checkout afterwards, exactly as `start_branch`
-/// alone leaves it, or the next write from the new worktree is measured against
+/// The pointer must name the checkout afterwards, exactly as the checkout
+/// `claim` makes leaves it, or the next write from the new worktree is measured against
 /// a run that does not cover it.
 #[test]
 fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {

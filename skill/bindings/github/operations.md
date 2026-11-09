@@ -36,9 +36,9 @@ claim is adjudicated first, so its refusals are what a caller meets before anyth
 transition's own refusals follow; omitting the flag claims without moving, which leaves the separate
 `transition` call available.
 
-`--branch` and `--base` (with `start-branch`'s `--worktree-root` and `--no-link`) then run
-`start-branch` in the same call. A refused claim creates no checkout; a failed checkout is reported
-under `start_branch` while the claim stands.
+`--branch` and `--base` (with `--worktree-root` and `--no-link`) then create the isolated checkout in
+the same call. A refused claim creates no checkout; a failed checkout is reported under
+`start_branch` while the claim stands.
 
 ## Handing an issue to another runtime
 

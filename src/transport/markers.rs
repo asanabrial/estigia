@@ -22,6 +22,20 @@ pub const ACTIVITY_KINDS: &[&str] = &["heartbeat", "branch", "published", "progr
 /// to mint one.
 pub const RENEWAL_KINDS: &[&str] = &["heartbeat", "progress", "blocked"];
 
+/// Every kind the merged `comment` accepts: a renewal kind or a comment kind.
+///
+/// The schema publishes this one list, so a kind cannot be offered to an agent
+/// and refused by the transport, or the reverse. A test crosses it against
+/// [`RENEWAL_KINDS`] and [`COMMENT_KINDS`] so the three cannot drift.
+pub const COMMENT_OR_RENEWAL_KINDS: &[&str] = &[
+    "blocker",
+    "diagnosis",
+    "note",
+    "heartbeat",
+    "progress",
+    "blocked",
+];
+
 /// Whether the inside of an HTML comment opens a control marker.
 ///
 /// **One predicate.** The prefix was written in three places across two

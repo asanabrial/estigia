@@ -806,7 +806,7 @@ fn unclaimed_hold(
          to write in."
     } else {
         "Claim an issue first, filing one with `create` when none covers the change, then work \
-         through `start_branch`."
+         through `claim` with `branch` and `base`."
     };
     let held = match requirement {
         crate::config::IssueRequirement::Required => {
@@ -903,8 +903,8 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                     "take a local claim with `assist` in a worktree, which gives the isolated \
                      checkout to commit and push from"
                 } else {
-                    "claim an issue, then work through `start_branch`, which gives the isolated \
-                     checkout to commit in"
+                    "claim an issue, then work through `claim` with `branch` and `base`, which \
+                     gives the isolated checkout to commit in"
                 };
                 format!(
                     "This run holds no issue. The push guard is installed in this checkout, so \
@@ -4143,7 +4143,8 @@ mod tests {
             .as_str()
             .expect("context is injected");
         assert!(
-            text.contains("refuses every commit and every push") && text.contains("start_branch"),
+            text.contains("refuses every commit and every push")
+                && text.contains("`claim` with `branch` and `base`"),
             "{text}"
         );
         assert!(!text.contains("gates nothing"), "{text}");
