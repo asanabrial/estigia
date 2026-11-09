@@ -740,7 +740,7 @@ pub(crate) fn refusal(
          need no claim"
     } else {
         "an issue claimed with `claim`, filed first with `create` when none covers this \
-         change, then a branch started with `start_branch`, which gives the isolated \
+         change, then a branch started with `claim`'s `branch` and `base`, which gives the isolated \
          checkout to write in; or `Unclaimed write policy` set to `off` for this repository, \
          when its writes need no claim"
     };

@@ -1847,7 +1847,7 @@ fn run_tool_asking(
     // so an unwritten one has to be said: `session::update` used to answer
     // the same whether the store worked or not, reporting this as an
     // ordinary success when it was a known and dropped failure.
-    if recorded == Some(false) && tool.effect != PointerEffect::None {
+    if recorded == Some(false) && tool.effect_with(arguments) != PointerEffect::None {
         text.push_str(&format!(
             "
 
@@ -2100,7 +2100,7 @@ pub(crate) fn apply_effect(
     if body.is_some_and(|body| body.get("write_performed") == Some(&json!(false))) {
         return true;
     }
-    let effect = tool.effect;
+    let effect = tool.effect_with(arguments);
     if effect == PointerEffect::Forget
         && body.is_some_and(|body| body.get("close_incomplete").is_some())
     {

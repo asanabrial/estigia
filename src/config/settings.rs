@@ -1662,7 +1662,7 @@ pub(crate) fn retired_setting_report(label: &str, value: &str) -> Option<Refusal
 /// retired, `Merge strategy` when the row itself was retired and delivery's
 /// merge commit was hard-coded, and `Repair ceiling` when `repair_rounds`
 /// stopped reading a setting for the one-correction count. `Git operation
-/// window` is the fallback `start_branch` and `publish_review` layer the
+/// window` is the fallback `claim` and `publish_review` layer the
 /// repository's own schedule over. `review_tier`
 /// (`src/transport/tier.rs`) used to read another, `blind judges`, to reduce
 /// its panel-size answer — a porting error now reversed: how many judges a change gets is a contract question now,

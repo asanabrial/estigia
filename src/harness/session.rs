@@ -71,7 +71,7 @@ pub struct Run {
     /// is not measured against it.
     pub repo_dir: Option<PathBuf>,
     /// The isolated checkout this run works in, recorded because it is *where
-    /// the work happens*. Written by `start_branch`, or by a `claim` or renewal
+    /// the work happens*. Written by `claim` with `branch`, or by a `claim` or renewal
     /// that discovers this run **adopted** one.
     #[serde(default)]
     pub worktree: Option<PathBuf>,

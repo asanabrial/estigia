@@ -1434,3 +1434,181 @@ fn a_declared_check_holds_the_lenses_back_unless_it_passed() {
     let unread = checks_hold(Err(crate::transport::Failure::Read("no".to_owned()))).expect("held");
     assert_eq!(unread.0, "checks-unavailable");
 }
+
+/// A merged `comment` that carries `expect_state` renews before it posts, and a
+/// renewal that says stop leaves nothing on the issue.
+#[test]
+fn a_comment_that_renews_posts_nothing_when_the_renewal_fails() {
+    let root = tempfile::tempdir().expect("a scratch root");
+    let mut context = context(root.path());
+    context.repo = Some("o/r".to_owned());
+    let note = root.path().join("note.md");
+    std::fs::write(&note, "still working\n").expect("the note");
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-b",
+        4001,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+    let flags: Vec<String> = [
+        "--issue",
+        "4001",
+        "--run-id",
+        "claude-a",
+        "--expect-state",
+        "in-progress",
+        "--body-file",
+        note.to_str().expect("a utf-8 path"),
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+
+    crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        super::dispatch(&context, "comment", &flags, "2026-01-01T00:00Z")
+    })
+    .expect_err("the renewal refused and the comment posted anyway");
+
+    let written = std::fs::read_to_string(&log).expect("the log");
+    assert!(
+        written.contains("issue view"),
+        "the renewal did not read the issue it was checking: {written}"
+    );
+    assert!(
+        !written.contains("issue comment"),
+        "a refused renewal posted its note: {written}"
+    );
+}
+
+/// A plain `comment` is a comment: no renewal, and no marker in the body.
+#[test]
+fn a_plain_comment_posts_no_renewal_marker() {
+    let root = tempfile::tempdir().expect("a scratch root");
+    let context = context(root.path());
+    let note = root.path().join("note.md");
+    std::fs::write(&note, "a plain note\n").expect("the note");
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[serde_json::json!({
+        "matches": "issue comment",
+        "status": 0,
+    })]);
+    let bodies = root.path().join("bodies.log");
+    let flags: Vec<String> = [
+        "--issue",
+        "4002",
+        "--body-file",
+        note.to_str().expect("a utf-8 path"),
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+
+    crate::test_env::with_body_log(bin.path(), &script, &bodies, || {
+        super::dispatch(&context, "comment", &flags, "2026-01-01T00:00Z")
+    })
+    .expect("a plain comment posts");
+
+    let written = std::fs::read_to_string(&bodies).expect("the body log");
+    assert!(written.contains("a plain note"), "{written}");
+    assert!(
+        !written.contains("issue-flow:"),
+        "a plain comment carried a control marker: {written}"
+    );
+}
+
+/// A clause on a transition that does not land in `blocked` is refused before
+/// the issue moves, so the caller cannot leave a clause nothing will read.
+#[test]
+fn a_clause_on_a_transition_that_does_not_block_refuses_before_the_move() {
+    let root = tempfile::tempdir().expect("a scratch root");
+    let flags: Vec<String> = [
+        "--issue",
+        "12",
+        "--to",
+        "review",
+        "--until-issue",
+        "14",
+        "--until-state",
+        "done",
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+
+    let refused = super::dispatch(
+        &context(root.path()),
+        "transition",
+        &flags,
+        "2026-01-01T00:00Z",
+    )
+    .expect_err("a clause on a review move was accepted");
+    assert_eq!(
+        refused.envelope()["reason"],
+        "invalid-blocked-clause",
+        "{}",
+        refused.envelope()
+    );
+}
+
+/// A transition into `blocked` records the clause it carries under the answer,
+/// so one call both moves the issue and says what discharges it.
+#[test]
+fn a_transition_to_blocked_records_the_clause_it_carries() {
+    let root = tempfile::tempdir().expect("a scratch root");
+    let checkout = crate::test_env::repository_with_commit();
+    let status = std::process::Command::new("git")
+        .args([
+            "-C",
+            checkout.path().to_str().expect("a utf-8 path"),
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/fixture/repo",
+        ])
+        .status()
+        .expect("git runs");
+    assert!(status.success(), "the fixture repository took no remote");
+    let mut context = context(checkout.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let labels = root.path().join("labels.json");
+    std::fs::write(
+        &labels,
+        serde_json::json!(["status:in-progress"]).to_string(),
+    )
+    .expect("the labels file");
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "issue view 21 --json labels",
+            "labels": true,
+            "status": 0,
+        }),
+        crate::test_env::live_holder_issue("claude-a", 21, "in-progress"),
+    ]);
+    let log = root.path().join("calls.log");
+    let flags: Vec<String> = [
+        "--issue",
+        "21",
+        "--to",
+        "blocked",
+        "--from",
+        "in-progress",
+        "--until-issue",
+        "14",
+        "--until-state",
+        "done",
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+
+    let answer =
+        crate::test_env::with_labelled_logging_gh(bin.path(), &script, &labels, &log, || {
+            super::dispatch(&context, "transition", &flags, "2026-01-01T00:00Z")
+        })
+        .expect("the issue moves to blocked and records its clause");
+
+    assert_eq!(answer["blocked_until"]["recorded"], true, "{answer}");
+    assert_eq!(answer["blocked_until"]["clauses"], 1, "{answer}");
+}

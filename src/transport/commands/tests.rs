@@ -1597,3 +1597,118 @@ fn tasks_answer_a_bounded_title_unless_the_full_text_or_one_id_is_asked() {
     assert_eq!(one["tasks"][0]["text"], long, "{one}");
     assert_eq!(one["tasks"][0]["evidence"], "e".repeat(2000), "{one}");
 }
+
+/// A label the repository does not have is created and the same edit repeated
+/// once, at the write that needed it.
+#[test]
+fn a_missing_label_is_created_and_the_same_edit_retried_once() {
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let context = local_context(root.path());
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "issue edit",
+            "nth": 1,
+            "stderr": "could not resolve to a label: status:review",
+            "status": 1,
+        }),
+        serde_json::json!({ "matches": "issue edit", "nth": 2, "status": 0 }),
+        serde_json::json!({ "matches": "label create", "status": 0 }),
+    ]);
+    let counts = root.path().join("counts");
+    let log = root.path().join("calls.log");
+    let arguments: Vec<String> = ["gh", "issue", "edit", "5", "--add-label", "status:review"]
+        .iter()
+        .map(|part| (*part).to_owned())
+        .collect();
+
+    crate::test_env::with_counting_logging_gh(bin.path(), &script, &counts, &log, || {
+        super::edit_labels(&context, &arguments)
+    })
+    .expect("the created label lets the repeated edit land");
+
+    let written = std::fs::read_to_string(&log).expect("the log");
+    let lines: Vec<&str> = written.lines().collect();
+    assert_eq!(lines.len(), 3, "{written}");
+    assert!(lines[0].contains("issue edit"), "{written}");
+    assert!(
+        lines[1].contains("label create status:review")
+            && lines[1].contains("--color ededed")
+            && lines[1].contains("--force"),
+        "the missing label was not created the way `ensure_states` did: {written}"
+    );
+    assert!(lines[2].contains("issue edit"), "{written}");
+}
+
+/// A write that failed for a reason that is not a label is the write failure it
+/// is; creating a label would be a correction nothing asked for.
+#[test]
+fn an_edit_that_fails_for_another_reason_is_not_retried() {
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let context = local_context(root.path());
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "issue edit",
+            "nth": 1,
+            "stderr": "HTTP 403: label editing is forbidden for this token",
+            "status": 1,
+        }),
+        serde_json::json!({ "matches": "issue edit", "nth": 2, "status": 0 }),
+        serde_json::json!({ "matches": "label create", "status": 0 }),
+    ]);
+    let counts = root.path().join("counts");
+    let log = root.path().join("calls.log");
+    let arguments: Vec<String> = ["gh", "issue", "edit", "5", "--add-label", "status:review"]
+        .iter()
+        .map(|part| (*part).to_owned())
+        .collect();
+
+    crate::test_env::with_counting_logging_gh(bin.path(), &script, &counts, &log, || {
+        super::edit_labels(&context, &arguments)
+    })
+    .expect_err("a forbidden edit is not a missing label");
+
+    let written = std::fs::read_to_string(&log).expect("the log");
+    assert_eq!(
+        written.lines().count(),
+        1,
+        "a failure that named no missing label was retried: {written}"
+    );
+    assert!(!written.contains("label create"), "{written}");
+}
+
+/// A clause belongs to a `blocked` issue and is one whole thing: both halves,
+/// or `clear`, never a piece of either.
+#[test]
+fn a_transition_clause_is_held_to_the_shape_a_blocked_issue_accepts() {
+    let recorded = super::transition_clause("blocked", Some(14), Some("done"), false)
+        .expect("a well formed clause is accepted")
+        .expect("the clause is recorded");
+    assert_eq!(recorded.until_issue, Some(14));
+    assert_eq!(recorded.until_state, Some("done"));
+    assert!(!recorded.clear);
+
+    let cleared = super::transition_clause("blocked", None, None, true)
+        .expect("`clear` alone is accepted")
+        .expect("the clause clears");
+    assert!(cleared.clear);
+
+    assert!(
+        super::transition_clause("blocked", None, None, false)
+            .expect("no clause is not a defect")
+            .is_none(),
+        "a transition carrying no clause gained one"
+    );
+    for (to, issue, state, clear) in [
+        ("review", Some(14), Some("done"), false),
+        ("blocked", Some(14), None, false),
+        ("blocked", Some(14), Some("done"), true),
+        ("blocked", Some(14), Some("nowhere"), false),
+    ] {
+        assert!(
+            super::transition_clause(to, issue, state, clear).is_err(),
+            "`{to}` with {issue:?}/{state:?} and clear={clear} was accepted"
+        );
+    }
+}

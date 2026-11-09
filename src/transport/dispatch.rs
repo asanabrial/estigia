@@ -251,6 +251,27 @@ fn pending_slot(name: &str, failure: &Failure) -> serde_json::Value {
 /// A merged call's answer: the primary part's own answer, with the later
 /// part's answer beside it under its own name. The primary answer is kept
 /// whole, so a caller that knew only the old shape still reads it.
+/// The renewal half of the merged `comment`, kept out of the match arm so the
+/// dispatcher's static scan does not read `--run-id` as required of every
+/// comment: a plain note has no run to attribute.
+fn renew_comment(
+    context: &Context,
+    flags: &Flags<'_>,
+    issue: u64,
+    expect_state: &str,
+    now: &str,
+) -> Result<serde_json::Value, Failure> {
+    super::claim::heartbeat(
+        context,
+        issue,
+        flags.need("run-id", "comment")?,
+        expect_state,
+        Path::new(flags.need("body-file", "comment")?),
+        flags.get("kind").unwrap_or("heartbeat"),
+        now,
+    )
+}
+
 fn merged_step(
     mut answer: serde_json::Value,
     key: &str,
@@ -879,14 +900,17 @@ fn run_operation(
                 super::commands::list_state(context, state, run_id()?, limit, now)
             }
         }
-        "comment" => super::commands::comment(
-            context,
-            issue()?,
-            Path::new(f.need("body-file", operation)?),
-            f.get("run-id"),
-            f.get("kind"),
-            now,
-        ),
+        "comment" => match f.get("expect-state") {
+            Some(expect_state) => renew_comment(context, &f, issue()?, expect_state, now),
+            None => super::commands::comment(
+                context,
+                issue()?,
+                Path::new(f.need("body-file", operation)?),
+                f.get("run-id"),
+                f.get("kind"),
+                now,
+            ),
+        },
         "create" => {
             super::commands::findings_require_an_epoch(f.get("epoch"), f.get("findings"))?;
             super::commands::create(
@@ -950,13 +974,32 @@ fn run_operation(
             };
             super::commands::tasks(context, issue()?, view)
         }
-        "transition" => super::commands::transition(
-            context,
-            issue()?,
-            f.need("to", operation)?,
-            f.get("from"),
-            now,
-        ),
+        "transition" => {
+            let issue = issue()?;
+            let to = f.need("to", operation)?;
+            let clause = super::commands::transition_clause(
+                to,
+                f.get("until-issue")
+                    .and_then(|number| number.trim().parse::<u64>().ok()),
+                f.get("until-state"),
+                f.on("clear"),
+            )?;
+            let answer = super::commands::transition(context, issue, to, f.get("from"), now)?;
+            match clause {
+                None => Ok(answer),
+                Some(clause) => {
+                    let recorded = super::commands::blocked_until(
+                        context,
+                        issue,
+                        clause.until_issue,
+                        clause.until_state,
+                        clause.clear,
+                        now,
+                    )?;
+                    Ok(merged_step(answer, "blocked_until", recorded))
+                }
+            }
+        }
         "changelog-notes" => super::commands::changelog_notes(
             context,
             Path::new(f.need("file", operation)?),

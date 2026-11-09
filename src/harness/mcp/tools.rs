@@ -217,6 +217,7 @@ const ISSUE_ANY: Argument = Argument::required(
 // From the transport that adjudicates it, not spelled again here — the same
 // reason `choices` above points at `STATES` instead of a literal list.
 const FINDING_CLASSES: &[&str] = crate::transport::claim::FINDING_CLASSES;
+const COMMENT_KINDS: &[&str] = crate::transport::markers::COMMENT_OR_RENEWAL_KINDS;
 const REVIEW_FOCUSES: &[&str] = crate::transport::tier::REVIEW_FOCUSES;
 const RISK_ITEMS: &[&str] = crate::transport::tier::RISK_ITEMS;
 const FINDING_ORIGINS: &[&str] = crate::transport::claim::FINDING_ORIGINS;
@@ -352,8 +353,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "branch",
                 "string",
-                "Also create this branch's checkout in this call, as `start_branch` does; \
-                 needs `base`.",
+                "Also create this branch's checkout in this call; needs `base`.",
             ),
             Argument::optional(
                 "base",
@@ -363,12 +363,12 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "worktree_root",
                 "string",
-                "As `start_branch`'s; with `branch`.",
+                "Where the checkout is made; with `branch`.",
             ),
             Argument::optional(
                 "no_link",
                 "boolean",
-                "As `start_branch`'s; with `branch`.",
+                "Skip the checkout branch's link to its issue; with `branch`.",
             ),
             Argument::optional(
                 "takeover",
@@ -422,37 +422,11 @@ pub const TOOLS: &[Tool] = &[
         writes: false,
     },
     Tool {
-        name: "heartbeat",
-        contract_name: "heartbeat",
-        description: "Renew the claim and record activity of the named kind, default heartbeat. \
-                      Renewal first, post second: it refuses to post when the renewal says stop.",
-        operation: "heartbeat",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            Argument::required(
-                "expect_state",
-                "string",
-                "The state this run believes the issue is in.",
-            )
-            .of(crate::config::STATES),
-            Argument::required("body_file", "string", "Path to the progress note."),
-            Argument::optional(
-                "kind",
-                "string",
-                "The activity kind to record: heartbeat, progress, or blocked. Defaults to \
-                 heartbeat.",
-            )
-            .of(crate::transport::markers::RENEWAL_KINDS),
-        ],
-        effect: PointerEffect::Renew,
-        writes: true,
-    },
-    Tool {
         name: "transition",
         contract_name: "transition",
         description: "Move the workflow state. Projects it onto every project the issue belongs \
-                      to, swaps the label, then reads both back and repairs a disagreement.",
+                      to, swaps the label, then reads both back and repairs a disagreement. A \
+                      move to `blocked` also records or clears what discharges it.",
         operation: "transition",
         arguments: &[
             ISSUE,
@@ -465,10 +439,26 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "from",
                 "string",
-                "The state being left. Omitted, every stale state label is removed. Naming \
-                 the state being entered removes nothing.",
+                "The state being left. Omitted, every stale state label is removed.",
             )
             .of(crate::config::STATES),
+            Argument::optional(
+                "until_issue",
+                "integer",
+                "With `to: blocked`, the issue whose state discharges this one.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "until_state",
+                "string",
+                "With `to: blocked`, the state that issue must be in.",
+            )
+            .of(crate::config::STATES),
+            Argument::optional(
+                "clear",
+                "boolean",
+                "With `to: blocked`, remove every clause instead of adding one.",
+            ),
         ],
         effect: PointerEffect::Moved,
         writes: true,
@@ -477,14 +467,35 @@ pub const TOOLS: &[Tool] = &[
         name: "comment",
         contract_name: "comment",
         description: "Record evidence on the issue. Generic text can never become a control \
-                      event: markers in it are escaped.",
+                      event: markers in it are escaped. With `expect_state`, renew the claim \
+                      first and record a renewal (`heartbeat`, `progress` or `blocked`); renewal \
+                      first, post second, and it refuses to post when the renewal says stop. \
+                      Without `expect_state`, a plain `note`, `blocker` or `diagnosis`.",
         operation: "comment",
         arguments: &[
             ISSUE,
             Argument::required("body_file", "string", "Path to the comment body."),
-            Argument::optional("run_id", "string", "Attribution. Pairs with kind."),
-            Argument::optional("kind", "string", "note, blocker, or diagnosis.")
-                .of(crate::config::COMMENT_KINDS),
+            Argument::optional(
+                "run_id",
+                "string",
+                "Attribution. Required with `expect_state`; with a plain comment it pairs with \
+                 `kind`.",
+            ),
+            Argument::optional(
+                "kind",
+                "string",
+                "A renewal kind (`heartbeat`, `progress`, `blocked`) with `expect_state`, \
+                 defaulting to heartbeat; otherwise a comment kind (`note`, `blocker`, \
+                 `diagnosis`), defaulting to note.",
+            )
+            .of(COMMENT_KINDS),
+            Argument::optional(
+                "expect_state",
+                "string",
+                "The state this run believes the issue is in. Given, the call renews the claim \
+                 before it records, as `heartbeat` did.",
+            )
+            .of(crate::config::STATES),
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -703,37 +714,6 @@ pub const TOOLS: &[Tool] = &[
         ],
         effect: PointerEffect::None,
         writes: false,
-    },
-    Tool {
-        name: "blocked_until",
-        contract_name: "blocked_until",
-        description: "Record, or clear, the clauses that discharge a blocked issue. A clause \
-                      holds when the local store puts `until_issue` in `until_state`. Local to \
-                      the store. Needs no claim; the issue must be held in `blocked`.",
-        operation: "blocked-until",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            Argument::optional(
-                "until_issue",
-                "integer",
-                "The issue whose state discharges this one. Pairs with `until_state`.",
-            )
-            .counting_from(1),
-            Argument::optional(
-                "until_state",
-                "string",
-                "The state that issue must be in. Pairs with `until_issue`.",
-            )
-            .of(crate::config::STATES),
-            Argument::optional(
-                "clear",
-                "boolean",
-                "Remove every clause recorded for the issue instead of adding one.",
-            ),
-        ],
-        effect: PointerEffect::None,
-        writes: true,
     },
     Tool {
         name: "task",
@@ -1184,18 +1164,6 @@ pub const TOOLS: &[Tool] = &[
         writes: false,
     },
     Tool {
-        name: "ensure_states",
-        contract_name: "ensure_states",
-        description: "Create the workflow's labels. Idempotent; run before the first write in an \
-                      unfamiliar project. While the git operation window is closed it answers \
-                      `deferred` and writes nothing — a queued create, claim or transition creates \
-                      the labels at the flush.",
-        operation: "ensure-states",
-        arguments: &[],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
         name: "create",
         contract_name: "create",
         description: "File a finding. Creates every label before attaching it, then projects the \
@@ -1378,35 +1346,6 @@ pub const TOOLS: &[Tool] = &[
             ),
         ],
         effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
-        name: "start_branch",
-        contract_name: "branch + worktree",
-        description: "Create the isolated checkout for this issue, verifying the claim first.",
-        operation: "start-branch",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            Argument::required("branch", "string", "The branch to create."),
-            Argument::required("base", "string", "The base branch to start from."),
-            Argument::optional(
-                "expect_state",
-                "string",
-                "The state this run believes the issue is in. Defaults to in-progress.",
-            )
-            .of(crate::config::STATES),
-            NO_LINK,
-            Argument::optional(
-                "worktree_root",
-                "string",
-                "Where the checkout is made. A prefix, not a container: `<branch>~<run-id>` is \
-                 appended to the path given, so the checkout lands as a sibling of it, keeping \
-                 two checkouts from sharing one directory. Defaults to the configured \
-                 location.",
-            ),
-        ],
-        effect: PointerEffect::Isolated,
         writes: true,
     },
     Tool {
@@ -2065,6 +2004,107 @@ pub const INTERNAL: &[Tool] = &[
         effect: PointerEffect::None,
         writes: true,
     },
+    Tool {
+        name: "heartbeat",
+        contract_name: "comment",
+        description: "The renewal half of `comment`: renew the claim and record activity of the \
+                      named kind. Kept for the CLI and refused on `tools/call`, where `comment` \
+                      with `expect_state` answers it.",
+        operation: "heartbeat",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required(
+                "expect_state",
+                "string",
+                "The state this run believes the issue is in.",
+            )
+            .of(crate::config::STATES),
+            Argument::required("body_file", "string", "Path to the progress note."),
+            Argument::optional(
+                "kind",
+                "string",
+                "The activity kind to record: heartbeat, progress, or blocked. Defaults to \
+                 heartbeat.",
+            )
+            .of(crate::transport::markers::RENEWAL_KINDS),
+        ],
+        effect: PointerEffect::Renew,
+        writes: true,
+    },
+    Tool {
+        name: "blocked_until",
+        contract_name: "transition",
+        description: "The clause half of `transition --to blocked`: record or clear the clauses \
+                      that discharge a blocked issue. Kept for the CLI and refused on \
+                      `tools/call`, where `transition` answers it.",
+        operation: "blocked-until",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::optional(
+                "until_issue",
+                "integer",
+                "The issue whose state discharges this one. Pairs with `until_state`.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "until_state",
+                "string",
+                "The state that issue must be in. Pairs with `until_issue`.",
+            )
+            .of(crate::config::STATES),
+            Argument::optional(
+                "clear",
+                "boolean",
+                "Remove every clause recorded for the issue instead of adding one.",
+            ),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "start_branch",
+        contract_name: "claim",
+        description: "The checkout half of `claim`: create the isolated checkout for this issue, \
+                      verifying the claim first. Kept for the CLI and refused on `tools/call`, \
+                      where `claim` with `branch` and `base` answers it.",
+        operation: "start-branch",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required("branch", "string", "The branch to create."),
+            Argument::required("base", "string", "The base branch to start from."),
+            Argument::optional(
+                "expect_state",
+                "string",
+                "The state this run believes the issue is in. Defaults to in-progress.",
+            )
+            .of(crate::config::STATES),
+            NO_LINK,
+            Argument::optional(
+                "worktree_root",
+                "string",
+                "Where the checkout is made. A prefix, not a container: `<branch>~<run-id>` is \
+                 appended to the path given, so the checkout lands as a sibling of it, keeping \
+                 two checkouts from sharing one directory. Defaults to the configured \
+                 location.",
+            ),
+        ],
+        effect: PointerEffect::Isolated,
+        writes: true,
+    },
+    Tool {
+        name: "ensure_states",
+        contract_name: "create",
+        description: "Create the workflow's labels. Kept for the CLI and refused on `tools/call`: \
+                      every label write creates a missing label and retries, so no agent calls \
+                      this.",
+        operation: "ensure-states",
+        arguments: &[],
+        effect: PointerEffect::None,
+        writes: true,
+    },
 ];
 
 /// Names taken off the menu, each with what an agent does instead.
@@ -2132,6 +2172,22 @@ pub const RETIRED: &[(&str, &str)] = &[
         "release_ci",
         "call `deliver` with `until: ci`, which records the verdict if it is owed and releases \
          the draft to CI",
+    ),
+    (
+        "start_branch",
+        "call `claim` with `branch` and `base`, plus `worktree_root` and `no_link`",
+    ),
+    (
+        "heartbeat",
+        "call `comment` with `expect_state`, which renews first and records the same `kind`",
+    ),
+    (
+        "blocked_until",
+        "call `transition` with `to: blocked`, plus `until_issue` and `until_state`, or `clear`",
+    ),
+    (
+        "ensure_states",
+        "call `create` or `transition`; a label a write needs is created and the write retried",
     ),
 ];
 
@@ -2327,6 +2383,19 @@ pub fn find(name: &str) -> Option<&'static Tool> {
 }
 
 impl Tool {
+    /// The pointer effect of one call, which can depend on the arguments.
+    ///
+    /// `comment` is the one tool whose effect is chosen at call time: a plain
+    /// comment changes nothing, while a comment carrying `expect_state` is the
+    /// renewal `heartbeat` used to be and renews the pointer.
+    pub fn effect_with(self, arguments: &Value) -> PointerEffect {
+        if self.name == "comment" && arguments.get("expect_state").is_some() {
+            PointerEffect::Renew
+        } else {
+            self.effect
+        }
+    }
+
     /// The MCP schema an agent reads to call this tool.
     pub fn schema(&self) -> Value {
         let mut properties = serde_json::Map::new();

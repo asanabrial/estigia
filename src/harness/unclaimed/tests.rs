@@ -168,7 +168,8 @@ fn the_refusal_names_the_claim_and_the_branch_start() {
     };
     let resolution = format!("{:?}", refusal.resolution);
     assert!(resolution.contains("`claim`"), "{resolution}");
-    assert!(resolution.contains("start_branch"), "{resolution}");
+    assert!(resolution.contains("`branch`"), "{resolution}");
+    assert!(resolution.contains("`base`"), "{resolution}");
 }
 
 #[test]

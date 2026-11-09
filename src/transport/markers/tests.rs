@@ -294,3 +294,28 @@ fn a_close_angle_before_the_close_means_there_is_no_marker() {
         "skipping the unreadable one took the readable one with it"
     );
 }
+
+/// The kind list the merged `comment` publishes is exactly the renewal kinds
+/// and the comment kinds, with nothing offered that one of them would refuse.
+#[test]
+fn the_merged_comment_kinds_are_the_two_lists_it_accepts() {
+    let mut expected: Vec<&str> = RENEWAL_KINDS
+        .iter()
+        .chain(COMMENT_KINDS.iter())
+        .copied()
+        .collect();
+    expected.sort_unstable();
+    expected.dedup();
+
+    let mut published = COMMENT_OR_RENEWAL_KINDS.to_vec();
+    published.sort_unstable();
+    assert_eq!(
+        published, expected,
+        "the schema offers a kind the transport refuses, or hides one it accepts"
+    );
+    assert_eq!(
+        published.len(),
+        COMMENT_OR_RENEWAL_KINDS.len(),
+        "the published list repeats a kind"
+    );
+}

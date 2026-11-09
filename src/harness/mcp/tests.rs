@@ -1105,18 +1105,15 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
     let mut kept = vec![
         "ask",
         "assist",
-        "blocked_until",
         "claim",
         "collect_review_input",
         "comment",
         "create",
         "deliver",
         "draft_pr",
-        "ensure_states",
         "escalate_review",
         "handoff",
         "handoff_review",
-        "heartbeat",
         "inbox",
         "judge_workspaces",
         "list_sessions",
@@ -1134,7 +1131,6 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
         "review_status",
         "review_thread",
         "send_message",
-        "start_branch",
         "task",
         "tasks",
         "transition",
@@ -1143,13 +1139,13 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
     ];
     kept.sort_unstable();
     assert_eq!(exposed, kept);
-    assert_eq!(TOOLS.len(), 37);
+    assert_eq!(TOOLS.len(), 33);
     assert_eq!(
         TOOLS
             .iter()
             .filter(|tool| !tools::is_assisted_only(tool.name))
             .count(),
-        32
+        28
     );
 }
 
@@ -2610,8 +2606,10 @@ const CONSTRAINED_TO_THE_STATES: &[(&str, &str)] = &[
     ("transition", "to"),
     ("transition", "from"),
     ("claim", "transition-to"),
+    ("comment", "expect-state"),
     ("heartbeat", "expect-state"),
     ("start-branch", "expect-state"),
+    ("transition", "until-state"),
     ("publish-review", "expect-state"),
     ("republish-review", "expect-state"),
 ];
@@ -3044,10 +3042,7 @@ fn isolating_a_run_records_the_checkout_it_was_adjudicated_from() {
         repository_host: crate::config::RepositoryHost::Github { repo: None },
         boundaries: Vec::new(),
     };
-    let start = super::tools::TOOLS
-        .iter()
-        .find(|tool| tool.name == "start_branch")
-        .expect("the tool is listed");
+    let start = super::tools::find("start_branch").expect("the operation is still reachable");
     assert_eq!(
         start.effect,
         super::PointerEffect::Isolated,
@@ -5224,10 +5219,7 @@ fn a_fresh_key_is_never_reissued_as_though_it_had_lost_a_race() {
 
 #[test]
 fn the_start_branch_template_names_the_sibling_it_makes() {
-    let start = super::tools::TOOLS
-        .iter()
-        .find(|tool| tool.name == "start_branch")
-        .expect("the tool is listed");
+    let start = super::tools::find("start_branch").expect("the operation is still reachable");
     let root = start
         .arguments
         .iter()
@@ -7006,7 +6998,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 55_146;
+const TOOLS_LIST_CEILING: usize = 52_750;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -9406,22 +9398,14 @@ mod send_message {
 }
 
 #[test]
-fn the_ensure_states_description_names_the_deferred_answer() {
-    let tool = tools::TOOLS
-        .iter()
-        .find(|tool| tool.operation == "ensure-states")
-        .expect("ensure_states is a tool");
+fn the_label_a_write_needs_is_created_at_that_write() {
     assert!(
-        tool.description
-            .contains("closed it answers `deferred` and writes nothing"),
-        "`ensure_states` answers `deferred` while the git operation window is closed and its \
-         description does not say so, so a caller reads that as the whole answer: {}",
-        tool.description
+        tools::find("ensure_states").is_some(),
+        "the transport operation is still reachable for the CLI"
     );
     assert!(
-        tool.description.contains("creates the labels at the flush"),
-        "the deferred answer leaves a caller with no idea where the labels then come from: {}",
-        tool.description
+        tools::retired("ensure_states").is_some(),
+        "`ensure_states` is reachable and no agent is told what replaces it"
     );
 }
 
@@ -9783,7 +9767,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 11_937;
+const ALWAYS_LOADED_CEILING: usize = 12_359;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
@@ -9800,6 +9784,14 @@ fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
         "the always-loaded schemas are {bytes} bytes against a ceiling of \
          {ALWAYS_LOADED_CEILING}: every turn pays them, so trim one or raise this in a reviewed edit"
     );
+    for tool in listed["tools"]
+        .as_array()
+        .expect("a tool list")
+        .iter()
+        .filter(|tool| tool["_meta"]["anthropic/alwaysLoad"] == true)
+    {
+        eprintln!("SIZE {} {}", tool["name"], tool.to_string().len());
+    }
 }
 
 #[test]

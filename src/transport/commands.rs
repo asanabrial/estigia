@@ -927,6 +927,52 @@ pub(super) fn ensure_label(context: &Context, name: &str, colour: &str) -> Resul
     .map(|_| ())
 }
 
+/// Whether `gh` refused an edit because a label it was told to attach does not
+/// exist.
+///
+/// A missing label is the one write failure this transport repairs itself: the
+/// label is created and the edit repeated once. A network or permission
+/// failure says nothing about a label and is left as the write it is.
+fn names_a_missing_label(detail: &str) -> bool {
+    let lowered = detail.to_ascii_lowercase();
+    lowered.contains("label")
+        && (lowered.contains("not found") || lowered.contains("could not resolve"))
+}
+
+/// The labels an edit is attaching, in the order it names them.
+fn added_labels(arguments: &[String]) -> Vec<&str> {
+    arguments
+        .windows(2)
+        .filter(|pair| pair[0] == "--add-label")
+        .map(|pair| pair[1].as_str())
+        .collect()
+}
+
+/// Runs a `gh issue edit` that attaches labels, creating a missing label and
+/// retrying the same edit once.
+///
+/// The retry lives here, on the write itself, rather than in a separate setup
+/// call a caller has to remember: `gh` refuses to attach a label that does not
+/// exist, so the write that needs it is the only place that can repair it
+/// without a second round trip by the agent. A failed retry is the write
+/// failure it is.
+pub(super) fn edit_labels(context: &Context, arguments: &[String]) -> Result<(), Failure> {
+    let write = || {
+        let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+        super::run(&borrowed, Some(&context.repo_dir), super::How::write())
+    };
+    match write() {
+        Ok(_) => Ok(()),
+        Err(Failure::Write(detail)) if names_a_missing_label(&detail) => {
+            for label in added_labels(arguments) {
+                ensure_label(context, label, "ededed")?;
+            }
+            write().map(|_| ())
+        }
+        Err(failure) => Err(failure),
+    }
+}
+
 /// A finding identity means nothing without the receipt it was recorded
 /// against, so `--findings` without a usable `--epoch` is refused.
 ///
@@ -985,8 +1031,8 @@ fn invalid_clause(detail: String) -> Failure {
         "ok": false,
         "reason": "invalid-blocked-clause",
         "detail": detail,
-        "action": "call `blocked_until` again with `until_issue` and `until_state` naming an \
-                   issue and a workflow state, or with `clear`; for `create`, spell \
+        "action": "call `transition` with `to` blocked and `until_issue` and `until_state` \
+                   naming an issue and a workflow state, or with `clear`; for `create`, spell \
                    `blocked_until` as `<issue>=<state>` joined by `+` and file it `blocked`",
     }))
 }
@@ -1028,6 +1074,57 @@ fn creation_clauses(spec: Option<&str>, state: &str) -> Result<Vec<String>, Fail
             clause_marker(target, until.trim())
         })
         .collect()
+}
+
+/// The clause a merged `transition` carries.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TransitionClause<'a> {
+    pub until_issue: Option<u64>,
+    pub until_state: Option<&'a str>,
+    pub clear: bool,
+}
+
+/// The clause half of `transition`, held to the shape [`blocked_until`]
+/// enforces before the issue is moved.
+///
+/// A clause belongs to a `blocked` issue, so a transition that does not land in
+/// `blocked` refuses it before the move rather than moving and then failing to
+/// record what it was told to.
+pub(crate) fn transition_clause<'a>(
+    to: &str,
+    until_issue: Option<u64>,
+    until_state: Option<&'a str>,
+    clear: bool,
+) -> Result<Option<TransitionClause<'a>>, Failure> {
+    if until_issue.is_none() && until_state.is_none() && !clear {
+        return Ok(None);
+    }
+    if to != "blocked" {
+        return Err(invalid_clause(format!(
+            "a clause belongs to a blocked issue, and this transition moves it to `{to}`"
+        )));
+    }
+    match (clear, until_issue, until_state) {
+        (true, None, None) => Ok(Some(TransitionClause {
+            until_issue: None,
+            until_state: None,
+            clear: true,
+        })),
+        (true, _, _) => Err(invalid_clause(
+            "`clear` removes the recorded clauses and takes no clause of its own".to_owned(),
+        )),
+        (false, Some(target), Some(state)) => {
+            clause_marker(target, state)?;
+            Ok(Some(TransitionClause {
+                until_issue: Some(target),
+                until_state: Some(state),
+                clear: false,
+            }))
+        }
+        (false, _, _) => Err(invalid_clause(
+            "a clause needs both `until_issue` and `until_state`, or `clear`".to_owned(),
+        )),
+    }
 }
 
 /// `blocked-until` — record or clear the clauses that discharge a blocked issue.
@@ -1915,13 +2012,12 @@ pub(super) fn project_state(
             }
         }
     }
-    let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
     // With what the mirror did, when this fails: the board is moved **first**,
     // so a label edit that fails leaves the board ahead of the authoritative
     // store — the caller must read it as well as the labels before deciding
     // what happened. The mirror's own words rather than a guess, since moved,
     // skipped and never attempted need different answers.
-    if let Err(failure) = super::run(&borrowed, Some(&context.repo_dir), super::How::write()) {
+    if let Err(failure) = edit_labels(context, &arguments) {
         let Failure::Write(detail) = failure else {
             return Err(failure);
         };
