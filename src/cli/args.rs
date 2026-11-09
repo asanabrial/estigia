@@ -211,6 +211,32 @@ pub enum Command {
         #[arg(long, value_name = "FIELDS")]
         fields: Option<String>,
 
+        /// Answer only sessions in this state. `unregistered` is refused: a
+        /// bounded page freezes a start time a pointer-only run does not have.
+        #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(crate::cli::sessions::STATUSES))]
+        status: Option<String>,
+
+        /// Answer only sessions of this runtime.
+        #[arg(long)]
+        runtime: Option<String>,
+
+        /// Answer only the session with this run id.
+        #[arg(long)]
+        run: Option<String>,
+
+        /// Answer only the session with this host session id.
+        #[arg(long)]
+        session_id: Option<String>,
+
+        /// Answer only sessions started in this directory.
+        #[arg(long)]
+        repo_dir: Option<String>,
+
+        /// Resolve an address the way `send_message` does and answer its
+        /// matches, or the closest when it names none.
+        #[arg(long)]
+        address: Option<String>,
+
         /// What to do beyond listing.
         #[command(subcommand)]
         action: Option<SessionsAction>,
@@ -550,6 +576,51 @@ pub enum Command {
         /// This run's id, as `SessionStart` reported it.
         #[arg(long, env = "ESTIGIA_RUN_ID", value_parser = present)]
         run_id: String,
+
+        /// Seconds after which `estigia inbox --sent` shows the handoff as
+        /// overdue.
+        #[arg(long, value_name = "SECONDS", value_parser = clap::value_parser!(u64).range(1..))]
+        deadline_seconds: Option<u64>,
+    },
+
+    /// Mint one bare working directory per Judgment Day judge over an exact
+    /// review transaction, and refuse rather than return a short list.
+    JudgeWorkspaces {
+        /// The issue whose review transaction the panel judges.
+        #[arg(value_parser = clap::value_parser!(u64).range(1..))]
+        issue: u64,
+
+        /// This run's id, as `SessionStart` reported it.
+        #[arg(long, env = "ESTIGIA_RUN_ID", value_parser = present)]
+        run_id: String,
+
+        /// The publication epoch.
+        #[arg(long)]
+        epoch: String,
+
+        /// The pull request number.
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+        pr: u64,
+
+        /// The full published head SHA.
+        #[arg(long)]
+        head: String,
+
+        /// The full published base SHA.
+        #[arg(long)]
+        base: String,
+
+        /// The complete-target digest.
+        #[arg(long)]
+        digest: String,
+
+        /// How many judges the panel has, and so how many directories it needs.
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=64))]
+        count: u64,
+
+        /// Where the panel root is made. Defaults to the configured location.
+        #[arg(long)]
+        worktree_root: Option<std::path::PathBuf>,
     },
 
     /// Recover an escalated review, as a maintainer.

@@ -563,146 +563,6 @@ fn post_close_evidence(
     super::commands::comment(context, issue, path, Some(run_id), Some("note"), now)
 }
 
-/// One spend record a merged `unassign` carries, parsed from its JSON object.
-/// The operation id is derived exactly as the tool server derives a standalone
-/// `spend`'s, so a merged record and a separate one naming the same measurement
-/// read back as one event.
-struct MergedSpend {
-    operation_id: String,
-    phase: String,
-    epoch: String,
-    pr: u64,
-    head: String,
-    base: String,
-    digest: String,
-    conditions: String,
-    counts: [u64; 4],
-    note: String,
-}
-
-impl MergedSpend {
-    fn parse(run_id: &str, value: &serde_json::Value) -> Result<Self, Failure> {
-        let missing = |field: &str| {
-            Failure::ConfigDefect(serde_json::json!({
-                "ok": false,
-                "reason": "missing-argument",
-                "argument": "--spend",
-                "detail": format!("--spend has no `{field}`"),
-            }))
-        };
-        let text = |field: &str| -> Result<String, Failure> {
-            value
-                .get(field)
-                .and_then(serde_json::Value::as_str)
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| missing(field))
-        };
-        let count = |field: &str| -> Result<u64, Failure> {
-            value
-                .get(field)
-                .and_then(serde_json::Value::as_u64)
-                .ok_or_else(|| missing(field))
-        };
-        let phase = text("phase")?;
-        let epoch = text("epoch")?;
-        let pr = count("pr")?;
-        let head = text("head")?;
-        let base = text("base")?;
-        let digest = text("digest")?;
-        let conditions = text("conditions")?;
-        let counts = [
-            count("input")?,
-            count("tokens")?,
-            count("seconds")?,
-            count("contexts")?,
-        ];
-        let note = value
-            .get("note")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        let pr_field = pr.to_string();
-        let operation_id = super::claim::review_operation_id(
-            "spend",
-            &[
-                run_id,
-                &phase,
-                &epoch,
-                &pr_field,
-                &head,
-                &base,
-                &digest,
-                &conditions,
-            ],
-        );
-        Ok(Self {
-            operation_id,
-            phase,
-            epoch,
-            pr,
-            head,
-            base,
-            digest,
-            conditions,
-            counts,
-            note,
-        })
-    }
-
-    fn review<'a>(
-        &'a self,
-        issue: u64,
-        run_id: &'a str,
-        now: &'a str,
-    ) -> super::claim::SpendReview<'a> {
-        let [input, tokens, seconds, contexts] = self.counts;
-        super::claim::SpendReview {
-            issue,
-            run_id,
-            operation_id: &self.operation_id,
-            phase: &self.phase,
-            epoch: &self.epoch,
-            pr: self.pr,
-            head: &self.head,
-            base: &self.base,
-            digest: &self.digest,
-            conditions: &self.conditions,
-            input,
-            tokens,
-            seconds,
-            contexts,
-            note: &self.note,
-            now,
-        }
-    }
-}
-
-/// `--spend` as a list of records: one JSON object or an array of them, every
-/// element parsed before any is recorded.
-fn parse_merged_spends(run_id: &str, spend: &str) -> Result<Vec<MergedSpend>, Failure> {
-    let malformed = |detail: String| {
-        Failure::ConfigDefect(serde_json::json!({
-            "ok": false,
-            "reason": "malformed-argument",
-            "argument": "--spend",
-            "detail": detail,
-        }))
-    };
-    let value: serde_json::Value = serde_json::from_str(spend)
-        .map_err(|error| malformed(format!("--spend is a JSON object or an array: {error}")))?;
-    let records = match value {
-        serde_json::Value::Array(records) if !records.is_empty() => records,
-        serde_json::Value::Array(_) => {
-            return Err(malformed("--spend is an empty array".to_owned()));
-        }
-        single => vec![single],
-    };
-    records
-        .iter()
-        .map(|record| MergedSpend::parse(run_id, record))
-        .collect()
-}
-
 /// A landed write followed by a refusal: the answer a release gives when its
 /// close stopped part-way. A refusal would clear what the pointer recorded
 /// about a claim that is still held, so the stop is named in the answer.
@@ -732,7 +592,7 @@ fn merged_release(
 ) -> Result<serde_json::Value, Failure> {
     let (issue, run_id, now) = (departure.issue, departure.run_id, departure.now);
     let spends = match spend {
-        Some(spend) => parse_merged_spends(run_id, spend)?,
+        Some(spend) => super::claim::parse_merged_spends(run_id, spend)?,
         None => Vec::new(),
     };
     for record in &spends {
@@ -1251,6 +1111,7 @@ fn run_operation(
                 digest: f.need("digest", operation)?,
                 blocker: f.need("blocker", operation)?,
                 discharger: f.need("discharger", operation)?,
+                spend: f.get("spend"),
                 now,
             },
         ),

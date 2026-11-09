@@ -396,12 +396,24 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             limit,
             cursor,
             fields,
+            status,
+            runtime,
+            run,
+            session_id,
+            repo_dir,
+            address,
         } => sessions_command(
             action.as_ref(),
             *all,
             *limit,
             cursor.as_deref(),
             fields.as_deref(),
+            status.as_deref(),
+            runtime.as_deref(),
+            run.as_deref(),
+            session_id.as_deref(),
+            repo_dir.as_deref(),
+            address.as_deref(),
             cli.json,
         ),
 
@@ -475,7 +487,34 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             cli.json,
         ),
 
-        Command::Handoff { issue, to, run_id } => handoff(issue, to, run_id, cli.json),
+        Command::Handoff {
+            issue,
+            to,
+            run_id,
+            deadline_seconds,
+        } => handoff(issue, to, run_id, *deadline_seconds, cli.json),
+        Command::JudgeWorkspaces {
+            issue,
+            run_id,
+            epoch,
+            pr,
+            head,
+            base,
+            digest,
+            count,
+            worktree_root,
+        } => judge_workspaces(
+            *issue,
+            run_id,
+            epoch,
+            *pr,
+            head,
+            base,
+            digest,
+            *count,
+            worktree_root.as_deref(),
+            cli.json,
+        ),
 
         Command::Recover {
             issue,
@@ -5296,15 +5335,26 @@ fn claim(
 }
 
 /// Hands an issue to another runtime, recording it beside its label projection.
-fn handoff(issue: &str, to: &str, run_id: &str, json: bool) -> Result<(), Refusal> {
+fn handoff(
+    issue: &str,
+    to: &str,
+    run_id: &str,
+    deadline_seconds: Option<u64>,
+    json: bool,
+) -> Result<(), Refusal> {
     let number: u64 = issue
         .trim()
         .parse()
         .map_err(|_| harness::issue_not_a_number(issue))?;
-    let result = tool(
-        "handoff",
-        &serde_json::json!({ "issue": number, "to": to, "run_id": run_id }),
-    )?;
+    let mut arguments = serde_json::json!({
+        "issue": number,
+        "to": to,
+        "run_id": run_id,
+    });
+    if let Some(seconds) = deadline_seconds {
+        arguments["deadline_seconds"] = serde_json::json!(seconds);
+    }
+    let result = tool("handoff", &arguments)?;
     let answer: serde_json::Value =
         serde_json::from_str(&result).unwrap_or(serde_json::Value::String(result.clone()));
     if json {
@@ -5326,6 +5376,45 @@ fn handoff(issue: &str, to: &str, run_id: &str, json: bool) -> Result<(), Refusa
              runtime in this repository sees the handoff at SessionStart"
         ),
     }
+    Ok(())
+}
+
+/// Mints one bare working directory per Judgment Day judge over a review
+/// transaction, and refuses rather than returning a short list.
+#[allow(clippy::too_many_arguments)]
+fn judge_workspaces(
+    issue: u64,
+    run_id: &str,
+    epoch: &str,
+    pr: u64,
+    head: &str,
+    base: &str,
+    digest: &str,
+    count: u64,
+    worktree_root: Option<&std::path::Path>,
+    json: bool,
+) -> Result<(), Refusal> {
+    let mut arguments = serde_json::json!({
+        "issue": issue,
+        "run_id": run_id,
+        "epoch": epoch,
+        "pr": pr,
+        "head": head,
+        "base": base,
+        "digest": digest,
+        "count": count,
+    });
+    if let Some(root) = worktree_root {
+        arguments["worktree_root"] = serde_json::json!(root.display().to_string());
+    }
+    let result = tool("judge_workspaces", &arguments)?;
+    let answer: serde_json::Value =
+        serde_json::from_str(&result).unwrap_or(serde_json::Value::String(result.clone()));
+    if json {
+        print_json(&answer);
+        return Ok(());
+    }
+    say!("{}", indented_for_a_person(result));
     Ok(())
 }
 
@@ -6356,16 +6445,53 @@ fn status_set(
 }
 
 /// `estigia sessions`: the list, or `send`.
+#[allow(clippy::too_many_arguments)]
 fn sessions_command(
     action: Option<&SessionsAction>,
     all: bool,
     limit: Option<u64>,
     cursor: Option<&str>,
     fields: Option<&str>,
+    status: Option<&str>,
+    runtime: Option<&str>,
+    run: Option<&str>,
+    session_id: Option<&str>,
+    repo_dir: Option<&str>,
+    address: Option<&str>,
     json: bool,
 ) -> Result<(), Refusal> {
     match action {
-        None => sessions::sessions(json, all, limit, cursor, fields),
+        None => {
+            if let Some(address) = address {
+                let listing: Vec<&str> = [
+                    all.then_some("--all"),
+                    limit.is_some().then_some("--limit"),
+                    cursor.is_some().then_some("--cursor"),
+                    fields.is_some().then_some("--fields"),
+                    status.is_some().then_some("--status"),
+                    runtime.is_some().then_some("--runtime"),
+                    run.is_some().then_some("--run"),
+                    session_id.is_some().then_some("--session-id"),
+                    repo_dir.is_some().then_some("--repo-dir"),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                if !listing.is_empty() {
+                    return Err(sessions::address_takes_no_listing_flag(&listing));
+                }
+                let result = tool("list_sessions", &serde_json::json!({ "address": address }))?;
+                if json {
+                    say!("{result}");
+                } else {
+                    say!("{}", indented_for_a_person(result));
+                }
+                return Ok(());
+            }
+            sessions::sessions(
+                json, all, limit, cursor, fields, status, runtime, run, session_id, repo_dir,
+            )
+        }
         Some(SessionsAction::Ask {
             session,
             text,
@@ -6422,14 +6548,20 @@ fn sessions_command(
             in_reply_to,
             expires_in,
             run_id,
-            session_id,
-            runtime,
+            session_id: sender_session_id,
+            runtime: sender_runtime,
         }) => {
             let listing: Vec<&str> = [
                 all.then_some("--all"),
                 limit.is_some().then_some("--limit"),
                 cursor.is_some().then_some("--cursor"),
                 fields.is_some().then_some("--fields"),
+                status.is_some().then_some("--status"),
+                runtime.is_some().then_some("--runtime"),
+                run.is_some().then_some("--run"),
+                session_id.is_some().then_some("--session-id"),
+                repo_dir.is_some().then_some("--repo-dir"),
+                address.is_some().then_some("--address"),
             ]
             .into_iter()
             .flatten()
@@ -6441,8 +6573,8 @@ fn sessions_command(
             let sender = gate_identity(
                 "estigia sessions send <run-id> \"<text>\"",
                 run_id.as_deref(),
-                session_id.as_deref(),
-                runtime.as_deref(),
+                sender_session_id.as_deref(),
+                sender_runtime.as_deref(),
                 ambient.as_deref(),
             )?;
             sessions::send(

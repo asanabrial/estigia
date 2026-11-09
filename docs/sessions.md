@@ -4,8 +4,8 @@
 hold, and how can it be reached. `estigia sessions --all` answers the wider one: every row the registry
 has ever written, and `--limit N` with `--cursor TOKEN` answers it one page at a time. `estigia sessions
 send` puts a message in another session's mailbox, and the hook point of each runtime delivers it. The
-`send_message` and `list_sessions` MCP tools are the same two doors for an agent
-([below](#the-mcp-tools)), and all four take the same addresses. The last section lists what does not
+`send_message` and `inbox` are the MCP doors for an agent
+([below](#the-mcp-tools)), and they take the same addresses as `estigia sessions`. The last section lists what does not
 exist yet.
 
 ## Resuming a stopped session
@@ -42,7 +42,7 @@ a file named exactly that command; then `resume` prints that path instead (`/opt
 - **The alternatives are ordered and name the issue.** The report knows the held issue from the run's claim
   marker, else from its pointer. It lists keep, then `estigia release --run-id <run>` (still how a lapsed
   claim is put down), then `estigia handoff <issue> --to <runtime>`, which comes only after the release
-  because `handoff` refuses a held issue. With no issue held, handoff is not offered and the text says there
+  because the handoff command refuses a held issue. With no issue held, handoff is not offered and the text says there
   is nothing to hand over. `--json` carries them as `alternatives`, an ordered list of `{action, command}`
   (`command` is null for keep). Resume runs none of them.
 - **Liveness** is read from the process the registry recorded: the parent of the `SessionStart` hook or
@@ -252,7 +252,7 @@ gate treats differently.
 
 ## Handing an issue to another runtime
 
-`handoff` (and `estigia handoff <issue> --to <runtime> --run-id <run>`) records `{issue, runtime,
+`estigia handoff <issue> --to <runtime> --run-id <run>` records `{issue, runtime,
 from_run, at}` in `~/.estigia/state.db` and projects `dev:<runtime>` on the issue. It is the one call
 the 2026-10-21 operator request needed: the issue, who handed it over, and where it went. It does not
 message a session and does not claim anything — the recipient still claims through `claim`.
@@ -265,7 +265,7 @@ What the recipient then owes the sender is [the completion contract](#the-comple
   projects. It is written and read back twice; a read-back that never agrees is a write failure, not
   an answer. While the git operation window is closed the projection is queued as a `reconverge` in
   the outbox and the answer says `projection: deferred` with the queue position; a later `flush`
-  projects it, reads it back, and marks the row `landed`. Re-running `handoff` is how a caller
+  projects it, reads it back, and marks the row `landed`. Re-running `estigia handoff` is how a caller
   reconciles its answer.
 - **A held issue is refused** with `handoff-issue-held` and nothing is written, whichever runtime
   holds it — the local ledger is what is read, since that is where a claim lives. A handoff is a
@@ -279,7 +279,7 @@ What the recipient then owes the sender is [the completion contract](#the-comple
 - **A later session sees it.** `SessionStart` of a session of that runtime whose repository is that
   directory names each waiting issue, who handed it over and when, and says a handoff is a request,
   never a claim. A row whose projection is still `deferred` says its `dev:` label is queued and not
-  yet read back, so a label that may never land is not presented as one that did. `list_sessions` and `estigia sessions --json` carry the same list as `handoffs` on
+  yet read back, so a label that may never land is not presented as one that did. `estigia sessions --json` carries the same list as `handoffs` on
   every row of that runtime in that repository.
 
 The directory recorded is the one the handoff ran in. A session started in a *worktree* of that
@@ -328,7 +328,7 @@ what it sent. They name the run the way `sessions send` names its sender (`--run
 ### The completion contract for a handoff
 
 A handoff opens a **duty**, kept in the `handoff_duties` table beside the handoff row: who handed the issue
-over, the optional deadline (`handoff`'s `deadline_seconds`, counted from the handoff), and, once taken, which
+over, the optional deadline (`estigia handoff --deadline-seconds`, counted from the handoff), and, once taken, which
 run accepted it and how it ended. The mail is the notice; the duty row is the record, and the store enforces it.
 
 - **Accepting is claiming.** A successful `claim` of the issue by a run of the runtime it was handed to, in
@@ -340,7 +340,7 @@ run accepted it and how it ended. The mail is the notice; the duty row is the re
   `handoff-completion-invalid`; a run that did not accept is `handoff-not-accepted`.
 - **A second word is refused.** The close is one `UPDATE` that names the open duty and the accepting run, so a
   second `done`, or a `blocked` after a `done`, changes no row and is refused `handoff-already-settled`, whatever
-  the first said. A repeated `handoff` of the same issue to the same runtime opens a new duty, replacing the
+  the first said. A repeated `estigia handoff` of the same issue to the same runtime opens a new duty, replacing the
   settled one, as it replaces the handoff row.
 - **Ending without one is reported.** When a session ends, every duty it accepted and never closed becomes
   `abandoned` in the same store write, and its sender gets an `escalation` from the ended run naming the issue.
@@ -355,7 +355,7 @@ run accepted it and how it ended. The mail is the notice; the duty row is the re
 
 ## Addressing a session
 
-`send_message`, `list_sessions`, `estigia sessions send` and `estigia sessions` all take one address
+`send_message`, `estigia sessions send` and `estigia sessions` all take one address
 vocabulary. It is resolved against the registry **at the moment of the call**, over the live rows the
 listing shows, never against an earlier listing — a session that registered a second ago is found.
 
@@ -394,7 +394,7 @@ the sender, instead of refusing several matches. `to` takes the table above and 
 | `repo:<name>` | every live session in that repository (a name or a directory) |
 | `worktree:<name or path>` | every live session running in that checkout, by its recorded worktree or directory |
 
-`list_sessions` with `address` resolves the same words, so the group can be read before it is sent to.
+`estigia sessions --address` resolves the same words, so the group can be read before it is sent to.
 `repo_dir` narrows a broadcast as it narrows any send.
 
 - **Consent is asked once for the group.** The question names the sender, each member in the addressable
@@ -431,7 +431,7 @@ A delivered message opens with the sender in the same form — `From estigia-2 (
 the session that sent it, with no run id to copy. A row a person sent has no session to answer and is
 refused `message-reply-has-no-sender`; an id the mailbox does not hold is `message-reply-unknown`.
 
-`list_sessions` with no arguments is the bounded default: the live sessions only, one line each, beside
+`estigia sessions` with no arguments is the bounded default: the live sessions only, one line each, beside
 `live_count`, `of` (how many rows the registry holds), `build` and `skew` (which live rows registered
 with another build). With `address` it answers `matched` and `live`, plus `closest` when nothing matched.
 With any of `status`, `runtime`, `run`, `session_id`, `repo_dir`, `limit` or `cursor` it answers the
@@ -444,7 +444,9 @@ the opt-in for the whole registry.
 `to` (an address) or `reply_to` (a message being answered), and `text`, and calls the same
 `mailbox::send` as `estigia sessions send`, so the empty-text and size refusals above are the same ones.
 Both tools answer from the local store and bypass the tracker transport, so they need neither a tracker
-nor a repository host transport and are not binding operations.
+nor a repository host transport and are not binding operations. `send_message` with `question: true` also
+takes `choices` and `timeout_seconds` and blocks for the answer; `inbox` with `wait: true` blocks for one
+matching message, and neither accepts the other mode's arguments.
 
 Consent follows who started the send. A person at a terminal is never asked. An agent's `send_message` is asked
 about before any row is written, through MCP elicitation (protocol `2025-06-18`):
@@ -530,7 +532,7 @@ Codex and OpenCode.
 
 ## Bounded session discovery
 
-`list_sessions` with any option, or `estigia sessions` with `--limit` and/or `--cursor`, answers a **page**
+`estigia sessions` with any page option — `--status`, `--runtime`, `--run`, `--session-id`, `--repo-dir`, `--limit` or `--cursor` — answers a **page**
 of the registry rather than the whole list. Both are adapters of one bounded read, so the accounting and the
 cursors are the same from either. The answer is a versioned object: `version`, the page's `sessions`, its own
 accounting (`limit`, `returned`, `matched` — the rows the selectors matched as this page was taken —,
@@ -559,7 +561,7 @@ page holds, and `send` has no rows: given beside it they are refused `sessions-s
 before the message is written, and the refusal says the same call without the flag delivers. The
 `sessions` position is where they parse; after `send` the parser refuses them as unexpected arguments.
 
-**What each door prints.** `list_sessions` answers the page's JSON. `estigia sessions --json` with a page
+**What each door prints.** `estigia sessions --json` with a page
 flag prints the same bytes, the compact JSON the tool's caller sees; without `--json` it prints each row in
 the line the unbounded list uses, then one footer naming how many rows the page returned, how many matched,
 whether more remain, and the next cursor when there is one — `2 of 5 row(s) on this page; more remain — the
@@ -644,12 +646,12 @@ until something asks. What asks is `fields`, below.
 
 ### Showing it: `fields: status`
 
-`estigia sessions --json --fields status` and `list_sessions` with `fields: "status"` add the newest
+`estigia sessions --json --fields status` adds the newest
 self-report of each row's run to the row; with no `fields` the answer is byte-for-byte what it was. The one
 value is `status`, as one string: any other value, a list or a number is refused `sessions-fields-unknown` and
 nothing is listed. On the CLI the flag changes the JSON only, the prose lines are unchanged, and `send` refuses
 it with the other listing flags. `fields` is not part of a cursor, so a walk gives it again on every page; on
-`list_sessions` it counts as a page option, so it cannot be combined with `address`.
+`--fields` it counts as a page option, so it cannot be combined with `--address`.
 
 The row's existing `status` is liveness (`live`, `stale`, `ended`, `unregistered`, `unknown`) and keeps that
 meaning, so the self-reported line is `status_text`. A row whose run has a self-report gains `status_text`,
@@ -666,37 +668,35 @@ nothing, since a session row does not name its repository. A row with neither ga
 All of it is what the run said about itself or what a checklist implies, and is never review, CI, claim or close
 evidence. Treat it as a hint about where to look, not as a fact about the work.
 
-## What does not exist yet
+## Ask and wait
 
-### Ask and wait
+`send_message` with `question: true` (`estigia sessions ask <session> "<text>" [--choice A --choice B] [--timeout S]`)
+puts a `question` to any addressable session and returns the answer as its result. `inbox` with `wait: true`
+(`estigia sessions wait [--type T] [--thread N] [--from RUN] [--timeout S]`) returns the first message to the
+calling run that matches and has not been delivered, or a timeout. Defaults are 120 seconds for a question, the
+query timeout [the Pi channel](#the-pi-parent-child-channel) measured, and 60 for a wait; both stop at 900.
 
-`ask` (MCP tool, `estigia sessions ask <session> "<text>" [--choice A --choice B] [--timeout S]`) puts a
-`question` to any addressable session and returns the answer as its result. `wait` (MCP tool,
-`estigia sessions wait [--type T] [--thread N] [--from RUN] [--timeout S]`) returns the first message to the
-calling run that matches and has not been delivered, or a timeout. Defaults are 120 seconds for an `ask`, the
-query timeout [the Pi channel](#the-pi-parent-child-channel) measured, and 60 for a `wait`; both stop at 900.
-
-An `ask` ends in exactly one outcome, recorded in the `asks` table beside the question:
+A question ends in exactly one outcome, recorded in the `asks` table beside it:
 
 | Outcome | When | What the caller is told |
 |---|---|---|
 | `answered` | the addressed session sent an `answer` replying to the question | its text, `from_person: false` |
-| `timed_out` | no answer before the timeout | that the ask is closed |
+| `timed_out` | no answer before the timeout | that the question is closed |
 | `ended` | the recipient's session ended, or already had | that it ended without answering |
 | `not_woken` | the recipient's row records no idle wake (Codex, OpenCode 1) | that it was not waited on, below |
 
-- **A late answer is refused.** Once an ask has ended in any outcome, an `answer` replying to it is refused
+- **A late answer is refused.** Once a question has ended in any outcome, an `answer` replying to it is refused
   `message-answer-late` and nothing is recorded, so no answer is reported as given that the asker never
   took. An answer outside the offered `choices` is refused `message-answer-not-a-choice`, and one from a
-  session the question was not put to `message-answer-not-addressed`; the ask stays open for a valid one.
+  session the question was not put to `message-answer-not-addressed`; the question stays open for a valid one.
   The answer is taken by the asker as delivered, not read or acked: that stays its own act.
-- **Consent is `send_message`'s.** An agent's `ask` is put to the person unless allowed for the session, and
-  that prompt is capped at the `ask`'s own timeout, so a blocking call never outlives it waiting for a
+- **Consent is `send_message`'s.** An agent's question is put to the person unless allowed for the session, and
+  that prompt is capped at the question's own timeout, so a blocking call never outlives it waiting for a
   person; a denial or silence records nothing. The timeout counts from the call, prompt included.
 - **A recipient that cannot be woken is told, not waited on.** Codex's `Stop` hook cannot start a turn in an
-  idle session and its row records no wake, so `ask` records and delivers the question, returns `not_woken`
-  at once, and leaves the ask open: the answer, if it comes, is mail for `wait` or `inbox`. A `wait` run by a
-  Codex session holds its turn open and works, and says that it covers only that turn.
+  idle session and its row records no wake, so the question is recorded and delivered, the call returns `not_woken`
+  at once, and leaves the question open: the answer, if it comes, is mail for `inbox` with `wait: true` or a
+  plain listing. A wait run by a Codex session holds its turn open and works, and says that it covers only that turn.
 - **Heartbeat.** While blocked, MCP calls carrying a `progressToken` get a `notifications/progress` every
   10 seconds, so a host that kills silent calls does not. A client sending no token gets none.
 - **An answer from another agent is not the person's.** The result says so, and nothing reads an `answer` as
@@ -706,6 +706,6 @@ What was generalised from the Pi parent-child query is its rules, not its channe
 honest distinct result for a timeout or an end, a late reply refused rather than reported as answered, and the
 120 second default. The Pi runner's IPC channel is in-process JavaScript, at-most-once and unrecorded; it was
 not rewritten onto the mailbox, so a Pi child still asks its parent through `estigia_parent_message`, and
-peer `ask` and the Pi channel are still two mechanisms.
+peer questions and the Pi channel are still two mechanisms.
 
 [`honesty.md`](honesty.md) records what this does not measure.

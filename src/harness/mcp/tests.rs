@@ -1109,7 +1109,6 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
     let mut exposed: Vec<&str> = TOOLS.iter().map(|tool| tool.name).collect();
     exposed.sort_unstable();
     let mut kept = vec![
-        "ask",
         "assist",
         "claim",
         "collect_review_input",
@@ -1118,18 +1117,14 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
         "deliver",
         "draft_pr",
         "escalate_review",
-        "handoff",
         "handoff_review",
         "inbox",
-        "judge_workspaces",
-        "list_sessions",
         "list_state",
         "pr_review",
         "publish_review",
         "ready_pr",
         "record_disposition",
         "record_review_finding",
-        "record_spend",
         "release",
         "republish_review",
         "review_read",
@@ -1141,17 +1136,16 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
         "tasks",
         "transition",
         "verify_claim",
-        "wait",
     ];
     kept.sort_unstable();
     assert_eq!(exposed, kept);
-    assert_eq!(TOOLS.len(), 33);
+    assert_eq!(TOOLS.len(), 27);
     assert_eq!(
         TOOLS
             .iter()
             .filter(|tool| !tools::is_assisted_only(tool.name))
             .count(),
-        28
+        22
     );
 }
 
@@ -1656,8 +1650,6 @@ fn publication_tools_bind_to_the_repository_host_the_local_ones_to_neither_and_t
  {
     let neither = [
         "send_message",
-        "ask",
-        "wait",
         "inbox",
         "list_sessions",
         "review_tier",
@@ -5503,8 +5495,6 @@ const LOCAL_WRITER_TOOLS: &[&str] = &[
     "blocked_until",
     "task",
     "send_message",
-    "ask",
-    "wait",
     "inbox",
     "run_checks",
 ];
@@ -7004,7 +6994,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 52_798;
+const TOOLS_LIST_CEILING: usize = 46_607;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7060,6 +7050,7 @@ fn an_assisted_menu_omits_every_tool_that_writes_the_tracker() {
             "{name} is the assisted work and was not advertised"
         );
     }
+    assert_eq!(names.len(), 14, "the assisted menu is {names:?}");
 }
 
 #[test]
@@ -7074,6 +7065,7 @@ fn an_autonomous_menu_omits_the_assisted_only_tools_and_keeps_the_rest() {
         );
     }
     assert_eq!(names.len(), TOOLS.len() - tools::ASSISTED_ONLY.len());
+    assert_eq!(names.len(), 22, "the autonomous menu is {names:?}");
 }
 
 #[test]
@@ -8029,6 +8021,58 @@ mod send_message {
     }
 
     #[test]
+    fn a_question_takes_no_send_only_argument_and_a_send_takes_no_question_argument() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let refused = |arguments: Value| {
+            let failure = run_tool("send_message", &arguments, Ok(&context))
+                .expect_err("an argument from the other mode");
+            assert!(matches!(failure, ToolFailure::Malformed(_)), "{failure}");
+        };
+        for name in [
+            "reply_to",
+            "broadcast",
+            "handoff",
+            "outcome",
+            "thread",
+            "expires_in",
+            "type",
+            "repo_dir",
+        ] {
+            let mut arguments =
+                json!({ "run_id": SENDER, "to": RECIPIENT, "text": "A or B?", "question": true });
+            arguments[name] = json!(1);
+            refused(arguments);
+        }
+        for name in ["choices", "timeout_seconds"] {
+            let mut arguments = json!({ "run_id": SENDER, "to": RECIPIENT, "text": "hello" });
+            arguments[name] = json!(1);
+            refused(arguments);
+        }
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn a_wait_takes_no_listing_argument_and_a_listing_takes_no_wait_timeout() {
+        let rig = Rig::new();
+        let context = rig.context();
+        for name in ["sent", "state", "limit", "read", "ack"] {
+            let mut arguments = json!({ "run_id": SENDER, "wait": true, "timeout_seconds": 1 });
+            arguments[name] = json!(1);
+            let failure = run_tool("inbox", &arguments, Ok(&context))
+                .expect_err("a listing argument beside wait");
+            assert!(matches!(failure, ToolFailure::Malformed(_)), "{failure}");
+        }
+        let failure = run_tool(
+            "inbox",
+            &json!({ "run_id": SENDER, "timeout_seconds": 1 }),
+            Ok(&context),
+        )
+        .expect_err("a wait timeout beside a listing");
+        assert!(matches!(failure, ToolFailure::Malformed(_)), "{failure}");
+    }
+
+    #[test]
     fn the_default_answer_is_the_live_sessions_and_the_registry_is_the_opt_in() {
         let rig = Rig::new();
         let now = crate::harness::session::now_seconds().expect("a clock");
@@ -8912,16 +8956,6 @@ mod send_message {
                 matches!(failure, ToolFailure::Malformed(_)),
                 "{limit} was answered as something other than a malformed call: {failure}"
             );
-            let answer = ask(json!({
-                "jsonrpc": "2.0", "id": 7, "method": "tools/call",
-                "params": { "name": "list_sessions", "arguments": { "limit": limit } },
-            }))
-            .expect("an answer");
-            assert_eq!(
-                answer["error"]["code"],
-                super::super::code::INVALID_PARAMS,
-                "{limit} did not answer the malformed-params code: {answer}"
-            );
         }
 
         let ToolFailure::Malformed(said) = rig
@@ -9166,13 +9200,14 @@ mod send_message {
     }
 
     fn ask_call(id: u64, to: &str, extra: Value) -> Value {
-        let mut arguments = json!({ "run_id": SENDER, "to": to, "text": "A or B?" });
+        let mut arguments =
+            json!({ "run_id": SENDER, "to": to, "text": "A or B?", "question": true });
         for (key, value) in extra.as_object().expect("an object") {
             arguments[key] = value.clone();
         }
         json!({
             "jsonrpc": "2.0", "id": id, "method": "tools/call",
-            "params": { "name": "ask", "arguments": arguments },
+            "params": { "name": "send_message", "arguments": arguments },
         })
     }
 
@@ -9369,8 +9404,8 @@ mod send_message {
         .id;
         let call = |timeout: u64| {
             let answer = run_tool(
-                "wait",
-                &json!({ "run_id": SENDER, "type": "done", "thread": first, "timeout_seconds": timeout }),
+                "inbox",
+                &json!({ "run_id": SENDER, "type": "done", "thread": first, "timeout_seconds": timeout, "wait": true }),
                 Ok(&context),
             )
             .expect("the wait answers");
@@ -9387,8 +9422,8 @@ mod send_message {
     fn a_wait_on_codex_states_that_an_idle_codex_session_is_not_woken() {
         let rig = Rig::new();
         let answer = run_tool(
-            "wait",
-            &json!({ "run_id": RECIPIENT, "timeout_seconds": 1 }),
+            "inbox",
+            &json!({ "run_id": RECIPIENT, "timeout_seconds": 1, "wait": true }),
             Ok(&rig.context()),
         )
         .expect("the wait answers");

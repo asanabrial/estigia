@@ -132,12 +132,12 @@ destroys that measurement, races whoever else is repairing the same directory, a
 gets delivered as whatever survived. Reporting a dirty target costs one verdict. Quietly repairing it
 costs the evidence that anything was wrong.
 
-Those directories come from `judge_workspaces`, which takes the run id, a publication's receipt identity
+Those directories come from `estigia judge-workspaces`, which takes the run id, a publication's receipt identity
 (it scopes the directories to a head and gives Judgment Day no authority) and
 a judge count, and answers one **bare working directory** per judge — outside the checkout the
 claim covers, distinct from each other and never nested in one another, each created and read back
 before it is answered — refusing rather than returning a short list when it cannot make one for
-every judge. A target nobody published has no receipt, so `judge_workspaces` cannot serve it: for
+every judge. A target nobody published has no receipt, so `estigia judge-workspaces` cannot serve it: for
 Judgment Day over it the orchestrator creates each judge's directory by hand, outside the checkout and
 under this same rule. [Repository delivery](../references/repository-delivery.md) still owns run isolation
 for the claimed checkout itself: checkout paths, what makes a checkout this run's own, and
@@ -180,7 +180,8 @@ never this document, so a duty written only here is one nothing carries.
 
 `Review budget` names the figure a single context's tokens are reported against, a lens's or a judge's — `150000` by default,
 `none` to declare nothing. It is advisory: nothing here refuses a panel that runs past it, and a
-figure recorded with `record_spend` is recorded, not verified. Judges are never told the budget.
+figure recorded with `spend` on `release`, `handoff_review` or `deliver` is recorded, not verified.
+Judges are never told the budget.
 
 ### What a judge's closing statement must report
 

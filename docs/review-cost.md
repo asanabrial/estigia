@@ -160,6 +160,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | One `pr_review` with `action` replaces the six `pr_review_*` names | 43 | 59,796 |
 | `review_tier` and `target` become `review_read` views, `launch_review_input` and `run_checks` become `collect_review_input` arguments, `record_computed_verdict` and `release_ci` become `deliver`'s `until` | 37 | 55,146 |
 | `heartbeat`, `blocked_until`, `ensure_states` and `start_branch` absorb into `comment`, `transition` and `claim`; `comment` and `transition` gain the merged arguments | 33 | 52,798 |
+| `send_message` takes `question`, `inbox` takes `wait`; `record_spend` becomes `spend` on `release`, `handoff_review` and `deliver`; `handoff`, `list_sessions` and `judge_workspaces` become CLI commands | 27 | 46,607 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
@@ -189,7 +190,7 @@ name still dispatches and refuses with its own typed reason.
 - **`ALWAYS_LOADED`** (seven tools in `src/harness/mcp/tools.rs`) carry
   `"_meta": {"anthropic/alwaysLoad": true}`, which Claude Code reads to load a schema at session
   start instead of spending one to three `ToolSearch` turns before the first `claim`. In the lever
-  bench below, 16 of 18 publishing runs spent a `ToolSearch` turn on `record_spend` or `review_read`
+  bench below, 16 of 18 publishing runs spent a `ToolSearch` turn on the spend record or `review_read`
   to learn the receipt fields, and 6 had a first `release` refused `missing-argument`; one turn costs
   about 50,000 tokens of context and the hundred bytes are paid once.
   The other side of the trade is that a marked schema is paid on every turn of every session. A tool
@@ -234,10 +235,10 @@ returns the recorded answer, and a job past its deadline is still killed and ref
 
 ## The orchestrator's own phase is recorded, not measured
 
-`review_read` with `view: spend` and `phase: orchestrator` answers whatever `record_spend` was asked to
+`review_read` with `view: spend` and `phase: orchestrator` answers whatever a `spend` record was asked to
 record for that phase: the delivering run's own report of its context, tokens and time. Nothing
 re-derives it from a transcript, because Estigia has no channel into the harness that ran the
-orchestrator, as it has none into any subagent. The delivery step records one `record_spend` for
+orchestrator, as it has none into any subagent. The delivery step records one `spend` record for
 `orchestrator` and one per delegated phase before the transition to `done`; `skill/SKILL.md`'s
 developer step 6 states this inside the delivery sentence, and no test pins that clause.
 
@@ -521,7 +522,7 @@ A later arm inherits every limit of the ones before it.
   the comparison covers what each system sends a reviewer, how many it selects and how many corrections
   it permits, and says nothing about what either finds or how it grades. Nothing timed the two systems
   end to end, and no artifact of the measurement is retained.
-- **The orchestrator's phase is a declaration.** `record_spend` reports what the run said, as stated in
+- **The orchestrator's phase is a declaration.** A `spend` record reports what the run said, as stated in
   [`honesty.md`](honesty.md), and the corpus holds no post-change session to measure the polling
   removal against.
 

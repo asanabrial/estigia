@@ -561,47 +561,25 @@ pub const TOOLS: &[Tool] = &[
             .counting_from(1),
             Argument::optional("outcome", "string", "With `done`: `succeeded` or `failed`.")
                 .of(&["succeeded", "failed"]),
-        ],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
-        name: "ask",
-        contract_name: "ask",
-        description: "Put a question to another session and block for its `answer`, which comes \
-                      back as this result. A timeout, the recipient ending, or a recipient that \
-                      cannot be woken idle each answer as their own outcome, never a guess; an \
-                      answer sent after is refused. Same consent as `send_message`. Another \
-                      session's answer is not your user's.",
-        operation: "ask",
-        arguments: &[
-            RUN_ID,
-            Argument::required("to", "string", "The recipient, as `send_message` takes it."),
-            Argument::required("text", "string", "The question."),
+            Argument::optional(
+                "question",
+                "boolean",
+                "Ask a blocking question and wait for its `answer`, which comes back as this \
+                 result. Takes `to`, `text`, `choices` and `timeout_seconds`; refuses a reply, \
+                 a broadcast, a handoff and every listing argument. Same consent as a send.",
+            ),
             Argument::optional(
                 "choices",
                 "array",
-                "The answers on offer; the reply must be exactly one.",
+                "With `question: true`, the answers on offer; the reply must be exactly one.",
             ),
-            Argument::optional("timeout_seconds", "integer", "Default 120, at most 900.")
-                .counting_from(1),
-        ],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
-        name: "wait",
-        contract_name: "wait",
-        description: "Block until the first unread message to this run matching `type`, `thread` \
-                      and `from` arrives, and return exactly that one as delivered, or a timeout.",
-        operation: "wait",
-        arguments: &[
-            RUN_ID,
-            Argument::optional("type", "string", "Only this type.").of(crate::harness::inbox::KINDS),
-            Argument::optional("thread", "integer", "Only this thread.").counting_from(1),
-            Argument::optional("from", "string", "Only this sender's run id."),
-            Argument::optional("timeout_seconds", "integer", "Default 60, at most 900.")
-                .counting_from(1),
+            Argument::optional(
+                "timeout_seconds",
+                "integer",
+                "With `question: true`, how long to wait for the answer: default 120, at most \
+                 900.",
+            )
+            .counting_from(1),
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -611,7 +589,9 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "inbox",
         description: "List this run's mail, or what it sent, without consuming it; `read` and \
                       `ack` mark one received message and are its own acts. Delivery stays at \
-                      hook points. Mail decides no permission or gate.",
+                      hook points. With `wait: true`, block until the first unread message to \
+                      this run matching `type`, `thread` and `from` arrives, and answer exactly \
+                      that one as delivered, or a timeout. Mail decides no permission or gate.",
         operation: "inbox",
         arguments: &[
             RUN_ID,
@@ -627,94 +607,22 @@ pub const TOOLS: &[Tool] = &[
                 .counting_from(1),
             Argument::optional("ack", "integer", "Acknowledge this received message.")
                 .counting_from(1),
-        ],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
-        name: "handoff",
-        contract_name: "handoff",
-        description: "Hand an issue to another runtime: records the handoff in this machine's \
-                      store for that runtime's next session in this repository, and projects its \
-                      `dev:<runtime>` label with read-back through the outbox. The issue must not \
-                      be held: a handoff is a destination, never a claim. The run that claims it \
-                      owes you one `done` or `blocked` (`send_message` with `handoff`); `inbox` \
-                      with `sent` shows each as offered, accepted, overdue or ended. It does not \
-                      message a session; `send_message` does that.",
-        operation: "handoff",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            Argument::required(
-                "to",
-                "string",
-                "The runtime the issue is handed to — a label-safe word such as `opencode`.",
+            Argument::optional(
+                "wait",
+                "boolean",
+                "Block for the first matching message instead of listing. Takes `type`, \
+                 `thread`, `from` and `timeout_seconds`; refuses `sent`, `state`, `limit`, \
+                 `read` and `ack`.",
             ),
             Argument::optional(
-                "deadline_seconds",
+                "timeout_seconds",
                 "integer",
-                "Seconds after which `inbox` with `sent` shows the handoff as overdue.",
+                "With `wait: true`, how long to block: default 60, at most 900.",
             )
             .counting_from(1),
         ],
         effect: PointerEffect::None,
         writes: true,
-    },
-    Tool {
-        name: "list_sessions",
-        contract_name: "list_sessions",
-        description: "Who is around: with no arguments, the live sessions beside how many \
-                      rows the registry holds. `address` takes `send_message`'s vocabulary and \
-                      answers the matches, or the closest when none. The page selectors \
-                      (`status`, `runtime`, `run`, `session_id`, `repo_dir`, `limit`, `cursor`, `fields`) \
-                      read the whole registry as a bounded page. Read-only.",
-        operation: "list-sessions",
-        arguments: &[
-            Argument::optional(
-                "address",
-                "string",
-                "The sessions this address names, plus the closest when it names none; \
-                 `send_message`'s vocabulary.",
-            ),
-            Argument::optional(
-                "status",
-                "string",
-                "Answer only sessions in this state: live, stale, ended or unknown. \
-                 `unregistered` is refused: a pointer-only run has no start time to freeze.",
-            )
-            .of(crate::cli::sessions::STATUSES),
-            Argument::optional("runtime", "string", "Answer only sessions of this runtime."),
-            Argument::optional("run", "string", "Answer only the session with this run id."),
-            Argument::optional(
-                "session_id",
-                "string",
-                "Answer only the session with this host session id.",
-            ),
-            Argument::optional(
-                "repo_dir",
-                "string",
-                "Answer only sessions started in this directory.",
-            ),
-            Argument::optional(
-                "limit",
-                "integer",
-                "The most rows this page answers. Defaults to 50; a value above 500 is refused.",
-            )
-            .counting_from(1),
-            Argument::optional(
-                "cursor",
-                "string",
-                "The `next_cursor` of the page before, to continue the same snapshot. Give the \
-                 same selectors again.",
-            ),
-            Argument::optional(
-                "fields",
-                "string",
-                "`status` adds each run's self-reported line, never evidence, or its task.",
-            ),
-        ],
-        effect: PointerEffect::None,
-        writes: false,
     },
     Tool {
         name: "task",
@@ -859,6 +767,13 @@ pub const TOOLS: &[Tool] = &[
                 "discharger",
                 "string",
                 "Who or what can discharge the blocker.",
+            ),
+            Argument::optional(
+                "spend",
+                "string",
+                "One JSON object or an array: `phase`, `conditions`, `input`, `tokens`, \
+                 `seconds`, `contexts`, optional `note`. The receipt fields default to the \
+                 held review transaction. All checked before any write. Omit to record none.",
             ),
         ],
         effect: PointerEffect::Forget,
@@ -1061,54 +976,6 @@ pub const TOOLS: &[Tool] = &[
                 "boolean",
                 "Run the declared checks instead of collecting. Takes only `wait_seconds`.",
             ),
-        ],
-        effect: PointerEffect::Renew,
-        writes: true,
-    },
-    Tool {
-        name: "record_spend",
-        contract_name: "record_spend",
-        description: "Record one measurement of what a phase cost against a review transaction: \
-                      bytes handed in, tokens, seconds and agents. A round's cost stays \
-                      recordable after a republish. Recorded, not verified.",
-        operation: "spend",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            Argument::required(
-                "phase",
-                "string",
-                "Which phase spent this.",
-            )
-            .of(SPEND_PHASES),
-            RECEIPT_EPOCH,
-            RECEIPT_PR,
-            RECEIPT_HEAD,
-            RECEIPT_BASE,
-            RECEIPT_DIGEST,
-            Argument::required(
-                "conditions",
-                "string",
-                "What this measurement varied, such as \"sealed\" or \"payload only\". Part of \
-                 the record's identity: the same receipt and phase under different conditions \
-                 are two measurements.",
-            ),
-            Argument::required(
-                "input",
-                "integer",
-                "Bytes the phase was handed: brief plus payload.",
-            )
-            .counting_from(1),
-            Argument::required("tokens", "integer", "Tokens the phase consumed.").counting_from(1),
-            Argument::required("seconds", "integer", "Wall-clock seconds the phase ran.")
-                .counting_from(1),
-            Argument::required(
-                "contexts",
-                "integer",
-                "How many agents produced this figure; a four-lens review is `contexts: 4`.",
-            )
-            .counting_from(1),
-            Argument::optional("note", "string", "What produced it, when worth stating."),
         ],
         effect: PointerEffect::Renew,
         writes: true,
@@ -1344,39 +1211,6 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "Path to your verification that the lane's run never executed a step, for an \
                  `approved` verdict over `publication-lane-never-ran`. Stored, not verified.",
-            ),
-        ],
-        effect: PointerEffect::None,
-        writes: true,
-    },
-    Tool {
-        name: "judge_workspaces",
-        contract_name: "judge_workspaces",
-        description: "Mint one bare working directory per Judgment Day judge for a panel over an \
-                      exact review transaction, and refuse rather than return a short list. The \
-                      directories are distinct siblings of the claimed checkout, not nested, \
-                      with no git checkout of the reviewed head. It proves nothing about where a \
-                      judge wrote.",
-        operation: "judge-workspaces",
-        arguments: &[
-            ISSUE,
-            RUN_ID,
-            RECEIPT_EPOCH,
-            RECEIPT_PR,
-            RECEIPT_HEAD,
-            RECEIPT_BASE,
-            RECEIPT_DIGEST,
-            Argument::required(
-                "count",
-                "integer",
-                "How many judges the Judgment Day panel has, and so how many directories it needs. At most 64.",
-            )
-            .counting_from(1),
-            Argument::optional(
-                "worktree_root",
-                "string",
-                "Where the panel root is made, as for `start_branch`. Defaults to the configured \
-                 location.",
             ),
         ],
         effect: PointerEffect::None,
@@ -1719,6 +1553,161 @@ pub const TOOLS: &[Tool] = &[
 /// is offered. [`find`] reads them; `tools/list` does not, and [`RETIRED`] answers for
 /// them on `tools/call`.
 pub const INTERNAL: &[Tool] = &[
+    Tool {
+        name: "handoff",
+        contract_name: "handoff",
+        description: "Hand an issue to another runtime. Kept for `estigia handoff`; refused on \
+                      `tools/call`.",
+        operation: "handoff",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required(
+                "to",
+                "string",
+                "The runtime the issue is handed to — a label-safe word such as `opencode`.",
+            ),
+            Argument::optional(
+                "deadline_seconds",
+                "integer",
+                "Seconds after which `inbox` with `sent` shows the handoff as overdue.",
+            )
+            .counting_from(1),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "list_sessions",
+        contract_name: "list_sessions",
+        description: "The session registry, addressed or paged. Kept for `estigia sessions`; \
+                      refused on `tools/call`.",
+        operation: "list-sessions",
+        arguments: &[
+            Argument::optional(
+                "address",
+                "string",
+                "The sessions this address names, plus the closest when it names none; \
+                 `send_message`'s vocabulary.",
+            ),
+            Argument::optional(
+                "status",
+                "string",
+                "Answer only sessions in this state: live, stale, ended or unknown. \
+                 `unregistered` is refused: a pointer-only run has no start time to freeze.",
+            )
+            .of(crate::cli::sessions::STATUSES),
+            Argument::optional("runtime", "string", "Answer only sessions of this runtime."),
+            Argument::optional("run", "string", "Answer only the session with this run id."),
+            Argument::optional(
+                "session_id",
+                "string",
+                "Answer only the session with this host session id.",
+            ),
+            Argument::optional(
+                "repo_dir",
+                "string",
+                "Answer only sessions started in this directory.",
+            ),
+            Argument::optional(
+                "limit",
+                "integer",
+                "The most rows this page answers. Defaults to 50; a value above 500 is refused.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "cursor",
+                "string",
+                "The `next_cursor` of the page before, to continue the same snapshot. Give the \
+                 same selectors again.",
+            ),
+            Argument::optional(
+                "fields",
+                "string",
+                "`status` adds each run's self-reported line, never evidence, or its task.",
+            ),
+        ],
+        effect: PointerEffect::None,
+        writes: false,
+    },
+    Tool {
+        name: "record_spend",
+        contract_name: "record_spend",
+        description: "Record one measurement of what a phase cost against a review transaction. \
+                      Kept for `release`, `handoff_review` and `deliver`'s continuing slice; \
+                      refused on `tools/call`.",
+        operation: "spend",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required(
+                "phase",
+                "string",
+                "Which phase spent this.",
+            )
+            .of(SPEND_PHASES),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
+            Argument::required(
+                "conditions",
+                "string",
+                "What this measurement varied, such as \"sealed\" or \"payload only\". Part of \
+                 the record's identity: the same receipt and phase under different conditions \
+                 are two measurements.",
+            ),
+            Argument::required(
+                "input",
+                "integer",
+                "Bytes the phase was handed: brief plus payload.",
+            )
+            .counting_from(1),
+            Argument::required("tokens", "integer", "Tokens the phase consumed.").counting_from(1),
+            Argument::required("seconds", "integer", "Wall-clock seconds the phase ran.")
+                .counting_from(1),
+            Argument::required(
+                "contexts",
+                "integer",
+                "How many agents produced this figure; a four-lens review is `contexts: 4`.",
+            )
+            .counting_from(1),
+            Argument::optional("note", "string", "What produced it, when worth stating."),
+        ],
+        effect: PointerEffect::Renew,
+        writes: true,
+    },
+    Tool {
+        name: "judge_workspaces",
+        contract_name: "judge_workspaces",
+        description: "Mint one bare working directory per Judgment Day judge. Kept for \
+                      `estigia judge-workspaces`; refused on `tools/call`.",
+        operation: "judge-workspaces",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
+            Argument::required(
+                "count",
+                "integer",
+                "How many judges the Judgment Day panel has, and so how many directories it needs. At most 64.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "worktree_root",
+                "string",
+                "Where the panel root is made, as for `claim` with `branch`. Defaults to the \
+                 configured location.",
+            ),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
     Tool {
         name: "launch_review_input",
         contract_name: "launch_review_input",
@@ -2190,6 +2179,32 @@ pub const RETIRED: &[(&str, &str)] = &[
         "ensure_states",
         "call `create` or `transition`; a label a write needs is created and the write retried",
     ),
+    (
+        "ask",
+        "call `send_message` with `question: true`, plus `to`, `text`, `choices` and \
+         `timeout_seconds`",
+    ),
+    (
+        "wait",
+        "call `inbox` with `wait: true`, plus `type`, `thread`, `from` and `timeout_seconds`",
+    ),
+    (
+        "handoff",
+        "run `estigia handoff <issue> --to <runtime>`, which records the same handoff and label",
+    ),
+    (
+        "list_sessions",
+        "run `estigia sessions`, which addresses or pages the same registry",
+    ),
+    (
+        "record_spend",
+        "pass `spend` to `release`, `handoff_review`, or `deliver`; each records the same \
+         measurements",
+    ),
+    (
+        "judge_workspaces",
+        "run `estigia judge-workspaces`, which mints the same directories",
+    ),
 ];
 
 /// What replaces a retired name, when it is one.
@@ -2340,8 +2355,6 @@ pub const PULL_REVIEW_TOOLS: &[&str] = &[
 /// local store.
 pub const NEEDS_NO_TRANSPORT: &[&str] = &[
     "send_message",
-    "ask",
-    "wait",
     "inbox",
     "list_sessions",
     "review_tier",
@@ -2356,8 +2369,6 @@ pub const NEEDS_NO_TRANSPORT: &[&str] = &[
 pub const LOCAL_STORE_TOOLS: &[&str] = &[
     "pr_review",
     "send_message",
-    "ask",
-    "wait",
     "inbox",
     "list_sessions",
     "deliver",
