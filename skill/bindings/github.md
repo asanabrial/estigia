@@ -121,7 +121,9 @@ unless marked `forced=true`; an acquisition expires at its horizon or four hours
 `comment` with `expect_state` runs the renewal **before** it records, and refuses to record when the
 renewal says stop, so a loser's next renewal exits `1` instead of writing. The renewal does not
 prevent losing the race; it caps the cost of having lost it at one renewal interval. Without
-`expect_state`, `comment` is a plain `note`, `blocker` or `diagnosis` and renews nothing.
+`expect_state`, `comment` is a plain `note`, `blocker` or `diagnosis` and renews nothing. The two
+halves have their own kinds — `heartbeat`, `progress` and `blocked` for the renewal, and the three
+plain kinds otherwise — and a kind named against the other half is refused rather than guessed at.
 
 ## State names
 

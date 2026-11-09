@@ -2390,7 +2390,12 @@ impl Tool {
     /// comment changes nothing, while a comment carrying `expect_state` is the
     /// renewal `heartbeat` used to be and renews the pointer.
     pub fn effect_with(self, arguments: &Value) -> PointerEffect {
-        if self.name == "comment" && arguments.get("expect_state").is_some() {
+        if self.name == "comment"
+            && arguments
+                .get("expect_state")
+                .and_then(Value::as_str)
+                .is_some_and(|state| !state.is_empty())
+        {
             PointerEffect::Renew
         } else {
             self.effect
