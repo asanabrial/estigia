@@ -435,6 +435,21 @@ pub(super) fn listing_flags_beside_send(flags: &[&str]) -> Refusal {
     )
 }
 
+pub(super) fn address_takes_no_listing_flag(flags: &[&str]) -> Refusal {
+    let named = flags.join(", ");
+    Refusal::not_started(
+        "sessions-address-takes-no-listing-flag",
+        format!(
+            "`--address` answers the live registry by what a person calls a session, and {named} \
+             belongs to the page selectors; nothing was listed"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "`--address` alone, or the page selectors without it",
+        ),
+    )
+}
+
 fn clock_unreadable() -> Refusal {
     Refusal::unavailable(
         "clock-unreadable",
@@ -845,20 +860,38 @@ fn row_line(entry: &Listed, all: bool) -> String {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bounded_listing(
     json: bool,
     all: bool,
     limit: Option<u64>,
     cursor: Option<&str>,
     fields: Option<&str>,
+    status: Option<&str>,
+    runtime: Option<&str>,
+    run: Option<&str>,
+    session_id: Option<&str>,
+    repo_dir: Option<&str>,
     root: &Path,
 ) -> Result<(), Refusal> {
     let mut arguments = serde_json::Map::new();
     if let Some(fields) = fields {
         arguments.insert("fields".to_owned(), Value::from(fields));
     }
-    if !all {
+    if let Some(status) = status {
+        arguments.insert("status".to_owned(), Value::from(status));
+    } else if !all {
         arguments.insert("status".to_owned(), Value::from("live"));
+    }
+    for (name, value) in [
+        ("runtime", runtime),
+        ("run", run),
+        ("session_id", session_id),
+        ("repo_dir", repo_dir),
+    ] {
+        if let Some(value) = value {
+            arguments.insert(name.to_owned(), Value::from(value));
+        }
     }
     if let Some(limit) = limit {
         arguments.insert("limit".to_owned(), Value::from(limit));
@@ -878,16 +911,31 @@ fn bounded_listing(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn sessions(
     json: bool,
     all: bool,
     limit: Option<u64>,
     cursor: Option<&str>,
     fields: Option<&str>,
+    status: Option<&str>,
+    runtime: Option<&str>,
+    run: Option<&str>,
+    session_id: Option<&str>,
+    repo_dir: Option<&str>,
 ) -> Result<(), Refusal> {
     let root = session::state_root(None)?;
-    if limit.is_some() || cursor.is_some() {
-        return bounded_listing(json, all, limit, cursor, fields, &root);
+    if limit.is_some()
+        || cursor.is_some()
+        || status.is_some()
+        || runtime.is_some()
+        || run.is_some()
+        || session_id.is_some()
+        || repo_dir.is_some()
+    {
+        return bounded_listing(
+            json, all, limit, cursor, fields, status, runtime, run, session_id, repo_dir, &root,
+        );
     }
     let with_status = wants_status(&serde_json::json!({ "fields": fields }))?;
     let mut entries = entries(&root)?;

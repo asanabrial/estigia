@@ -804,7 +804,7 @@ pointer that leaves it names the document it points at.
   write. A judge's finding recorded with `record_review_finding` enters the ledger like a lens's and can
   reject the computed verdict. Nothing refuses a run that convenes Judgment Day over a target it also
   reviews with lenses, or launches `review-refuter` beside it, or observes that the operator asked.
-  `review-blind` and `review-blind-sealed` stay installed and inert. `judge_workspaces` scopes its
+  `review-blind` and `review-blind-sealed` stay installed and inert. `estigia judge-workspaces` scopes its
   directories to a publication's receipt identity, so a Judgment Day over an unpublished target chooses
   them by hand. `tests/no_judges_in_ordinary_review.rs` holds the rest of `skill/` and the rendered
   contract to "ordinary review acquires no judge" by reading sentences and fails closed: a sentence
@@ -815,7 +815,7 @@ pointer that leaves it names the document it points at.
   definitions (`review-blind`) with no judge word, the Judgment Day policy file and judge definitions
   (not scanned), and an `ALLOWED` reason, which is a reviewer's claim.
 
-- **`judge_workspaces` hands out directories and proves nothing about where a judge wrote.** It reads
+- **`estigia judge-workspaces` hands out directories and proves nothing about where a judge wrote.** It reads
   the run's `Worktree location`, mints one **bare working directory** per judge outside the claimed
   checkout, reads each back, and refuses rather than returning a short list. The directories are not git
   checkouts, so a `reading` judge has nothing to build. Estigia cannot see whether a judge stayed in its
@@ -900,9 +900,9 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 19,982 | file on disk |
+  | `skill/bindings/github.md` | 20,689 | file on disk |
   | `skill/policies/blind-judges.md` | 42,909 | file on disk |
-  | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
+  | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
   | `skill/bindings/github/delivery.md` | 42,584 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
@@ -1171,7 +1171,7 @@ pointer that leaves it names the document it points at.
   commands to name, and Estigia cannot tell that from a `measuring` judge that skipped stating one. What
   changed is that "measured and said so" versus "said nothing" is a field on the timeline.
 
-- **`record_spend` is a declaration, not a measurement.** Estigia cannot see a subagent's token count,
+- **A recorded `spend` is a declaration, not a measurement.** Estigia cannot see a subagent's token count,
   wall-clock seconds, or how many contexts produced a figure. `input`, `tokens`, `seconds` and `contexts`
   are supplied numbers stored and read back; nothing confirms them, a run that under-reports is
   undetectable, and `conditions` is free text trusted the way `basis` is. The orchestrating run's own
@@ -1767,11 +1767,11 @@ pointer that leaves it names the document it points at.
   from a per-judge spend. The distribution supplies a check, not a derivation: twenty-eight judges across
   five issues, from harness completion reports, put the minimum at 96,073, the median at 127,025 and the
   maximum at 182,136 tokens, and 150,000 sits above that median while 18% (5 of 28) still ran over it.
-  `record_spend` records a panel total beside a `contexts` count (a convention; validation refuses only a
-  zero). The row is **advisory**: nothing refuses a panel whose recorded tokens exceed it, and
-  `record_spend` is a declaration, not a measurement (an under-report is undetectable). **None of the
-  twenty-eight figures include the orchestrating run itself**; the delivery step records one `record_spend
-  --phase orchestrator` before `transition --to done` (`docs/review-cost.md`), which closes the *channel*
+  a `spend` record states a panel total beside a `contexts` count (a convention; validation refuses only a
+  zero). The row is **advisory**: nothing refuses a panel whose recorded tokens exceed it, and a recorded
+  `spend` is a declaration, not a measurement (an under-report is undetectable). **None of the
+  twenty-eight figures include the orchestrating run itself**; the delivery step records one `spend` record
+  with `phase: orchestrator` before it closes (`docs/review-cost.md`), which closes the *channel*
   and not the *trust* gap. `skill/policies/judgment-day.md` and `skill/bindings/github/operations.md` name
   the row, and nothing in the always-routed contract reads or reports the figure, so naming it there would
   describe an action no run takes.
@@ -4344,13 +4344,13 @@ measure:
   that knows a message id can join its thread. `expires_in` is recorded and shown and decides nothing, so an
   expired message is still delivered. Types, threads and acks are text and rows in a local file; no gate,
   permission or claim reads them.
-- **`ask` and `wait` wake only what can be woken, and were driven on no live host.** A question reaches a
+- **A question and a wait wake only what can be woken, and were driven on no live host.** A question reaches a
   session at its next hook point or idle wake. Claude Code (`Stop` waiter), Pi and OpenCode 2 (polling)
-  record a wake; Codex and OpenCode 1 record none, so an `ask` to them returns `not_woken` after delivering
+  record a wake; Codex and OpenCode 1 record none, so a question to them returns `not_woken` after delivering
   the question and does not wait, and a model on Codex can answer only on a turn it is already running. The
   heartbeat is an MCP `notifications/progress` sent only to a call that carried a `progressToken`; a host
-  that sends none and kills silent calls will still kill a long `wait`, and no host was run to measure
-  which does. The ask and its answer are separate writes: an answer admitted a moment before the asker's
+  that sends none and kills silent calls will still kill a long wait, and no host was run to measure
+  which does. The question and its answer are separate writes: an answer admitted a moment before the asker's
   timeout is recorded can sit in the mailbox as mail for a question already reported `timed_out`, never as
   the answer to it. A session that dies without ending its row is not seen as `ended` and the ask times out.
   The Pi parent-child channel was not moved onto the mailbox: it shares the rules (one outcome, refused
@@ -4369,7 +4369,7 @@ measure:
   `sent`. An abandoned duty is reported when the registry records the session's end; a session that dies
   without ending its row is never reported, and one that resumes after its end finds the duty abandoned and a
   late `done` refused. The deadline is a time the sender reads as `overdue`, not a timer: nothing wakes anyone
-  when it passes, and it can be set only through the MCP `handoff` tool, not `estigia handoff`. The
+  when it passes, and only `estigia handoff --deadline-seconds` sets it. The
   hook that accepts on `claim` has a unit test of the acceptance and none that drives a real claim.
 - **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from
   acting on it. **The `flow dev` conflict rule reads the words of the message**: `send_message` and

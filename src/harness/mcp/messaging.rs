@@ -345,6 +345,33 @@ pub(super) fn send_message(
     named: Option<&NamedRun<'_>>,
     consent: Option<&mut Consent<'_>>,
 ) -> Result<Value, ToolFailure> {
+    if arguments.get("question").and_then(Value::as_bool) == Some(true) {
+        for name in [
+            "reply_to",
+            "broadcast",
+            "handoff",
+            "outcome",
+            "thread",
+            "expires_in",
+            "type",
+            "repo_dir",
+        ] {
+            if arguments.get(name).is_some_and(|value| !value.is_null()) {
+                return Err(malformed(format!(
+                    "`{name}` belongs to a plain send; `question: true` takes only `to`, `text`, \
+                     `choices` and `timeout_seconds`"
+                )));
+            }
+        }
+        return ask(arguments, context, named, consent);
+    }
+    for name in ["choices", "timeout_seconds"] {
+        if arguments.get(name).is_some_and(|value| !value.is_null()) {
+            return Err(malformed(format!(
+                "`{name}` belongs to `question: true`; a plain send takes neither"
+            )));
+        }
+    }
     let sender = named.map_or("", |run| run.id);
     let text = arguments
         .get("text")
@@ -626,7 +653,27 @@ pub(super) fn inbox(
     arguments: &Value,
     context: &GateContext,
     named: Option<&NamedRun<'_>>,
+    consent: Option<&mut Consent<'_>>,
 ) -> Result<Value, ToolFailure> {
+    if arguments.get("wait").and_then(Value::as_bool) == Some(true) {
+        for name in ["sent", "state", "limit", "read", "ack"] {
+            if arguments.get(name).is_some_and(|value| !value.is_null()) {
+                return Err(malformed(format!(
+                    "`{name}` belongs to a listing; `wait: true` takes only `type`, `thread`, \
+                     `from` and `timeout_seconds`"
+                )));
+            }
+        }
+        return wait(arguments, context, named, consent);
+    }
+    if arguments
+        .get("timeout_seconds")
+        .is_some_and(|value| !value.is_null())
+    {
+        return Err(malformed(
+            "`timeout_seconds` belongs to `wait: true`; a listing takes none".to_owned(),
+        ));
+    }
     let run =
         named.ok_or_else(|| malformed("`run_id` is this run's id; inbox needs it".to_owned()))?;
     let text = |name: &str| match arguments.get(name) {

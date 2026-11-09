@@ -555,6 +555,64 @@ fn a_slice_whose_pull_request_does_not_close_the_issue_continues_it() {
 }
 
 #[test]
+fn a_continuing_slice_records_the_spend_it_is_given_before_it_posts_evidence() {
+    let world = world("b.txt", "two\n");
+    let mut script = green_script(&world);
+    script.retain(|entry| entry["matches"] != "closingIssuesReferences");
+    script.insert(0, closing(&[]));
+    let fake = fake(&world);
+    fake.scripts
+        .borrow_mut()
+        .insert("record_spend".into(), vec![Ok(json!({"ok": true}))]);
+    let mut request = request();
+    request.spend = Some(
+        json!({
+            "phase": "orchestrator",
+            "conditions": "inline",
+            "input": 10,
+            "tokens": 20,
+            "seconds": 30,
+            "contexts": 1,
+        })
+        .to_string(),
+    );
+    let ran = drive(&fake, &script, &request);
+
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert_eq!(ran.answer["continues"], true, "{}", ran.answer);
+    assert!(
+        ran.answer["done"]
+            .as_array()
+            .is_some_and(|done| done.contains(&json!("record_spend"))),
+        "the continuing slice did not report the spend it recorded: {}",
+        ran.answer
+    );
+    let calls = called(&fake);
+    let spend = calls
+        .iter()
+        .position(|call| call == "record_spend")
+        .expect("the continuing slice recorded no spend");
+    let comment = calls
+        .iter()
+        .position(|call| call == "comment")
+        .expect("the continuing slice posted no evidence");
+    assert!(
+        spend < comment,
+        "the spend was recorded after the evidence claimed it: {calls:?}"
+    );
+    let recorded = fake
+        .sent
+        .borrow()
+        .iter()
+        .find(|(name, _)| name == "record_spend")
+        .map(|(_, arguments)| arguments.clone())
+        .expect("the spend call");
+    assert_eq!(recorded["epoch"], receipt_of(&world).epoch, "{recorded}");
+    assert_eq!(recorded["phase"], "orchestrator", "{recorded}");
+    assert_eq!(recorded["tokens"], 20, "{recorded}");
+}
+
+#[test]
 fn a_pull_request_whose_closing_references_cannot_be_read_hands_back_before_release() {
     let world = world("b.txt", "two\n");
     let mut script = green_script(&world);

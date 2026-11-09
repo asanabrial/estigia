@@ -391,6 +391,38 @@ impl<H: Hands> Deliver<'_, H> {
         })
     }
 
+    fn record_spends(&mut self, step: &str, receipt: &ReviewTransaction) -> Step<()> {
+        let Some(spend) = &self.request.spend else {
+            return Ok(());
+        };
+        let unreadable = |detail: String| {
+            stop(
+                step,
+                "spend-unreadable",
+                json!({"detail": format!("the `spend` argument could not be read: {detail}")}),
+            )
+        };
+        let parsed: Value = serde_json::from_str(spend)
+            .map_err(|error| unreadable(format!("it is not JSON: {error}")))?;
+        let records = match parsed {
+            Value::Array(records) if !records.is_empty() => records,
+            Value::Array(_) => return Err(unreadable("it is an empty array".to_owned())),
+            single => vec![single],
+        };
+        for record in records {
+            let Value::Object(fields) = record else {
+                return Err(unreadable("every record is a JSON object".to_owned()));
+            };
+            let mut arguments = self.receipt_arguments(receipt);
+            if let Value::Object(into) = &mut arguments {
+                into.extend(fields);
+            }
+            self.call(step, "record_spend", arguments)?;
+            self.done.push("record_spend");
+        }
+        Ok(())
+    }
+
     fn expired(&self) -> bool {
         self.hands.instant() >= self.deadline
     }
@@ -784,14 +816,17 @@ impl<H: Hands> Deliver<'_, H> {
     }
 
     fn close(&mut self, receipt: &ReviewTransaction, merged: &Merged, ci: &Value) -> Step<Value> {
-        let facts = self.facts(receipt, merged, ci);
-        let evidence = evidence(&facts);
         if !self
             .closes_issue(receipt)
             .map_err(|halt| with_merged(halt, merged))?
         {
-            return self.continue_chain(receipt, merged, &evidence);
+            self.record_spends("continue", receipt)
+                .map_err(|halt| with_merged(halt, merged))?;
+            let facts = self.facts(receipt, merged, ci);
+            return self.continue_chain(receipt, merged, &evidence(&facts));
         }
+        let facts = self.facts(receipt, merged, ci);
+        let evidence = evidence(&facts);
         let scratch = self.hands.scratch();
         let file = scratch.join(format!("{}-{}.md", self.request.run_id, receipt.pr));
         let written = std::fs::create_dir_all(&scratch)
@@ -1150,8 +1185,8 @@ pub(super) fn evidence(facts: &Facts) -> String {
         other => format!("parents `{}`", other.join("`, `")),
     };
     let spend = match &facts.spend {
-        Some(spend) => format!("recorded with this close: `{spend}`"),
-        None => "none recorded with this close".to_owned(),
+        Some(spend) => format!("recorded by this delivery: `{spend}`"),
+        None => "none recorded by this delivery".to_owned(),
     };
     let mut note = format!(
         "{summary}\n\n\

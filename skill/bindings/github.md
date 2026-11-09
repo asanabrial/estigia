@@ -17,7 +17,7 @@ publication, CI release, the closing-keyword scan — are code. The steps that n
 is worth analysing, whether a blocker is discharged, whether a diff passes review — are not, and stay
 in the prose where they belong.
 
-Each operation is one of Estigia's MCP tools, called by name; a `--flag` written here is the tool's argument of the same name.
+Each operation is one of Estigia's MCP tools or CLI commands, called by name; a `--flag` written here is the argument of the same name.
 
 There is no interpreter and no script on the path: the operations answer in one place.
 
@@ -192,6 +192,12 @@ Each name below has no tool of its own; the call on the right answers it.
 - `heartbeat` → `comment` with `expect_state`, whose `kind` defaults to `heartbeat`; the renewal runs first and a refusal posts nothing.
 - `blocked_until` → `transition` with `to` `blocked` and `until_issue`/`until_state`, or `clear`; the `blocked-until` operation remains for the CLI.
 - `ensure_states` → `create`, or any label write: a missing label is created at the write that needs it and the write retried; the `ensure-states` operation remains for the CLI.
+- `ask` → `send_message` with `question: true`, `to`, `text`, optional `choices` and `timeout_seconds`; its four outcomes are the answer, a timeout, an ended recipient and one that cannot be woken.
+- `wait` → `inbox` with `wait: true`, `type`, `thread`, `from` and `timeout_seconds`.
+- `record_spend` → `release`, `handoff_review` or `deliver` with `spend`, whose receipt fields default to the held review transaction.
+- `handoff` → the `handoff` command, `estigia handoff <issue> --to <runtime>`.
+- `list_sessions` → the `sessions` command, `estigia sessions`, with the same selectors and `--address`.
+- `judge_workspaces` → the `judge-workspaces` command, `estigia judge-workspaces`.
 - `reclaim` → `claim` with `takeover`, plus `target_operation`, and `force` with `reason_file`.
 - `list_identities` → `list_state` with `identities`.
 - `review_findings`, `review_transaction`, `review_payload_membership`, `inspect_candidate`, `computed_verdict`, `spend_summary` → `review_read` with `view` `findings`, `transaction`, `membership`, `inspect`, `verdict`, `spend`.

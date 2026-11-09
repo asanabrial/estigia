@@ -1201,9 +1201,7 @@ fn run_tool_asking(
         "send_message" => {
             return messaging::send_message(arguments, context, named.as_ref(), consent);
         }
-        "ask" => return messaging::ask(arguments, context, named.as_ref(), consent),
-        "wait" => return messaging::wait(arguments, context, named.as_ref(), consent),
-        "inbox" => return messaging::inbox(arguments, context, named.as_ref()),
+        "inbox" => return messaging::inbox(arguments, context, named.as_ref(), consent),
         "list_sessions" => return messaging::list_sessions(arguments, context),
         "deliver" => return deliver::deliver(arguments, context, named.as_ref()),
         _ => {}
@@ -1453,6 +1451,7 @@ fn run_tool_asking(
         flags.push(key);
         flags.push("--runtime".to_owned());
         flags.push(runtime.to_owned());
+        default_spend_receipt(&run, issue, &mut flags);
     }
     // The finding's own identity (`id`, `class`) is in the key, so two
     // different findings against one receipt mint two operations rather than

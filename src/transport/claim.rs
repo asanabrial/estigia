@@ -4757,6 +4757,9 @@ pub struct HandoffReview<'a> {
     pub blocker: &'a str,
     /// Who or what can discharge the blocker.
     pub discharger: &'a str,
+    /// Measurements this handoff records before it releases the claim: one
+    /// JSON object or an array, receipt fields defaulted by the tool server.
+    pub spend: Option<&'a str>,
     /// The moment the timeline is judged and the request is recorded.
     ///
     /// Read from the machine, never from the run being judged. A test may pass
@@ -4777,6 +4780,13 @@ pub fn handoff_review(
         handoff.base,
         handoff.digest,
     )?;
+    let spends = match handoff.spend {
+        Some(spend) => parse_merged_spends(handoff.run_id, spend)?,
+        None => Vec::new(),
+    };
+    for record in &spends {
+        validate_spend(&record.review(handoff.issue, handoff.run_id, handoff.now))?;
+    }
     let read = || timeline(context, handoff.issue, handoff.now);
     let labels = || super::commands::issue_view(context, handoff.issue, "labels");
     let expected = [
@@ -4894,6 +4904,23 @@ pub fn handoff_review(
     // an epoch whose review request is no longer current.
     let before_release = read()?;
     require_recorded_receipt(&before_release, &receipt, "cannot be handed off")?;
+    let mut spend_answers = Vec::new();
+    if !spends.is_empty() {
+        let ledger = Ledger::open(context, handoff.issue, handoff.now)?;
+        for record in &spends {
+            check_spend_receipt(
+                &ledger,
+                &record.review(handoff.issue, handoff.run_id, handoff.now),
+            )?;
+        }
+        for record in &spends {
+            spend_answers.push(record_spend_on(
+                context,
+                &ledger,
+                &record.review(handoff.issue, handoff.run_id, handoff.now),
+            )?);
+        }
+    }
     let release_id = review_operation_id("review-handoff-release", &[&operation_id]);
     unassign(
         context,
@@ -4948,7 +4975,7 @@ pub fn handoff_review(
         ));
     }
 
-    Ok(serde_json::json!({
+    let mut answer = serde_json::json!({
         "ok": true,
         "issue": handoff.issue,
         "state": "review",
@@ -4965,7 +4992,14 @@ pub fn handoff_review(
         "blocker": recorded.blocker,
         "discharger": recorded.discharger,
         "holder": after_holding.holder,
-    }))
+    });
+    if !spend_answers.is_empty() {
+        answer["spend"] = match spend_answers.len() {
+            1 => spend_answers.remove(0),
+            _ => serde_json::Value::Array(spend_answers),
+        };
+    }
+    Ok(answer)
 }
 
 /// What one reviewer found, and what it is worth.
@@ -5083,6 +5117,144 @@ pub struct SpendReview<'a> {
     /// Read from the machine, never from the run being judged. A test may pass
     /// a chosen value; production obtains it from the MCP server's clock.
     pub now: &'a str,
+}
+
+/// One spend record a merged `unassign` or `handoff_review` carries, parsed
+/// from its JSON object.
+pub(crate) struct MergedSpend {
+    operation_id: String,
+    phase: String,
+    epoch: String,
+    pr: u64,
+    head: String,
+    base: String,
+    digest: String,
+    conditions: String,
+    counts: [u64; 4],
+    note: String,
+}
+
+impl MergedSpend {
+    fn parse(run_id: &str, value: &serde_json::Value) -> Result<Self, Failure> {
+        let missing = |field: &str| {
+            Failure::ConfigDefect(serde_json::json!({
+                "ok": false,
+                "reason": "missing-argument",
+                "argument": "--spend",
+                "detail": format!("--spend has no `{field}`"),
+            }))
+        };
+        let text = |field: &str| -> Result<String, Failure> {
+            value
+                .get(field)
+                .and_then(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| missing(field))
+        };
+        let count = |field: &str| -> Result<u64, Failure> {
+            value
+                .get(field)
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| missing(field))
+        };
+        let phase = text("phase")?;
+        let epoch = text("epoch")?;
+        let pr = count("pr")?;
+        let head = text("head")?;
+        let base = text("base")?;
+        let digest = text("digest")?;
+        let conditions = text("conditions")?;
+        let counts = [
+            count("input")?,
+            count("tokens")?,
+            count("seconds")?,
+            count("contexts")?,
+        ];
+        let note = value
+            .get("note")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let pr_field = pr.to_string();
+        let operation_id = review_operation_id(
+            "spend",
+            &[
+                run_id,
+                &phase,
+                &epoch,
+                &pr_field,
+                &head,
+                &base,
+                &digest,
+                &conditions,
+            ],
+        );
+        Ok(Self {
+            operation_id,
+            phase,
+            epoch,
+            pr,
+            head,
+            base,
+            digest,
+            conditions,
+            counts,
+            note,
+        })
+    }
+
+    pub(crate) fn review<'a>(
+        &'a self,
+        issue: u64,
+        run_id: &'a str,
+        now: &'a str,
+    ) -> SpendReview<'a> {
+        let [input, tokens, seconds, contexts] = self.counts;
+        SpendReview {
+            issue,
+            run_id,
+            operation_id: &self.operation_id,
+            phase: &self.phase,
+            epoch: &self.epoch,
+            pr: self.pr,
+            head: &self.head,
+            base: &self.base,
+            digest: &self.digest,
+            conditions: &self.conditions,
+            input,
+            tokens,
+            seconds,
+            contexts,
+            note: &self.note,
+            now,
+        }
+    }
+}
+
+/// `--spend` as a list of records: one JSON object or an array of them, every
+/// element parsed before any is recorded.
+pub(crate) fn parse_merged_spends(run_id: &str, spend: &str) -> Result<Vec<MergedSpend>, Failure> {
+    let malformed = |detail: String| {
+        Failure::ConfigDefect(serde_json::json!({
+            "ok": false,
+            "reason": "malformed-argument",
+            "argument": "--spend",
+            "detail": detail,
+        }))
+    };
+    let value: serde_json::Value = serde_json::from_str(spend)
+        .map_err(|error| malformed(format!("--spend is a JSON object or an array: {error}")))?;
+    let records = match value {
+        serde_json::Value::Array(records) if !records.is_empty() => records,
+        serde_json::Value::Array(_) => {
+            return Err(malformed("--spend is an empty array".to_owned()));
+        }
+        single => vec![single],
+    };
+    records
+        .iter()
+        .map(|record| MergedSpend::parse(run_id, record))
+        .collect()
 }
 
 /// A finding's location, parsed: a repository-relative path and the new-side
