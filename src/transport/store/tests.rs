@@ -1529,6 +1529,149 @@ fn records_round_trip_and_the_prune_takes_only_the_stale_ones() {
 }
 
 #[test]
+fn the_decision_cap_keeps_the_newest_ten_thousand_of_each_repository() {
+    use super::Record;
+    let (_directory, store) = open();
+    let mut entries = Vec::new();
+    for at in 0..10_005 {
+        entries.push(serde_json::json!({"at": at, "verdict": "allow", "repo": "github.com/a/b"}));
+    }
+    for at in 0..3 {
+        entries.push(serde_json::json!({"at": at, "verdict": "allow", "repo": "github.com/c/d"}));
+    }
+    store
+        .import_records("cap-fixture", &[(Record::Decision, entries)])
+        .expect("the fixture records");
+
+    assert_eq!(
+        store
+            .cap_decisions(10_000, crate::harness::doctor::UNDECIDED)
+            .expect("caps"),
+        5,
+        "the pass kept a different number of rows than the cap it was given"
+    );
+
+    let records = store.records(Record::Decision).expect("reads");
+    assert_eq!(records.len(), 10_003);
+    let repo_of = |record: &serde_json::Value| {
+        record
+            .get("repo")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let busiest: Vec<&serde_json::Value> = records
+        .iter()
+        .filter(|record| repo_of(record) == "github.com/a/b")
+        .collect();
+    assert_eq!(busiest.len(), 10_000);
+    let oldest = busiest
+        .iter()
+        .filter_map(|record| record.get("at").and_then(serde_json::Value::as_u64))
+        .min();
+    assert_eq!(
+        oldest,
+        Some(5),
+        "the cap kept a different end of the busiest repository"
+    );
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| repo_of(record) == "github.com/c/d")
+            .count(),
+        3,
+        "the cap touched a repository under its own cap"
+    );
+}
+
+#[test]
+fn the_decision_cap_never_evicts_a_verdict_silence_reads() {
+    use super::Record;
+    let (_directory, store) = open();
+    let protected = crate::harness::doctor::UNDECIDED[0];
+    store
+        .add_record(
+            Record::Decision,
+            &serde_json::json!({"at": 0, "verdict": protected, "repo": "github.com/a/b"}),
+        )
+        .expect("the protected record");
+    for at in 1..4 {
+        store
+            .add_record(
+                Record::Decision,
+                &serde_json::json!({"at": at, "verdict": "allow", "repo": "github.com/a/b"}),
+            )
+            .expect("an allow");
+    }
+
+    assert_eq!(
+        store
+            .cap_decisions(2, crate::harness::doctor::UNDECIDED)
+            .expect("caps"),
+        1
+    );
+    let records = store.records(Record::Decision).expect("reads");
+    assert_eq!(
+        records.len(),
+        3,
+        "the cap evicted more than the newest two allows"
+    );
+    assert!(
+        records.iter().any(
+            |record| record.get("verdict").and_then(serde_json::Value::as_str) == Some(protected)
+        ),
+        "the cap evicted the verdict `silence` reads: {records:?}"
+    );
+}
+
+#[test]
+fn the_decision_cap_gives_rows_with_no_repository_one_bucket_and_leaves_roles_alone() {
+    use super::Record;
+    let (_directory, store) = open();
+    for at in 0..3 {
+        store
+            .add_record(
+                Record::Decision,
+                &serde_json::json!({"at": at, "verdict": "allow"}),
+            )
+            .expect("a keyless decision");
+        store
+            .add_record(
+                Record::Decision,
+                &serde_json::json!({"at": at, "verdict": "allow", "repo": "github.com/a/b"}),
+            )
+            .expect("a keyed decision");
+        store
+            .add_record(
+                Record::Role,
+                &serde_json::json!({"at": at, "agent_type": "developer"}),
+            )
+            .expect("a role");
+    }
+
+    assert_eq!(
+        store.cap_decisions(2, &[]).expect("caps"),
+        2,
+        "the pass did not cap each bucket on its own"
+    );
+    let decisions = store.records(Record::Decision).expect("reads");
+    let keyless = decisions
+        .iter()
+        .filter(|record| record.get("repo").is_none())
+        .count();
+    let keyed = decisions
+        .iter()
+        .filter(|record| record.get("repo").is_some())
+        .count();
+    assert_eq!((keyless, keyed), (2, 2));
+    assert_eq!(
+        store.records(Record::Role).expect("reads").len(),
+        3,
+        "the cap reached the role records"
+    );
+}
+
+#[test]
 fn an_import_records_the_blocked_until_clauses_the_body_carried() {
     let (_directory, mut store) = open();
     store

@@ -3456,15 +3456,19 @@ pointer that leaves it names the document it points at.
   provably-data spans are blanked only in read-only simple commands, alone or as the top-level commands of
   a compound line through which no data reaches execution.
 - **Decisions are written down; the reasoning behind them is not.** Every allow and deny is appended to the
-  local store's `decisions` table with the run, the tool, **what the decision was about**, the verdict and the
-  refusal code. A call identified only by `--run-id` — `estigia gate`, the question a person or an agent
+  local store's `decisions` table with the run, the tool, **what the decision was about**, the verdict, the
+  refusal code and the repository it was made in — `github.com/owner/name` when the checkout's `origin`
+  names one, otherwise the main checkout's path, and nothing when the directory is in no repository. A call
+  identified only by `--run-id` — `estigia gate`, the question a person or an agent
   asks — answers and records nothing and touches no run pointer, because that road is how the gate is
   probed and it once wrote 75% of every recorded denial. `Outside` is not recorded (a record per tool call of every session that never swore would bury
   the ones that matter) and the write is best-effort (a refusal that could not be written down is still a
   refusal). **A payload Estigia cannot parse does not stop the call, and says so**: the hook stands aside
   (a schema this build does not know could wrap `Read` as easily as `Write`) and writes `payload-unreadable`
   to the ledger. Records older than thirty days are deleted at most once every twenty-four hours, by
-  `SessionStart` only; a record that could not be appended is counted (itself best-effort) and reported by
+  `SessionStart` only; each repository also keeps at most ten thousand decisions, newest first, and the
+  undecided verdicts `doctor` reads are never removed by that cap, only by age. A record that could not be
+  appended is counted (itself best-effort) and reported by
   `doctor`; the JSONL history this replaced was imported then deleted (a torn legacy line is skipped, so
   whether every record survived is not measured). `status` lists what this machine's runs recorded holding;
   whether those claims are live is the tracker's answer.
@@ -4392,6 +4396,13 @@ not establish:
   recorded again, and one that straddles a bucket edge can be recorded twice in a minute.
 - **`ask` is only as real as the gate's `ask`.** A `Delivery authorisation` of `ask` may not reach the gate at
   all, and hosts other than Claude Code convert `ask` into a deny before it is recorded.
+- **The repository key is read, not proved.** It comes from the shared git directory's `config` without
+  spawning a process: a remote in a shape `RepoRef::from_github_remote` does not accept, or a config this
+  reader cannot parse, falls back to the main checkout's path (a submodule's own root, inside one); a
+  decision from a directory in no repository
+  records no key, an ask records that working directory instead, and two clones of one repository with no
+  GitHub remote are two keys. The path fallback is canonicalised, so symlinked spellings of one checkout
+  agree.
 - **No runtime was run live.** The tests drive the functions, not a session of any host.
 
 ## The npm installer and the registries

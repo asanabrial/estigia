@@ -531,6 +531,7 @@ pub(crate) fn note(
         Decision::Deny(refusal) => ("deny", format!("{}: {}", refusal.code, refusal.message)),
         Decision::Ask(refusal) => ("ask", format!("{}: {}", refusal.code, refusal.message)),
     };
+    let repository = crate::skill::repository_key(&context.repo_dir);
     let mut entry = json!({
             "at": session::now_seconds(),
             "run_id": run_id,
@@ -543,6 +544,9 @@ pub(crate) fn note(
             // **and recorded**.
             "flag": context.flag,
     });
+    if let Some(repository) = &repository {
+        entry["repo"] = json!(repository);
+    }
     // What the decision was *about*: the target, or the command.
     if let Some(subject) = subject.filter(|subject| !subject.trim().is_empty())
         && let Value::Object(fields) = &mut entry
@@ -556,7 +560,7 @@ pub(crate) fn note(
     }
     session::record(&context.state_root, &entry);
     if let Decision::Ask(refusal) = decision {
-        record_ask(context, run_id, refusal.code);
+        record_ask(context, run_id, refusal.code, repository.as_deref());
     }
 }
 
@@ -567,11 +571,11 @@ fn ask_key(run_id: &str, code: &str, now: u64) -> String {
     format!("ask:{run_id}:{code}:{}", now / ASK_DEDUP_SECONDS)
 }
 
-fn record_ask(context: &GateContext, run_id: &str, code: &str) {
+fn record_ask(context: &GateContext, run_id: &str, code: &str, repository: Option<&str>) {
     let Some(now) = session::now_seconds() else {
         return;
     };
-    let repo = context.repo_dir.display().to_string();
+    let repo = repository.map_or_else(|| context.repo_dir.display().to_string(), str::to_owned);
     let recorded =
         crate::transport::store::Store::open(&crate::transport::store::beside(&context.state_root))
             .and_then(|store| {
@@ -605,7 +609,8 @@ fn record_ask(context: &GateContext, run_id: &str, code: &str) {
                 "tool": "needs-person",
                 "verdict": "unrecorded",
                 "detail": failure.detail(),
-                "repo_dir": repo,
+                "repo_dir": context.repo_dir.display().to_string(),
+                "repo": repo,
             }),
         );
     }
@@ -2054,7 +2059,7 @@ mod tests {
             .execute_batch("DROP TABLE needs_person")
             .expect("drops");
 
-        record_ask(&context, "claude-abcd1234", "a-code");
+        record_ask(&context, "claude-abcd1234", "a-code", None);
 
         let kept = crate::transport::store::Store::open(&path)
             .expect("opens")
@@ -4534,6 +4539,154 @@ mod tests {
         assert!(
             blank.get("subject").is_none(),
             "a blank subject was written down as one: {blank}"
+        );
+    }
+
+    #[test]
+    fn a_decision_names_one_repository_from_its_root_a_subdirectory_and_a_linked_worktree() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let repo = root.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("the checkout");
+        crate::test_env::repository_at(&repo);
+        crate::test_env::add_github_remote(&repo);
+        let linked = root.path().join("linked");
+        let added = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(["worktree", "add", "-b", "linked"])
+            .arg(&linked)
+            .output()
+            .expect("this fixture needs a usable `git` on PATH");
+        assert!(
+            added.status.success(),
+            "`git worktree add` failed: {}",
+            String::from_utf8_lossy(&added.stderr).trim()
+        );
+        let subdirectory = repo.join("apps").join("engine");
+        std::fs::create_dir_all(&subdirectory).expect("a subdirectory");
+
+        let state = root.path().join("state");
+        let context = |repo_dir: &std::path::Path| GateContext {
+            repo_dir: repo_dir.to_path_buf(),
+            state_root: state.clone(),
+            skill_root: state.join("skill"),
+            ..nowhere()
+        };
+        let record = |repo_dir: &std::path::Path| {
+            clear_ledger(&state);
+            note(
+                &context(repo_dir),
+                "claude-abcd1234",
+                "Bash",
+                None,
+                &crate::harness::Decision::Allow("routine".to_owned()),
+                &[],
+            );
+            let text = decisions(&state);
+            serde_json::from_str::<Value>(text.lines().next().expect("a line"))
+                .expect("the line is JSON")
+        };
+
+        for directory in [&repo, &linked, &subdirectory] {
+            let entry = record(directory);
+            assert_eq!(
+                entry.get("repo").and_then(Value::as_str),
+                Some("github.com/asanabrial/estigia"),
+                "{} did not name the one repository every spelling belongs to: {entry}",
+                directory.display()
+            );
+        }
+
+        let outside = root.path().join("outside");
+        std::fs::create_dir_all(&outside).expect("a directory in no repository");
+        let entry = record(&outside);
+        assert!(
+            entry.get("verdict").is_some(),
+            "a directory in no repository lost its decision: {entry}"
+        );
+        assert!(
+            entry.get("repo").is_none(),
+            "a directory in no repository invented one: {entry}"
+        );
+
+        clear_ledger(&state);
+        let refusal =
+            Refusal::not_started("a-code", "a message", Resolution::run("estigia status"));
+        note(
+            &context(&subdirectory),
+            "claude-abcd1234",
+            "Bash",
+            None,
+            &crate::harness::Decision::Ask(Box::new(refusal)),
+            &[],
+        );
+        let needs = crate::transport::store::Store::open(&crate::transport::store::beside(&state))
+            .expect("the store opens")
+            .needs_person(10)
+            .expect("the needs read");
+        assert_eq!(
+            needs.first().map(|need| need.repo.as_str()),
+            Some("github.com/asanabrial/estigia"),
+            "a need named a different repository than the decision beside it: {needs:?}"
+        );
+
+        let bare = root.path().join("bare");
+        std::fs::create_dir_all(&bare).expect("a checkout with no remote");
+        crate::test_env::repository_at(&bare);
+        let bare_subdirectory = bare.join("apps").join("engine");
+        std::fs::create_dir_all(&bare_subdirectory).expect("a subdirectory");
+        let bare_linked = root.path().join("bare-linked");
+        let added = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&bare)
+            .args(["worktree", "add", "-b", "bare-linked"])
+            .arg(&bare_linked)
+            .output()
+            .expect("this fixture needs a usable `git` on PATH");
+        assert!(
+            added.status.success(),
+            "`git worktree add` failed: {}",
+            String::from_utf8_lossy(&added.stderr).trim()
+        );
+        let root_path = std::fs::canonicalize(&bare)
+            .expect("the fixture's main checkout")
+            .display()
+            .to_string();
+        for directory in [&bare, &bare_subdirectory, &bare_linked] {
+            let entry = record(directory);
+            assert_eq!(
+                entry.get("repo").and_then(Value::as_str),
+                Some(root_path.as_str()),
+                "{} did not fall back to the main checkout: {entry}",
+                directory.display()
+            );
+        }
+    }
+
+    #[test]
+    fn a_repository_key_reads_only_the_origins_github_url() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let repo = root.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("the checkout");
+        crate::test_env::repository_at(&repo);
+        std::fs::write(
+            repo.join(".git").join("config"),
+            concat!(
+                "[core]\n",
+                "\trepositoryformatversion = 0\n",
+                "[remote \"upstream\"]\n",
+                "\turl = https://github.com/someone/else.git\n",
+                "[remote \"origin\"]\n",
+                "\turl = https://gitlab.com/a/b.git\n",
+                "\turl = git@github.com:asanabrial/estigia.git\n",
+            ),
+        )
+        .expect("the remote configuration");
+
+        assert_eq!(
+            crate::skill::repository_key(&repo).as_deref(),
+            Some("github.com/asanabrial/estigia"),
+            "the key read another remote's URL, or stopped at the first unparsable one"
         );
     }
 
