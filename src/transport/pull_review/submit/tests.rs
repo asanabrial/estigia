@@ -142,8 +142,26 @@ fn spawner(answer: &str) -> impl Spawner + use<> {
     })
 }
 
+struct Slow(Stub, std::time::Duration);
+
+impl Adapter for Slow {
+    fn review(&self, invocation: &Invocation) -> Result<Vec<u8>, Refusal> {
+        std::thread::sleep(self.1);
+        self.0.review(invocation)
+    }
+}
+
+fn spawner_after(delay: std::time::Duration, answer: &str) -> impl Spawner + use<> {
+    let answer = answer.as_bytes().to_vec();
+    OnThread(move || Ok(Box::new(Slow(Stub(answer.clone()), delay)) as Box<dyn Adapter>))
+}
+
 // A review taken as far as a computed verdict. Answers `worktree`.
 fn reviewed(rig: &Rig, answer: &str) -> std::path::PathBuf {
+    reviewed_by(rig, &spawner(answer))
+}
+
+fn reviewed_by(rig: &Rig, spawner: &dyn Spawner) -> std::path::PathBuf {
     let trees = rig.root.path().join("trees/<repo>/<branch>");
     let trees = trees.to_string_lossy().into_owned();
     let open = view(rig, &rig.head, "OPEN", "main");
@@ -161,8 +179,9 @@ fn reviewed(rig: &Rig, answer: &str) -> std::path::PathBuf {
         )
     })
     .expect("the claim");
+    let now = crate::harness::session::now_seconds().expect("a clock");
     gh(rig, std::slice::from_ref(&open), || {
-        launch_with(&rig.context, RUN, &spawner(answer), 1_000)
+        launch_with(&rig.context, RUN, spawner, now)
     })
     .expect("the launch");
     let collected = gh(rig, &[open], || {
@@ -250,6 +269,16 @@ fn a_clean_review_approves_carrying_the_reviewed_commit_and_reports_only_the_rea
     );
     assert!(written.contains("event=APPROVE"), "{written}");
     gone(&rig, &worktree);
+}
+
+#[test]
+fn a_reviewer_that_answers_after_the_first_poll_is_collected_not_abandoned() {
+    let rig = rig();
+    let worktree = reviewed_by(
+        &rig,
+        &spawner_after(std::time::Duration::from_millis(250), CLEAN),
+    );
+    assert!(worktree.exists(), "the delayed answer left no worktree");
 }
 
 #[test]
