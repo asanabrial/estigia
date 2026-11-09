@@ -99,7 +99,7 @@ impl Store {
                 let _ = self.forget_snapshot_failure();
             }
             Err(failure) => {
-                let _ = self.note_snapshot_failure(now, &failure.detail());
+                let _ = self.note_snapshot_failure((now != 0).then_some(now), &failure.detail());
             }
         }
     }

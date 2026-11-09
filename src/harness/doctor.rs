@@ -3188,6 +3188,11 @@ pub fn silence(found: &Ungated) -> Check {
             format!("\n                      {why}")
         });
     let indent = " ".repeat(22);
+    let when = if last == 0 {
+        "at a time the store did not record".to_owned()
+    } else {
+        format!("at {}", crate::harness::session::stamp_of(last))
+    };
     let ages_out = if last == 0 {
         format!(
             "\n{indent}the newest undecided call carries no date, so when it ages out is unknown"
@@ -3205,14 +3210,13 @@ pub fn silence(found: &Ungated) -> Check {
         about: "whether any call reached the gate and went undecided",
         health: Health::broken(
             format!(
-                "{} call(s) went through ungated, the most recent {} at {}: \
+                "{} call(s) went through ungated, the most recent {} {when}: \
                  {what}{unminted}{latest}{ages_out}",
                 ungated.len(),
                 found.source.as_deref().map_or_else(
                     || "from an agent no line names".to_owned(),
                     |who| format!("from {who}"),
                 ),
-                crate::harness::session::stamp_of(last)
             ),
             Resolution::no_command(
                 crate::outcome::NoCommandReason::OperatorKnowledge,
@@ -7192,7 +7196,10 @@ mod tests {
         let super::Health::Broken { detail, .. } = health else {
             panic!("a counted failure from yesterday was reported fine");
         };
-        assert!(detail.contains('2'), "how many is not said: {detail}");
+        assert!(
+            detail.contains("2 decision record(s)"),
+            "how many is not said: {detail}"
+        );
         assert!(
             detail.contains(&crate::harness::session::stamp_of(at)),
             "when the last one was is not said: {detail}"
@@ -7202,6 +7209,12 @@ mod tests {
     #[test]
     fn a_counted_failure_older_than_the_retention_stops_being_broken() {
         let days = crate::harness::session::RECORD_RETENTION_DAYS;
+        let boundary = COUNTED_AT - days * 86_400;
+        assert!(
+            super::counted_failures(&[counted("decisions", 1, Some(boundary), None)], COUNTED_AT)
+                .is_broken(),
+            "a failure exactly at the retention boundary was read as older than it"
+        );
         let old = COUNTED_AT - (days + 1) * 86_400;
         assert!(
             !super::counted_failures(&[counted("decisions", 1, Some(old), None)], COUNTED_AT)
@@ -7264,6 +7277,25 @@ mod tests {
         assert!(
             detail.contains(&crate::harness::session::stamp_of(aged_out)),
             "when the newest one ages out is not said: {detail}"
+        );
+    }
+
+    #[test]
+    fn an_undated_undecided_call_is_not_given_a_date() {
+        let check = silence(&Ungated {
+            calls: vec![("payload-absent".to_owned(), 0)],
+            ..Ungated::default()
+        });
+        let super::Health::Broken { detail, .. } = &check.health else {
+            panic!("an ungated call stopped being broken");
+        };
+        assert!(
+            detail.contains("did not record") && detail.contains("carries no date"),
+            "an undated call is not reported as undated: {detail}"
+        );
+        assert!(
+            !detail.contains("1970"),
+            "an undated call was given the epoch as its date: {detail}"
         );
     }
 

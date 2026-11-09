@@ -902,7 +902,7 @@ fn append_waiting(root: &Path, kind: Record, entry: &Value, wait: Duration) {
         return;
     };
     if store.add_record(kind, entry).is_err() {
-        let _ = store.note_record_failure(kind, now_seconds().unwrap_or_default());
+        let _ = store.note_record_failure(kind, now_seconds());
     }
 }
 
@@ -997,7 +997,7 @@ fn rotated(path: &Path) -> PathBuf {
 fn import_legacy(store: &Store, root: &Path) {
     let mut batch: Vec<(Record, Vec<Value>)> = Vec::new();
     let mut files: Vec<PathBuf> = Vec::new();
-    let now = now_seconds().unwrap_or_default();
+    let now = now_seconds();
     for (path, kind) in legacy_files(root) {
         match fs::read_to_string(&path) {
             Ok(text) => {

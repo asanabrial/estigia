@@ -126,28 +126,34 @@ impl Store {
     }
 
     /// Counts one failed append, so a record that could not be written down is
-    /// visible to `doctor` rather than silently lost.
-    pub(crate) fn note_record_failure(&self, kind: Record, now: u64) -> Result<(), Failure> {
+    /// visible to `doctor` rather than silently lost. A time the clock would
+    /// not give is stored as unknown, never as 1970.
+    pub(crate) fn note_record_failure(
+        &self,
+        kind: Record,
+        now: Option<u64>,
+    ) -> Result<(), Failure> {
         self.connection()
             .execute(
                 "INSERT INTO record_failures (kind, count, last_at) VALUES (?1, 1, ?2)
                  ON CONFLICT (kind) DO UPDATE SET count = count + 1, last_at = excluded.last_at",
-                rusqlite::params![kind.table(), int(now)],
+                rusqlite::params![kind.table(), now.map(int)],
             )
             .map_err(unreadable("count a failed record"))?;
         Ok(())
     }
 
     /// Counts one snapshot that could not be written, so `doctor` reports it
-    /// with when it happened and why.
-    pub(crate) fn note_snapshot_failure(&self, now: u64, why: &str) -> Result<(), Failure> {
+    /// with when it happened and why. A time the clock would not give is stored
+    /// as unknown, never as 1970.
+    pub(crate) fn note_snapshot_failure(&self, now: Option<u64>, why: &str) -> Result<(), Failure> {
         self.connection()
             .execute(
                 "INSERT INTO record_failures (kind, count, last_at, last_error)
                  VALUES ('snapshot', 1, ?1, ?2)
                  ON CONFLICT (kind) DO UPDATE SET count = count + 1, last_at = excluded.last_at,
                      last_error = excluded.last_error",
-                rusqlite::params![int(now), why],
+                rusqlite::params![now.map(int), why],
             )
             .map_err(unreadable("count a failed snapshot"))?;
         Ok(())

@@ -544,10 +544,7 @@ fn a_counted_record_failure_in_a_store_that_opens_does_not_block_readiness() {
     let path = super::default_path(Some(home.path())).expect("a path");
     Store::open(&path)
         .expect("opens")
-        .note_snapshot_failure(
-            crate::harness::session::now_seconds().unwrap_or_default(),
-            "the disk was full",
-        )
+        .note_snapshot_failure(crate::harness::session::now_seconds(), "the disk was full")
         .expect("a counted snapshot failure");
 
     let checks = vec![
@@ -659,19 +656,45 @@ fn a_snapshot_that_succeeds_clears_a_counted_snapshot_failure() {
     let path = directory.path().join("state.db");
     let store = Store::open(&path).expect("opens");
     store
-        .note_snapshot_failure(1_000_000, "the disk was full")
+        .note_record_failure(super::Record::Decision, Some(900_000))
+        .expect("a counted decision failure");
+    store
+        .note_snapshot_failure(Some(1_000_000), "the disk was full")
         .expect("a counted snapshot failure");
 
     store.snapshot(&path, 2_000_000);
 
-    assert!(
-        store
-            .record_failures()
-            .expect("reads")
-            .iter()
-            .all(|failure| failure.kind != "snapshot"),
-        "a snapshot failure outlived a snapshot that succeeded after it"
+    let kinds: Vec<String> = store
+        .record_failures()
+        .expect("reads")
+        .into_iter()
+        .map(|failure| failure.kind)
+        .collect();
+    assert_eq!(
+        kinds,
+        ["decisions"],
+        "a snapshot success cleared more than the snapshot failure"
     );
+}
+
+#[test]
+fn a_failure_the_clock_could_not_date_is_stored_as_unknown() {
+    let (_directory, store) = open();
+    store
+        .note_record_failure(super::Record::Decision, None)
+        .expect("a counted decision failure");
+    store
+        .note_snapshot_failure(None, "the clock was not readable")
+        .expect("a counted snapshot failure");
+
+    let failures = store.record_failures().expect("reads");
+    assert_eq!(failures.len(), 2);
+    for failure in &failures {
+        assert_eq!(
+            failure.last_at, None,
+            "a time the clock would not give was stored as 1970: {failure:?}"
+        );
+    }
 }
 
 #[test]
@@ -1573,10 +1596,10 @@ fn records_round_trip_and_the_prune_takes_only_the_stale_ones() {
     );
     assert_eq!(store.meta("never-written").expect("reads"), None);
     store
-        .note_record_failure(Record::Decision, 100)
+        .note_record_failure(Record::Decision, Some(100))
         .expect("counts");
     store
-        .note_record_failure(Record::Decision, 200)
+        .note_record_failure(Record::Decision, Some(200))
         .expect("counts");
     let failures = store.record_failures().expect("reads");
     assert_eq!(failures.len(), 1);
@@ -1591,11 +1614,11 @@ fn the_failure_prune_drops_only_rows_with_a_recorded_time_older_than_the_cutoff(
     use super::Record;
     let (_directory, store) = open();
     store
-        .note_record_failure(Record::Decision, 100)
+        .note_record_failure(Record::Decision, Some(100))
         .expect("an old counted failure");
     store
-        .note_record_failure(Record::Role, 300)
-        .expect("a recent counted failure");
+        .note_record_failure(Record::Role, Some(200))
+        .expect("a counted failure exactly at the cutoff");
     store
         .connection()
         .execute(
