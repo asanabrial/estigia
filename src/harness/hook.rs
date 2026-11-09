@@ -1559,6 +1559,8 @@ pub fn run_as(
                 push_refs: Vec::new(),
             };
             let mut run = session::load(&context.state_root, &run_id);
+            let session_run = run.clone();
+            let session_context = context;
             let mut run_id = run_id;
             let landed = (dialect == Dialect::ClaudeCode
                 && run.issue.is_none()
@@ -1724,13 +1726,13 @@ pub fn run_as(
                 &[],
             );
             let mut answer = response_in(dialect, &decision);
-            let Some(recipient) = mail_recipient(dialect, host, input) else {
-                return answer;
-            };
-            if let Some(news) = hold_news(context, &run, &decision) {
+            if let Some(news) = hold_news(session_context, &session_run, &decision) {
                 answer["hookSpecificOutput"]["additionalContext"] = json!(news);
                 return answer;
             }
+            let Some(recipient) = mail_recipient(dialect, host, input) else {
+                return answer;
+            };
             with_mail(context, dialect, &recipient, answer)
         }
     }
