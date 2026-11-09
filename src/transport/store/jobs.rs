@@ -155,11 +155,12 @@ impl Store {
             if job.state != "running" || job.deadline_at.saturating_add(JOB_SETTLE_SECONDS) >= now {
                 continue;
             }
-            if matches!(
-                crate::reviewer::job::job_status(Path::new(&job.dir)),
-                Ok(crate::reviewer::job::JobStatus::Running)
-            ) {
-                continue;
+            match crate::reviewer::job::job_status(Path::new(&job.dir)) {
+                Ok(crate::reviewer::job::JobStatus::Running) | Err(_) => continue,
+                Ok(
+                    crate::reviewer::job::JobStatus::Finished(_)
+                    | crate::reviewer::job::JobStatus::Lost,
+                ) => {}
             }
             self.abandon_running_job(&job.id)?;
         }
