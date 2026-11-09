@@ -90,11 +90,17 @@ fn prune(store_path: &Path) {
 }
 
 impl Store {
-    /// Snapshots the store when one is due, and records the failure when one is
-    /// not written, so the operation that triggered it goes on.
+    /// Snapshots the store when one is due, clears a counted failure a success
+    /// answers, and records the failure when one is not written, so the
+    /// operation that triggered it goes on.
     pub(super) fn snapshot(&self, store_path: &Path, now: u64) {
-        if take_snapshot(self.connection(), store_path, now).is_err() {
-            let _ = self.note_snapshot_failure();
+        match take_snapshot(self.connection(), store_path, now) {
+            Ok(()) => {
+                let _ = self.forget_snapshot_failure();
+            }
+            Err(failure) => {
+                let _ = self.note_snapshot_failure(now, &failure.detail());
+            }
         }
     }
 }

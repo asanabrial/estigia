@@ -13,6 +13,16 @@ pub(crate) enum Record {
     Role,
 }
 
+/// One kind of record the store could not write down, with how often, when it
+/// last happened, and the reason the last failure gave.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RecordFailure {
+    pub(crate) kind: String,
+    pub(crate) count: u64,
+    pub(crate) last_at: Option<u64>,
+    pub(crate) last_error: Option<String>,
+}
+
 impl Record {
     fn table(self) -> &'static str {
         match self {
@@ -117,45 +127,72 @@ impl Store {
 
     /// Counts one failed append, so a record that could not be written down is
     /// visible to `doctor` rather than silently lost.
-    pub(crate) fn note_record_failure(&self, kind: Record) -> Result<(), Failure> {
+    pub(crate) fn note_record_failure(&self, kind: Record, now: u64) -> Result<(), Failure> {
         self.connection()
             .execute(
-                "INSERT INTO record_failures (kind, count) VALUES (?1, 1)
-                 ON CONFLICT (kind) DO UPDATE SET count = count + 1",
-                [kind.table()],
+                "INSERT INTO record_failures (kind, count, last_at) VALUES (?1, 1, ?2)
+                 ON CONFLICT (kind) DO UPDATE SET count = count + 1, last_at = excluded.last_at",
+                rusqlite::params![kind.table(), int(now)],
             )
             .map_err(unreadable("count a failed record"))?;
         Ok(())
     }
 
-    /// Counts one snapshot that could not be written, so `doctor` reports it.
-    pub(crate) fn note_snapshot_failure(&self) -> Result<(), Failure> {
+    /// Counts one snapshot that could not be written, so `doctor` reports it
+    /// with when it happened and why.
+    pub(crate) fn note_snapshot_failure(&self, now: u64, why: &str) -> Result<(), Failure> {
         self.connection()
             .execute(
-                "INSERT INTO record_failures (kind, count) VALUES ('snapshot', 1)
-                 ON CONFLICT (kind) DO UPDATE SET count = count + 1",
-                [],
+                "INSERT INTO record_failures (kind, count, last_at, last_error)
+                 VALUES ('snapshot', 1, ?1, ?2)
+                 ON CONFLICT (kind) DO UPDATE SET count = count + 1, last_at = excluded.last_at,
+                     last_error = excluded.last_error",
+                rusqlite::params![int(now), why],
             )
             .map_err(unreadable("count a failed snapshot"))?;
         Ok(())
     }
 
+    /// Forgets the snapshot failure a later snapshot has answered, so one old
+    /// failure does not keep the row broken for the life of the store.
+    pub(crate) fn forget_snapshot_failure(&self) -> Result<(), Failure> {
+        self.connection()
+            .execute("DELETE FROM record_failures WHERE kind = 'snapshot'", [])
+            .map_err(unreadable("clear a failed snapshot"))?;
+        Ok(())
+    }
+
     /// Every kind that failed to be recorded and how many times.
-    pub(crate) fn record_failures(&self) -> Result<Vec<(String, u64)>, Failure> {
+    pub(crate) fn record_failures(&self) -> Result<Vec<RecordFailure>, Failure> {
         let mut statement = self
             .connection()
-            .prepare("SELECT kind, count FROM record_failures ORDER BY kind")
+            .prepare("SELECT kind, count, last_at, last_error FROM record_failures ORDER BY kind")
             .map_err(unreadable("read the failed records"))?;
         let rows = statement
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                Ok(RecordFailure {
+                    kind: row.get(0)?,
+                    count: u64::try_from(row.get::<_, i64>(1)?).unwrap_or_default(),
+                    last_at: row
+                        .get::<_, Option<i64>>(2)?
+                        .and_then(|at| u64::try_from(at).ok()),
+                    last_error: row.get(3)?,
+                })
             })
             .map_err(unreadable("read the failed records"))?;
-        rows.map(|row| {
-            let (kind, count) = row.map_err(unreadable("read the failed records"))?;
-            Ok((kind, u64::try_from(count).unwrap_or_default()))
-        })
-        .collect()
+        rows.map(|row| row.map_err(unreadable("read the failed records")))
+            .collect()
+    }
+
+    /// Forgets counted failures whose last occurrence is older than `cutoff`.
+    /// A row with no `last_at` has no age, so it is never old enough.
+    pub(crate) fn prune_failures(&self, cutoff: u64) -> Result<usize, Failure> {
+        self.connection()
+            .execute(
+                "DELETE FROM record_failures WHERE last_at IS NOT NULL AND last_at < ?1",
+                [int(cutoff)],
+            )
+            .map_err(unreadable("prune the failed records"))
     }
 
     /// Forgets records whose `at` is older than `cutoff`, across both kinds, and

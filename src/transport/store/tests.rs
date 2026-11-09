@@ -270,7 +270,7 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(mode, "wal");
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
-    assert_eq!(store.schema_version().expect("reads"), 25);
+    assert_eq!(store.schema_version().expect("reads"), 26);
 }
 
 #[cfg(debug_assertions)]
@@ -294,7 +294,7 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
             .expect("reopens")
             .schema_version()
             .expect("reads"),
-        25
+        26
     );
 
     rusqlite::Connection::open(&path)
@@ -506,7 +506,7 @@ fn doctor_reports_the_path_the_schema_and_the_last_hours_calls() {
         panic!("a readable store is fine: {:?}", check.health);
     };
     assert!(
-        detail.contains("state.db") && detail.contains("schema 25"),
+        detail.contains("state.db") && detail.contains("schema 26"),
         "{detail}"
     );
     assert!(detail.contains("3 GraphQL, 0 REST"), "{detail}");
@@ -544,7 +544,10 @@ fn a_counted_record_failure_in_a_store_that_opens_does_not_block_readiness() {
     let path = super::default_path(Some(home.path())).expect("a path");
     Store::open(&path)
         .expect("opens")
-        .note_snapshot_failure()
+        .note_snapshot_failure(
+            crate::harness::session::now_seconds().unwrap_or_default(),
+            "the disk was full",
+        )
         .expect("a counted snapshot failure");
 
     let checks = vec![
@@ -631,10 +634,43 @@ fn a_snapshot_that_cannot_be_written_is_counted_and_does_not_fail_the_operation(
 
     store.snapshot(&path, 1_000_000);
 
+    let failures = store.record_failures().expect("reads");
     assert_eq!(
-        store.record_failures().expect("reads"),
-        [("snapshot".to_owned(), 1)],
+        failures.len(),
+        1,
         "a snapshot that could not be written was not counted"
+    );
+    assert_eq!(failures[0].kind, "snapshot");
+    assert_eq!(failures[0].count, 1);
+    assert_eq!(failures[0].last_at, Some(1_000_000));
+    assert!(
+        failures[0]
+            .last_error
+            .as_deref()
+            .is_some_and(|why| why.contains("could not create")),
+        "the reason the snapshot failed was not kept: {:?}",
+        failures[0].last_error
+    );
+}
+
+#[test]
+fn a_snapshot_that_succeeds_clears_a_counted_snapshot_failure() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let store = Store::open(&path).expect("opens");
+    store
+        .note_snapshot_failure(1_000_000, "the disk was full")
+        .expect("a counted snapshot failure");
+
+    store.snapshot(&path, 2_000_000);
+
+    assert!(
+        store
+            .record_failures()
+            .expect("reads")
+            .iter()
+            .all(|failure| failure.kind != "snapshot"),
+        "a snapshot failure outlived a snapshot that succeeded after it"
     );
 }
 
@@ -750,7 +786,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     })
     .expect("the slower opener finds the schema already laid down");
 
-    assert_eq!(slow.schema_version().expect("reads"), 25);
+    assert_eq!(slow.schema_version().expect("reads"), 26);
 }
 
 #[test]
@@ -1376,7 +1412,7 @@ fn recorded(inserted: super::jobs::Inserted) -> bool {
 #[test]
 fn migration_five_creates_the_review_jobs_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 25);
+    assert_eq!(store.schema_version().expect("a version"), 26);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('review_jobs')")
@@ -1412,7 +1448,7 @@ fn migration_five_creates_the_review_jobs_table() {
 #[test]
 fn migration_six_creates_the_blocked_clauses_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 25);
+    assert_eq!(store.schema_version().expect("a version"), 26);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('blocked_clauses')")
@@ -1429,7 +1465,7 @@ fn migration_six_creates_the_blocked_clauses_table() {
 #[test]
 fn migration_seven_creates_the_record_tables() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 25);
+    assert_eq!(store.schema_version().expect("a version"), 26);
     for (table, wanted) in [
         ("decisions", ["at", "body"].as_slice()),
         ("roles", ["at", "body"].as_slice()),
@@ -1450,6 +1486,22 @@ fn migration_seven_creates_the_record_tables() {
                 "no {table}.{column}"
             );
         }
+    }
+}
+
+#[test]
+fn migration_twenty_six_adds_the_failure_time_and_reason() {
+    let (_directory, store) = open();
+    let columns: Vec<String> = store
+        .connection()
+        .prepare("SELECT name FROM pragma_table_info('record_failures')")
+        .expect("prepares")
+        .query_map([], |row| row.get(0))
+        .expect("reads")
+        .collect::<Result<_, _>>()
+        .expect("rows");
+    for wanted in ["kind", "count", "last_at", "last_error"] {
+        assert!(columns.iter().any(|found| found == wanted), "no {wanted}");
     }
 }
 
@@ -1520,11 +1572,50 @@ fn records_round_trip_and_the_prune_takes_only_the_stale_ones() {
         Some("42")
     );
     assert_eq!(store.meta("never-written").expect("reads"), None);
-    store.note_record_failure(Record::Decision).expect("counts");
-    store.note_record_failure(Record::Decision).expect("counts");
+    store
+        .note_record_failure(Record::Decision, 100)
+        .expect("counts");
+    store
+        .note_record_failure(Record::Decision, 200)
+        .expect("counts");
+    let failures = store.record_failures().expect("reads");
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].kind, "decisions");
+    assert_eq!(failures[0].count, 2);
+    assert_eq!(failures[0].last_at, Some(200));
+    assert_eq!(failures[0].last_error, None);
+}
+
+#[test]
+fn the_failure_prune_drops_only_rows_with_a_recorded_time_older_than_the_cutoff() {
+    use super::Record;
+    let (_directory, store) = open();
+    store
+        .note_record_failure(Record::Decision, 100)
+        .expect("an old counted failure");
+    store
+        .note_record_failure(Record::Role, 300)
+        .expect("a recent counted failure");
+    store
+        .connection()
+        .execute(
+            "INSERT INTO record_failures (kind, count) VALUES ('snapshot', 1)",
+            [],
+        )
+        .expect("a row from before the time was recorded");
+
+    assert_eq!(store.prune_failures(200).expect("prunes"), 1);
+
+    let kinds: Vec<String> = store
+        .record_failures()
+        .expect("reads")
+        .into_iter()
+        .map(|failure| failure.kind)
+        .collect();
     assert_eq!(
-        store.record_failures().expect("reads"),
-        [("decisions".to_owned(), 2)]
+        kinds,
+        ["roles", "snapshot"],
+        "the prune took a recent row or one whose age is unknown"
     );
 }
 
