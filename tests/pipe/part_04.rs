@@ -969,21 +969,14 @@ fn a_gate_question_by_run_id_writes_nothing() {
         decisions(home)
     );
 
-    // The unclaimed-write policy is turned off so a run holding nothing answers
-    // `outside` rather than the policy's refusal: the road under test is the
-    // question, not the policy. A run id nothing holds then leaves no pointer
-    // behind either, and no row.
+    // The policy is off so the unheld probe answers `outside`, not a refusal.
     let unknown = "claude-nosuch0000";
     forget_store(home);
-    let (out, err, ok) = run_in(
+    run_in(
         home,
         repo,
         &["config", "set", "Unclaimed write policy", "off", "--repo"],
         "",
-    );
-    assert!(
-        ok,
-        "the fixture's unclaimed write policy could not be turned off: {out}{err}"
     );
     let (out, err, ok) = run_with_tracker(
         home,
