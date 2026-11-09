@@ -1429,7 +1429,7 @@ fn is_checkout(candidate: &Path) -> bool {
 /// Anything else — no `.git` in `repo_dir` or above it, or only ones that
 /// [`checkout_root`] does not take for a checkout — resolves to `repo_dir`'s own
 /// `.git`, which does not exist as a directory, and so has no layer.
-fn git_common_dir(repo_dir: &Path) -> PathBuf {
+pub(crate) fn git_common_dir(repo_dir: &Path) -> PathBuf {
     let repo_dir = checkout_root(repo_dir).unwrap_or_else(|| repo_dir.to_path_buf());
     let repo_dir = repo_dir.as_path();
     let dot_git = repo_dir.join(".git");
@@ -1496,6 +1496,66 @@ fn resolve_against(base: &Path, path: &Path) -> PathBuf {
         }
     }
     plain
+}
+
+/// The key a recorded decision or need names a repository by, read without
+/// spawning a process: `github.com/owner/name` when the shared git directory's
+/// `origin` says so, otherwise the main checkout's path, and `None` for a
+/// directory in no repository. The path is canonicalised so that one checkout
+/// reached through a symlink keeps one key.
+pub(crate) fn repository_key(repo_dir: &Path) -> Option<String> {
+    let common = git_common_dir(repo_dir);
+    if !common.is_dir() {
+        return None;
+    }
+    if let Some(reference) = origin_reference(&common) {
+        return Some(format!("github.com/{reference}"));
+    }
+    common
+        .parent()
+        .map(Path::to_path_buf)
+        .filter(|root| root.join(".git").exists())
+        .or_else(|| checkout_root(repo_dir))
+        .map(|root| {
+            fs::canonicalize(&root)
+                .unwrap_or(root)
+                .display()
+                .to_string()
+        })
+}
+
+/// The GitHub reference `[remote "origin"]`'s `url` names in a git directory's
+/// `config`, or `None` when the file is absent, unreadable, or names no GitHub
+/// remote. Several `url` lines are read in order; the first GitHub one wins.
+fn origin_reference(common_dir: &Path) -> Option<crate::config::RepoRef> {
+    let config = fs::read_to_string(common_dir.join("config")).ok()?;
+    let mut origin = false;
+    for line in config.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if let Some(section) = line
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
+            origin = section.trim() == "remote \"origin\"";
+            continue;
+        }
+        if !origin {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "url" {
+            continue;
+        }
+        if let Some(reference) = crate::config::RepoRef::from_github_remote(value.trim()) {
+            return Some(reference);
+        }
+    }
+    None
 }
 
 /// Where the list of repositories that answer for themselves is kept.

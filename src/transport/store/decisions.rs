@@ -5,8 +5,8 @@ use super::{Failure, Store, int, unreadable};
 
 /// The two machine-wide histories the gate appends to. `Decision` records what
 /// the gate decided; `Role` records the delegated contexts it saw. Both are
-/// append-only and pruned by age, never by size, so no record is lost to a
-/// rotation two runs race.
+/// append-only and pruned by age; a decision is also capped per repository, and
+/// a role is not, so no record is lost to a rotation two runs race.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Record {
     Decision,
@@ -175,6 +175,41 @@ impl Store {
                 .map_err(unreadable("prune the records"))?;
         }
         Ok(removed)
+    }
+
+    /// Keeps the newest `per_key` decisions of each recorded repository and
+    /// answers how many went. Rows with no repository share one bucket, and a
+    /// verdict named in `protected` is only ever removed by age.
+    pub(crate) fn cap_decisions(&self, per_key: u64, protected: &[&str]) -> Result<usize, Failure> {
+        let mut query = String::from(
+            "DELETE FROM decisions WHERE rowid IN (
+                 SELECT rowid FROM (
+                     SELECT rowid, ROW_NUMBER() OVER (
+                         PARTITION BY json_extract(body, '$.repo') ORDER BY rowid DESC
+                     ) AS rank
+                     FROM decisions
+                 ) WHERE rank > ?1
+             )",
+        );
+        if !protected.is_empty() {
+            let placeholders: Vec<String> = (0..protected.len())
+                .map(|offset| format!("?{}", offset + 2))
+                .collect();
+            query.push_str(&format!(
+                " AND json_extract(body, '$.verdict') NOT IN ({})",
+                placeholders.join(", ")
+            ));
+        }
+        let mut values = Vec::with_capacity(protected.len() + 1);
+        values.push(rusqlite::types::Value::Integer(int(per_key)));
+        values.extend(
+            protected
+                .iter()
+                .map(|verdict| rusqlite::types::Value::Text((*verdict).to_owned())),
+        );
+        self.connection()
+            .execute(&query, rusqlite::params_from_iter(values))
+            .map_err(unreadable("cap the decisions"))
     }
 
     /// One machine-wide marker: the import has run, the prune last ran, and so on.

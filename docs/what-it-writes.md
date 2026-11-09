@@ -166,7 +166,11 @@ Five invariants, and the tests are named after them:
    identity and `blocked-until` clauses `create` and `blocked_until` record, and the task
    checklist `task` records. The transport creates it: the first dispatched operation that spawns `gh` records its
    call counts there, the first claim-family operation that touches an issue imports that
-   issue's history, and the gate appends every decision and role observation. `estigia
+   issue's history, and the gate appends every decision and role observation. A decision carries the
+   repository it was made in, spelled `github.com/owner/name` when the checkout's `origin` names a GitHub
+   repository and the main checkout's canonical path when it does not; the daily maintenance pass keeps
+   at most ten thousand decisions per repository, newest first, beside the thirty-day age limit, and
+   leaves the undecided verdicts `doctor` reads alone. Role records are bounded by age only. `estigia
    doctor`'s `store` row never creates the file, but `doctor` as a whole can, because its `stale-run-pointer`
    row replays `verify-claim` for every run pointer it finds and that imports.
    `estigia store import` is the operator's own door: it admits every open issue the store

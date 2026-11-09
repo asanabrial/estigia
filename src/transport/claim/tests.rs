@@ -834,6 +834,10 @@ fn only_a_blocked_transition_without_a_clause_records_a_need_for_a_person() {
         assert_eq!(needs.len(), expected, "{body}: {needs:?}");
         if let Some(need) = needs.first() {
             assert_eq!((need.kind.as_str(), need.issue), ("blocked", Some(12)));
+            assert_eq!(
+                need.repo, "github.com/fixture/repo",
+                "a ledger need did not spell the repository as host/owner/name"
+            );
         }
     }
 }

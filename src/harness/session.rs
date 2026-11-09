@@ -866,6 +866,9 @@ pub const LEDGER: &str = "decisions.jsonl";
 /// How long a decision or a role record is kept before the age prune removes it.
 pub const RECORD_RETENTION_DAYS: u64 = 30;
 
+/// How many decisions one repository keeps, newest first, beside the age limit.
+pub const DECISIONS_PER_REPOSITORY: u64 = 10_000;
+
 /// How long a decision append waits on the store's lock before giving up.
 const APPEND_WAIT: Duration = Duration::from_secs(5);
 
@@ -956,6 +959,7 @@ pub fn maintain(root: &Path) {
     }
     let cutoff = now.saturating_sub(RECORD_RETENTION_DAYS * 24 * 60 * 60);
     let _ = store.prune_records(cutoff);
+    let _ = store.cap_decisions(DECISIONS_PER_REPOSITORY, crate::harness::doctor::UNDECIDED);
     let _ = store.set_meta(LAST_PRUNE, &now.to_string());
 }
 
@@ -1872,6 +1876,47 @@ mod tests {
             decision_records(&state).len(),
             1,
             "the prune did not run once the interval elapsed"
+        );
+    }
+
+    #[test]
+    fn maintain_caps_one_repositorys_decisions_while_every_row_is_young() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let state = root.path().join("runs");
+        std::fs::create_dir_all(&state).expect("the state directory");
+        let now = now_seconds().expect("a clock");
+        let entries: Vec<Value> = (0..DECISIONS_PER_REPOSITORY + 3)
+            .map(|n| {
+                serde_json::json!({
+                    "at": now,
+                    "verdict": "allow",
+                    "repo": "github.com/a/b",
+                    "n": n,
+                })
+            })
+            .collect();
+        Store::open(&crate::transport::store::beside(&state))
+            .expect("the store")
+            .import_records(
+                "cap-wiring",
+                &[(crate::transport::store::Record::Decision, entries)],
+            )
+            .expect("the fixture records");
+
+        maintain(&state);
+
+        let kept = decision_records(&state);
+        assert_eq!(
+            kept.len() as u64,
+            DECISIONS_PER_REPOSITORY,
+            "the daily pass did not cap one repository's young decisions"
+        );
+        assert_eq!(
+            kept.iter()
+                .filter_map(|record| record.get("n").and_then(Value::as_u64))
+                .min(),
+            Some(3),
+            "the daily pass kept a different end of the repository"
         );
     }
 

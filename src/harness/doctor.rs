@@ -415,8 +415,8 @@ fn remote(repo_dir: &Path) -> Health {
 }
 
 /// Every verdict that means a call reached the gate and was not decided on.
-/// Held in one place because it is read in two.
-const UNDECIDED: &[&str] = &[
+/// One place, because `doctor` reads it and the daily cap must never evict one.
+pub(crate) const UNDECIDED: &[&str] = &[
     "payload-unreadable",
     "payload-absent",
     "tool-unnamed",

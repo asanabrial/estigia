@@ -8,6 +8,11 @@ One `needs_person` row in `~/.estigia/state.db`, written in the same place the a
 state it describes. It carries the kind, the repository, the issue (absent for `ask`), the run, the time, and
 a `delivery` text. Nothing is posted to GitHub.
 
+An `escalated` or `blocked` row names the repository `github.com/owner/name`. An `ask` names the repository
+of the working directory it came from: `github.com/owner/name` when that checkout's `origin` is a GitHub
+remote, the main checkout's path when it is not, and the working directory itself when it is in no
+repository.
+
 | Kind | Written by | Dedup key |
 |---|---|---|
 | `escalated` | `escalate_review`, on the first escalation and on a repeat that finds one | the publication epoch |
