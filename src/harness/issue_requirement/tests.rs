@@ -71,12 +71,22 @@ fn edit(context: &GateContext) -> Decision {
 }
 
 fn hook_answer(context: &GateContext, dialect: Dialect, agent: &str) -> serde_json::Value {
+    hook_answer_as(context, dialect, agent, None)
+}
+
+fn hook_answer_as(
+    context: &GateContext,
+    dialect: Dialect,
+    agent: &str,
+    agent_type: Option<&str>,
+) -> serde_json::Value {
     let target = context.repo_dir.join("src.rs");
     let input = Input {
         session_id: "abcd1234".to_owned(),
         cwd: context.repo_dir.display().to_string(),
         tool_name: "Edit".to_owned(),
         tool_input: serde_json::json!({ "file_path": target.display().to_string() }),
+        agent_type: agent_type.map(str::to_owned),
         ..Input::default()
     };
     crate::harness::hook::run_as(
@@ -280,6 +290,28 @@ fn a_hold_that_began_after_the_session_started_is_told_to_the_agent_on_every_ask
             "{answer}"
         );
     }
+}
+
+#[test]
+fn a_sub_agents_ask_carries_the_hold_paragraph() {
+    let (repo, _root, context) = rig_without_a_remote(IssueRequirement::Watch);
+    hook_session_start(&context);
+    crate::test_env::add_github_remote(repo.path());
+    let answer = hook_answer_as(
+        &context,
+        Dialect::ClaudeCode,
+        "claude-code",
+        Some("general-purpose"),
+    );
+    assert_eq!(
+        answer["hookSpecificOutput"]["permissionDecision"], "ask",
+        "{answer}"
+    );
+    let text = told(&answer).unwrap_or_default();
+    assert!(
+        text.contains("Claim an issue first, filing one with `create`"),
+        "{answer}"
+    );
 }
 
 #[test]
