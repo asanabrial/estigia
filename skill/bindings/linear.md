@@ -90,8 +90,8 @@ only a numbering tracker performs (every such operation is refused for Linear be
 ## The operations this binding does not perform
 
 Apart from a mapped state, Linear is not written, so every operation that would write the tracker is
-**unsupported** rather than mapped: `ensure_states`, `create`, `list_state`, `claim`, `reclaim`, `verify_claim`,
-`heartbeat`, `transition`, `comment`, `unassign`, `publish_review`,
+**unsupported** rather than mapped: `create`, `list_state`, `claim`, `reclaim`, `verify_claim`,
+`transition`, `comment`, `unassign`, `publish_review`,
 `republish_review`, `handoff_review`, `review_finding`, `review_computed_verdict`, `review_disposition`, and `release_ci`. An assisted run performs none of
 them — the team coordinates the work, and Estigia reads the issue and writes nothing but a mapped
 state.

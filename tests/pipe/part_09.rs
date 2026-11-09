@@ -2037,7 +2037,7 @@ fn releasing_a_delivered_issue_puts_its_checkout_and_branch_down() {
 }
 
 /// A delivery deletes every remote head its run recorded starting,
-/// not only the pull request's own — the branch linked at `start_branch` is not
+/// not only the pull request's own — the branch linked by `claim`'s checkout is not
 /// always the branch published, and GitHub's `delete_branch_on_merge` removes
 /// only the latter. The checkout here is on the recorded branch while the pull
 /// request's head names a different one, so a deletion that read the pull

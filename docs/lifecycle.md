@@ -163,7 +163,7 @@ estigia release --run-id claude-0198fe1c
 ```
 
 `release` is the last step, and it deletes every remote head the run recorded starting — the branch
-`start_branch` linked is not always the branch published, and GitHub's own auto-delete removes only
+`claim` linked is not always the branch published, and GitHub's own auto-delete removes only
 the latter. `estigia prune` is the operator-invoked sweep for what no delivery owned; the contract's
 delivery reference has the rules, and [`honesty.md`](honesty.md) what neither can see.
 

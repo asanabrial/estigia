@@ -45,7 +45,7 @@ actually matters.
 
 **A slice that is not the last of its chain opts out of the link.** The accepted close is wrong for the
 first slices of a chain delivered as several pull requests: the first merge would close an issue that
-still has slices left. `start_branch` takes `no_link: true` (`--no-link` on the command line), which
+still has slices left. `claim` with `branch` and `base` takes `no_link: true` (`--no-link` on the command line), which
 skips the develop call and so the Development-sidebar link. The branch is still reserved locally and
 the answer says so honestly: `natively_linked: false` and `link_outcome: skipped`, with no `link_queued`
 even while the schedule is closed, because nothing is deferred. The branch reaches the remote with the

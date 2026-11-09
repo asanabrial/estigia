@@ -1022,6 +1022,29 @@ fn run_tool_asking(
         ))
     })?;
 
+    if name == "comment"
+        && let Some(kind) = arguments.get("kind").and_then(Value::as_str)
+    {
+        let renewing = arguments
+            .get("expect_state")
+            .and_then(Value::as_str)
+            .is_some_and(|state| !state.is_empty());
+        let renewal = crate::transport::markers::RENEWAL_KINDS.contains(&kind);
+        let plain = crate::transport::markers::COMMENT_KINDS.contains(&kind);
+        if renewal && !renewing {
+            return Err(ToolFailure::Malformed(format!(
+                "`comment` takes the renewal kind `{kind}` only with `expect_state`; without it \
+                 the kinds are `note`, `blocker` and `diagnosis`"
+            )));
+        }
+        if plain && renewing {
+            return Err(ToolFailure::Malformed(format!(
+                "`expect_state` records a renewal, and `{kind}` is a plain comment kind; name \
+                 `heartbeat`, `progress` or `blocked`, or drop `expect_state`"
+            )));
+        }
+    }
+
     if name == "assist"
         && arguments.get("several") == Some(&json!(true))
         && let Ok(context) = context
@@ -1847,7 +1870,7 @@ fn run_tool_asking(
     // so an unwritten one has to be said: `session::update` used to answer
     // the same whether the store worked or not, reporting this as an
     // ordinary success when it was a known and dropped failure.
-    if recorded == Some(false) && tool.effect != PointerEffect::None {
+    if recorded == Some(false) && tool.effect_with(arguments) != PointerEffect::None {
         text.push_str(&format!(
             "
 
@@ -2100,7 +2123,7 @@ pub(crate) fn apply_effect(
     if body.is_some_and(|body| body.get("write_performed") == Some(&json!(false))) {
         return true;
     }
-    let effect = tool.effect;
+    let effect = tool.effect_with(arguments);
     if effect == PointerEffect::Forget
         && body.is_some_and(|body| body.get("close_incomplete").is_some())
     {

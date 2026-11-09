@@ -11271,8 +11271,7 @@ fn converge_with(
         }
         let edits = edit.len() > 4;
         if edits {
-            let borrowed: Vec<&str> = edit.iter().map(String::as_str).collect();
-            super::run(&borrowed, Some(&context.repo_dir), super::How::write())?;
+            super::commands::edit_labels(context, &edit)?;
             wrote = true;
         }
 

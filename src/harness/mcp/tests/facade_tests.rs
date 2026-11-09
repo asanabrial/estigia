@@ -404,7 +404,7 @@ fn a_shipped_line_that_tells_the_agent_to_call_a_retired_name_is_seen() {
 
 #[test]
 fn the_arguments_that_choose_a_row_are_declared_and_carry_no_transport_flag() {
-    assert_eq!(TOOLS.len(), 37);
+    assert_eq!(TOOLS.len(), 33);
     let columns = |name: &str| {
         tools::find(name)
             .expect("a row")

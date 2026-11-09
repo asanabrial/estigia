@@ -94,7 +94,7 @@ is enforced — [`honesty.md`](honesty.md) says what the other agents get.
 `git branch` creation — the copy spelling included — `git checkout -b/-B/--orphan`,
 `git switch -c/-C/--create/--force-create/--orphan`, and `git worktree add -b/-B/--orphan`
 outside the permitted period — including the internal push `publish_review` performs, and the branch
-creation `start_branch` would perform, which is not denied: it makes the local branch and the
+creation `claim` with `branch` and `base` would perform, which is not denied: it makes the local branch and the
 worktree, and queues the native link of the branch to its issue for when the window opens, answering
 `natively_linked: false` and `link_outcome: deferred`. Ordinary pushes are also evaluated in the pre-push
 guard whether or not the checkout is claimed. The schedule never grants: inside the period every
@@ -135,7 +135,7 @@ provisional number — far above any number GitHub issues — queues the filing 
 answers `"provisional":true` with `"url":null`; with `repo` it records and queues that under the other repository, whose queue a `flush` run from a checkout of it sends. `claim`, `claim --takeover` and `unassign` record
 the ownership in the store as they always do, queue one convergence of the assignee and the `dev:`
 label, and answer `"projection":"deferred"`; an `unassign` that carries `--evidence-file` queues the
-evidence as a comment. A provisional issue is claimed, given tasks and heartbeats, verified and
+evidence as a comment. A provisional issue is claimed, given tasks and renewals, verified and
 released without a call to GitHub, which has no such issue. `list_state` still reads GitHub's open
 list, takes every state from the store, and appends the provisional issues in the state asked for,
 marked `provisional`, so a run sees the work it filed itself; `list_state --identities` includes
