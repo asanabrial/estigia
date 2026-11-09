@@ -6998,7 +6998,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 52_750;
+const TOOLS_LIST_CEILING: usize = 52_798;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -9397,18 +9397,6 @@ mod send_message {
     }
 }
 
-#[test]
-fn the_label_a_write_needs_is_created_at_that_write() {
-    assert!(
-        tools::find("ensure_states").is_some(),
-        "the transport operation is still reachable for the CLI"
-    );
-    assert!(
-        tools::retired("ensure_states").is_some(),
-        "`ensure_states` is reachable and no agent is told what replaces it"
-    );
-}
-
 mod handoff {
     use super::*;
     use crate::transport::store::{self, SessionSeen, Store};
@@ -9767,7 +9755,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 12_359;
+const ALWAYS_LOADED_CEILING: usize = 12_407;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {

@@ -251,6 +251,15 @@ fn pending_slot(name: &str, failure: &Failure) -> serde_json::Value {
 /// A merged call's answer: the primary part's own answer, with the later
 /// part's answer beside it under its own name. The primary answer is kept
 /// whole, so a caller that knew only the old shape still reads it.
+fn merged_step(
+    mut answer: serde_json::Value,
+    key: &str,
+    step: serde_json::Value,
+) -> serde_json::Value {
+    answer[key] = step;
+    answer
+}
+
 /// The renewal half of the merged `comment`, kept out of the match arm so the
 /// dispatcher's static scan does not read `--run-id` as required of every
 /// comment: a plain note has no run to attribute.
@@ -270,15 +279,6 @@ fn renew_comment(
         flags.get("kind").unwrap_or("heartbeat"),
         now,
     )
-}
-
-fn merged_step(
-    mut answer: serde_json::Value,
-    key: &str,
-    step: serde_json::Value,
-) -> serde_json::Value {
-    answer[key] = step;
-    answer
 }
 
 /// Adds the tier and the first `review_status` to a publication's answer when
