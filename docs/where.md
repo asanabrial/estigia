@@ -38,7 +38,7 @@ store holds with no state is `unavailable`, not a default.
 | `holders` | the session registry: runs whose pointer holds the issue in this repository, their status (`live`, `stale`, `ended`), last seen, worktree and the branch checked out there |
 | `pull_request` | the tracker: number from the newest review receipt, URL, state and live head and base |
 | `review` | the newest receipt on the local timeline: verdict, `escalated`, epoch, PR, **head and base it is bound to**, digest, and `bound_to_live_head` (`null` when the live head could not be read) |
-| `tasks`, `blocked_until` | the checklist progress and open tasks; the recorded clauses |
+| `tasks`, `transition` | the checklist progress and open tasks; the clause a move to `blocked` records |
 | `messages` | the last five messages to or from each holder run (preview of 200 characters) |
 | `outbox` | writes queued and not landed (`queued` or `sending`); a sent write is not listed |
 

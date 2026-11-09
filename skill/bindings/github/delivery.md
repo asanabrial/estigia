@@ -58,14 +58,14 @@ comment.
 
 An enabled git operation window denies `git push`, `git commit`, and local branch creation outside the
 configured daily range in this machine's local time — `publish_review` is denied before its push;
-`start_branch` makes the branch and worktree and queues the link. The refusal carries
+`claim` with `branch` and `base` makes the branch and worktree and queues the link. The refusal carries
 `git-operation-window-denied`, and a write the transport meets inside a closed window `outbox-bypass`;
 wait for the range, widen it, or set the row to `disabled`. File edits and worktree operations on an
 existing branch are unaffected. A hook still cannot prove no push happened: `git push --no-verify`,
 direct ref writes, hosting APIs, and other clones bypass it, so treat a quiet period as observed rather
 than proven.
 
-While the window is closed, `claim`, `transition`, `comment`, `create`, `unassign` and `start_branch` answer
+While the window is closed, `claim`, `transition`, `comment`, `create` and `unassign` answer
 from the local store and queue their GitHub writes; an issue created then carries a provisional number until
 the queue is sent. `estigia flush` sends the queue in order once the window is open, and every write to
 GitHub and every publication runs it first. A queue that does not drain refuses `outbox-pending`, naming the
@@ -77,7 +77,7 @@ write it stopped at and how many remain: settle that write, then run `flush` aga
 base, already linked** in the issue's Development sidebar — one command replacing branch creation AND
 recording. A branch nobody can find from the issue is work nobody can follow.
 
-`start-branch` runs it **last**, not first. It fetches, resumes an existing local or remote-only
+`claim` with `branch` and `base` runs it **last**, not first. It fetches, resumes an existing local or remote-only
 branch without moving it — only a branch absent everywhere starts from the fetched base — creates
 the worktree and records ownership, and only then links the issue. *Nothing is created remotely
 until the local checkout is reserved*, below, is where that order and its reasons live; the summary
@@ -114,7 +114,7 @@ spells it, so refusing its separator would refuse every ordinary call.
 — `Fix-1-a` and `fix-1-a` — or only in Unicode normalization — `café` composed and `café` decomposed
 — compose two strings that are ONE directory on a filesystem that folds either (case on macOS and
 Windows; normalization on default APFS, which is normalization-insensitive). The run ID is lowercase by
-construction, so such a difference can only enter through the branch. `start-branch` refuses it as
+construction, so such a difference can only enter through the branch. `claim` with `branch` and `base` refuses it as
 `case-insensitive-branch-collision` when the path it composes matches a registered checkout's path
 once both are folded, naming both branches and telling you not to delete the registered checkout. The
 fold is over the spellings, not the filesystem, so a volume that distinguishes them refuses too:
@@ -157,10 +157,10 @@ binding uses.
 Relying on git to catch the collision instead was tried and does not hold. `worktree add` refuses a
 branch already checked out elsewhere (`fatal: '<branch>' is already used by worktree at …`), but that
 is a read followed by a write with no lock between them, so two concurrent runs can both succeed. Git
-loses the race its check exists to win, so `start-branch` serializes on its own **branch-scoped
+loses the race its check exists to win, so `claim` with `branch` and `base` serializes on its own **branch-scoped
 lock** first (below).
 
-**So `start-branch` asks whether the directory is YOURS, and requires proof.** "The registry says
+**So the checkout `claim` makes asks whether the directory is YOURS, and requires proof.** "The registry says
 this path holds this branch" is not proof: two runs of one branch satisfy it equally well, which is
 how the second one checks out on top of the first. So the registry answers only half, and a durable
 **ownership marker**, written by the run that created the checkout into that worktree's private git
@@ -240,7 +240,7 @@ guard cannot help there: it compares branches, and these are two different branc
 
 ### Nothing is created remotely until the local checkout is reserved
 
-The order of operations inside `start-branch` is a guarantee, not an implementation detail. The
+The order of operations inside the checkout `claim` makes is a guarantee, not an implementation detail. The
 branch lock, the path decision, the local branch, the worktree and the ownership marker all happen
 **before** the first call that mutates GitHub. Reversed,
 a run created a server-side branch and a sidebar link, then stopped on the local check, leaving
@@ -506,7 +506,7 @@ refusal names the merge commit and its parents. It runs after the merge and afte
 reference, and the answer carries `delivery` (pull request, merge commit, parents). No receipt, no check.
 
 That is the **final-delivery** path. An intermediate slice of a retained issue must not borrow it.
-Start its branch with `start_branch` `no_link: true` (`--no-link`): nothing links the branch, its merge
+Start its branch with `claim`'s `branch`/`base` and `no_link: true` (`--no-link`): nothing links the branch, its merge
 leaves the issue open, and the publication's autoclose verdict reads `will_autoclose: false`. The last slice
 starts linked. `deliver` reads the merged pull request's `closingIssuesReferences`: when they do not
 name the issue it posts the evidence, moves the issue back to `in-progress` under the same claim and

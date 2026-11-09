@@ -91,8 +91,9 @@ through the sync, nothing that hands the issue to someone, and it can only stop 
 ### Control markers
 
 Parsing prose for the same answer is fragile — any rewording breaks it — so every control marker
-these operations record carries a machine-readable trailer. `claim`, `reclaim`, `unassign`, `heartbeat` and `start-branch`
-record theirs in the local store, as do the review operations; none is posted to GitHub as a comment. The
+these operations record carries a machine-readable trailer. `claim`, `reclaim`, `unassign`, and the
+renewal half of `comment` (transport `heartbeat`) and of `claim` (transport `start-branch`) record
+theirs in the local store, as do the review operations; none is posted to GitHub as a comment. The
 shape below is the one the store keeps and the one an older binary posted:
 
 ```
@@ -117,9 +118,10 @@ asked you to drop.
 Only `viewerDidAuthor=true` comments are control input. Reclaims must match the stale prior holder
 unless marked `forced=true`; an acquisition expires at its horizon or four hours after trusted activity, whichever is later.
 
-`heartbeat` runs the renewal **before** it records, and refuses to record when the renewal says stop,
-so a loser's next heartbeat exits `1` instead of writing. The renewal does not prevent losing the race;
-it caps the cost of having lost it at one renewal interval.
+`comment` with `expect_state` runs the renewal **before** it records, and refuses to record when the
+renewal says stop, so a loser's next renewal exits `1` instead of writing. The renewal does not
+prevent losing the race; it caps the cost of having lost it at one renewal interval. Without
+`expect_state`, `comment` is a plain `note`, `blocker` or `diagnosis` and renews nothing.
 
 ## State names
 
@@ -139,20 +141,16 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 
 | Operation | Command |
 |---|---|
-| `ensure_states` | `SCRIPT ensure-states` |
 | `flush` | `estigia flush`, a command and no tool; `--status` lists the queue |
 | `create` | `SCRIPT create` |
 | `list_state` | `SCRIPT list-state` |
 | `claim` | `SCRIPT claim` — see *Claim* in github/operations.md |
 | `handoff` | `SCRIPT handoff` — see *Handing an issue to another runtime* in github/operations.md |
 | `verify_claim` | `SCRIPT verify-claim` |
-| `transition` | `SCRIPT transition` |
-| `comment` | `SCRIPT comment` |
-| `blocked_until` | `SCRIPT blocked-until` |
+| `transition` | `SCRIPT transition` — a move to `blocked` also records or clears what discharges it |
+| `comment` | `SCRIPT comment` — with `expect_state` it renews first; without, a plain note |
 | `task` | `SCRIPT task` |
 | `tasks` | `SCRIPT tasks` |
-| `heartbeat` | `SCRIPT heartbeat` |
-| branch + worktree | `SCRIPT start-branch` |
 | `judge_workspaces` | `SCRIPT judge-workspaces` |
 | `publish_review` | `SCRIPT publish-review` — see *Publishing a review target* in github/operations.md |
 | `republish_review` | `SCRIPT republish-review` |
@@ -188,6 +186,10 @@ Not scripted, performed by the agent after verifying SHAs (`github/delivery.md`)
 
 Each name below has no tool of its own; the call on the right answers it.
 
+- `start_branch` → `claim` with `branch` and `base`, plus `worktree_root` and `no_link`; the checkout it makes is answered under `start_branch`.
+- `heartbeat` → `comment` with `expect_state`, whose `kind` defaults to `heartbeat`; the renewal runs first and a refusal posts nothing.
+- `blocked_until` → `transition` with `to` `blocked` and `until_issue`/`until_state`, or `clear`; the `blocked-until` operation remains for the CLI.
+- `ensure_states` → `create`, or any label write: a missing label is created at the write that needs it and the write retried; the `ensure-states` operation remains for the CLI.
 - `reclaim` → `claim` with `takeover`, plus `target_operation`, and `force` with `reason_file`.
 - `list_identities` → `list_state` with `identities`.
 - `review_findings`, `review_transaction`, `review_payload_membership`, `inspect_candidate`, `computed_verdict`, `spend_summary` → `review_read` with `view` `findings`, `transaction`, `membership`, `inspect`, `verdict`, `spend`.

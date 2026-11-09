@@ -900,11 +900,11 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 19,016 | file on disk |
+  | `skill/bindings/github.md` | 19,772 | file on disk |
   | `skill/policies/blind-judges.md` | 42,909 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,489 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,584 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -1581,14 +1581,14 @@ pointer that leaves it names the document it points at.
     **did**.
   - **A reviewer's directory has no remover, and Estigia is not one.** Each Judgment Day round mints one
     directory per judge, but Estigia does not spawn the judge and `release` puts down only the checkout
-    `start_branch` created, so they accumulate until an operator sweeps them by hand, after the judge has
+    `claim` with `branch` and `base` created, so they accumulate until an operator sweeps them by hand, after the judge has
     returned its findings and only once `git status --porcelain` is empty and every commit is on the remote.
     They live under the configured `Worktree location`, which makes them look like registered worktrees when
     Git considers them no such thing (a separate root is an open question). `estigia prune` lists a detached
     checkout no branch owns but cannot tell a judge's directory from any other orphan: a name to check, not a
     disposal.
   - **What a delivery's remote deletion cannot see.** `release` deletes every remote head the run recorded
-    starting, read back through `ls-remote`, but the record is only what `start_branch` wrote: a branch pushed
+    starting, read back through `ls-remote`, but the record is only what the checkout `claim` makes wrote: a branch pushed
     by hand, or under an identity the issue's timeline never named, is not in the set, and GitHub's
     `delete_branch_on_merge` covers the pull request's own head only. `estigia prune` catches it later, and
     only when the operator confirms.
@@ -1682,7 +1682,7 @@ pointer that leaves it names the document it points at.
   `Routine` while `<checkout>/.git/hooks/pre-push` answers `Boundary`, and `core.hooksPath` in that file
   decides whether the push guard runs at all. Normally harmless, since `covered()` yields both `repo_dir`
   and the worktree; with a pointer carrying only a worktree (`repo_dir = <project>/worktrees/wt-a`) writes
-  to `<project>/src/x.rs` **and** `<project>/.git/config` both stand aside. `start_branch` now records the
+  to `<project>/src/x.rs` **and** `<project>/.git/config` both stand aside. `claim` with `branch` and `base` now records the
   claim's checkout beside the worktree, so Estigia's own tools no longer *produce* such a pointer; it stands
   for a run whose `repo_dir` genuinely is a worktree or a hand-written record. Whether the fix is naming the
   file or widening what a worktree run covers is open.
@@ -2174,7 +2174,7 @@ pointer that leaves it names the document it points at.
   The guard that enforces this entry walks every agent whose tool calls Estigia gates by any
   mechanism, retired ones included, because their hooks are still on machines that installed them; a
   plugin-written gate that carries no list of its own has to be named here.
-- **`ensure-states` cannot tell "already there" from "gh could not run".** `gh label create --force` exits
+- **Label creation cannot tell "already there" from "gh could not run".** `gh label create --force` exits
   non-zero for both, and the command reads that as idempotence. Measured against a `gh` that refuses every
   call: each answers `ok: true` with all six labels listed as `ensured`, and none exists. Closing it means
   reading what `gh` printed, and this crate has never been shown those exact words (the reason `icacls` is
@@ -2567,7 +2567,7 @@ pointer that leaves it names the document it points at.
   - **The operation schedule is observed through the same openings.** An enabled `Git operation
     window` denies commits, ordinary pushes, and branch creation at every Estigia entry point — the
     shell classifier, the pre-push guard, and `publish_review` — and nothing else enforces it.
-    `start_branch` makes the local branch and the worktree and queues the link to the issue while the
+    `claim` with `branch` and `base` makes the local branch and the worktree and queues the link to the issue while the
     window is closed. `git push --no-verify` skips the guard, direct object and ref writes never reach
     the classifier, hosting APIs never reach any hook, and another clone holds no copy of the row: the
     repository override lives in one clone's git directory. A quiet period is observed through
@@ -2657,12 +2657,12 @@ pointer that leaves it names the document it points at.
 ## What the gate covers
 
 - **The gate covers two directories: the checkout the claim was made in, and the isolated one
-  `start_branch` created or a resumed run adopted.** A run that makes its own worktree by hand (one git
+  `claim` with `branch` and `base` created or a resumed run adopted.** A run that makes its own worktree by hand (one git
   has never registered, or whose ownership marker names no issue) gets that write gated but the directory
   is never recorded, so subsequent writes there read as `Outside`. Use the tool, or resume through a
   checkout the transport already knows about.
 
-  `start_branch` records the claim's checkout as well as the worktree, filling and never overwriting. A
+  `claim` with `branch` and `base` records the claim's checkout as well as the worktree, filling and never overwriting. A
   `claim` whose tracker write lands and whose readback fails returns before the pointer effect runs, so no
   checkout is recorded and the worktree would become the run's **only** covered directory; the server is
   then outside its own run and every later call is refused `run-id-names-another-checkout`
@@ -2716,7 +2716,7 @@ pointer that leaves it names the document it points at.
   non-write until named; it does not read an alias, a script, a shell variable or substitution that spells the
   call, or a `gh` word that is not first in its command, and a `gh api graphql` whose query comes from
   `--input` or an `@file` field is treated as a write while a mutation behind a shell variable passes. While
-  closed, `create`, `comment`, `transition`, `claim`, `claim --takeover`, `unassign` and `start_branch` queue
+  closed, `create`, `comment`, `transition`, `claim`, `claim --takeover` and `unassign` queue
   their GitHub writes, a publication is refused with the number of writes waiting, and `release_ci` is
   refused (`release_ci_denies_outside_the_period_before_reading_anything_else`).
 - **The window's scope is the repository a write is aimed at, and the gate's reading of an agent's own
@@ -3362,7 +3362,7 @@ pointer that leaves it names the document it points at.
   ratatui's word wrap (`Paragraph::line_count` sits behind `unstable-rendered-line-info`), checked only
   against Help in both tongues and one synthetic long row.
 - **The legacy-checkout stop cannot name the legacy path of a template that named no placeholder.** A
-  `Worktree location` missing `<branch>` or `<run-id>` gains it in memory, and `start_branch` stops with
+  `Worktree location` missing `<branch>` or `<run-id>` gains it in memory, and `claim` with `branch` and `base` stops with
   `legacy-worktree-registered` when the pre-migration checkout is still registered, computed from the raw
   template. For a bare directory naming **neither**, that raw path is one no build created (they appended
   `~<run-id>`), so a run resuming such a branch is stopped by `branch-checked-out-elsewhere` instead, before
@@ -3413,7 +3413,7 @@ pointer that leaves it names the document it points at.
     failed, never `0`), and read the review queue's per-candidate timeline without the sync a ledger open
     pays. `estigia store import` admits untouched open issues oldest first.
   - **The dedup identity, the `blocked-until` clauses and the task checklist live in the store and nowhere
-    else**, so a lost `state.db` loses all three. `blocked_until` requires no claim; a `task` is recorded, not
+    else**, so a lost `state.db` loses all three. `transition` records a clause without requiring a claim; a `task` is recorded, not
     verified (nothing checks its commit exists or its `evidence` note names anything real); `transition --to
     done` answers nothing to verify when the issue has no confirmed publication. FLOW's routing rules in
     `skill/SKILL.md` are instructions, enforced only by `task`'s `done` rule, and their effect on cost is not
@@ -3565,7 +3565,7 @@ pointer that leaves it names the document it points at.
 
 - **The integration exemption proves *a* branch is checked out where the merge runs, not that it is the
   issue's own branch.** `is_integration_in_the_runs_own_checkout` checks `run.worktree` alone, an
-  unredirected environment and any `refs/heads/*` symbolic ref. `start_branch` returns a branch but the
+  unredirected environment and any `refs/heads/*` symbolic ref. `claim` returns a branch but the
   MCP pointer effect retains only worktree; the branch remains in `ownership_path`'s private git file.
   `checkout`/`switch` are not observed. Git prevents checking out a branch held by another worktree,
   not trunk after the base moves away, `develop`, `release/1.x` or another feature branch. No guard
@@ -3903,7 +3903,7 @@ pointer that leaves it names the document it points at.
   locally); Linear with workflow unset or autonomous stands down
   (`a_read_only_tracker_without_an_assisted_workflow_refuses_nothing`; `doctor` flags that
   configuration). Under `assisted` both refusals and the SessionStart text name `assist`, not `claim`,
-  `create` or `start_branch`, which are refused there
+  `create` or the checkout `claim` makes, which are refused there
   (`an_assisted_run_is_told_to_assist_not_to_claim`,
   `an_assisted_session_start_names_assist_and_not_the_refused_tools`). The tests build the gate context
   with `Tracker::Linear` directly, so the repository-file layer that produces it is read by its own

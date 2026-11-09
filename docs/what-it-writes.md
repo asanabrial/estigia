@@ -52,12 +52,12 @@ ownership lock; the race after the final checks is in `honesty.md`.
 
 **What reaches GitHub.** Issues and their prose, a person's `comment` prose, labels,
 open or closed, pull requests and branches — and no `issue-flow` marker anywhere. The markers of the
-claim family (`claim`, `reclaim`, `unassign`, `heartbeat`, `progress`, `blocked`, `branch`) and of
+claim family (`claim`, `reclaim`, `unassign`, renewal `heartbeat`, `progress`, `blocked`, `branch`) and of
 the review family (`published`, `review-handoff`, finding, lens report, refutation, disposition,
 validator result, spend, computed verdict, receipt) are recorded in `~/.estigia/state.db` alone, and
 no sentence is posted beside them. What reaches GitHub from a claim is the projection, written after
 the local commit and never read back to decide: the assignee, the `dev:<runtime>` label (created on
-the first claim for a runtime), and for `start-branch` the develop link and the branch. The
+the first claim for a runtime), and for `claim` with `branch` and `base` the develop link and the branch. The
 `comment` tool posts the escaped prose and nothing else, and `create` files the caller's body
 unchanged. [`honesty.md`](honesty.md) names what recording locally costs.
 
@@ -163,7 +163,7 @@ Five invariants, and the tests are named after them:
 
    `~/.estigia/state.db`, with its `-wal` and `-shm`, is written at run time and never by
    `setup`. The workflow state with no GitHub object to live in is only here: the dedup
-   identity and `blocked-until` clauses `create` and `blocked_until` record, and the task
+   identity and `blocked-until` clauses `create` and `transition` record, and the task
    checklist `task` records. The transport creates it: the first dispatched operation that spawns `gh` records its
    call counts there, the first claim-family operation that touches an issue imports that
    issue's history, and the gate appends every decision and role observation. A decision carries the
@@ -314,7 +314,7 @@ clears one an earlier loop left behind. `/flow-status`
 prints a pending request beside the tracker answer.
 
 **One clause is what makes a blocked item dischargeable**, and the plugin never reads prose for it.
-A blocked issue records one clause per `blocked_until` call (or per `<issue>=<state>` pair of
+A blocked issue records one clause per `transition` call that carries one (or per `<issue>=<state>` pair of
 `create`'s `blocked_until`), in the local store and nowhere on GitHub; a body still carrying a
 `<!-- issue-flow: blocked-until issue=<n> state=<s> -->` marker has it imported on first touch. The clause holds when the local store puts issue `<n>` in state `<s>`, and an item is dischargeable only when every clause it recorded holds now. A clause that is not well formed, or
 whose named issue the store has never admitted, is reported as one that does not hold — never
@@ -1538,7 +1538,7 @@ through untouched. Gating every session would be a lock, not workflow authority.
 `pre-push` hook, a run holding no claim is refused every commit (`git commit`, `cherry-pick`,
 `revert`, `merge`, `rebase`, `am`) and every `git push`, on every branch, with the refusal
 `unclaimed-commit`; the `pre-push` hook refuses the same push when git runs it. The way out is to
-claim an issue and work through `start_branch`, whose isolated checkout the claim covers. Reads stay
+claim an issue and work through `claim` with `branch` and `base`, whose isolated checkout the claim covers. Reads stay
 ungated, edits and tests are held only by `Unclaimed write policy`, and a checkout without the guard
 has no commit refusal, as does one with no tracker transport or no installed contract.
 
@@ -1585,7 +1585,7 @@ match, and being asked beats being silently wrong. `release` also puts down the 
 run created — every slice's, not only the last — and the local branch checked out there, once the
 tracker recognises the delivery and nothing unpublished remains; what it kept, and why, is named in
 its answer. It deletes every remote head the run recorded starting, too, because the branch
-`start_branch` linked is not always the branch published and GitHub's own auto-delete removes only the
+`claim` linked is not always the branch published and GitHub's own auto-delete removes only the
 latter. `estigia prune` clears what no delivery owned: it lists the merged or closed branches and
 checkouts, keeps any a live claim holds or that carries commits the remote does not have, and removes
 the rest only on `--confirm`. The main checkout is never a candidate, from whichever checkout the

@@ -26,7 +26,7 @@ Load the analyst reference whenever the run is the analyst or the combined analy
 - Resume this run's held issue before consulting queues. Use the selected binding's claim, adjudicated in the local store; the earliest live claim wins. **The gate performs the pre-write verification**: a repository write it observes is re-verified against the claim whenever the renewal window has passed, and at every expensive or irreversible boundary, so a separate `verify_claim` before the first write is not required. An unreadable control surface permits no write, and an explicit `verify_claim` remains available when a run wants the answer itself. The one exception is the assisted path in [decision gates](references/decision-gates.md): where the repository's `Claim workflow` is `assisted` no claim exists to verify, and the local claim `assist` records stands in for it.
 - Keep exactly one of `analysis`, `ready`, `in-progress`, `review`, `blocked`, or `done`. The binding's workflow state is authoritative; every configured projection is updated and read back, and `done` is explicit before tracker closure.
 - A claimed task reaches `done` or a state that names its exact exit condition and discharger; it never enters an ownerless, conditionless queue.
-- The selected binding MUST map `ensure_states`, `create`, `list_state`, `claim`, `reclaim`, `verify_claim`, `heartbeat`, `transition`, `comment`, `unassign`, `publish_review`, `republish_review`, `handoff_review`, `review_finding`, `review_computed_verdict`, `review_disposition`, and `release_ci`. Run executable reversible operations instead of reconstructing them; bindings MUST declare unsupported capabilities and fail closed.
+- The selected binding MUST map `create`, `list_state`, `claim`, `reclaim`, `verify_claim`, `transition`, `comment`, `unassign`, `publish_review`, `republish_review`, `handoff_review`, `review_finding`, `review_computed_verdict`, `review_disposition`, and `release_ci`. Run executable reversible operations instead of reconstructing them; bindings MUST declare unsupported capabilities and fail closed.
 - `deliver` with `until` carries the verdict and the CI release.
 - Issue acceptance criteria, routed domain rules, and repository rules define done. Never invent missing gates or reinterpret the issue silently.
 - Aim for no more than the `Change size` row of the operator table below, in changed lines per pull request, but treat size as reviewability guidance rather than a gate. A larger coherent change is valid when splitting would reduce safety or review quality; the developer records why before review and the independent reviewer assesses that rationale without relaxing any quality gate. **The candidate is the publication**, not a commit, so no review is due before one; the lever is this row, and [repository delivery](references/repository-delivery.md) states the rule where review-unit sizing lives.
@@ -74,7 +74,7 @@ Crossing a threshold selects delegated work only. Size, file count, and risk do 
 
 ## Execution Steps
 
-Before either role's first tracker write in an unfamiliar project, run the selected binding's `ensure_states`; then use that binding's executable operations and readbacks rather than reconstructing them.
+Before either role's first tracker write in an unfamiliar project, use that binding's executable operations and readbacks rather than reconstructing them; a label a write needs is created at that write.
 
 ### Analyst
 

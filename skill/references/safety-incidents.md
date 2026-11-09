@@ -19,18 +19,18 @@ the surviving executable or document owner changes.
 | ID | Failure mode and evidence | Protection or invariant | Surviving executable or document owner |
 |---|---|---|---|
 | I02 | On 2026-07-26, a five-minute dev loop repeatedly re-entered selection while already holding one issue and nearly started additional work on every tick. | Resume self-held work before consulting any queue; one run holds one task. | `SKILL.md` dev step 1 |
-| I03 | On 2026-07-24, one issue was claimed by two runs 1m46s apart; the loser did not renew before filesystem work and wrote a model, migration, and tests into the winner's checkout. | Verify the live claim immediately before branch, worktree, or file creation; stop if the store says another run won. | Binding verify-claim and start-branch operations; `SKILL.md` dev step 4 |
+| I03 | On 2026-07-24, one issue was claimed by two runs 1m46s apart; the loser did not renew before filesystem work and wrote a model, migration, and tests into the winner's checkout. | Verify the live claim immediately before branch, worktree, or file creation; stop if the store says another run won. | Binding verify-claim and checkout operations; `SKILL.md` dev step 4 |
 | I07 | On 2026-07-22, a run lost a claim race by five seconds, was told 33 seconds later, then posted three heartbeats and worked about 48 more minutes without rereading control messages. | Every heartbeat reads before it writes, and the same renewal precedes expensive or irreversible boundaries. | Renewal and reclaim below; binding heartbeat/verify-claim operations |
 | I08 | Agent-team tasks have remained incomplete and blocked dependants after their session disappeared, requiring manual status repair. | Treat in-session task lists as ephemeral; persist progress on the issue and recover abandoned work from server-timestamped evidence. | Renewal and reclaim below; `references/runtime-notes.md` |
 
 ### Renewal and reclaim procedure
 
-1. Claim with a declared horizon and persist progress through the binding's `heartbeat`
-   operation, which records `progress` and `blocked` activity as readily as a heartbeat. Only an
+1. Claim with a declared horizon and persist progress through `comment` with `expect_state`,
+   which records `progress` and `blocked` activity as readily as a heartbeat. Only an
    activity marker the holder authored renews ownership — `heartbeat`, `progress`, `blocked`,
    `branch` or `published`; a note, diagnosis, mention, unrelated update, or control target does
    not.
-2. Every heartbeat runs `verify_claim` before writing. Run the same renewal before filesystem work,
+2. Every renewal runs `verify_claim` before writing. Run the same renewal before filesystem work,
    evaluation, review, merge, publication, and close. A failed read answered nothing: write nothing
    and retry the read. A successful stop answer means stop, acknowledge once when the binding asks,
    release only this runtime's projection, and leave state owned by whoever moved it.
@@ -48,7 +48,7 @@ the surviving executable or document owner changes.
 
 | ID | Failure mode and evidence | Protection or invariant | Surviving executable or document owner |
 |---|---|---|---|
-| I05 | On 2026-07-24, two runs on one issue derived the same worktree directory; files appeared in a checkout its owner had created clean minutes earlier. | Use one issue branch and an external checkout whose construction is unique per run — registration of a common branch is not isolation and is not ownership. Resume only on durable evidence that this run created the checkout; a foreign path, an orphan and an unproven claim all stop, and an unreadable claim is a failed read rather than a decision. | `references/repository-delivery.md`; binding start-branch operation |
+| I05 | On 2026-07-24, two runs on one issue derived the same worktree directory; files appeared in a checkout its owner had created clean minutes earlier. | Use one issue branch and an external checkout whose construction is unique per run — registration of a common branch is not isolation and is not ownership. Resume only on durable evidence that this run created the checkout; a foreign path, an orphan and an unproven claim all stop, and an unreadable claim is a failed read rather than a decision. | `references/repository-delivery.md`; binding checkout operation |
 | X06 | Fresh worktrees omit ignored credentials, environment files, and local settings, so a familiar tool can start normally and fail only when an absent value is needed. | Restore required ignored inputs and run the worktree's code while reusing the established environment when safe. | `references/repository-delivery.md`; selected binding's worktree guidance |
 | X07 | Rebasing rewrites SHAs already named by reviews, CI, signatures, or deployments and can require a force-push over refs another actor fetched. | Integrate the current base without rewriting published evidence unless repository policy explicitly requires otherwise; reverify after integration. | `references/repository-delivery.md`; `SKILL.md` delivery steps |
 
@@ -122,8 +122,8 @@ justified them is here.
   | 15:24:21 | the winner delivers |
   | 15:28:52 | `claude-code-d7d8a22e` finally stands down, retracting a measurement taken on work it no longer held |
 
-  Under write-only heartbeats the stand-down sat unread for 48 minutes; `heartbeat` runs the renewal
-  before it records, so the loser's next heartbeat at 14:49:22 would have exited `1` instead of writing.
+  Under write-only heartbeats the stand-down sat unread for 48 minutes; `comment` with `expect_state` runs the renewal
+  before it records, so the loser's next renewal at 14:49:22 would have exited `1` instead of writing.
 - **Markdown bodies.** The tools remove the class of inline-body corruption rather than warning about it,
   and answer it in one implementation rather than a PowerShell/bash pair: writing the fix in the language
   that causes the bug, twice, would drift. It was once a script beside the contract, one implementation in
