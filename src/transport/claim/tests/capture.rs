@@ -539,6 +539,11 @@ fn put(path: &std::path::Path, text: &str) {
 #[cfg(unix)]
 /// A world whose base declares a check, so `review_status` is held by the checks while one runs.
 fn declared_world() -> World {
+    declared_world_as("claude-a")
+}
+
+#[cfg(unix)]
+fn declared_world_as(run_id: &str) -> World {
     let root = tempfile::tempdir().expect("a directory");
     let repo = root.path().join("repo");
     std::fs::create_dir_all(repo.join("src")).expect("the src directory");
@@ -565,7 +570,7 @@ fn declared_world() -> World {
     let payload = crate::transport::target::review_payload(&repo, &receipt.base, &receipt.head)
         .expect("the change has a payload");
     let comments = vec![
-        live_claim("claude-a"),
+        live_claim(run_id),
         published_with_payload(&receipt, &payload.digest),
     ];
     let context = Context {
@@ -1080,6 +1085,7 @@ fn a_lens_launched_on_a_receipt_the_review_moved_past_is_still_stale_while_the_c
     let launched = launched.unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
     wait_until_done(&launched);
     let _running = running_check(&world);
+    assert_eq!(next_step(&world)["reason_code"], "checks-running");
     let receipt = ReviewTransaction {
         epoch: op(77),
         ..world.receipt.clone()
@@ -1099,6 +1105,56 @@ fn a_lens_launched_on_a_receipt_the_review_moved_past_is_still_stale_while_the_c
     let outcome = collect(&world, RELIABILITY_LENS);
 
     assert_eq!(refused_as(&outcome), "capture-result-stale");
+    assert_eq!(job_state(&world, &launched), "stale");
+    nothing_was_written(&world);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_relay_answer_is_admitted_while_the_declared_checks_run() {
+    let run = "opencode-ses12345deadbeef";
+    let world = declared_world_as(run);
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
+    let _running = running_check(&world);
+    assert_eq!(next_step(&world)["reason_code"], "checks-running");
+
+    let answer = framed_answer(&launched, "Acknowledged.", r#"{"findings": []}"#);
+    let admitted = relay_admit_for(&world, RELIABILITY_LENS, &answer, run)
+        .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+
+    assert_eq!(admitted["ok"], true);
+    assert_eq!(job_state(&world, &launched), "admitted");
+    assert_eq!(on_the_timeline(&world).1, [RELIABILITY_LENS]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_relay_answer_for_a_receipt_the_review_moved_past_is_stale_while_the_checks_run() {
+    let run = "opencode-ses12345deadbeef";
+    let world = declared_world_as(run);
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
+    let _running = running_check(&world);
+    assert_eq!(next_step(&world)["reason_code"], "checks-running");
+    let receipt = ReviewTransaction {
+        epoch: op(77),
+        ..world.receipt.clone()
+    };
+    let payload = crate::transport::target::review_payload(
+        &world.context.repo_dir,
+        &receipt.base,
+        &receipt.head,
+    )
+    .expect("a payload");
+    open_ledger_result(&world)
+        .and_then(|ledger| {
+            ledger.append(&published_with_payload(&receipt, &payload.digest).body, NOW)
+        })
+        .expect("a newer publication lands while the checks run");
+
+    let answer = framed_answer(&launched, "Acknowledged.", r#"{"findings": []}"#);
+    let rejected = relay_admit_for(&world, RELIABILITY_LENS, &answer, run);
+
+    assert_eq!(refused_as(&rejected), "capture-result-stale");
     assert_eq!(job_state(&world, &launched), "stale");
     nothing_was_written(&world);
 }
