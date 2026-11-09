@@ -159,7 +159,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `where`, `feed`, `status` and `flush` become commands alone; `check_closing_keywords` goes, `publish_review` runs its scan | 48 | 61,940 |
 | One `pr_review` with `action` replaces the six `pr_review_*` names | 43 | 59,796 |
 | `review_tier` and `target` become `review_read` views, `launch_review_input` and `run_checks` become `collect_review_input` arguments, `record_computed_verdict` and `release_ci` become `deliver`'s `until` | 37 | 55,146 |
-| `heartbeat`, `blocked_until`, `ensure_states` and `start_branch` absorb into `comment`, `transition` and `claim`; `comment` and `transition` gain the merged arguments | 33 | 52,750 |
+| `heartbeat`, `blocked_until`, `ensure_states` and `start_branch` absorb into `comment`, `transition` and `claim`; `comment` and `transition` gain the merged arguments | 33 | 52,798 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
@@ -167,7 +167,7 @@ rest were absorbed by a surviving name reached through a parameter or a `view`. 
 `src/harness/mcp/tests.rs` bounds the list, and each change above moved it by exactly the measured
 difference. It is the largest list a process can answer, the unreadable-context one.
 
-A turn pays only for the `ALWAYS_LOADED` schemas on a host that honours the mark: 12,359 bytes, held by
+A turn pays only for the `ALWAYS_LOADED` schemas on a host that honours the mark: 12,407 bytes, held by
 `ALWAYS_LOADED_CEILING`, since a name that absorbs another's arguments grows them while the menu shrinks. That is
 why `transition` grew when it took `blocked_until`'s clause, even as four tools left the menu.
 
