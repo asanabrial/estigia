@@ -1581,14 +1581,14 @@ pointer that leaves it names the document it points at.
     **did**.
   - **A reviewer's directory has no remover, and Estigia is not one.** Each Judgment Day round mints one
     directory per judge, but Estigia does not spawn the judge and `release` puts down only the checkout
-    `claim` with `branch` and `base` created, so they accumulate until an operator sweeps them by hand, after the judge has
+    the claim created, so they accumulate until an operator sweeps them by hand, after the judge has
     returned its findings and only once `git status --porcelain` is empty and every commit is on the remote.
     They live under the configured `Worktree location`, which makes them look like registered worktrees when
     Git considers them no such thing (a separate root is an open question). `estigia prune` lists a detached
     checkout no branch owns but cannot tell a judge's directory from any other orphan: a name to check, not a
     disposal.
   - **What a delivery's remote deletion cannot see.** `release` deletes every remote head the run recorded
-    starting, read back through `ls-remote`, but the record is only what the checkout `claim` makes wrote: a branch pushed
+    starting, read back through `ls-remote`, but the record is only what the claim's checkout wrote: a branch pushed
     by hand, or under an identity the issue's timeline never named, is not in the set, and GitHub's
     `delete_branch_on_merge` covers the pull request's own head only. `estigia prune` catches it later, and
     only when the operator confirms.
@@ -2174,7 +2174,7 @@ pointer that leaves it names the document it points at.
   The guard that enforces this entry walks every agent whose tool calls Estigia gates by any
   mechanism, retired ones included, because their hooks are still on machines that installed them; a
   plugin-written gate that carries no list of its own has to be named here.
-- **Label creation cannot tell "already there" from "gh could not run".** `gh label create --force` exits
+- **`ensure-states` cannot tell "already there" from "gh could not run".** `gh label create --force` exits
   non-zero for both, and the command reads that as idempotence. Measured against a `gh` that refuses every
   call: each answers `ok: true` with all six labels listed as `ensured`, and none exists. Closing it means
   reading what `gh` printed, and this crate has never been shown those exact words (the reason `icacls` is
@@ -2657,7 +2657,7 @@ pointer that leaves it names the document it points at.
 ## What the gate covers
 
 - **The gate covers two directories: the checkout the claim was made in, and the isolated one
-  `claim` with `branch` and `base` created or a resumed run adopted.** A run that makes its own worktree by hand (one git
+  the claim created or a resumed run adopted.** A run that makes its own worktree by hand (one git
   has never registered, or whose ownership marker names no issue) gets that write gated but the directory
   is never recorded, so subsequent writes there read as `Outside`. Use the tool, or resume through a
   checkout the transport already knows about.

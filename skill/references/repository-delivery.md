@@ -298,7 +298,7 @@ nothing that carries unpublished work is ever swept to make the listing shorter.
 **A reviewer's directory is not a checkout, and `release` does not remove it.** The isolation rule
 gives each Judgment Day judge a directory of its own, one per judge per review round. Estigia does not spawn
 the judge: the orchestrating context creates each directory and is the only context that could remove it.
-`release` reaches only the checkout `claim` with `branch` and `base` created for the delivering run's own branch. Sweep
+`release` reaches only the checkout the delivering run's claim created for its own branch. Sweep
 reviewer directories by hand once the judge that wrote one has returned its findings,
 or let `estigia prune` list them — a detached checkout no branch owns is one of its cases — and only
 after the same check `release` applies to its own checkout: `git status --porcelain` is empty and
