@@ -725,9 +725,10 @@ pub fn selected_documents(config: &Config) -> String {
     let body = config.body_language.as_str();
     if summary != defaults.summary_language.as_str() || body != defaults.body_language.as_str() {
         lines.push_str(&format!(
-            "Write the summary sentence at the top of an issue in **{summary}**, and the rest of \
-             the body in **{body}**. They are separate rows because they are read by different \
-             people: the summary is for somebody who will never read past it, and the body is for \
+            "Write the summary sentence at the top of an issue in **{summary}**, and the title \
+             and every section from `## Problem` down in **{body}** \u{2014} whatever language the \
+             repository's own documents, comments or existing issues are in. They are separate \
+             rows because they are read by different people: the summary is for somebody who will never read past it, and the body is for \
              whoever implements the thing. Headings are never translated \u{2014} `## Problem` is \
              `## Problem` in every installation, because the contract and its markers are written \
              against those exact words.
@@ -3562,6 +3563,14 @@ mod tests {
         assert!(
             body.contains("in **Español**") && body.contains("in **Deutsch**"),
             "the contract does not carry both languages: {body}"
+        );
+        assert!(
+            body.contains("the title and every section from `## Problem` down in **Deutsch**"),
+            "the title is written outside the template, and the contract does not say which row governs it: {body}"
+        );
+        assert!(
+            body.contains("whatever language the repository"),
+            "a repository written in another language overrides the rows unless the contract says it does not: {body}"
         );
         // And the headings are named as the thing that never moves. They are
         // the contract's own vocabulary and the machine marker's neighbours.
