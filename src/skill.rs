@@ -726,7 +726,8 @@ pub fn selected_documents(config: &Config) -> String {
     if summary != defaults.summary_language.as_str() || body != defaults.body_language.as_str() {
         lines.push_str(&format!(
             "Write the summary sentence at the top of an issue in **{summary}**, and the title \
-             and every section from `## Problem` down in **{body}** \u{2014} whatever language the \
+             and every section from `## Problem` down in **{body}**, and a pull request's title \
+             and body in **{body}** as well \u{2014} whatever language the \
              repository's own documents, comments or existing issues are in. They are separate \
              rows because they are read by different people: the summary is for somebody who will never read past it, and the body is for \
              whoever implements the thing. Headings are never translated \u{2014} `## Problem` is \
@@ -3567,6 +3568,10 @@ mod tests {
         assert!(
             body.contains("the title and every section from `## Problem` down in **Deutsch**"),
             "the title is written outside the template, and the contract does not say which row governs it: {body}"
+        );
+        assert!(
+            body.contains("a pull request's title and body in **Deutsch**"),
+            "a pull request is titled outside any template, and the contract does not say which row governs it: {body}"
         );
         assert!(
             body.contains("whatever language the repository"),
