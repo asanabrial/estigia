@@ -232,7 +232,7 @@ pub(super) fn landed_child(
 fn named_child(state_root: &Path, parent: &str, literal: &str) -> Option<Run> {
     let named: Vec<PathBuf> = literal
         .split(|character: char| character.is_whitespace() || ";&|()'\"".contains(character))
-        .filter(|word| word.starts_with('/'))
+        .filter(|word| Path::new(word).is_absolute())
         .filter_map(|word| crate::paths::placed(Path::new(word)))
         .collect();
     let mut matching = session::children(state_root, parent)
