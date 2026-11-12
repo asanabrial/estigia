@@ -228,6 +228,61 @@ pub(super) fn landed_child(
     covering.next().is_none().then_some(Landed { run, runs_in })
 }
 
+/// The one child of `parent` whose worktree an absolute path in `literal` names.
+fn named_child(state_root: &Path, parent: &str, literal: &str) -> Option<Run> {
+    let named: Vec<PathBuf> = literal
+        .split(|character: char| character.is_whitespace() || ";&|()'\"".contains(character))
+        .filter(|word| word.starts_with('/'))
+        .filter_map(|word| crate::paths::placed(Path::new(word)))
+        .collect();
+    let mut matching = session::children(state_root, parent)
+        .into_iter()
+        .filter(|child| {
+            child.worktree.as_deref().is_some_and(|worktree| {
+                named
+                    .iter()
+                    .any(|path| crate::paths::covers(worktree, path))
+            })
+        });
+    let run = matching.next()?;
+    matching.next().is_none().then_some(run)
+}
+
+/// An unclaimed hold on a call that names a child's worktree without landing in
+/// it, re-pointed at the shape the gate attributes to that child. The decision
+/// is unchanged.
+pub(super) fn naming_the_child(
+    decision: Decision,
+    state_root: &Path,
+    parent: &str,
+    literal: Option<&str>,
+) -> Decision {
+    let Decision::Ask(mut refusal) = decision else {
+        return decision;
+    };
+    if refusal.code != super::issue_requirement::CODE {
+        return Decision::Ask(refusal);
+    }
+    let Some(child) = literal.and_then(|literal| named_child(state_root, parent, literal)) else {
+        return Decision::Ask(refusal);
+    };
+    let Some(worktree) = child.worktree.as_deref() else {
+        return Decision::Ask(refusal);
+    };
+    refusal.resolution = Resolution::no_command(
+        NoCommandReason::OperatorKnowledge,
+        format!(
+            "this run's child `{}` holds `{}`: a call that is one bare `git -C {}` command, \
+             or a write tool by an absolute path inside it, is attributed to that claim; a \
+             chain through `cd`, `&&` or `;` is not",
+            child.run_id,
+            worktree.display(),
+            worktree.display()
+        ),
+    );
+    Decision::Ask(refusal)
+}
+
 /// The directory of a call that is exactly one `git -C <plain path> <subcommand>`.
 fn single_git_directory(literal: &str) -> Option<String> {
     let words = simple_command_words(literal)?;
