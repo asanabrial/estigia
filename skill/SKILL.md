@@ -182,8 +182,8 @@ beside this file. When present, read it and let its same-named rows override thi
 additional instructions are local policy too. That file contains permissions and machine-specific
 paths, is ignored by Git, and MUST NOT be committed or published.
 
-A repository's own file (`$(git rev-parse --git-common-dir)/estigia/estigia.local.md`) may
-tighten only `Delivery authorisation` and `Transition authorisation`; the stricter answer wins.
+`estigia config list`, run in the repository, prints every row in force. Its own file may
+tighten only `Delivery authorisation` and `Transition authorisation`.
 
 | Setting | Value here | Skill default |
 |---|---|---|

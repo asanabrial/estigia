@@ -571,8 +571,11 @@ pub fn configuration_body(config: &Config) -> String {
          committed or published. `{legacy}` is read only when `{local}` is not there, for \
          installations that came from issue-flow \u{2014} with both present, the older one is \
          ignored entirely.\n\n\
-         A repository's own file (`$(git rev-parse --git-common-dir)/estigia/{local}`) may \
-         tighten `Delivery authorisation` and `Transition authorisation`, and only those: an \
+         Read the configuration in force with `estigia config list`, run from the repository: \
+         it prints every row's effective value and the layer that answered it. The \
+         repository's own file, `estigia/{local}` under its Git common directory, answers the \
+         repository-scoped rows such as `Claim workflow`, and may tighten `Delivery \
+         authorisation` and `Transition authorisation`, and only those: an \
          `ask` there over an `auto` here is in force, and an `auto` there over an `ask` here is \
          not. The stricter answer wins.\n\n\
          {method}{rows}",
@@ -2612,8 +2615,12 @@ mod tests {
 
         let body = configuration_body(&Config::default());
         assert!(
-            body.contains("$(git rev-parse --git-common-dir)/estigia/estigia.local.md"),
-            "the contract does not hand the agent a route to the repository file:\n{body}"
+            body.contains("`estigia config list`, run from the repository"),
+            "the contract does not hand the agent a read of the repository's rows:\n{body}"
+        );
+        assert!(
+            !body.contains("$("),
+            "the contract routes the agent through a shell substitution the gate cannot place:\n{body}"
         );
         assert!(
             !body.contains(".git/estigia/estigia.local.md"),
