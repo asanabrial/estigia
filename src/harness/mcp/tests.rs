@@ -8715,10 +8715,18 @@ mod send_message {
             }
         }
         let mut stripped = with.clone();
-        for row in stripped["sessions"].as_array_mut().expect("rows") {
+        stripped["taken_at"] = plain["taken_at"].clone();
+        let plain_rows = plain["sessions"].as_array().expect("rows");
+        for (row, plain_row) in stripped["sessions"]
+            .as_array_mut()
+            .expect("rows")
+            .iter_mut()
+            .zip(plain_rows)
+        {
             for key in STATUS_KEYS {
                 row.as_object_mut().expect("an object").remove(key);
             }
+            row["silent_for"] = plain_row["silent_for"].clone();
         }
         assert_eq!(stripped, plain);
     }
