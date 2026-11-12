@@ -607,10 +607,12 @@ unattended is a property of the repository's risk as much as of which agent hold
 file lives in `.git/` and is written by `config set --repo` without adjudication — a layer that can
 only remove autonomy cannot reopen the shape that was closed, a row there that *granted* a capability.
 
-The agent reads the effective answer from the contract's own sentence, which points at the
-repository file by the route that resolves wherever the checkout is worked on —
-`$(git rev-parse --git-common-dir)/estigia/estigia.local.md` — because a linked worktree's `.git`
-is a file, not the directory that holds it.
+The contract sends the agent to `estigia config list`, run from the repository, for the effective
+answer, and names the repository file only as `estigia/estigia.local.md` under the Git common
+directory, never as a literal `.git/` path, because a linked worktree's `.git` is a file, not the
+directory that holds it. It used to hand the agent a `$(git rev-parse --git-common-dir)` route.
+That route answers a relative `.git` at a primary checkout's root, so a run that built it from
+another directory read nothing.
 
 - `config set "Delivery authorisation" ask --repo` (and `ask 30m`) writes only that row into the
   repository's file. `config list` in that repository shows the value and marks the row
