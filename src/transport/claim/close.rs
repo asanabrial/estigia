@@ -774,18 +774,19 @@ mod tests {
             }),
             serde_json::json!({ "matches": "issue edit", "status": 0 }),
         ]);
+        if closed {
+            let file = crate::skill::repository_config_path(repo);
+            std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+            std::fs::write(
+                &file,
+                "| Setting | Value |\n|---|---|\n| Git operation window | enabled 09:00-17:00 |\n",
+            )
+            .expect("the repository's rows");
+        }
         let context = Context {
             skill_dir: repo.to_path_buf(),
             repo_dir: repo.to_path_buf(),
-            config: if closed {
-                vec![(
-                    "Git operation window".to_owned(),
-                    "enabled 09:00-17:00".to_owned(),
-                    crate::transport::Source::Written,
-                )]
-            } else {
-                Vec::new()
-            },
+            config: Vec::default(),
             repo: closed.then(|| "fixture/repo".to_owned()),
         };
         let log_dir = tempfile::tempdir().expect("a log directory");

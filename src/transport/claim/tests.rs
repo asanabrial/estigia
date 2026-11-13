@@ -15843,16 +15843,16 @@ fn publishing_at(minutes: u16, run: impl FnOnce()) {
     crate::harness::operation_window::with_now_override(Some(publish_clock), run);
 }
 
-fn schedule_skill(value: &str) -> tempfile::TempDir {
-    let skill = tempfile::tempdir().expect("a skill root");
+fn scheduled_checkout(value: &str) -> tempfile::TempDir {
+    let repo = tempfile::tempdir().expect("a checkout");
+    let file = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
     std::fs::write(
-        skill.path().join(crate::skill::CONTRACT),
-        format!(
-            "| Setting | Value here | Skill default |\n|---|---|---|\n| Git operation window | {value} | disabled |\n"
-        ),
+        &file,
+        format!("| Setting | Value |\n|---|---|\n| Git operation window | {value} |\n"),
     )
-    .expect("a contract");
-    skill
+    .expect("the repository's rows");
+    repo
 }
 
 fn publish_what() -> Publication<'static> {
@@ -15886,8 +15886,8 @@ fn publish_script() -> String {
 
 #[test]
 fn publish_review_denies_its_internal_push_outside_the_period() {
-    let skill = schedule_skill("enabled 09:00-17:00");
-    let repo = tempfile::tempdir().expect("a checkout");
+    let skill = tempfile::tempdir().expect("a skill root");
+    let repo = scheduled_checkout("enabled 09:00-17:00");
     let context = Context::live(skill.path().to_path_buf(), repo.path().to_path_buf(), None);
     let what = publish_what();
     let bin = crate::test_env::scripted_gh();
@@ -15907,8 +15907,8 @@ fn publish_review_denies_its_internal_push_outside_the_period() {
 
 #[test]
 fn publish_review_inside_the_period_reaches_the_checks_after_the_schedule() {
-    let skill = schedule_skill("enabled 09:00-17:00");
-    let repo = tempfile::tempdir().expect("a checkout");
+    let skill = tempfile::tempdir().expect("a skill root");
+    let repo = scheduled_checkout("enabled 09:00-17:00");
     let context = Context::live(skill.path().to_path_buf(), repo.path().to_path_buf(), None);
     let what = publish_what();
     let bin = crate::test_env::scripted_gh();
@@ -15928,8 +15928,8 @@ fn publish_review_inside_the_period_reaches_the_checks_after_the_schedule() {
 
 #[test]
 fn release_ci_denies_outside_the_period_before_reading_anything_else() {
-    let skill = schedule_skill("enabled 09:00-17:00");
-    let repo = tempfile::tempdir().expect("a checkout");
+    let skill = tempfile::tempdir().expect("a skill root");
+    let repo = scheduled_checkout("enabled 09:00-17:00");
     let context = Context::live(skill.path().to_path_buf(), repo.path().to_path_buf(), None);
     let receipt = ReviewTransaction {
         epoch: "1".repeat(32),

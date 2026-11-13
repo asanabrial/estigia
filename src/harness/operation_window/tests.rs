@@ -392,14 +392,14 @@ fn table(value: &str) -> String {
 }
 
 #[test]
-fn the_effective_schedule_layers_contract_local_and_repository() {
+fn the_effective_schedule_is_the_repository_files_and_nothing_else() {
     let root = tempfile::tempdir().expect("a temporary root");
     let skill = root.path().join("skill");
     let repo = root.path().join("repo");
     std::fs::create_dir_all(&skill).expect("a skill root");
     let fallback = GitOperationWindow::Disabled;
     assert_eq!(
-        effective_in(&skill, &repo, &fallback),
+        effective_in(&repo, &fallback),
         GitOperationWindow::Disabled,
         "an unconfigured checkout reads as the fallback"
     );
@@ -408,17 +408,15 @@ fn the_effective_schedule_layers_contract_local_and_repository() {
         table("enabled 09:00-17:00"),
     )
     .expect("a contract");
+    std::fs::write(
+        skill.join(crate::config::LOCAL_FILE),
+        table("enabled 09:00-17:00"),
+    )
+    .expect("a local override");
     assert_eq!(
-        effective_in(&skill, &repo, &fallback),
-        GitOperationWindow::parse("enabled 09:00-17:00").expect("a schedule"),
-        "the contract row was not read"
-    );
-    std::fs::write(skill.join(crate::config::LOCAL_FILE), table("disabled"))
-        .expect("a local override");
-    assert_eq!(
-        effective_in(&skill, &repo, &fallback),
+        effective_in(&repo, &fallback),
         GitOperationWindow::Disabled,
-        "the operator override did not win over the contract"
+        "a contract or machine row was read"
     );
     std::fs::create_dir_all(
         crate::skill::repository_config_path(&repo)
@@ -432,10 +430,64 @@ fn the_effective_schedule_layers_contract_local_and_repository() {
     )
     .expect("a repository override");
     assert_eq!(
-        effective_in(&skill, &repo, &fallback),
+        effective_in(&repo, &fallback),
         GitOperationWindow::parse("enabled 22:00-06:00 inverted").expect("a schedule"),
-        "the repository row did not win over the operator file"
+        "the repository row was not read"
     );
+}
+
+#[test]
+fn a_contract_or_machine_schedule_does_not_reach_a_repository_with_no_file_of_its_own() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let skill = root.path().join("skill");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    std::fs::create_dir_all(&repo).expect("a checkout");
+    std::fs::write(
+        skill.join(crate::skill::CONTRACT),
+        table("enabled 08:00-17:00"),
+    )
+    .expect("a contract");
+    std::fs::write(
+        skill.join(crate::config::LOCAL_FILE),
+        table("enabled 08:00-17:00"),
+    )
+    .expect("a machine override");
+    let window = effective_in(&repo, &GitOperationWindow::Disabled);
+    assert_eq!(window, GitOperationWindow::Disabled);
+    let context = context(root.path(), window);
+    installed(&context);
+    let mut run = sworn(&context.repo_dir);
+    at(10 * 60, || {
+        match crate::harness::gate(&context, &mut run, &commit(), Sensitivity::Routine) {
+            Decision::Allow(_) => {}
+            other => panic!("a machine-level schedule denied a commit elsewhere: {other:?}"),
+        }
+    });
+}
+
+#[test]
+fn a_repository_file_still_denies_a_commit_inside_its_inverted_range() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let skill = root.path().join("skill");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    let file = crate::skill::repository_config_path(&repo);
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the repository directory");
+    std::fs::write(&file, table("enabled mon-fri 08:00-17:00 inverted"))
+        .expect("a repository override");
+    let window = effective_in(&repo, &GitOperationWindow::Disabled);
+    let context = context(root.path(), window);
+    installed(&context);
+    let mut run = sworn(&context.repo_dir);
+    at(2 * 1440 + 10 * 60, || {
+        let Decision::Deny(refusal) =
+            crate::harness::gate(&context, &mut run, &commit(), Sensitivity::Routine)
+        else {
+            panic!("a Wednesday 10:00 commit passed an inverted mon-fri 08:00-17:00");
+        };
+        assert_eq!(refusal.code, "git-operation-window-denied");
+    });
 }
 
 #[test]
@@ -471,7 +523,7 @@ fn the_repository_schedule_applies_from_a_subdirectory_and_from_a_linked_worktre
     ] {
         std::fs::create_dir_all(&deep).expect("a subdirectory");
         assert_eq!(
-            effective_in(&skill, &deep, &fallback),
+            effective_in(&deep, &fallback),
             GitOperationWindow::Disabled,
             "{} did not read the repository's own schedule",
             deep.display()
@@ -482,16 +534,12 @@ fn the_repository_schedule_applies_from_a_subdirectory_and_from_a_linked_worktre
 #[test]
 fn a_present_but_unparsable_row_is_invalid_not_disabled() {
     let root = tempfile::tempdir().expect("a temporary root");
-    let skill = root.path().join("skill");
     let repo = root.path().join("repo");
-    std::fs::create_dir_all(&skill).expect("a skill root");
-    std::fs::write(
-        skill.join(crate::skill::CONTRACT),
-        table("enabled 09:00-09:00"),
-    )
-    .expect("a contract");
+    let file = crate::skill::repository_config_path(&repo);
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the repository directory");
+    std::fs::write(&file, table("enabled 09:00-09:00")).expect("a repository override");
     assert_eq!(
-        effective_in(&skill, &repo, &GitOperationWindow::Disabled),
+        effective_in(&repo, &GitOperationWindow::Disabled),
         GitOperationWindow::Invalid,
         "equal endpoints fell back to disabled instead of failing closed"
     );

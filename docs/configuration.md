@@ -41,7 +41,7 @@ estigia config set "Integration mode" trunk
 | Merge by | `agent`, or `person`. Follows `Claim workflow` until written: `agent` under `autonomous`, `person` under `assisted`. Who merges the reviewed pull request; `deliver` hands back unless it is `agent`. Fixed at `agent` under `autonomous`, and refused as `agent` under `assisted` (`assisted-merge-is-the-persons`), where the run holds no tracker claim to deliver under | Delivery | repository |
 | Irreversible commands | `none`, or commands separated by commas — the options page suggests `git push --force`, `gh release create`, `gh repo delete` and `npm publish`, one at a time; a longer list is typed | Gate limits | everywhere |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` | Gate limits | everywhere |
-| Git operation window | `disabled`, or `enabled [days] HH:MM-HH:MM` with an optional ` inverted`, such as `enabled 09:00-17:00`, `enabled 22:00-06:00 inverted`, `enabled mon-fri 08:00-17:00 inverted` or `enabled sat,sun 10:00-14:00` — one daily range in this machine's local time, optionally on a set of weekdays (`mon` to `sun`, ranges such as `mon-fri`, commas, case-insensitive; a range may wrap the week, as `fri-mon` does; a repeated or empty day is invalid); no day set means every day; a start later than the end crosses midnight and the part after midnight belongs to the day the range started on; equal endpoints are invalid; half-open `[start, end)`; `inverted` permits exactly the rest of the week | Gate limits | everywhere |
+| Git operation window | **Answered only by a repository's own file**, like `Unclaimed write policy`: `config set` requires `--repo`, a row for it in the contract, an agent file or this machine's `estigia.local.md` is not read, and a repository with no row of its own reads `disabled`. `disabled`, or `enabled [days] HH:MM-HH:MM` with an optional ` inverted`, such as `enabled 09:00-17:00`, `enabled 22:00-06:00 inverted`, `enabled mon-fri 08:00-17:00 inverted` or `enabled sat,sun 10:00-14:00` — one daily range in this machine's local time, optionally on a set of weekdays (`mon` to `sun`, ranges such as `mon-fri`, commas, case-insensitive; a range may wrap the week, as `fri-mon` does; a repeated or empty day is invalid); no day set means every day; a start later than the end crosses midnight and the part after midnight belongs to the day the range started on; equal endpoints are invalid; half-open `[start, end)`; `inverted` permits exactly the rest of the week | Gate limits | repository |
 | Decision mode | `ask` or `auto`. Default `ask`: a run may put a question to the person. `auto`: a question tool is refused, the run applies the recommended answer, and the turn ends by listing every question and the decision taken — see *Decision mode* below. | Gate limits | everywhere |
 | Evidence standard | `reading`, or `measuring` | Review & change | everywhere |
 | Publication lane | `on` or `off`. Default `on`: accepted verdicts are gated on the head's check runs. `off` skips the check-run read and records `classification: not-consulted`. A `cancelled` conclusion still refuses when the gate is on. `deliver` reads the pull request's whole rollup whatever the lane says, since a `not-consulted` lane is no evidence that CI does not run: red and running checks still stop or wait it, but on that lane an empty rollup passes at once instead of waiting for a check to appear. Only a lane that reads `disabled` or `never-ran` skips the rollup. | Review & change | everywhere |
@@ -263,7 +263,7 @@ rest of the crate asks, not another list:
   one agent to answer differently — `config set --agent <slug>` refuses a machine row the way it
   refuses a repository one, and says which command holds it instead.
 
-- **Repository** — `Unclaimed write policy`, `Unclaimed GitHub writes`, `Claim workflow` and the other rows of the *Delivery* group, each
+- **Repository** — `Unclaimed write policy`, `Unclaimed GitHub writes`, `Git operation window`, `Claim workflow` and the other rows of the *Delivery* group, each
   answered by a repository's own file and by nothing else. The contract carries no row for any of them,
   so two roots cannot diverge on them and
   `doctor` has nothing to compare. `Scope::Repository` is a fourth value rather than an `Everywhere` row because an
@@ -293,9 +293,9 @@ rest of the crate asks, not another list:
   written follows `Claim workflow`, which is why an installation carrying only `Claim workflow assisted`
   reads as the `assisted` preset rather than as `autonomous` rows under an assisted claim.
 
-Eleven rows reach `GateContext`, eight of them **Everywhere**: `Tracker`, `Repository host`, `Integration mode`,
-`Renewal window`, `Git operation window`, `Decision mode`, `Evidence standard` and `Irreversible commands`; the ninth to
-eleventh are `Unclaimed write policy`, `Unclaimed GitHub writes` and `Claim workflow`. Ten of those feed the gate's
+Eleven rows reach `GateContext`, seven of them **Everywhere**: `Tracker`, `Repository host`, `Integration mode`,
+`Renewal window`, `Decision mode`, `Evidence standard` and `Irreversible commands`; the eighth to
+eleventh are `Git operation window`, `Unclaimed write policy`, `Unclaimed GitHub writes` and `Claim workflow`. Ten of those feed the gate's
 own allow/deny decision — `Claim workflow` only for the pointer an `assisted` run left; `Repository host` is carried so MCP publication tools can bind to it
 rather than so `decide` branches on it, and `Claim workflow` is also read where the tool server
 runs a tool and where `estigia goal` counts work. Every other repository-scoped row, `Repair
