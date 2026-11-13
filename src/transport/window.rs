@@ -58,21 +58,9 @@ pub(crate) fn state(context: &Context) -> Mode {
         return mode;
     }
     let window = match aimed_at(context) {
-        Aimed::Caller => {
-            let fallback = context
-                .get("Git operation window")
-                .and_then(GitOperationWindow::parse)
-                .unwrap_or(GitOperationWindow::Disabled);
-            schedule::effective_in(&context.skill_dir, &context.repo_dir, &fallback)
-        }
+        Aimed::Caller => schedule::effective_in(&context.repo_dir, &GitOperationWindow::Disabled),
         Aimed::Checkout(checkout) => {
-            let fallback = crate::skill::installed_config_in_keeping_what_parses(
-                &context.skill_dir,
-                &checkout,
-            )
-            .0
-            .git_operation_window;
-            schedule::effective_in(&context.skill_dir, &checkout, &fallback)
+            schedule::effective_in(&checkout, &GitOperationWindow::Disabled)
         }
         Aimed::Unreadable => GitOperationWindow::Unreadable,
     };

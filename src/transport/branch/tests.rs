@@ -1333,28 +1333,23 @@ fn a_branch_another_checkout_holds_is_refused_by_name_before_git_is_asked() {
     );
 }
 
-fn schedule_context(skill: &std::path::Path, repo: &std::path::Path, value: &str) -> Context {
+fn schedule_context(skill: &std::path::Path, repo: &std::path::Path) -> Context {
     Context {
         skill_dir: skill.to_path_buf(),
         repo_dir: repo.to_path_buf(),
-        config: vec![(
-            "Git operation window".to_owned(),
-            value.to_owned(),
-            crate::transport::Source::Written,
-        )],
+        config: Vec::new(),
         repo: None,
     }
 }
 
-fn contract_with(skill: &std::path::Path, value: &str) {
-    std::fs::create_dir_all(skill).expect("a skill root");
+fn repository_with(repo: &std::path::Path, value: &str) {
+    let file = crate::skill::repository_config_path(repo);
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
     std::fs::write(
-        skill.join(crate::skill::CONTRACT),
-        format!(
-            "| Setting | Value here | Skill default |\n|---|---|---|\n| Git operation window | {value} | disabled |\n"
-        ),
+        &file,
+        format!("| Setting | Value |\n|---|---|\n| Git operation window | {value} |\n"),
     )
-    .expect("a contract");
+    .expect("the repository's rows");
 }
 
 fn shell(at: &std::path::Path, arguments: &[&str]) {
@@ -1443,8 +1438,8 @@ fn start_branch_inside_the_period_reaches_the_checks_after_the_schedule() {
     let repo = root.path().join("repo");
     std::fs::create_dir_all(&repo).expect("a repository directory");
     shell(&repo, &["init", "--quiet", "-b", "main"]);
-    contract_with(&skill, "enabled 09:00-17:00");
-    let context = schedule_context(&skill, &repo, "enabled 09:00-17:00");
+    repository_with(&repo, "enabled 09:00-17:00");
+    let context = schedule_context(&skill, &repo);
     let what = start_what("fix/12", None);
     let bin = crate::test_env::scripted_gh();
     denying_at(12 * 60, || {
@@ -1468,8 +1463,8 @@ fn start_branch_outside_the_period_reaches_the_checks_after_the_schedule() {
     let repo = root.path().join("repo");
     std::fs::create_dir_all(&repo).expect("a repository directory");
     shell(&repo, &["init", "--quiet", "-b", "main"]);
-    contract_with(&skill, "enabled 09:00-17:00");
-    let context = schedule_context(&skill, &repo, "enabled 09:00-17:00");
+    repository_with(&repo, "enabled 09:00-17:00");
+    let context = schedule_context(&skill, &repo);
     let what = start_what("fix/12", None);
     let bin = crate::test_env::scripted_gh();
     denying_at(20 * 60, || {

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::transport::store::{OutboxKind, Repo, Store, store_path};
-use crate::transport::{Context, Failure, Source, dispatch::dispatch, outbox};
+use crate::transport::{Context, Failure, dispatch::dispatch, outbox};
 
 const NOW: &str = "2026-01-01T20:00:00Z";
 
@@ -43,14 +43,13 @@ pub(super) fn rig() -> Rig {
         directory.path(),
         &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
     );
+    let file = crate::skill::repository_config_path(directory.path());
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+    crate::paths::replace_atomically(&file, &rows("enabled 09:00-17:00")).expect("the rows");
     let context = Context {
         skill_dir: directory.path().to_path_buf(),
         repo_dir: directory.path().to_path_buf(),
-        config: vec![(
-            "Git operation window".to_owned(),
-            "enabled 09:00-17:00".to_owned(),
-            Source::Written,
-        )],
+        config: Vec::default(),
         repo: Some("fixture/repo".to_owned()),
     };
     let script = crate::test_env::answers(&[
@@ -998,6 +997,9 @@ fn repository_rig() -> Rig {
     git(&repo, &["add", "one.txt"]);
     git(&repo, &["commit", "--quiet", "-m", "one"]);
     git(&repo, &["push", "--quiet", "origin", "main"]);
+    let file = crate::skill::repository_config_path(&repo);
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+    crate::paths::replace_atomically(&file, &rows("enabled 09:00-17:00")).expect("the rows");
     rig.context.repo_dir = repo;
     rig.script = crate::test_env::answers(&[crate::test_env::live_holder_issue(
         "claude-a",

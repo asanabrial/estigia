@@ -651,8 +651,7 @@ fn a_rendered_table_reads_back_identically() {
         models: ModelRouting::parse("developer=opus, judge=haiku").expect("a routing"),
         integration: Integration::Trunk,
         window: std::time::Duration::from_secs(30),
-        git_operation_window: GitOperationWindow::parse("enabled 22:00-06:00 inverted")
-            .expect("a schedule"),
+        git_operation_window: GitOperationWindow::Disabled,
         evidence: Evidence::Measuring,
         publication_lane: crate::config::PublicationLane::Off,
         issue_requirement: crate::config::IssueRequirement::Watch,
@@ -2396,10 +2395,10 @@ fn a_label_this_crate_forgives_is_one_the_transport_reads_too() {
         |rows: &str| format!("<!-- estigia:config:start -->\n{rows}<!-- estigia:config:end -->\n");
 
     for label in [
-        "Git operation window",
-        "Git operation window (mine)",
-        "`Git operation window`",
-        "Git  operation  window",
+        "Review budget",
+        "Review budget (mine)",
+        "`Review budget`",
+        "Review  budget",
     ] {
         let home = tempfile::tempdir().expect("a home");
         let skill = home.path().join("skill");
@@ -2408,7 +2407,7 @@ fn a_label_this_crate_forgives_is_one_the_transport_reads_too() {
         std::fs::write(
             skill.join(crate::config::LOCAL_FILE),
             marked(&format!(
-                "| Setting | Value |\n|---|---|\n| {label} | disabled |\n"
+                "| Setting | Value |\n|---|---|\n| {label} | 150000 |\n"
             )),
         )
         .expect("the operator's own file");
@@ -2417,16 +2416,16 @@ fn a_label_this_crate_forgives_is_one_the_transport_reads_too() {
         // recognises would satisfy the assertion below by measuring nothing.
         let told = crate::skill::installed_config_in_keeping_what_parses(&skill, home.path()).0;
         assert_eq!(
-            super::Setting::GitOperationWindow.value_of(&told),
-            "disabled",
-            "{label} is not read as a git operation window here, so this case poses nothing"
+            super::Setting::ReviewBudget.value_of(&told),
+            "150000",
+            "{label} is not read as a review budget here, so this case poses nothing"
         );
 
         let live = crate::transport::Context::live(skill.clone(), home.path().to_path_buf(), None);
         assert_eq!(
-            live.get("git operation window"),
-            Some("disabled"),
-            "{label}: the gate reports a git operation window the transport will never read"
+            live.get("review budget"),
+            Some("150000"),
+            "{label}: the gate reports a review budget the transport will never read"
         );
     }
 }

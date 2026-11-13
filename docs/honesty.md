@@ -2809,8 +2809,8 @@ pointer that leaves it names the document it points at.
     against a fake `gh` by `src/transport/stages/tests.rs`.
 - **No other setting is read by nobody.**
   An operator sets thirty-two rows and `config list` reports all of them. Measured: `context.get` is
-  called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
-  `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. The four rows that
+  called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location` and `Review budget` (for the review forecast line). The gate reads
+  `Irreversible commands`, and `Git operation window` is read from the repository's own file by the transport and the gate alike, never through `context.get`; and the payload's prose names the rest of the acted-on rows. The four rows that
   had exactly one answer (`Delivery route`, `Review delegation`, `Merge strategy`, `Review protocol`) were
   retired and hard-coded, and the guard fails on any row the gate, the transport and the prose all leave
   unread (`every_setting_is_read_by_the_gate_the_transport_or_the_prose`). `Delivery authorisation` and

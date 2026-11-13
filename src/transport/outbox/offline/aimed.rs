@@ -29,11 +29,8 @@ fn created_at(rig: &Rig, clock: fn() -> Option<u16>) -> Result<serde_json::Value
 
 fn aimed_at(rig: &mut Rig, window: &str) {
     rig.context.repo = Some(DEST.to_owned());
-    rig.context.config = vec![(
-        "Git operation window".to_owned(),
-        window.to_owned(),
-        Source::Written,
-    )];
+    let file = crate::skill::repository_config_path(&rig.context.repo_dir);
+    crate::paths::replace_atomically(&file, &rows(window)).expect("the caller's rows");
 }
 
 #[test]

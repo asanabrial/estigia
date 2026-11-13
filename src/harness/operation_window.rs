@@ -242,32 +242,17 @@ pub fn permits_now(window: &GitOperationWindow, now: Option<u16>) -> bool {
     }
 }
 
-/// The effective schedule for this checkout: the repository's row over the
-/// contract, or `fallback` when no document says.
+/// The effective schedule for this checkout: what the repository's own file
+/// says, or `fallback` when it has no such row.
 ///
 /// A row that is present and does not parse is [`GitOperationWindow::Invalid`],
 /// never the fallback: an unknown schedule denies rather than disabling
-/// itself. Absent rows keep the fallback, so a repository that never answered
-/// reads exactly as it did before the row existed.
-pub fn effective_in(
-    skill_root: &Path,
-    repo_dir: &Path,
-    fallback: &GitOperationWindow,
-) -> GitOperationWindow {
+/// itself. No contract or machine document is consulted, and `fallback` is the
+/// repository layer's own answer, [`GitOperationWindow::Disabled`] when it has
+/// none.
+pub fn effective_in(repo_dir: &Path, fallback: &GitOperationWindow) -> GitOperationWindow {
     let mut raw: Option<String> = None;
-    let contract = skill_root.join(crate::skill::CONTRACT);
-    let documents = [
-        std::fs::read_to_string(contract).ok(),
-        crate::skill::local_overrides(skill_root)
-            .ok()
-            .flatten()
-            .map(|(_, text)| text),
-        crate::skill::repository_rows(repo_dir)
-            .ok()
-            .flatten()
-            .map(|(_, text)| text),
-    ];
-    for text in documents.into_iter().flatten() {
+    if let Some((_, text)) = crate::skill::repository_rows(repo_dir).ok().flatten() {
         for (label, value) in crate::config::table_rows(&text) {
             if Setting::from_label(&label) == Some(Setting::GitOperationWindow) {
                 raw = Some(value);

@@ -15,15 +15,23 @@ fn at(minutes: u16, body: impl FnOnce()) {
     crate::harness::operation_window::with_now_override(Some(clock), body);
 }
 
-fn context(value: &str) -> Context {
+fn checkout(value: &str) -> tempfile::TempDir {
+    let directory = tempfile::tempdir().expect("a checkout");
+    let file = crate::skill::repository_config_path(directory.path());
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+    std::fs::write(
+        &file,
+        format!("| Setting | Value |\n|---|---|\n| Git operation window | {value} |\n"),
+    )
+    .expect("the rows");
+    directory
+}
+
+fn context(checkout: &tempfile::TempDir, config: Vec<(String, String, Source)>) -> Context {
     Context {
         skill_dir: std::path::PathBuf::from("/nonexistent-skill"),
-        repo_dir: std::path::PathBuf::from("/nonexistent-repo"),
-        config: vec![(
-            "Git operation window".to_owned(),
-            value.to_owned(),
-            Source::Written,
-        )],
+        repo_dir: checkout.path().to_path_buf(),
+        config,
         repo: None,
     }
 }
@@ -51,33 +59,48 @@ fn a_repository_with_no_readable_rows_is_denied_without_claiming_a_range() {
 
 #[test]
 fn a_disabled_window_is_open_at_any_hour() {
+    let checkout = checkout("disabled");
     at(23 * 60, || {
-        assert!(matches!(state(&context("disabled")), Mode::Open));
+        assert!(matches!(state(&context(&checkout, Vec::new())), Mode::Open));
     });
 }
 
 #[test]
 fn an_enabled_window_is_closed_outside_its_range_and_open_inside() {
+    let checkout = checkout("enabled 09:00-17:00");
+    let context = context(&checkout, Vec::new());
     at(20 * 60, || {
-        assert!(matches!(
-            state(&context("enabled 09:00-17:00")),
-            Mode::Closed(_)
-        ));
+        assert!(matches!(state(&context), Mode::Closed(_)));
     });
     at(12 * 60, || {
-        assert!(matches!(state(&context("enabled 09:00-17:00")), Mode::Open));
+        assert!(matches!(state(&context), Mode::Open));
+    });
+}
+
+#[test]
+fn a_table_row_in_the_context_does_not_set_the_window() {
+    let checkout = checkout("disabled");
+    let context = context(
+        &checkout,
+        vec![(
+            "Git operation window".to_owned(),
+            "enabled 09:00-17:00".to_owned(),
+            Source::Written,
+        )],
+    );
+    at(20 * 60, || {
+        assert!(matches!(state(&context), Mode::Open));
     });
 }
 
 #[test]
 fn a_scoped_mode_answers_instead_of_the_clock_and_is_gone_afterwards() {
+    let checkout = checkout("enabled 09:00-17:00");
+    let context = context(&checkout, Vec::new());
     at(20 * 60, || {
-        let inside = with_mode(Mode::Open, || state(&context("enabled 09:00-17:00")));
+        let inside = with_mode(Mode::Open, || state(&context));
         assert!(matches!(inside, Mode::Open));
-        assert!(matches!(
-            state(&context("enabled 09:00-17:00")),
-            Mode::Closed(_)
-        ));
+        assert!(matches!(state(&context), Mode::Closed(_)));
     });
 }
 

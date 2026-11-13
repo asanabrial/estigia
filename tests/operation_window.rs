@@ -23,8 +23,16 @@ fn the_window_is_a_single_disabled_by_default_row() {
     );
     assert_eq!(
         Setting::GitOperationWindow.scope(),
-        estigia::config::Scope::Everywhere,
-        "a per-agent schedule would differ by reader while the gate is one"
+        estigia::config::Scope::Repository,
+        "a machine-wide schedule would bind a repository that never asked for one"
+    );
+    assert!(
+        estigia::config::REPOSITORY_SETTINGS.contains(&Setting::GitOperationWindow),
+        "the repository's own file does not answer the schedule"
+    );
+    assert!(
+        !estigia::config::EVERYWHERE_SETTINGS.contains(&Setting::GitOperationWindow),
+        "the schedule is still answered everywhere"
     );
 }
 

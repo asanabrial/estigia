@@ -304,13 +304,13 @@ pub const AGENT_SETTINGS: &[Setting] = &[
 /// The settings that are the same whichever agent asks, in table order.
 ///
 /// Not every row here is read the same way. Most are read by an agent, out
-/// of the prose, or by the transport — but ten rows reach the gate's
-/// `GateContext`, the seven here and three of the repository-only rows, and nine
+/// of the prose, or by the transport — but eleven rows reach the gate's
+/// `GateContext`, the seven here and four of the repository-only rows, and ten
 /// of them feed its own allow/deny decision: `Repository host` is carried so
 /// MCP publication tools can bind to it rather than so `decide` branches on
 /// it, and `Workflow` decides only for the pointer an `assisted` run left.
 /// Every write through a repository's own `estigia.local.md` — whichever row
-/// it names, including one of those nine — is a `Boundary` and re-reads the
+/// it names, including one of those ten — is a `Boundary` and re-reads the
 /// tracker rather than riding the renewal window like an ordinary write.
 /// [`Setting::decides_what_the_gate_enforces`] names them as an exhaustive
 /// `match` a new row here has to answer rather than default past;
@@ -327,7 +327,6 @@ pub const EVERYWHERE_SETTINGS: &[Setting] = &[
     // agent it was a row no decision would ever consult.
     Setting::Boundaries,
     Setting::Window,
-    Setting::GitOperationWindow,
     Setting::DecisionMode,
     Setting::Evidence,
     Setting::PublicationLane,
@@ -355,6 +354,7 @@ pub const REPOSITORY_SETTINGS: &[Setting] = &[
     Setting::ExternalReviewers,
     Setting::CorrectionsAfterReady,
     Setting::MergeBy,
+    Setting::GitOperationWindow,
 ];
 
 /// Everything the options page offers, in table order.
@@ -460,7 +460,6 @@ impl Setting {
             Self::ChangeSize
             | Self::CorrectionsPerLineage
             | Self::Window
-            | Self::GitOperationWindow
             | Self::DecisionMode
             | Self::Worktree
             | Self::Tracker
@@ -486,7 +485,8 @@ impl Setting {
             | Self::ReadyBy
             | Self::ExternalReviewers
             | Self::CorrectionsAfterReady
-            | Self::MergeBy => Scope::Repository,
+            | Self::MergeBy
+            | Self::GitOperationWindow => Scope::Repository,
         }
     }
 
@@ -1652,7 +1652,7 @@ pub(crate) fn retired_setting_report(label: &str, value: &str) -> Option<Refusal
 /// The settings the transport itself reads out of the table.
 ///
 /// Five: the transport calls `context.get` for `worktree location`,
-/// `Review budget`, `Git operation window`, `Tracker`
+/// `Review budget`, `Tracker`
 /// (`assist` compares a Linear key's team with the one the row names) and
 /// `Model routing` (`launch_review_input` reads the `reviewer` target's model),
 /// and for nothing else. `Publication lane` is read via `config_exact` (prefix-safe
@@ -1662,8 +1662,8 @@ pub(crate) fn retired_setting_report(label: &str, value: &str) -> Option<Refusal
 /// retired, `Merge strategy` when the row itself was retired and delivery's
 /// merge commit was hard-coded, and `Repair ceiling` when `repair_rounds`
 /// stopped reading a setting for the one-correction count. `Git operation
-/// window` is the fallback `claim` and `publish_review` layer the
-/// repository's own schedule over. `review_tier`
+/// window` left when it became a repository row: the transport reads the
+/// repository's own file for it, not `context.get`. `review_tier`
 /// (`src/transport/tier.rs`) used to read another, `blind judges`, to reduce
 /// its panel-size answer — a porting error now reversed: how many judges a change gets is a contract question now,
 /// answered in `skill/SKILL.md` and `skill/policies/blind-judges.md`, never
@@ -1676,7 +1676,6 @@ pub const READ_BY_THE_TRANSPORT: &[Setting] = &[
     Setting::Worktree,
     Setting::ReviewBudget,
     Setting::CorrectionsPerLineage,
-    Setting::GitOperationWindow,
     Setting::Tracker,
     Setting::Models,
     Setting::Notifications,

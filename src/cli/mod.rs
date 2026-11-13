@@ -5241,11 +5241,9 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
         unclaimed_github_writes: installed.unclaimed_github_writes,
         decision_mode: installed.decision_mode,
         workflow: effective_workflow(unreadable, installed.workflow),
-        // The repository's own schedule over the contract, failing closed on
-        // an enabled value that does not parse. Read off `installed` so the
-        // crossing in `tests/honesty.rs` sees which row this field answers.
+        // Read off `installed` so the crossing in `tests/honesty.rs` sees which
+        // row this field answers.
         operation_window: harness::operation_window::effective_in(
-            &skill_root,
             &repo_dir,
             &installed.git_operation_window,
         ),

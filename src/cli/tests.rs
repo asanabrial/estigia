@@ -3178,7 +3178,6 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
     for setting in [
         Setting::Integration,
         Setting::Window,
-        Setting::GitOperationWindow,
         Setting::Tracker,
         Setting::RepositoryHost,
         Setting::Boundaries,
@@ -3199,6 +3198,7 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
     assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::IssueRequirement));
     assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::UnclaimedGithubWrites));
     assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::Workflow));
+    assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::GitOperationWindow));
 
     let source = crate::source_text::code_of(include_str!("mod.rs"));
     let (start, _) = source
@@ -8962,6 +8962,48 @@ fn unclaimed_github_writes_are_written_to_the_repository_file_and_nowhere_else()
     )
     .expect_err("a per-agent value was accepted");
     assert_eq!(refusal.code, "setting-not-per-agent");
+}
+
+#[test]
+fn the_git_operation_window_is_written_to_the_repository_file_and_nowhere_else() {
+    let rig = authorisation_rig(&Config::default());
+    let refusal = super::config_set(
+        "Git operation window",
+        "enabled 08:00-17:00",
+        None,
+        false,
+        false,
+        &rig.options,
+        false,
+    )
+    .expect_err("a machine-wide value was accepted");
+    assert_eq!(refusal.code, "setting-only-the-repositorys");
+    let rendered = serde_json::to_string(&refusal).expect("a refusal serialises");
+    assert!(
+        rendered.contains("--repo"),
+        "the refusal does not name `--repo`: {rendered}"
+    );
+
+    super::repository_set(
+        Setting::GitOperationWindow,
+        "enabled mon-fri 08:00-17:00 inverted",
+        rig.repo.path(),
+        &rig.options,
+    )
+    .expect("the repository may answer its own row");
+    let written = std::fs::read_to_string(crate::skill::repository_config_path(rig.repo.path()))
+        .expect("the file was created");
+    assert!(
+        written.contains("| Git operation window | enabled mon-fri 08:00-17:00 inverted |"),
+        "{written}"
+    );
+    let layered = crate::skill::layer_repository(&Config::default(), rig.repo.path())
+        .expect("the file reads back");
+    assert_eq!(
+        layered.git_operation_window,
+        crate::config::GitOperationWindow::parse("enabled mon-fri 08:00-17:00 inverted")
+            .expect("a schedule")
+    );
 }
 
 #[test]
