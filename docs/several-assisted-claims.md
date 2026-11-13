@@ -42,6 +42,12 @@ with `-` straight after the path (`-c`, a second `-C`) disqualifies it too. So `
 is decided under neither. On Windows the path is spelled with forward slashes, since a backslash outside
 quotes is an escape to the shell that runs the line.
 
+A call that selects no child but names one child's worktree in an absolute path, such as `cd <worktree>
+&& git commit …`, is still decided by the session's run. When that answer is an `issue-required` ask, its
+way in names the child, its worktree and the two shapes that select it, in place of the advice to take
+an `assist` claim the session already has through that child. The decision does not change. The match is
+lexical, and a line naming two children's worktrees keeps the session's own message.
+
 `SessionEnd` forgets the children with the session's own pointer, and `SessionStart` lists each one.
 
 ## Merging the base

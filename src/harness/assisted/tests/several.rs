@@ -403,3 +403,31 @@ fn another_dialect_never_selects_a_child() {
     );
     assert!(allowed_under(&fan.context).is_empty(), "{answer}");
 }
+
+#[test]
+fn a_held_chain_into_one_child_names_that_child_and_the_shape_it_takes() {
+    let fan = fan();
+    let a = spelled(&fan.a);
+    let command = format!("cd \"{a}\" && git commit -qam x");
+    let answer = bash(&fan.context, &command);
+    assert_eq!(verdict(&answer), "ask", "{answer}");
+    let text = reason(&answer);
+    assert!(text.contains(&fan.a.run_id), "{text}");
+    assert!(
+        text.contains(&format!("git -C {}", worktree(&fan.a).display())),
+        "{text}"
+    );
+
+    let policy = without_children(&fan, |context| bash(context, &command));
+    assert!(!reason(&policy).contains("git -C"), "{policy}");
+}
+
+#[test]
+fn a_held_chain_naming_no_child_keeps_the_parents_message() {
+    let fan = fan();
+    let outside = fan.repo.path().join("elsewhere");
+    let command = format!("cd {} && git commit -m x", outside.display());
+    let answer = bash(&fan.context, &command);
+    let policy = without_children(&fan, |context| bash(context, &command));
+    assert_eq!(reason(&answer), reason(&policy), "{answer}");
+}

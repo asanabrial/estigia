@@ -1691,6 +1691,20 @@ pub fn run_as(
                     run_id,
                 )
             };
+            let decision = if session_run.issue.is_none() && session_run.run_id == run.run_id {
+                let literal = match observed.command.as_ref().map(|command| &command.literal) {
+                    Some(crate::outcome::Established::Known(text)) => Some(text.as_str()),
+                    _ => None,
+                };
+                super::assisted::naming_the_child(
+                    decision,
+                    &context.state_root,
+                    &session_run.run_id,
+                    literal,
+                )
+            } else {
+                decision
+            };
             let decision = if can_ask(dialect, host) {
                 decision
             } else {
