@@ -354,11 +354,11 @@ impl DecisionMode {
 /// Repository-only: it is read from the repository's own file and nowhere else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IssueRequirement {
-    /// The default: an unclaimed write the gate can place is put to the host, except inside an
-    /// isolated checkout that a run pointer's `worktree` covers; one it cannot place runs, and the
-    /// host is asked on the next call only if the checkout changed. A stored `ask` reads as this.
+    /// An unclaimed write the gate can place is put to the host, except inside an isolated
+    /// checkout that a run pointer's `worktree` covers; one it cannot place runs, and the host is
+    /// asked on the next call only if the checkout changed. A stored `ask` reads as this.
     Watch,
-    /// Unclaimed writes are allowed.
+    /// The default: unclaimed writes are allowed.
     Off,
     /// Unclaimed writes are refused.
     Required,
@@ -1182,7 +1182,7 @@ impl Default for Config {
             // exists to let an operator move it, not to move it for them.
             publication_lane: PublicationLane::On,
             decision_mode: DecisionMode::Ask,
-            issue_requirement: IssueRequirement::Watch,
+            issue_requirement: IssueRequirement::Off,
             unclaimed_github_writes: UnclaimedGithubWrites::Held,
             workflow: Workflow::Autonomous,
             state_names: Vec::new(),
