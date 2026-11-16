@@ -2097,7 +2097,10 @@ pointer that leaves it names the document it points at.
   `estigia stand-down` (`stand-down-is-for-a-person`, any host, sub-agent or orchestrator), a file-tool,
   patch-body or shell write naming the stand-down record under `~/.estigia` (also via the control directory
   and the bare name), deleting it, and a line carrying `--lift` (it cannot be told from a declaration that
-  only quotes the flag). The person lifts with `estigia stand-down --lift --reason <why>` in their own
+  only quotes the flag). A word after `estigia` that carries a shell expansion or a glob (`$`, a
+  backtick, `{`, `*`, `?`, `[`) is refused as either command, because the gate cannot read which one
+  runs and never evaluates the expansion; a quoted span is one word of data and not an invocation.
+  The person lifts with `estigia stand-down --lift --reason <why>` in their own
   shell, or `!` in Claude Code. **Open by declaration:** a spelling that never writes `estigia stand-down`
   as two words (an alias, wrapper script, `cargo run -- stand-down`, a renamed binary), a write the shell
   reader does not recognise (an interpreter's `open(...)`), a glob or directory target that never spells the

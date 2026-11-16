@@ -3126,6 +3126,23 @@ fn a_refused_person_only_call_is_in_the_ledger_on_the_hook_road() {
 }
 
 #[test]
+fn the_hook_denies_a_stand_down_whose_verb_is_a_shell_expansion() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    let cwd = home.path().display().to_string().replace('\\', "\\\\");
+    let payload = format!(
+        "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"Bash\",\
+         \"tool_input\":{{\"command\":\"estigia $(printf stand-down) --reason x\"}}}}"
+    );
+    let (out, error, _) = run(home.path(), &["hook", "pre-tool-use"], &payload);
+    assert!(
+        out.contains("\"permissionDecision\":\"deny\"")
+            && out.contains("stand-down-is-for-a-person"),
+        "an expanded verb reached the stand-down: {out}{error}"
+    );
+}
+
+#[test]
 fn a_refused_person_only_call_is_in_the_ledger_on_the_gate_road() {
     let home = tempfile::tempdir().expect("a temporary home");
     std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
