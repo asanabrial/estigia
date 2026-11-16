@@ -767,8 +767,8 @@ pub enum GitOperationWindow {
     /// operation: an unknown schedule is not clearance.
     Invalid,
     /// The repository a write is aimed at has no checkout on this machine whose
-    /// rows can be read. Denies every protected operation: a schedule nobody
-    /// can read is not clearance either.
+    /// rows can be read, or its rows are there and cannot be read. Denies every
+    /// protected operation: a schedule nobody can read is not clearance either.
     Unreadable,
 }
 

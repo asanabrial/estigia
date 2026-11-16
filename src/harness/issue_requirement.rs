@@ -16,13 +16,22 @@ pub const CODE: &str = "issue-required";
 /// requiring one without them would be a lock nobody can open. Whether the checkout a write lands
 /// in can name an issue is a separate question, asked where the write is placed and again for the
 /// checkout a call runs in.
+///
+/// A repository file that is there and cannot be read answers [`IssueRequirement::Required`]
+/// whatever the layers underneath it say: the rows it carries are unknown, and an unknown result
+/// is not clearance. The same preconditions still hold, so a checkout with no tracker to claim
+/// against is not turned into a lock. The refusal that stops the write carries the read failure
+/// rather than the policy, so the operator is shown the file to repair.
 pub fn in_force(context: &GateContext) -> Option<IssueRequirement> {
-    (context.issue_requirement != IssueRequirement::Off
-        && context
-            .tracker
-            .adjudicates_unclaimed_writes(context.workflow)
-        && context.skill_root.join(crate::skill::CONTRACT).is_file())
-    .then_some(context.issue_requirement)
+    let available = context
+        .tracker
+        .adjudicates_unclaimed_writes(context.workflow)
+        && context.skill_root.join(crate::skill::CONTRACT).is_file();
+    if context.repository_config_unreadable.is_some() {
+        return available.then_some(IssueRequirement::Required);
+    }
+    (context.issue_requirement != IssueRequirement::Off && available)
+        .then_some(context.issue_requirement)
 }
 
 /// Whether the configured tracker can name an issue for the checkout rooted at `root`.
@@ -288,6 +297,9 @@ fn held(
     scope: &Scope,
     reach: Reach,
 ) -> Option<Decision> {
+    if let Some(refusal) = &context.repository_config_unreadable {
+        return Some(Decision::Deny(Box::new(refusal.clone())));
+    }
     let assisted = context.workflow == Some(crate::config::Workflow::Assisted);
     if let (IssueRequirement::Watch, Scope::Repository(root)) = (requirement, scope) {
         let _ = std::fs::remove_file(watched_path(context, root));
