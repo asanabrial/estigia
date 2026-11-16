@@ -33,6 +33,7 @@ fn context(root: &Path, window: GitOperationWindow) -> GateContext {
         boundaries: Vec::new(),
         operation_window: window,
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -543,6 +544,32 @@ fn a_present_but_unparsable_row_is_invalid_not_disabled() {
         GitOperationWindow::Invalid,
         "equal endpoints fell back to disabled instead of failing closed"
     );
+}
+
+#[test]
+fn a_repository_file_that_cannot_be_read_is_unreadable_not_disabled() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    let file = crate::skill::repository_config_path(&repo);
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the repository directory");
+    std::fs::write(&file, [0xff, 0xfe]).expect("an unreadable repository override");
+    let window = effective_in(&repo, &GitOperationWindow::Disabled);
+    assert_eq!(
+        window,
+        GitOperationWindow::Unreadable,
+        "an unreadable repository file fell back to the fallback"
+    );
+    let context = context(root.path(), window);
+    installed(&context);
+    let mut run = sworn(&context.repo_dir);
+    at(12 * 60, || {
+        let Decision::Deny(refusal) =
+            crate::harness::gate(&context, &mut run, &commit(), Sensitivity::Routine)
+        else {
+            panic!("an unreadable repository file permitted a commit");
+        };
+        assert_eq!(refusal.code, "git-operation-window-denied");
+    });
 }
 
 #[test]

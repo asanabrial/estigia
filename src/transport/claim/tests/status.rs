@@ -2124,6 +2124,7 @@ fn gate_over(context: &Context, state_root: &std::path::Path) -> crate::harness:
         state_root: state_root.to_path_buf(),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),

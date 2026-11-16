@@ -3353,7 +3353,11 @@ pointer that leaves it names the document it points at.
     (that would stop every tracker write in every repository whenever one unrelated row was malformed), so a
     broken contract in a repository whose row says `assisted` leaves tracker writes open until it reads again
     (`an_unreadable_contract_names_no_workflow_at_all`,
-    `an_assisted_only_tool_is_refused_unless_the_row_says_assisted`).
+    `an_assisted_only_tool_is_refused_unless_the_row_says_assisted`). This is the contract chain — the
+    versioned block, the operator's `estigia.local.md` and an agent's own file — and not the repository's own
+    file: one that is there and cannot be read reads as the denying answers (`required` for `Unclaimed write
+    policy`, `unreadable` for `Git operation window`), so the gate refuses what those rows could have refused,
+    and the refusal that stops an unclaimed write names the file and the read error.
   - A test classifies every tool in the server's table as tracker writer, assisted-only, local writer or
     read, so a new tool fails until placed; a writer a person runs by hand through `gh` is not a tool call.
 - **The screen's door and event loop are unmeasured.** `the_screens_install_proceeds_on_a_source_build`

@@ -5221,9 +5221,12 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     // reason to have no context to decide in. See `harness::control_surface`.
     let skill_root = harness::control_surface();
     // Defaults rather than refusing, with this repository's rows layered on top.
-    let (installed, complaint) =
-        skill::installed_config_in_keeping_what_parses(&skill_root, &repo_dir);
+    // Told apart: a contract that did not parse leaves nothing standing, while a
+    // repository file that did not read keeps the rows underneath it.
+    let (installed, complaint, repository_unreadable) =
+        skill::installed_config_in_keeping_what_parses_apart(&skill_root, &repo_dir);
     let unreadable = complaint.is_some();
+    let repository_unknown = repository_unreadable.is_some();
     let tracker = installed.tracker;
     let repository_host = installed.repository_host;
     let boundaries = installed.boundaries;
@@ -5237,10 +5240,19 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
 
     Ok(harness::GateContext {
         integration: installed.integration,
-        issue_requirement: installed.issue_requirement,
-        unclaimed_github_writes: installed.unclaimed_github_writes,
+        issue_requirement: if repository_unknown {
+            crate::config::IssueRequirement::Required
+        } else {
+            installed.issue_requirement
+        },
+        repository_config_unreadable: repository_unreadable,
+        unclaimed_github_writes: if repository_unknown {
+            crate::config::UnclaimedGithubWrites::Held
+        } else {
+            installed.unclaimed_github_writes
+        },
         decision_mode: installed.decision_mode,
-        workflow: effective_workflow(unreadable, installed.workflow),
+        workflow: effective_workflow(unreadable || repository_unknown, installed.workflow),
         // Read off `installed` so the crossing in `tests/honesty.rs` sees which
         // row this field answers.
         operation_window: harness::operation_window::effective_in(

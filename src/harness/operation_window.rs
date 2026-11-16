@@ -184,10 +184,12 @@ pub fn denial(window: &GitOperationWindow, now: Option<u16>) -> Refusal {
             "a usable value, or `disabled`",
         ),
         (GitOperationWindow::Unreadable, _) => (
-            "the repository this write is aimed at has no checkout on this machine whose git \
-             operation window can be read, so no minute can be shown inside it"
+            "the repository this write is aimed at has no checkout on this machine whose rows \
+             this process can read, or the file carrying them cannot be read, so no minute can \
+             be shown inside its git operation window"
                 .to_owned(),
-            "a checkout of that repository carrying its own rows, or `disabled` written in them",
+            "a readable checkout of that repository carrying its own rows, or `disabled` written \
+             in them",
         ),
         (_, None) => (
             "this machine could not say what time it is, so no minute can be shown inside the \
@@ -247,12 +249,17 @@ pub fn permits_now(window: &GitOperationWindow, now: Option<u16>) -> bool {
 ///
 /// A row that is present and does not parse is [`GitOperationWindow::Invalid`],
 /// never the fallback: an unknown schedule denies rather than disabling
-/// itself. No contract or machine document is consulted, and `fallback` is the
-/// repository layer's own answer, [`GitOperationWindow::Disabled`] when it has
-/// none.
+/// itself. A file that is present and cannot be read is
+/// [`GitOperationWindow::Unreadable`], for the same reason. No contract or
+/// machine document is consulted, and `fallback` is the repository layer's own
+/// answer, [`GitOperationWindow::Disabled`] when it has none.
 pub fn effective_in(repo_dir: &Path, fallback: &GitOperationWindow) -> GitOperationWindow {
     let mut raw: Option<String> = None;
-    if let Some((_, text)) = crate::skill::repository_rows(repo_dir).ok().flatten() {
+    let rows = match crate::skill::repository_rows(repo_dir) {
+        Ok(rows) => rows,
+        Err(_) => return GitOperationWindow::Unreadable,
+    };
+    if let Some((_, text)) = rows {
         for (label, value) in crate::config::table_rows(&text) {
             if Setting::from_label(&label) == Some(Setting::GitOperationWindow) {
                 raw = Some(value);
