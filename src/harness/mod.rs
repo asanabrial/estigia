@@ -1007,58 +1007,84 @@ const IRREVERSIBLE: &[&str] = &[
     "gh release edit",
 ];
 
-/// Whether `fragment` appears in `text` as a whole command rather than as the
-/// beginning of a longer one: the fragment ends where the command does or at a
-/// space. A subcommand wearing the same prefix (`git merge-base`) is a
-/// different command.
-fn contains_whole_command(text: &str, fragment: &str) -> bool {
-    let mut from = 0;
-    while let Some(at) = text[from..].find(fragment) {
-        let start = from + at;
-        let end = start + fragment.len();
-        // A boundary at the end of the text, or followed by a separator. Not by
-        // `-`, which is how `merge-base` and `merge-tree` are spelled.
-        if text[end..]
-            .chars()
-            .next()
-            .is_none_or(|next| next.is_whitespace())
-        {
-            return true;
+/// What can end a command when it follows one directly: a list or pipe operator,
+/// the boundary of a subshell or a command substitution, or a newline, which
+/// [`char::is_whitespace`] already covers.
+const AFTER_A_COMMAND: &[char] = &[';', '&', '|', '(', ')', '`'];
+
+/// Whether a command ends at `at` in `text`: at the end of the text, at
+/// whitespace, or at one of [`AFTER_A_COMMAND`]. An operator inside a quoted span
+/// is data and a `-` is never a boundary, which is how `merge-base` and
+/// `merge-tree` stay different commands.
+fn ends_a_command(text: &str, at: usize) -> bool {
+    text[at..].chars().next().is_none_or(|next| {
+        next.is_whitespace() || (AFTER_A_COMMAND.contains(&next) && !inside_quotes(text, at))
+    })
+}
+
+/// Whether the text at `at` sits inside a `'` or `"` span. A backtick is code,
+/// not a quote: what it holds runs.
+fn inside_quotes(text: &str, at: usize) -> bool {
+    let mut quote = None;
+    let mut escaped = false;
+    for byte in text[..at].bytes() {
+        if escaped {
+            escaped = false;
+            continue;
         }
-        from = start + 1;
+        match (quote, byte) {
+            (Some(b'\''), b'\'') => quote = None,
+            (Some(b'\''), _) => {}
+            (_, b'\\') => escaped = true,
+            (None, b'\'') => quote = Some(b'\''),
+            (None, b'"') => quote = Some(b'"'),
+            (Some(b'"'), b'"') => quote = None,
+            _ => {}
+        }
     }
-    false
+    quote.is_some()
+}
+
+/// The text after each occurrence of `fragment` that ends where the command
+/// does. A subcommand wearing the same prefix (`git merge-base`) is a different
+/// command, and so is a word the fragment is only the beginning of.
+fn whole_command_tails<'a>(text: &'a str, fragment: &str) -> impl Iterator<Item = &'a str> {
+    let mut from = 0;
+    std::iter::from_fn(move || {
+        while let Some(at) = text[from..].find(fragment) {
+            let start = from + at;
+            let end = start + fragment.len();
+            from = start + 1;
+            if ends_a_command(text, end) {
+                return Some(&text[end..]);
+            }
+        }
+        None
+    })
+}
+
+fn contains_whole_command(text: &str, fragment: &str) -> bool {
+    whole_command_tails(text, fragment).next().is_some()
 }
 
 fn git_tag_needs_boundary(normalized: &str) -> bool {
-    let fragment = "git tag";
-    let mut from = 0;
-    while let Some(at) = normalized[from..].find(fragment) {
-        let start = from + at;
-        let end = start + fragment.len();
-        if normalized[end..]
-            .chars()
-            .next()
-            .is_none_or(|next| next.is_whitespace())
-        {
-            let rest = &normalized[end..];
-            let seg_end = rest
-                .find([';', '&', '|', '(', ')', '\n'])
-                .unwrap_or(rest.len());
-            let mut words = rest[..seg_end].split_whitespace();
-            let Some(first) = words.next() else {
-                from = start + 1;
-                continue;
-            };
-            let first = first.trim_matches(|next| next == '\'' || next == '"');
-            let lists = first == "-l" || first == "--list";
-            if !lists {
-                return true;
-            }
+    whole_command_tails(normalized, "git tag").any(|tail| {
+        let mut chars = tail.chars();
+        if !chars.next().is_some_and(char::is_whitespace) {
+            return false;
         }
-        from = start + 1;
-    }
-    false
+        let rest = chars.as_str().trim_start();
+        let first = rest
+            .split(|c: char| c.is_whitespace() || AFTER_A_COMMAND.contains(&c))
+            .next()
+            .unwrap_or_default();
+        if first.is_empty() {
+            // No word names a flag: either the listing ends at `git tag`
+            // itself, or the tag name is a command substitution.
+            return rest.starts_with('`');
+        }
+        !matches!(first.trim_matches(['\'', '"']), "-l" | "--list")
+    })
 }
 
 pub(crate) fn delivery_pr_unidentified(reason: Option<String>) -> Refusal {
@@ -1765,7 +1791,7 @@ fn names_fragment(code: &str, fragment: &str) -> bool {
         let rest = &code[at + fragment.len()..];
         let subcommand = rest
             .trim_start()
-            .split(|c: char| c.is_whitespace() || ";|&)".contains(c))
+            .split(|c: char| c.is_whitespace() || AFTER_A_COMMAND.contains(&c))
             .next();
         let reads =
             rest.starts_with(char::is_whitespace) && matches!(subcommand, Some("list" | "show"));

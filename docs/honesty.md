@@ -2077,11 +2077,15 @@ pointer that leaves it names the document it points at.
   not read are a backslash-escaped quote, a word spelled through a variable, `$(…)`, an alias or script, and
   non-plain content (`git "pu\sh"`).
 
-  **What exact-literal matching leaves** (traced by reading on 2026-09-07, not run): *not matched at all* are a
-  backslash line continuation, a `.exe` suffix and a full path carrying a global option, `git update-ref
-  refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh repo sync`, `git branch
-  <name>`, `git checkout HEAD -- <path>`, `git checkout -f` and `git filter-repo`; *matched but never read as
-  a delivery* are `gh api` against the merge, release and tag-ref endpoints and the pull spelling.
+  **What exact-literal matching leaves** (traced by reading on 2026-09-07, re-read on 2026-11-16, not run):
+  *not matched at all* are a backslash line continuation, a `.exe` suffix and a full path carrying a global
+  option, `git update-ref refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh
+  repo sync`, `git branch <name>`, `git checkout HEAD -- <path>`, `git checkout -f` and `git filter-repo`; a
+  quoted argument of a command that writes is read as code, because `data_view` blanks quoted spans only for
+  commands that read and that same breadth is what refuses a stand-down named in a commit message, so `git
+  commit -m "git merge origin"` is a merge while a `;`, `&`, `|`, `)` or a backtick inside the quotes does
+  not end it — `git commit -m "git merge;"` is not; *matched but never read as a delivery* are `gh api`
+  against the merge, release and tag-ref endpoints and the pull spelling.
 
   **The gate also measures its own disarmament.** `estigia stand-down`, `guard --uninstall`, `uninstall` and
   writes to the files those decisions are read from (its state, the contract, each agent's settings entry)

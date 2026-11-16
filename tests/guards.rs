@@ -712,6 +712,10 @@ const AFFIRMED: &[(&str, u64)] = &[
     // Re-read on 2026-09-13: `git tag -l`, `git tag --list` and bare `git tag`
     // list and left the list's meaning — every other `git tag` spelling,
     // including `git tag -d`, stays gated. Still too-tight, still true.
+    //
+    // Re-read on 2026-11-16: a command now also ends at `;`, `&`, `|`, `)` or a
+    // backtick, so `git push;echo` is the push it is. The claim — these
+    // spellings are gated, and they are not the only spellings — is unchanged.
     ("irreversible-shell", 3274127317113882223),
     // `repository-shell` — the git commands that write. Same shape and same
     // limits as `write-tools`, and it exists so that composing `git worktree
