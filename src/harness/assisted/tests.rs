@@ -395,7 +395,6 @@ fn an_admitted_boundary_does_not_carry_a_remote_write_past_the_claim() {
     for line in [
         "git pull; gh pr review 3 --approve",
         "git pull && gh pr comment 3 --body x",
-        "git merge; gh pr review 3 --approve",
         "gh pr review 3 --approve; git pull",
     ] {
         let mut rig = new_rig();
@@ -421,6 +420,10 @@ fn the_specific_assisted_refusals_answer_before_the_remote_write() {
     for (line, code) in [
         (
             "gh pr merge 3; gh pr review 3 --approve",
+            "assisted-does-not-deliver",
+        ),
+        (
+            "git merge; gh pr review 3 --approve",
             "assisted-does-not-deliver",
         ),
         (
