@@ -141,9 +141,10 @@ or broke a rule it can be told. That includes:
 - `checks-receipt-missing` and `checks-failed`: the base declares checks and the issue's local ledger holds no
   passing `checks-receipt` for the receipt's digest and the declared commands. The ledger was read
   and the rule says no; a receipt for other bytes is a receipt that was never there for these.
-  `checks-declaration-malformed` (a `[[check]]` table that could not run as written) and
-  `checks-base-unknown` (`run_checks` with no published base to bind to) are `refused` for the same
-  reason;
+  `checks-declaration-malformed` (a `[[check]]` table that could not run as written),
+  `checks-base-unknown` (`run_checks` with no published base to bind to) and
+  `checks-worktree-unknown` (a pointer with no checkout, whose repository checkout reproduces another
+  target than the published one) are `refused` for the same reason;
 - `merge-without-ci-release`: the local store holds no `ci-release` for the exact receipt being
   merged, so no verdict was checked for those bytes;
 - `inspect-parent-missing`: the publication named for an inspection was published with no recorded

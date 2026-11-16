@@ -219,6 +219,7 @@ const REFUSED: &[&str] = &[
     "checks-declaration-malformed",
     "checks-failed",
     "checks-receipt-missing",
+    "checks-worktree-unknown",
     "closing-keyword-live",
     "comment-body-invalid",
     "comment-marker-incomplete",

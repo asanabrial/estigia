@@ -3105,6 +3105,50 @@ fn isolating_a_run_records_the_checkout_it_was_adjudicated_from() {
 }
 
 #[test]
+fn a_claim_that_renumbers_a_provisional_issue_records_the_answer_not_the_argument() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, &root.path().join("repo"));
+    let claim = super::tools::find("claim").expect("the operation is still reachable");
+    let worktree = root.path().join("trees").join("issue-424");
+    let run_id = "opencode-abcd1234";
+
+    let mut run = crate::harness::session::Run::new(run_id.to_owned());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+
+    super::apply_effect(
+        claim,
+        &serde_json::json!({
+            "issue": crate::transport::outbox::PROVISIONAL_BASE + 27,
+            "run_id": run_id,
+            "transition_to": "in-progress",
+        }),
+        Some(&serde_json::json!({
+            "ok": true,
+            "issue": 424,
+            "start_branch": {
+                "ok": true,
+                "issue": 424,
+                "worktree": worktree.display().to_string(),
+            },
+        })),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, run_id);
+    assert_eq!(
+        after.issue,
+        Some(crate::identity::Identity::Number(424)),
+        "the pointer kept the provisional number the call was made with"
+    );
+    assert_eq!(
+        after.worktree.as_ref(),
+        Some(&worktree),
+        "the pointer lost the checkout the claim started"
+    );
+}
+
+#[test]
 fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {

@@ -173,7 +173,10 @@ one with no `[[check]]` table declares none. The declaration is read from the **
 
 **The tool.** `run_checks` (`issue`, `run_id`, optional `wait_seconds`) verifies the live `review` claim,
 derives the clean target of the run's checkout against the base its published receipt names, and refuses
-a dirty tree. It never runs a check inside the call: it starts the hidden `estigia __check-job <dir>`
+a dirty tree. A pointer that names no checkout runs in this repository's own checkout only while that
+checkout reproduces the published target; when it reproduces another one the call refuses
+`checks-worktree-unknown`, so a check is never recorded against bytes the publication did not name.
+It never runs a check inside the call: it starts the hidden `estigia __check-job <dir>`
 detached (the same lock, liveness and detaching `__review-job` uses, and the same
 `review-job-detach-refused` where the platform refuses), then waits up to `wait_seconds`, never more than
 50, so no call outlasts the 60 seconds some hosts allow. In order:
