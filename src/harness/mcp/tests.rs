@@ -9927,6 +9927,25 @@ fn a_compact_answer_omits_build_and_a_plain_one_keeps_it() {
 }
 
 #[test]
+fn a_notice_is_owed_to_the_model_and_never_reaches_the_body() {
+    let answered = super::Answered {
+        body: Some(json!({"ok": false, "close_incomplete": {"step": "evidence"}})),
+        text: r#"{"ok":false,"close_incomplete":{"step":"evidence"}}"#.to_owned(),
+        notices: vec!["estigia: this run's checkout `x` still holds 1 uncommitted file".to_owned()],
+    };
+    let envelope = answered.envelope();
+    let text = envelope["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(
+        text.ends_with("estigia: this run's checkout `x` still holds 1 uncommitted file"),
+        "the notice was dropped from the text the model reads: {text}"
+    );
+    assert!(
+        text.starts_with(r#"{"ok":false,"close_incomplete":{"step":"evidence"}}"#),
+        "the notice was folded into the body: {text}"
+    );
+}
+
+#[test]
 fn a_compact_review_status_names_the_receipt_once() {
     let receipt = json!({"epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"});
     let status = json!({

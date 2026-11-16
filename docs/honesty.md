@@ -4089,7 +4089,10 @@ real `git` repository with a bare origin; the happy path, each hand-back, a resu
 and a merge whose answer was lost). What it does not measure:
 
 - **The live tools and the gate are not driven end to end.** One pipe test drives the real MCP server up
-  to the receipt hand-back; nothing runs the whole tail against the real store and gate.
+  to the receipt hand-back, and
+  `a_release_that_stopped_part_way_is_not_read_as_delivered_beside_a_notice` drives `Live::tool` and a
+  real store across the close alone, against a scripted `gh`; nothing runs the whole tail against the
+  real store and gate.
 - **The required set is the pull request's whole rollup.** The host's required names and the repository's
   own lanes are not resolved: a failing check nobody requires hands back `ci-red`, and a required check
   that never reported is not noticed while the rest are green.

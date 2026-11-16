@@ -612,7 +612,8 @@ second call resumes from the store without repeating a landed write. `spend` is 
 `appendix_file` is the agent's text appended to the generated evidence, required where no CI can
 run. The steps and what each hands back are in *CI, merge and delivery* in delivery.md; a stop after
 the merge landed carries `merged` and, from the release, `close_incomplete`, which is repeated as
-*Releasing an issue* says.
+*Releasing an issue* says. A release answer that does not read as a success — its `ok` is not
+`true` — stops it there with `delivered: false`, and the issue is not closed.
 
 `until` stops the tail early for a person who merges and checks neither `Merge by` nor `Delivery
 authorisation`: `verdict` records the verdict and answers `reached: verdict`; `ci` also releases CI
