@@ -862,7 +862,7 @@ fn a_publication_refused_while_closed_says_what_is_queued_and_what_runs_it() {
 }
 
 #[test]
-fn a_denial_with_nothing_queued_keeps_its_old_text() {
+fn a_denial_with_nothing_queued_names_local_work() {
     let window = crate::config::GitOperationWindow::parse("enabled 09:00-17:00").expect("parses");
     let failure = crate::harness::operation_window::with_now_override(Some(night), || {
         crate::transport::branch::schedule_denial(&window)
@@ -880,6 +880,9 @@ fn a_denial_with_nothing_queued_keeps_its_old_text() {
             .contains("queued"),
         "{envelope}"
     );
+    let action = envelope["action"].as_str().unwrap_or_default();
+    assert!(action.contains("uncommitted"), "{action}");
+    assert!(!action.contains("disabled"), "{action}");
 }
 
 #[test]

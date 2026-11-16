@@ -152,6 +152,38 @@ pub(crate) fn rekey_files(store: &Store, state_root: &Path) -> Result<usize, Fai
         }
         changed += 1;
     }
+    for run in crate::harness::session::parked_holdings(state_root) {
+        for parked in &run.parked {
+            let Some(provisional) = parked
+                .issue
+                .number()
+                .filter(|number| is_provisional(*number))
+            else {
+                continue;
+            };
+            let real = resolve_in(store, provisional)?;
+            if real == provisional {
+                continue;
+            }
+            if let Some(worktree) = parked.worktree.as_deref() {
+                changed += usize::from(rekey_ownership(worktree, provisional, real)?);
+            }
+            let (_, landed) = crate::harness::session::updated(state_root, &run.run_id, |held| {
+                for entry in &mut held.parked {
+                    if entry.issue.number() == Some(provisional) {
+                        entry.issue = crate::identity::Identity::Number(real);
+                    }
+                }
+            });
+            if !landed {
+                return Err(Failure::Write(format!(
+                    "the pointer of {} still parks issue {provisional} after its rekey to {real}",
+                    run.run_id
+                )));
+            }
+            changed += 1;
+        }
+    }
     Ok(changed)
 }
 

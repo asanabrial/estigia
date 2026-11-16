@@ -2747,6 +2747,14 @@ pointer that leaves it names the document it points at.
   real number writes that number and the checkout `claim` started into the run pointer, read from the
   transport's answer rather than from the provisional argument the call was made with. A provisional
   issue opens its ledger without any GitHub call, and an unallocated or unrecorded number is refused.
+- **A parked claim is the pointer's note, and nothing renews it.** `claim` with `park: true` keeps
+  several claims under one run id, so the store's adjudication is untouched. Only the active one is
+  covered and verified. Nothing checks that a parked issue's work is built, only that the window
+  was closed when it was parked. A parked claim's horizon passes unrenewed, and once it has lapsed
+  another run may `reclaim` it without `force`. `SessionEnd` forgets the pointer and the parked list
+  with it, as it does a single claim, so after that a parked issue is found again only from the
+  store. The tests are `park_tests` in `src/harness/mcp/tests/`, plus the prune and rekey cases that
+  name a parked claim.
 - **The transition record is the store's own, and it is not a log of everything that moved a state.** Schema 16
   adds `transitions` (`at`, `run_id`, `from_state`, `to_state` per issue), append-only like `entries`, and
   `Ledger::set_state` writes the row in the same transaction as the state, so a history that cannot be written

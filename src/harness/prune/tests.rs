@@ -487,6 +487,29 @@ fn ownership_reads_nonended_sessions_and_refuses_corrupt_pointers_and_store() {
     assert!(ownership(&bad_pointers).is_err());
 }
 
+#[test]
+fn a_parked_claim_keeps_its_worktree_owned() {
+    let root = tempfile::tempdir().unwrap();
+    let pointers = root.path().join("runs");
+    let checkout = root.path().join("checkout");
+    let parked = root.path().join("parked");
+    let mut run = crate::harness::session::Run::new("claude-parked".to_owned());
+    run.repo_dir = Some(checkout);
+    run.parked = vec![crate::harness::session::ParkedClaim {
+        issue: crate::identity::Identity::Number(12),
+        state: None,
+        worktree: Some(parked.clone()),
+        operation_id: None,
+        release_id: None,
+        review_transaction: None,
+        reviewed_head: None,
+        horizon: None,
+    }];
+    crate::harness::session::store(&pointers, &run).unwrap();
+    let owned = ownership(&pointers).unwrap();
+    assert!(owned.contains(&parked), "{owned:?}");
+}
+
 fn observed(kind: Kind, name: &str, sweepable: Option<&str>) -> Observed {
     Observed {
         kind,

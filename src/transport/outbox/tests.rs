@@ -75,6 +75,32 @@ fn a_session_pointer_naming_the_provisional_number_is_rewritten_once() {
 }
 
 #[test]
+fn a_parked_claim_naming_the_provisional_number_is_rewritten_once() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let root = directory.path().join("runs");
+    let (store, provisional) = rekeyed(directory.path());
+    let mut run = session::Run::new("claude-aaaa".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(77));
+    run.parked = vec![session::ParkedClaim {
+        issue: crate::identity::Identity::Number(provisional),
+        state: None,
+        worktree: None,
+        operation_id: None,
+        release_id: None,
+        review_transaction: None,
+        reviewed_head: None,
+        horizon: None,
+    }];
+    session::store(&root, &run).expect("the pointer writes");
+
+    assert_eq!(rekey_files(&store, &root).expect("rewrites"), 1);
+    let after = session::load(&root, "claude-aaaa");
+    assert!(after.holds_parked(55), "{:?}", after.parked);
+    assert_eq!(after.issue_number(), Some(77));
+    assert_eq!(rekey_files(&store, &root).expect("rewrites"), 0);
+}
+
+#[test]
 fn a_pointer_whose_provisional_number_has_no_real_one_yet_is_left_alone() {
     let directory = tempfile::tempdir().expect("a directory");
     let root = directory.path().join("runs");
