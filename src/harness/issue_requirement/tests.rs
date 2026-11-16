@@ -6,7 +6,7 @@ use crate::config::{Config, IssueRequirement};
 use crate::harness::hook;
 use crate::harness::hook::{Dialect, Event, Input};
 use crate::harness::{Aside, Decision, GateContext, guard, session};
-use crate::outcome::Observed;
+use crate::outcome::{NoCommandReason, Observed, Refusal, Resolution};
 
 fn context(root: &Path, repo: &Path, requirement: IssueRequirement) -> GateContext {
     let skill_root = root.join("skill");
@@ -540,6 +540,40 @@ fn a_github_write_under_a_read_only_tracker_is_asked_and_never_watched() {
     let context = under_linear(context);
     let decision = on_a_shell_line(&context, "gh pr merge 3 --merge");
     assert!(matches!(&decision, Decision::Ask(_)), "{decision:?}");
+}
+
+#[test]
+fn an_unreadable_repository_file_requires_a_tracker_that_can_claim() {
+    let (_repo, _root, mut context) = rig(IssueRequirement::Off);
+    context.repository_config_unreadable = Some(Refusal::not_started(
+        "config-local-unreadable",
+        "the repository file: stream did not contain valid UTF-8",
+        Resolution::no_command(NoCommandReason::OperatorKnowledge, "that file readable"),
+    ));
+    assert_eq!(
+        in_force(&context),
+        Some(IssueRequirement::Required),
+        "an unreadable repository file did not read as required"
+    );
+
+    let mut unadjudicated = context.clone();
+    unadjudicated.tracker = crate::config::Tracker::Linear {
+        team: "T".to_owned(),
+    };
+    unadjudicated.workflow = Some(crate::config::Workflow::Autonomous);
+    assert_eq!(
+        in_force(&unadjudicated),
+        None,
+        "a tracker that cannot adjudicate was turned into a lock"
+    );
+
+    std::fs::remove_file(context.skill_root.join(crate::skill::CONTRACT))
+        .expect("the contract is removed");
+    assert_eq!(
+        in_force(&context),
+        None,
+        "a checkout with no installed contract was turned into a lock"
+    );
 }
 
 #[test]
