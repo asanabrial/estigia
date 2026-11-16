@@ -2138,6 +2138,12 @@ pub(crate) fn apply_effect(
     let issue = arguments
         .get("issue")
         .and_then(|value| serde_json::from_value::<crate::identity::Identity>(value.clone()).ok());
+    // A claim made against a provisional number answers with the real one the
+    // tracker issued when the write flushed; the argument still carries the
+    // provisional. What the answer says is what the run now holds.
+    let answered_issue = body
+        .and_then(|body| body.get("issue"))
+        .and_then(|value| serde_json::from_value::<crate::identity::Identity>(value.clone()).ok());
     // Kept as an `Option` beside the defaulted `state` below, because
     // `release_ci` carries neither. Writing the default down for it would stamp
     // a pointer with a state nobody named.
@@ -2174,6 +2180,13 @@ pub(crate) fn apply_effect(
         .and_then(|body| body.get("worktree"))
         .and_then(Value::as_str)
         .map(std::path::PathBuf::from);
+    // The checkout `claim` with `branch` started is nested under its
+    // `start_branch` step, not at the answer's top level.
+    let claim_worktree = body
+        .and_then(|body| body.get("start_branch"))
+        .and_then(|step| step.get("worktree"))
+        .and_then(Value::as_str)
+        .map(std::path::PathBuf::from);
     let branch = arguments
         .get("branch")
         .and_then(Value::as_str)
@@ -2194,9 +2207,12 @@ pub(crate) fn apply_effect(
     {
         // A renewal is a repair, so it trusts the pointer's own issue over
         // the call's arguments; a claim is what says what the run is about
-        // *now*, so it trusts the arguments first.
+        // *now*, so it trusts the answer first, then the arguments.
         match effect {
-            PointerEffect::Swear => issue.clone().or_else(|| run.issue.clone()),
+            PointerEffect::Swear => answered_issue
+                .clone()
+                .or_else(|| issue.clone())
+                .or_else(|| run.issue.clone()),
             _ => run.issue.clone().or_else(|| issue.clone()),
         }
         .and_then(|target| {
@@ -2225,7 +2241,7 @@ pub(crate) fn apply_effect(
         match effect {
             PointerEffect::None | PointerEffect::Forget => {}
             PointerEffect::Swear => {
-                run.issue = issue.clone();
+                run.issue = answered_issue.clone().or_else(|| issue.clone());
                 run.state = Some(state.clone());
                 run.repo_dir = Some(repo_dir.clone());
                 run.assisted = false;
@@ -2233,8 +2249,8 @@ pub(crate) fn apply_effect(
                 // `get_or_insert_with`, never assignment: a pointer that
                 // already names a checkout is describing something this call
                 // has no business replacing.
-                if let Some(discovered) = &discovered_worktree {
-                    run.worktree.get_or_insert_with(|| discovered.clone());
+                if let Some(recorded) = claim_worktree.as_ref().or(discovered_worktree.as_ref()) {
+                    run.worktree.get_or_insert_with(|| recorded.clone());
                 }
                 if let Some(receipt) = &claimed_receipt {
                     run.review_transaction = Some(receipt.clone());

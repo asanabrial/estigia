@@ -2736,8 +2736,10 @@ pointer that leaves it names the document it points at.
   numbers start at `PROVISIONAL_BASE` from one counter in `store_meta`, so two machines can allocate the
   same number and file the same issue twice. `Store::rekey` moves a provisional issue's rows in one
   transaction and `outbox::rekey_files` follows with the run pointers and the ownership record; a branch or
-  worktree directory named with the provisional number keeps that name. A provisional issue opens its
-  ledger without any GitHub call, and an unallocated or unrecorded number is refused.
+  worktree directory named with the provisional number keeps that name. A claim whose flush issues the
+  real number writes that number and the checkout `claim` started into the run pointer, read from the
+  transport's answer rather than from the provisional argument the call was made with. A provisional
+  issue opens its ledger without any GitHub call, and an unallocated or unrecorded number is refused.
 - **The transition record is the store's own, and it is not a log of everything that moved a state.** Schema 16
   adds `transitions` (`at`, `run_id`, `from_state`, `to_state` per issue), append-only like `entries`, and
   `Ledger::set_state` writes the row in the same transaction as the state, so a history that cannot be written
@@ -4014,6 +4016,11 @@ citation added in a form the test does not parse is prose held by review alone.
     it, on the reading that some hosts give up near 60 seconds; no host was run to confirm.
   - **A timed-out job records nothing**, so a check that always overruns 30 minutes never yields a
     receipt, and the runner's cause of death is not read back (`checks-runner-lost`).
+  - **Which checkout ran them is not in the key.** A receipt names the target digest, not the directory
+    that produced it: a worktree the pointer names is trusted, and one that reproduces another target
+    records under that other digest, which the verdict gate then refuses as a missing receipt. Only the
+    fallback to this repository's own checkout is refused before anything runs
+    (`checks-worktree-unknown`).
   - **The detaching launch is not crossed for this job.** The `__check-job` pipe test, Unix only, runs the
     subcommand directly; the launch that detaches it is the one `__review-job` uses, crossed by
     `tests/pipe/review_job.rs` for that subcommand alone, and nothing exercises the Windows flags.
