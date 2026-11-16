@@ -392,6 +392,12 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "Path to a file stating why a live claim is being taken. Required with `force`.",
             ),
+            Argument::optional(
+                "park",
+                "boolean",
+                "Park the held claim and claim this one: while the git window is closed, or to take a \
+                 parked issue back.",
+            ),
         ],
         effect: PointerEffect::Swear,
         writes: true,
@@ -2251,6 +2257,7 @@ pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("assist", "several"),
     ("create", "repo"),
     ("claim", "state"),
+    ("claim", "park"),
     ("collect_review_input", "launch"),
     ("collect_review_input", "checks"),
     ("review_read", "parent_head"),

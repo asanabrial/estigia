@@ -99,7 +99,9 @@ worktree, and queues the native link of the branch to its issue for when the win
 `natively_linked: false` and `link_outcome: deferred`. Ordinary pushes are also evaluated in the pre-push
 guard whether or not the checkout is claimed. The schedule never grants: inside the period every
 claim, state, review, and irreversible-boundary check still applies. Worktree creation on an existing
-branch, file edits, tests, and builds are unaffected. An enabled value that does not parse, or a
+branch, file edits, tests, and builds are unaffected, and the refusal says so: its remedy for an
+enabled window is to keep working and leave the work uncommitted in the worktree until the period
+it names, and it never offers `disabled`, which stays the person's own choice. An enabled value that does not parse, or a
 clock that cannot be read, denies the protected operations rather than falling back to unrestricted.
 A repository file that exists and cannot be read is the same class: it answers the window as
 `unreadable` and denies the protected operations, and its other rows read as the values that deny
