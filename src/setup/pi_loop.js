@@ -317,6 +317,7 @@ const consider = async (pi, ctx, session) => {
     }
   }
   let dischargeable = 0;
+  let next = null;
   let issue = null;
   if (read.said?.live === true) {
     const named = read.said?.issue;
@@ -337,6 +338,10 @@ const consider = async (pi, ctx, session) => {
       return;
     }
     const standing = read.said?.standing;
+    if (standing === "assisted") {
+      stop(ctx, session, PREAMBLE.assisted);
+      return;
+    }
     if (standing !== "stopped" && standing !== "nothing-sworn") {
       stop(ctx, session, `Estigia could not confirm this run's claim (${standing ?? "no standing"})`);
       return;
@@ -370,10 +375,11 @@ const consider = async (pi, ctx, session) => {
       return;
     }
     dischargeable = discharged;
+    if (typeof read.said?.next === "string" && read.said.next !== "") next = read.said.next;
   }
   if (!running(loops.get(session)) || stopRequested.has(session)) return;
   disarm(session);
-  enqueue(pi, goal, dischargeable, issue);
+  enqueue(pi, next === null ? goal : { ...goal, prompt: objective(`dev ${next}`) }, dischargeable, issue);
   reacted(goal, "enqueued");
 };
 

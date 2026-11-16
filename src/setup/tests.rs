@@ -10578,6 +10578,14 @@ cases.counts_unknown = await scenario("counts_unknown", {
   start: started,
   turns: [empty({ claimable: 0 })],
 });
+cases.assisted = await scenario("assisted", {
+  start: started,
+  turns: [empty({ standing: "assisted" })],
+});
+cases.named = await scenario("named", {
+  start: started,
+  turns: [empty({ standing: "nothing-sworn", claimable: 1, dischargeable: 0, next: "ABC-2" })],
+});
 cases.cap = await scenario("cap", {
   start: started,
   turns: [completedAt(1), completedAt(2)],
@@ -10906,6 +10914,26 @@ fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
             .as_str()
             .is_some_and(|reason| reason.contains("did not report how much work")),
         "a queue count that could not be read was not recorded as such: {unknown_counts}"
+    );
+
+    let named = &cases["named"];
+    assert!(
+        strings(&named["texts"])
+            .last()
+            .is_some_and(|text| text.contains("/flow dev ABC-2")),
+        "the loop did not hand over the queued issue: {named}"
+    );
+
+    let assisted = &cases["assisted"];
+    assert_eq!(
+        assisted["prompts"], 1,
+        "an assisted loop continued: {assisted}"
+    );
+    assert!(
+        assisted["stopped"]["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("the person names the next issue")),
+        "an assisted stop was not told why: {assisted}"
     );
 
     let cap = &cases["cap"];
@@ -19168,6 +19196,24 @@ const out = {};
   use({ answer: LIVE });
   const s = await scenario();
   await start(s, "x");
+  use({ answer: { run_id: "pi-abc", live: false, standing: "assisted" } });
+  await turn(s);
+  out.assisted = snapshot(s);
+}
+
+{
+  use({ answer: LIVE });
+  const s = await scenario();
+  await start(s, "x");
+  use({ answer: { ...DEAD, claimable: 1, next: "ABC-2" } });
+  await turn(s);
+  out.named = snapshot(s);
+}
+
+{
+  use({ answer: LIVE });
+  const s = await scenario();
+  await start(s, "x");
   use({ answer: { ...DEAD, dischargeable: 1 } });
   await turn(s);
   out.dischargeable = snapshot(s);
@@ -19481,6 +19527,26 @@ fn the_pi_loop_continues_while_estigia_says_there_is_work() {
     assert_eq!(
         dead["afterStop"]["asked"], dead["asked"],
         "a stopped loop asked again on the next turn: {dead}"
+    );
+
+    let named = &cases["named"];
+    assert!(
+        strings(&named["texts"])
+            .last()
+            .is_some_and(|text| text.contains("/flow dev ABC-2")),
+        "the loop did not hand over the queued issue: {named}"
+    );
+
+    let assisted = &cases["assisted"];
+    assert_eq!(
+        assisted["prompts"], 1,
+        "an assisted loop continued: {assisted}"
+    );
+    assert!(
+        strings(&assisted["said"])
+            .iter()
+            .any(|line| line.contains("the person names the next issue")),
+        "{assisted}"
     );
 
     assert_eq!(cases["claimable"]["prompts"], 2, "{}", cases["claimable"]);

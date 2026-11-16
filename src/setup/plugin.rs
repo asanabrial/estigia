@@ -2172,6 +2172,7 @@ const consider = async (ctx, sessionID, lapsed) => {{
     }}
   }}
   let dischargeable = 0;
+  let next = null;
   let issue = null;
   if (read.said?.live === true) {{
     const named = read.said?.issue;
@@ -2192,6 +2193,10 @@ const consider = async (ctx, sessionID, lapsed) => {{
       return;
     }}
     const standing = read.said?.standing;
+    if (standing === "assisted") {{
+      await stop(ctx, sessionID, PREAMBLE.assisted);
+      return;
+    }}
     if (standing !== "stopped" && standing !== "nothing-sworn") {{
       await stop(
         ctx,
@@ -2233,6 +2238,7 @@ const consider = async (ctx, sessionID, lapsed) => {{
       return;
     }}
     dischargeable = discharged;
+    if (typeof read.said?.next === "string" && read.said.next !== "") next = read.said.next;
   }}
   if (!running(await ctx.storage.get(KEY + sessionID)) || stopRequested.has(sessionID)) return;
   const awaited = [...sighted(ctx).children]
@@ -2247,7 +2253,13 @@ const consider = async (ctx, sessionID, lapsed) => {{
     return;
   }}
   disarm(sessionID);
-  await enqueue(ctx, goal, sessionID, dischargeable, issue);
+  await enqueue(
+    ctx,
+    next === null ? goal : {{ ...goal, prompt: objective(`dev ${{next}}`) }},
+    sessionID,
+    dischargeable,
+    issue,
+  );
   await reacted(ctx, sessionID, "enqueued");
 }};
 
