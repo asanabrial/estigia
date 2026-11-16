@@ -110,6 +110,10 @@ fn a_commit_outside_the_period_is_denied_before_the_renewal_window() {
             panic!("a commit at 20:00 rode the renewal window past 09:00-17:00");
         };
         assert_eq!(refusal.code, "git-operation-window-denied");
+        let text = refusal.to_string();
+        assert!(text.contains("uncommitted"), "{text}");
+        assert!(text.contains("inside 09:00-17:00 local"), "{text}");
+        assert!(!text.contains("disabled"), "{text}");
     });
 }
 

@@ -243,6 +243,11 @@ fn while_closed_a_git_push_is_refused() {
         matches!(&refused, Err(Failure::Stop(payload)) if payload["reason"] == "outbox-bypass"),
         "{refused:?}"
     );
+    let Err(Failure::Stop(payload)) = &refused else {
+        unreachable!()
+    };
+    let action = payload["action"].as_str().unwrap_or_default();
+    assert!(!action.contains("disabled"), "{action}");
 }
 
 #[test]

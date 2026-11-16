@@ -174,14 +174,20 @@ pub fn permitted_period(window: &GitOperationWindow) -> Option<String> {
     ))
 }
 
+/// What a run does while the window is closed: it keeps working, and nothing
+/// waits on the window but the commit and what follows it.
+pub const LOCAL_WORK: &str = "Local work goes on while the window is closed: edits, builds and \
+                              tests are not denied, and the work stays uncommitted in the \
+                              worktree until the window opens";
+
 /// The denial for a protected operation outside the permitted period.
 pub fn denial(window: &GitOperationWindow, now: Option<u16>) -> Refusal {
-    let (code_detail, remedy) = match (window, now) {
+    let (code_detail, remedy): (String, String) = match (window, now) {
         (GitOperationWindow::Invalid, _) => (
             "the repository's git operation window is enabled and does not parse, so no minute \
              can be shown inside it"
                 .to_owned(),
-            "a usable value, or `disabled`",
+            "a usable value, or `disabled`".to_owned(),
         ),
         (GitOperationWindow::Unreadable, _) => (
             "the repository this write is aimed at has no checkout on this machine whose rows \
@@ -189,13 +195,14 @@ pub fn denial(window: &GitOperationWindow, now: Option<u16>) -> Refusal {
              be shown inside its git operation window"
                 .to_owned(),
             "a readable checkout of that repository carrying its own rows, or `disabled` written \
-             in them",
+             in them"
+                .to_owned(),
         ),
         (_, None) => (
             "this machine could not say what time it is, so no minute can be shown inside the \
              repository's git operation window"
                 .to_owned(),
-            "a working system clock",
+            "a working system clock".to_owned(),
         ),
         (window @ GitOperationWindow::Enabled { .. }, Some(_)) => (
             format!(
@@ -203,11 +210,14 @@ pub fn denial(window: &GitOperationWindow, now: Option<u16>) -> Refusal {
                  creation, and writes to GitHub may run only {}",
                 permitted_period(window).unwrap_or_default()
             ),
-            "that range to arrive, or `disabled`",
+            format!(
+                "{LOCAL_WORK} ({})",
+                permitted_period(window).unwrap_or_default()
+            ),
         ),
         (GitOperationWindow::Disabled, _) => (
             "the repository's git operation window is disabled".to_owned(),
-            "nothing: this denial should not have been raised",
+            "nothing: this denial should not have been raised".to_owned(),
         ),
     };
     Refusal::not_started(
