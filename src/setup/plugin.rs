@@ -2192,6 +2192,10 @@ const consider = async (ctx, sessionID, lapsed) => {{
       return;
     }}
     const standing = read.said?.standing;
+    if (standing === "assisted") {{
+      await stop(ctx, sessionID, PREAMBLE.assisted);
+      return;
+    }}
     if (standing !== "stopped" && standing !== "nothing-sworn") {{
       await stop(
         ctx,

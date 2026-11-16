@@ -337,6 +337,10 @@ const consider = async (pi, ctx, session) => {
       return;
     }
     const standing = read.said?.standing;
+    if (standing === "assisted") {
+      stop(ctx, session, PREAMBLE.assisted);
+      return;
+    }
     if (standing !== "stopped" && standing !== "nothing-sworn") {
       stop(ctx, session, `Estigia could not confirm this run's claim (${standing ?? "no standing"})`);
       return;

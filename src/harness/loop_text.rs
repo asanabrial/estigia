@@ -100,6 +100,13 @@ const CAP: &str = ", or when the completion cap is reached";
 
 const CLOSE: &str = "; there is no completion string to write.";
 
+const ASSISTED: &str = "assisted: the person names the next issue, and this loop cannot select one";
+
+/// Why a loop with nothing held ends where the repository is assisted.
+pub fn assisted() -> &'static str {
+    ASSISTED
+}
+
 const HELD: &str = "estigia: issue #{issue} is still held by {run_id} \u{2014} the claim is still open, \
 so the turn continues. Finish the work the claim covers before stopping.";
 
@@ -158,6 +165,7 @@ pub fn preamble_parts() -> Value {
         "cap": CAP,
         "close": CLOSE,
         "held": HELD,
+        "assisted": ASSISTED,
     })
 }
 

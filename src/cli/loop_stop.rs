@@ -266,6 +266,15 @@ pub(super) fn decide(
             requested: true,
         };
     }
+    if reading.standing == "assisted" {
+        let reason = crate::harness::loop_text::assisted().to_owned();
+        return Decision::Stop {
+            value: ended(&reason),
+            reason,
+            terminal: true,
+            requested: false,
+        };
+    }
     let (Some(claimable), Some(dischargeable)) = (reading.claimable, reading.dischargeable) else {
         let reason = "Estigia did not report how much work this run's queues hold".to_owned();
         return Decision::Stop {

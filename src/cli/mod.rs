@@ -6375,7 +6375,8 @@ pub(crate) struct GoalReading {
     pub(crate) issue: Option<crate::identity::Identity>,
     /// The state the run believes the issue is in.
     pub(crate) state: Option<String>,
-    /// `passed`, `stopped`, `unread`, `nothing-sworn` or `unreadable`.
+    /// `passed`, `stopped`, `unread`, `nothing-sworn`, `assisted` (holding nothing where the
+    /// person names the issue, so no queue is read) or `unreadable`.
     pub(crate) standing: &'static str,
     /// Whether the run still holds its issue, on a readable answer.
     pub(crate) live: bool,
@@ -6838,21 +6839,31 @@ fn goal_start(
         }
         StartOutcome::Stored(goal) => {
             if json {
-                print_json(&serde_json::json!({
+                let mut answer = serde_json::json!({
                     "run_id": identity,
                     "objective": goal.objective,
                     "max": goal.max,
-                }));
+                });
+                if context.workflow == Some(crate::config::Workflow::Assisted) {
+                    answer["note"] = serde_json::json!(ASSISTED_LOOP);
+                }
+                print_json(&answer);
             } else {
                 say!("stored the Estigia loop for {identity}: {}", goal.objective);
                 if let Some(max) = goal.max {
                     say!("completion cap: {max}");
+                }
+                if context.workflow == Some(crate::config::Workflow::Assisted) {
+                    say!("{ASSISTED_LOOP}");
                 }
             }
         }
     }
     Ok(())
 }
+
+const ASSISTED_LOOP: &str = "this repository is assisted: the loop runs for an issue the person names, \
+                             and ends when that issue is put down";
 
 /// What `estigia goal start` did with the text it was given.
 enum StartOutcome {
@@ -7277,7 +7288,11 @@ pub(crate) fn goal_reading(
         return GoalReading {
             issue: None,
             state,
-            standing: "nothing-sworn",
+            standing: if context.workflow == Some(crate::config::Workflow::Assisted) {
+                "assisted"
+            } else {
+                "nothing-sworn"
+            },
             live: false,
             reason: None,
             claimable: queues.claimable,
@@ -7337,7 +7352,11 @@ pub(crate) fn goal_reading(
                 GoalReading {
                     issue: Some(issue),
                     state,
-                    standing: "stopped",
+                    standing: if context.workflow == Some(crate::config::Workflow::Assisted) {
+                        "assisted"
+                    } else {
+                        "stopped"
+                    },
                     live: false,
                     reason: Some(reason.to_owned()),
                     claimable: queues.claimable,
@@ -7406,12 +7425,12 @@ struct Queues {
 fn queue_reading(context: &harness::GateContext, run_id: &str) -> Queues {
     if context.workflow == Some(crate::config::Workflow::Assisted) {
         return Queues {
-            claimable: Some(0),
-            dischargeable: Some(0),
-            held: Some(0),
-            pending: Some(0),
-            unconditioned: Some(0),
-            unadmitted: Some(0),
+            claimable: None,
+            dischargeable: None,
+            held: None,
+            pending: None,
+            unconditioned: None,
+            unadmitted: None,
         };
     }
     let read = |state: &str| {
