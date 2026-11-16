@@ -284,7 +284,10 @@ claim was made in; from any other it says `unreadable`, which the plugin treats 
 not confirm. An answer that could not be read, or whose standing is `unread` or `unreadable`, is
 retried on the loop's own wait timer up to a bounded number of attempts; a later confirmed read
 continues the loop, and once the attempts are spent it stops with a resumable notice
-saying the read was retried. The goal is read again right before a prompt is
+saying the read was retried. Where the `Claim workflow` is `assisted`, the person names the issue, so
+no queue is read. A run holding no live claim answers the standing `assisted` with every count
+`null`, never zero. Every loop then stops, saying that the person names the next issue, and
+`estigia goal start` says the same when it stores such a loop. The goal is read again right before a prompt is
 enqueued, and an operator stop that arrives while a decision is in flight is held until that decision finishes, so no prompt is enqueued and no timer armed after it.
 
 Continuation

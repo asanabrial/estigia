@@ -6181,6 +6181,32 @@ fn goal_answers_nothing_sworn_when_the_pointer_holds_no_issue() {
     assert!(json["issue"].is_null());
 }
 
+#[test]
+fn an_assisted_run_holding_nothing_reads_no_queue_rather_than_empty_ones() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let state = root.path().join("state");
+    let repo = root.path().join("repo");
+    let run_id = harness::session::run_id("claude", "goal-assisted-1");
+    goal_pointer(&state, &run_id, None);
+    let mut context = release_context(&repo, &state);
+    context.workflow = Some(crate::config::Workflow::Assisted);
+
+    let reading = super::goal_reading(&context, &run_id, false);
+    assert_eq!(reading.standing, "assisted");
+    assert_eq!(reading.claimable, None);
+    assert_eq!(reading.dischargeable, None);
+    assert_eq!(reading.held, None);
+    assert_eq!(reading.pending, None);
+}
+
+#[test]
+fn an_assisted_loop_with_nothing_held_ends_on_the_person_naming_the_issue() {
+    let (answer, _) = decided(vec![reading("assisted", false, [None; 5])]);
+    let said = answer["systemMessage"].as_str().unwrap_or_default();
+    assert!(said.contains("the person names the next issue"), "{answer}");
+    assert!(!said.contains("no claimable"), "{answer}");
+}
+
 /// A tracker answer that could not be read never continues a loop: whatever
 /// the standing, `live` is false.
 #[test]
@@ -6496,7 +6522,7 @@ fn goal_answers_claimable_work_when_the_run_has_no_live_claim() {
 }
 
 #[test]
-fn goal_answers_no_work_when_the_repository_is_assisted() {
+fn goal_ends_an_assisted_loop_on_the_person_naming_the_issue() {
     let root = tempfile::tempdir().expect("a temporary root");
     let state = root.path().join("state");
     let repo = root.path().join("repo");
@@ -6521,8 +6547,8 @@ fn goal_answers_no_work_when_the_repository_is_assisted() {
     assert!(!reading.live);
     assert_eq!(
         (reading.claimable, reading.dischargeable),
-        (Some(0), Some(0)),
-        "an assisted repository offered work to a loop: {}",
+        (None, None),
+        "an assisted repository reported queues it never read: {}",
         super::goal_line(&run_id, &reading)
     );
     let stop = crate::test_env::with_scripted_gh(bin.path(), &script, || {
@@ -6536,9 +6562,8 @@ fn goal_answers_no_work_when_the_repository_is_assisted() {
         .into_value()
     });
     assert!(
-        stop.to_string()
-            .contains("no claimable or dischargeable work"),
-        "the loop was not told to stop: {stop}"
+        stop.to_string().contains("the person names the next issue"),
+        "the loop was not told why it stops: {stop}"
     );
 }
 
@@ -6562,7 +6587,7 @@ fn goal_tells_a_person_the_queues_were_not_read_where_the_repository_is_assisted
         "zeros were printed as though they were measured: {line}"
     );
     let reading = super::goal_reading(&context, &run_id, false);
-    assert_eq!(super::goal_json(&run_id, &reading)["claimable"], 0);
+    assert!(super::goal_json(&run_id, &reading)["claimable"].is_null());
 }
 
 /// The JSON the loop plugin reads carries `held`, `pending` and `unconditioned`
