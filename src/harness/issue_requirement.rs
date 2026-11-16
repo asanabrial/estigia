@@ -19,18 +19,19 @@ pub const CODE: &str = "issue-required";
 ///
 /// A repository file that is there and cannot be read answers [`IssueRequirement::Required`]
 /// whatever the layers underneath it say: the rows it carries are unknown, and an unknown result
-/// is not clearance. The refusal that stops the write carries the read failure rather than the
-/// policy, so the operator is shown the file to repair.
+/// is not clearance. The same preconditions still hold, so a checkout with no tracker to claim
+/// against is not turned into a lock. The refusal that stops the write carries the read failure
+/// rather than the policy, so the operator is shown the file to repair.
 pub fn in_force(context: &GateContext) -> Option<IssueRequirement> {
+    let available = context
+        .tracker
+        .adjudicates_unclaimed_writes(context.workflow)
+        && context.skill_root.join(crate::skill::CONTRACT).is_file();
     if context.repository_config_unreadable.is_some() {
-        return Some(IssueRequirement::Required);
+        return available.then_some(IssueRequirement::Required);
     }
-    (context.issue_requirement != IssueRequirement::Off
-        && context
-            .tracker
-            .adjudicates_unclaimed_writes(context.workflow)
-        && context.skill_root.join(crate::skill::CONTRACT).is_file())
-    .then_some(context.issue_requirement)
+    (context.issue_requirement != IssueRequirement::Off && available)
+        .then_some(context.issue_requirement)
 }
 
 /// Whether the configured tracker can name an issue for the checkout rooted at `root`.

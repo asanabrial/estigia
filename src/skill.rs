@@ -1879,10 +1879,16 @@ pub(crate) fn installed_config_in_keeping_what_parses_apart(
                 Ok(Config::read_keeping_what_parses(versioned, local))
             }) {
                 Ok(base) => base,
-                Err(_) => return (Config::default(), Some(failure), None),
+                Err(_) => {
+                    let repository =
+                        layer_repository_keeping_what_parses(&Config::default(), repo_dir).err();
+                    return (Config::default(), Some(failure), repository);
+                }
             };
-            let config = layer_repository_keeping_what_parses(&base, repo_dir).unwrap_or(base);
-            return (config, Some(failure), None);
+            return match layer_repository_keeping_what_parses(&base, repo_dir) {
+                Ok(config) => (config, Some(failure), None),
+                Err(repository) => (base, Some(failure), Some(repository)),
+            };
         }
     };
     match layer_repository(&contract_config, repo_dir) {
@@ -3299,6 +3305,48 @@ mod tests {
             complaint.message.contains("UTF-8"),
             "the complaint does not name what the read answered: {}",
             complaint.message
+        );
+    }
+
+    #[test]
+    fn a_bad_contract_row_does_not_hide_an_unreadable_repository_file() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let skill = root.path().join(DIRECTORY);
+        let here = root.path().join("repo");
+        std::fs::create_dir_all(&here).expect("the checkout");
+        let config = Config {
+            boundaries: vec!["terraform apply".to_owned()],
+            ..Config::default()
+        };
+        install(&skill, &config, false).expect("install succeeds");
+
+        let contract = skill.join(CONTRACT);
+        let installed = fs::read_to_string(&contract).expect("the contract reads");
+        let broken = installed.replace("| Change size | 800 |", "| Change size | banana |");
+        assert_ne!(
+            broken, installed,
+            "no row was corrupted, so this measures nothing"
+        );
+        fs::write(&contract, broken).expect("the bad contract row is written");
+
+        let file = repository_config_path(&here);
+        fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+        fs::write(&file, [0xff, 0xfe]).expect("an unreadable repository file");
+
+        let (kept, contract_failure, repository_failure) =
+            installed_config_in_keeping_what_parses_apart(&skill, &here);
+        assert!(
+            contract_failure.is_some(),
+            "the bad contract row was not reported"
+        );
+        assert!(
+            repository_failure.is_some(),
+            "the unreadable repository file was hidden by the contract's own failure"
+        );
+        assert_eq!(
+            kept.boundaries,
+            vec!["terraform apply".to_owned()],
+            "the rows the contract did parse were thrown away with the bad one"
         );
     }
 
