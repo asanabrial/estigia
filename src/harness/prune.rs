@@ -183,6 +183,15 @@ pub fn ownership(root: &Path) -> Result<Vec<std::path::PathBuf>, String> {
         paths.extend(pointer.worktree);
         paths.extend(pointer.repo_dir);
     }
+    for pointer in super::session::parked_holdings(root) {
+        paths.extend(
+            pointer
+                .parked
+                .into_iter()
+                .filter_map(|parked| parked.worktree),
+        );
+        paths.extend(pointer.repo_dir);
+    }
     let opened = crate::transport::store::open_for_read(&crate::transport::store::beside(root))
         .map_err(|failure| failure.detail())?;
     let Some(opened) = opened else {
