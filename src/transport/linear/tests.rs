@@ -896,3 +896,82 @@ fn an_unknown_key_or_a_missing_cli_is_a_failure_that_names_why() {
     .expect_err("no such program");
     assert_eq!(a_reason(&missing), "linear-cli-missing");
 }
+
+fn queue_answering(
+    stdout: &str,
+) -> (
+    Result<Vec<super::Queued>, crate::transport::Failure>,
+    Vec<String>,
+) {
+    through(
+        &[serde_json::json!({ "matches": "EstigiaQueue", "stdout": stdout })],
+        || super::read_queue("ABC"),
+    )
+}
+
+fn node(
+    key: &str,
+    state: &str,
+    priority: u64,
+    estimate: Option<f64>,
+    created: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "identifier": key,
+        "priority": priority,
+        "estimate": estimate,
+        "createdAt": created,
+        "state": { "type": state },
+    })
+}
+
+#[test]
+fn the_queue_is_todo_then_backlog_by_priority_then_estimate_then_age() {
+    let nodes = serde_json::json!([
+        node("ABC-1", "unstarted", 4, None, "2026-01-01T00:00:00Z"),
+        node("ABC-2", "unstarted", 2, Some(5.0), "2026-01-01T00:00:00Z"),
+        node("ABC-3", "unstarted", 2, Some(1.0), "2026-01-02T00:00:00Z"),
+        node("ABC-4", "unstarted", 2, None, "2026-01-01T00:00:00Z"),
+        node("ABC-5", "backlog", 1, Some(1.0), "2026-01-01T00:00:00Z"),
+        node("ABC-6", "unstarted", 0, None, "2026-01-01T00:00:00Z"),
+        node("ABC-7", "unstarted", 2, Some(1.0), "2026-01-01T00:00:00Z"),
+    ]);
+    let stdout = serde_json::json!({
+        "data": { "viewer": { "assignedIssues": {
+            "nodes": nodes, "pageInfo": { "hasNextPage": false }
+        } } }
+    })
+    .to_string();
+    let (read, calls) = queue_answering(&stdout);
+    let keys: Vec<String> = read
+        .expect("the queue is read")
+        .into_iter()
+        .map(|queued| queued.key)
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            "ABC-7", "ABC-3", "ABC-2", "ABC-4", "ABC-1", "ABC-6", "ABC-5"
+        ]
+    );
+    assert_eq!(
+        calls,
+        vec![format!(
+            "api --variables-json {{\"team\":\"ABC\"}} {}",
+            super::QUEUE_QUERY
+        )]
+    );
+}
+
+#[test]
+fn a_queue_with_another_page_is_a_failed_read_not_a_short_queue() {
+    let stdout = serde_json::json!({
+        "data": { "viewer": { "assignedIssues": {
+            "nodes": [node("ABC-1", "unstarted", 1, None, "2026-01-01T00:00:00Z")],
+            "pageInfo": { "hasNextPage": true }
+        } } }
+    })
+    .to_string();
+    let (read, _) = queue_answering(&stdout);
+    assert!(read.is_err(), "{read:?}");
+}

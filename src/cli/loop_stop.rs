@@ -285,9 +285,13 @@ pub(super) fn decide(
         };
     };
     if claimable + dischargeable > 0 {
+        let reason = match &reading.next {
+            Some(key) => crate::harness::loop_text::continuation_naming(invocation, run_id, key),
+            None => continuation(invocation, run_id, dischargeable),
+        };
         return Decision::Continue(json!({
             "decision": "block",
-            "reason": continuation(invocation, run_id, dischargeable),
+            "reason": reason,
         }));
     }
     let waiting = waiting_on(&reading);

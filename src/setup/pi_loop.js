@@ -317,6 +317,7 @@ const consider = async (pi, ctx, session) => {
     }
   }
   let dischargeable = 0;
+  let next = null;
   let issue = null;
   if (read.said?.live === true) {
     const named = read.said?.issue;
@@ -374,10 +375,11 @@ const consider = async (pi, ctx, session) => {
       return;
     }
     dischargeable = discharged;
+    if (typeof read.said?.next === "string" && read.said.next !== "") next = read.said.next;
   }
   if (!running(loops.get(session)) || stopRequested.has(session)) return;
   disarm(session);
-  enqueue(pi, goal, dischargeable, issue);
+  enqueue(pi, next === null ? goal : { ...goal, prompt: objective(`dev ${next}`) }, dischargeable, issue);
   reacted(goal, "enqueued");
 };
 

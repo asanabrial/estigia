@@ -155,6 +155,16 @@ pub fn continuation(invocation: Invocation, run_id: &str, dischargeable: u64) ->
     )
 }
 
+/// The prompt that hands an assisted loop the issue its queue named, so the agent takes that
+/// issue rather than choosing one.
+pub fn continuation_naming(invocation: Invocation, run_id: &str, key: &str) -> String {
+    format!(
+        "{}\n\n{}",
+        preamble(run_id, 0, false),
+        objective(invocation, &format!("dev {key}"))
+    )
+}
+
 /// The same pieces as data, for the JavaScript plugin to render its own
 /// `preamble` from.
 pub fn preamble_parts() -> Value {

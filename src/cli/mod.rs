@@ -6375,7 +6375,8 @@ pub(crate) struct GoalReading {
     pub(crate) issue: Option<crate::identity::Identity>,
     /// The state the run believes the issue is in.
     pub(crate) state: Option<String>,
-    /// `passed`, `stopped`, `unread`, `nothing-sworn`, `assisted` (holding nothing where the
+    /// `passed`, `stopped`, `unread`, `nothing-sworn`, `assisted-held` (a local assisted claim,
+    /// which no tracker answers for), `assisted` (holding nothing where the
     /// person names the issue, so no queue is read) or `unreadable`.
     pub(crate) standing: &'static str,
     /// Whether the run still holds its issue, on a readable answer.
@@ -6417,6 +6418,8 @@ pub(crate) struct GoalReading {
     /// that did not land. They are counted in no state: only an explicit
     /// `transition` admits one.
     pub(crate) unadmitted: Option<u64>,
+    /// The key of the issue an assisted loop takes next, where its queue names one.
+    pub(crate) next: Option<String>,
     /// How many issues this run's own delivery has closed, when the caller
     /// asked for the count and the tracker could be read.
     ///
@@ -6844,7 +6847,7 @@ fn goal_start(
                     "objective": goal.objective,
                     "max": goal.max,
                 });
-                if context.workflow == Some(crate::config::Workflow::Assisted) {
+                if assisted_without_queue(&context) {
                     answer["note"] = serde_json::json!(ASSISTED_LOOP);
                 }
                 print_json(&answer);
@@ -6853,7 +6856,7 @@ fn goal_start(
                 if let Some(max) = goal.max {
                     say!("completion cap: {max}");
                 }
-                if context.workflow == Some(crate::config::Workflow::Assisted) {
+                if assisted_without_queue(&context) {
                     say!("{ASSISTED_LOOP}");
                 }
             }
@@ -6952,6 +6955,7 @@ pub(crate) fn goal_human_line(
         pending: None,
         unconditioned: None,
         unadmitted: None,
+        next: None,
         ..reading
     };
     format!(
@@ -7261,6 +7265,7 @@ pub(crate) fn goal_reading(
             pending: None,
             unconditioned: None,
             unadmitted: None,
+            next: None,
             completed,
             stop_after,
         };
@@ -7278,6 +7283,7 @@ pub(crate) fn goal_reading(
             pending: None,
             unconditioned: None,
             unadmitted: None,
+            next: None,
             completed,
             stop_after,
         };
@@ -7288,7 +7294,7 @@ pub(crate) fn goal_reading(
         return GoalReading {
             issue: None,
             state,
-            standing: if context.workflow == Some(crate::config::Workflow::Assisted) {
+            standing: if assisted_without_queue(context) {
                 "assisted"
             } else {
                 "nothing-sworn"
@@ -7301,10 +7307,29 @@ pub(crate) fn goal_reading(
             pending: queues.pending,
             unconditioned: queues.unconditioned,
             unadmitted: queues.unadmitted,
+            next: queues.next,
             completed,
             stop_after,
         };
     };
+    if run.assisted {
+        return GoalReading {
+            issue: Some(issue),
+            state,
+            standing: "assisted-held",
+            live: true,
+            reason: None,
+            claimable: None,
+            dischargeable: None,
+            held: None,
+            pending: None,
+            unconditioned: None,
+            unadmitted: None,
+            next: None,
+            completed,
+            stop_after,
+        };
+    }
     match harness::tracker_answer_for_pointer(
         &context.skill_root,
         &context.repo_dir,
@@ -7327,6 +7352,7 @@ pub(crate) fn goal_reading(
                 pending: queues.pending,
                 unconditioned: queues.unconditioned,
                 unadmitted: queues.unadmitted,
+                next: queues.next,
                 completed,
                 stop_after,
             }
@@ -7344,6 +7370,7 @@ pub(crate) fn goal_reading(
                 pending: None,
                 unconditioned: None,
                 unadmitted: None,
+                next: None,
                 completed,
                 stop_after,
             },
@@ -7352,7 +7379,7 @@ pub(crate) fn goal_reading(
                 GoalReading {
                     issue: Some(issue),
                     state,
-                    standing: if context.workflow == Some(crate::config::Workflow::Assisted) {
+                    standing: if assisted_without_queue(context) {
                         "assisted"
                     } else {
                         "stopped"
@@ -7365,6 +7392,7 @@ pub(crate) fn goal_reading(
                     pending: queues.pending,
                     unconditioned: queues.unconditioned,
                     unadmitted: queues.unadmitted,
+                    next: queues.next,
                     completed,
                     stop_after,
                 }
@@ -7383,6 +7411,7 @@ pub(crate) fn goal_reading(
                     pending: queues.pending,
                     unconditioned: queues.unconditioned,
                     unadmitted: queues.unadmitted,
+                    next: queues.next,
                     completed,
                     stop_after,
                 }
@@ -7411,6 +7440,7 @@ struct Queues {
     pending: Option<u64>,
     unconditioned: Option<u64>,
     unadmitted: Option<u64>,
+    next: Option<String>,
 }
 
 /// Every count `estigia goal` reports about the queues, from one read of each
@@ -7422,8 +7452,18 @@ struct Queues {
 /// `review` that is not one this run could claim: the run holds nothing when
 /// these are read, so an item in either state is somebody else's, or a claim
 /// gone stale that nobody has reclaimed.
+/// Whether the person names every issue here: assisted work on a tracker with no queue the
+/// loop can read.
+fn assisted_without_queue(context: &harness::GateContext) -> bool {
+    context.workflow == Some(crate::config::Workflow::Assisted)
+        && !matches!(context.tracker, crate::config::Tracker::Linear { .. })
+}
+
 fn queue_reading(context: &harness::GateContext, run_id: &str) -> Queues {
     if context.workflow == Some(crate::config::Workflow::Assisted) {
+        if let crate::config::Tracker::Linear { team } = &context.tracker {
+            return linear_queue(context, team);
+        }
         return Queues {
             claimable: None,
             dischargeable: None,
@@ -7431,6 +7471,7 @@ fn queue_reading(context: &harness::GateContext, run_id: &str) -> Queues {
             pending: None,
             unconditioned: None,
             unadmitted: None,
+            next: None,
         };
     }
     let read = |state: &str| {
@@ -7471,6 +7512,44 @@ fn queue_reading(context: &harness::GateContext, run_id: &str) -> Queues {
                 .and_then(serde_json::Value::as_array)
                 .map_or(0, |list| list.len() as u64)
         }),
+        next: None,
+    }
+}
+
+/// The assisted queue a Linear tracker answers: the CLI user's own Todo and Backlog, in the
+/// order it is worked, less every issue a live claim on this machine already holds.
+fn linear_queue(context: &harness::GateContext, team: &str) -> Queues {
+    let Ok(queue) = crate::transport::linear::read_queue(team) else {
+        return Queues {
+            claimable: None,
+            dischargeable: None,
+            held: None,
+            pending: None,
+            unconditioned: None,
+            unadmitted: None,
+            next: None,
+        };
+    };
+    let taken: Vec<String> = harness::session::holdings(&context.state_root)
+        .into_iter()
+        .filter_map(|run| run.issue.map(|issue| issue.to_string()))
+        .collect();
+    let open: Vec<_> = queue
+        .into_iter()
+        .filter(|queued| {
+            !taken
+                .iter()
+                .any(|held| held.eq_ignore_ascii_case(&queued.key))
+        })
+        .collect();
+    Queues {
+        claimable: Some(open.len() as u64),
+        dischargeable: Some(0),
+        held: Some(0),
+        pending: Some(0),
+        unconditioned: Some(0),
+        unadmitted: Some(0),
+        next: open.first().map(|queued| queued.key.clone()),
     }
 }
 
@@ -7513,6 +7592,9 @@ pub(crate) fn goal_json(run_id: &str, reading: &GoalReading) -> serde_json::Valu
             .dischargeable
             .map_or(serde_json::Value::Null, serde_json::Value::from),
     );
+    if let Some(next) = &reading.next {
+        object.insert("next".to_owned(), serde_json::Value::String(next.clone()));
+    }
     for (key, count) in [
         ("held", reading.held),
         ("pending", reading.pending),

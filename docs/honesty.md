@@ -3934,6 +3934,17 @@ pointer that leaves it names the document it points at.
 
 ## Test counts and mutation claims in a receipt
 
+- **The assisted Linear queue is the CLI user's own list, and nothing makes taking from it atomic.**
+  `query EstigiaQueue` offers only issues assigned to the `viewer` the `linear` CLI is logged in as, so a
+  shared API key makes "assigned to me" mean that key's user. A live claim on this machine keeps a second
+  local run off an issue, but nothing stops a person or another machine from starting the same issue in
+  the same moment. Moving it to the `in-progress` name, where `State names` maps one, is visible and is
+  not a lock. The estimate is the team's own number and is not normalised across estimate scales. More
+  than one page of assigned issues is refused rather than read short. The tests are
+  `the_queue_is_todo_then_backlog_by_priority_then_estimate_then_age` and
+  `a_queue_with_another_page_is_a_failed_read_not_a_short_queue` in `src/transport/linear/tests.rs`, and
+  `an_assisted_linear_loop_offers_the_head_of_its_queue_less_what_this_machine_holds` in
+  `src/cli/tests.rs`.
 - **A review transaction's evidence prose and a pull request body are not files in this repository, and
   nothing reads either: a test count or a mutation claim written into one is unchecked prose.** The
   operator decision of 2026-10-04 chose this record over rewriting a merged body. The measurement is one

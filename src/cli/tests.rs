@@ -6080,6 +6080,7 @@ fn goal_json_carries_the_completed_count() {
         pending: None,
         unconditioned: None,
         unadmitted: None,
+        next: None,
         completed: Some(2),
         stop_after: None,
     };
@@ -6109,6 +6110,7 @@ fn goal_json_carries_the_dischargeable_count() {
         pending: None,
         unconditioned: None,
         unadmitted: None,
+        next: None,
         completed: None,
         stop_after: None,
     };
@@ -6607,6 +6609,7 @@ fn goal_json_carries_what_is_held_pending_and_unconditioned() {
         pending: Some(1),
         unconditioned: None,
         unadmitted: None,
+        next: None,
         completed: None,
         stop_after: None,
     };
@@ -9670,6 +9673,7 @@ fn reading(standing: &'static str, live: bool, counts: [Option<u64>; 5]) -> supe
         pending: counts[3],
         unconditioned: counts[4],
         unadmitted: None,
+        next: None,
         completed: None,
         stop_after: None,
     }
@@ -11187,5 +11191,87 @@ fn releasing_an_assisted_run_from_another_repository_forgets_nothing() {
     assert_eq!(
         harness::session::load(state.path(), "claude-assisted1").issue,
         Some(issue)
+    );
+}
+
+fn linear_context(repo: &std::path::Path, state: &std::path::Path) -> harness::GateContext {
+    let mut context = release_context(repo, state);
+    context.workflow = Some(crate::config::Workflow::Assisted);
+    context.tracker = crate::config::Tracker::Linear {
+        team: "ABC".to_owned(),
+    };
+    context
+}
+
+#[test]
+fn an_assisted_linear_loop_offers_the_head_of_its_queue_less_what_this_machine_holds() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let state = root.path().join("state");
+    let repo = root.path().join("repo");
+    let run_id = harness::session::run_id("claude", "goal-linear-1");
+    goal_pointer(&state, &run_id, None);
+    let mut other = harness::session::Run::new("claude-other0000".to_owned());
+    other.issue = Some(crate::identity::Identity::Key("ABC-1".to_owned()));
+    harness::session::store(&state, &other).expect("the pointer writes");
+    let context = linear_context(&repo, &state);
+
+    let stdout = serde_json::json!({
+        "data": { "viewer": { "assignedIssues": {
+            "nodes": [
+                { "identifier": "ABC-1", "priority": 1, "estimate": 1, "createdAt": "2026-01-01T00:00:00Z", "state": { "type": "unstarted" } },
+                { "identifier": "ABC-2", "priority": 2, "estimate": 1, "createdAt": "2026-01-01T00:00:00Z", "state": { "type": "unstarted" } }
+            ],
+            "pageInfo": { "hasNextPage": false }
+        } } }
+    })
+    .to_string();
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let reading = crate::test_env::with_counting_logging_gh(
+        crate::test_env::fake_cli_directory(&["linear"]).path(),
+        &crate::test_env::answers(&[
+            serde_json::json!({ "matches": "EstigiaQueue", "stdout": stdout }),
+        ]),
+        &scratch.path().join("counts.json"),
+        &scratch.path().join("calls.log"),
+        || super::goal_reading(&context, &run_id, false),
+    );
+    assert_eq!(reading.standing, "nothing-sworn");
+    assert_eq!(reading.claimable, Some(1));
+    assert_eq!(reading.next.as_deref(), Some("ABC-2"));
+}
+
+#[test]
+fn an_assisted_claim_this_machine_holds_keeps_the_loop_going() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let state = root.path().join("state");
+    let repo = root.path().join("repo");
+    let run_id = harness::session::run_id("claude", "goal-linear-2");
+    std::fs::create_dir_all(&state).expect("the state directory");
+    let mut run = harness::session::Run::new(run_id.clone());
+    run.issue = Some(crate::identity::Identity::Key("ABC-2".to_owned()));
+    run.assisted = true;
+    harness::session::store(&state, &run).expect("the pointer writes");
+    let context = linear_context(&repo, &state);
+
+    let reading = super::goal_reading(&context, &run_id, false);
+    assert!(reading.live, "{}", super::goal_line(&run_id, &reading));
+    assert_eq!(reading.standing, "assisted-held");
+}
+
+#[test]
+fn a_loop_whose_queue_names_an_issue_is_told_to_take_that_issue() {
+    let mut named = reading(
+        "nothing-sworn",
+        false,
+        [Some(1), Some(0), Some(0), Some(0), Some(0)],
+    );
+    named.next = Some("ABC-2".to_owned());
+    let (answer, _) = decided(vec![named]);
+    assert_eq!(answer["decision"], "block", "{answer}");
+    assert!(
+        answer["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("dev ABC-2")),
+        "{answer}"
     );
 }

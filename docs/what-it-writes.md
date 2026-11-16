@@ -284,10 +284,13 @@ claim was made in; from any other it says `unreadable`, which the plugin treats 
 not confirm. An answer that could not be read, or whose standing is `unread` or `unreadable`, is
 retried on the loop's own wait timer up to a bounded number of attempts; a later confirmed read
 continues the loop, and once the attempts are spent it stops with a resumable notice
-saying the read was retried. Where the `Claim workflow` is `assisted`, the person names the issue, so
-no queue is read. A run holding no live claim answers the standing `assisted` with every count
+saying the read was retried. Where the `Claim workflow` is `assisted` and the tracker has no queue the loop can read, the person
+names the issue. A run holding no live claim there answers the standing `assisted` with every count
 `null`, never zero. Every loop then stops, saying that the person names the next issue, and
-`estigia goal start` says the same when it stores such a loop. The goal is read again right before a prompt is
+`estigia goal start` says the same when it stores such a loop. A Linear tracker has such a queue (the
+Linear binding's *The loop's queue*), so there the loop reads it, and `goal --json` carries the head
+issue's key as `next`, which the continuation names as `/flow dev <KEY>`. A held assisted claim reads
+`assisted-held` and live, because no tracker answers for it, so the loop keeps going while it is held. The goal is read again right before a prompt is
 enqueued, and an operator stop that arrives while a decision is in flight is held until that decision finishes, so no prompt is enqueued and no timer armed after it.
 
 Continuation
