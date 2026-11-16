@@ -759,6 +759,49 @@ pub fn run_tool(
     run_tool_asking(name, arguments, context, None)
 }
 
+/// One operation's answer, kept apart from the prose a caller is owed beside it: `body` is what
+/// another operation reads (`None` for the operations that answer text only), and `text` is that
+/// body rendered for a model, with `notices` appended by [`Answered::envelope`].
+pub(super) struct Answered {
+    pub(super) body: Option<Value>,
+    text: String,
+    notices: Vec<String>,
+}
+
+impl Answered {
+    fn rendered(envelope: Value) -> Self {
+        let text = envelope["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        Answered {
+            body: None,
+            text,
+            notices: Vec::new(),
+        }
+    }
+
+    fn envelope(self) -> Value {
+        let mut text = self.text;
+        for notice in &self.notices {
+            text.push_str("\n\n");
+            text.push_str(notice);
+        }
+        json!({
+            "content": [{
+                "type": "text",
+                "text": text,
+            }],
+            "isError": false,
+        })
+    }
+
+    fn with_notice(mut self, notice: String) -> Self {
+        self.notices.push(notice);
+        self
+    }
+}
+
 // `assist` under a child's id, so the marker and the pointer name the child and
 // every other reader of a pointer needs no change. Anything malformed in the
 // arguments is left for that call to refuse.
@@ -766,7 +809,7 @@ fn assist_one_of_several(
     arguments: &Value,
     context: &GateContext,
     consent: Option<&mut messaging::Consent<'_>>,
-) -> Result<Value, ToolFailure> {
+) -> Result<Answered, ToolFailure> {
     let mut child_arguments = arguments.clone();
     child_arguments
         .as_object_mut()
@@ -778,10 +821,10 @@ fn assist_one_of_several(
         .and_then(|issue| serde_json::from_value::<crate::identity::Identity>(issue).ok());
     let branch = arguments.get("branch").and_then(Value::as_str);
     let (Some(parent), Some(issue), Some(branch)) = (parent, issue, branch) else {
-        return run_tool_asking("assist", &child_arguments, Ok(context), consent);
+        return run_tool_answering("assist", &child_arguments, Ok(context), consent);
     };
     let session::RunIdShape::Named { runtime } = session::run_id_shape(parent) else {
-        return run_tool_asking("assist", &child_arguments, Ok(context), consent);
+        return run_tool_answering("assist", &child_arguments, Ok(context), consent);
     };
     if runtime != session::DEFAULT_RUNTIME {
         return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
@@ -798,7 +841,7 @@ fn assist_one_of_several(
     }
     let holding = session::load(&context.state_root, parent);
     if holding.unreadable {
-        return run_tool_asking("assist", &child_arguments, Ok(context), consent);
+        return run_tool_answering("assist", &child_arguments, Ok(context), consent);
     }
     if let Some(held) = holding.issue.as_ref() {
         return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
@@ -811,7 +854,7 @@ fn assist_one_of_several(
     }
     let child = session::child_run_id(parent, &issue, branch);
     child_arguments["run_id"] = json!(child);
-    let mut answer = run_tool_asking("assist", &child_arguments, Ok(context), consent)?;
+    let answer = run_tool_answering("assist", &child_arguments, Ok(context), consent)?;
     if session::load(&context.state_root, &child).issue.is_none() {
         return Ok(answer);
     }
@@ -820,21 +863,18 @@ fn assist_one_of_several(
     });
     let note = if recorded {
         format!(
-            "\n\nestigia: this claim's run id is `{child}`, a child of `{parent}`: pass it to \
+            "estigia: this claim's run id is `{child}`, a child of `{parent}`: pass it to \
              `draft_pr`, `ready_pr`, `review_stages` and `review_thread`, and to `estigia release \
              --run-id`."
         )
     } else {
         format!(
-            "\n\nestigia: the worktree exists and `{}` could not be written, so the gate does not \
+            "estigia: the worktree exists and `{}` could not be written, so the gate does not \
              reach this claim from this session. Call `assist` again.",
             session::pointer_path(&context.state_root, &child).display()
         )
     };
-    if let Some(text) = answer["content"][0]["text"].as_str().map(str::to_owned) {
-        answer["content"][0]["text"] = json!(format!("{text}{note}"));
-    }
-    Ok(answer)
+    Ok(answer.with_notice(note))
 }
 
 /// The row a `pr_review` call names, and its arguments with `action` taken out.
@@ -994,6 +1034,31 @@ fn run_tool_asking(
     context: Result<&GateContext, &Refusal>,
     consent: Option<&mut messaging::Consent<'_>>,
 ) -> Result<Value, ToolFailure> {
+    run_tool_answering(name, arguments, context, consent).map(Answered::envelope)
+}
+
+/// [`run_tool_asking`] without the prose: the structured body of the answer, for an operation
+/// reading another one's answer rather than showing it to a model.
+pub(super) fn run_tool_body(
+    name: &str,
+    arguments: &Value,
+    context: Result<&GateContext, &Refusal>,
+) -> Result<Value, ToolFailure> {
+    run_tool_answering(name, arguments, context, None)?
+        .body
+        .ok_or_else(|| {
+            ToolFailure::Malformed(format!(
+                "`{name}` answers text and no structured body, so a step cannot read it"
+            ))
+        })
+}
+
+fn run_tool_answering(
+    name: &str,
+    arguments: &Value,
+    context: Result<&GateContext, &Refusal>,
+    consent: Option<&mut messaging::Consent<'_>>,
+) -> Result<Answered, ToolFailure> {
     if let Some(reason) = tools::unexposed_reason(name) {
         return Err(ToolFailure::Refused(Box::new(operation_has_no_tool(
             name, reason,
@@ -1002,13 +1067,13 @@ fn run_tool_asking(
     if name == "pr_review" {
         let (step, arguments) = pull_review_step(arguments)?;
         let action = step.trim_start_matches("pr_review_");
-        return run_tool_asking(&step, &arguments, context, consent)
+        return run_tool_answering(&step, &arguments, context, consent)
             .map_err(|failure| in_words_of(&format!("pr_review action {action}"), &step, failure));
     }
     if name == "review_read"
         && let Some((row, view, rest)) = read_view_step(arguments)?
     {
-        return run_tool_asking(row, &rest, context, consent)
+        return run_tool_answering(row, &rest, context, consent)
             .map_err(|failure| in_words_of(&format!("review_read view {view}"), row, failure));
     }
     let tool = tools::find(name).ok_or_else(|| {
@@ -1192,18 +1257,26 @@ fn run_tool_asking(
     if name == "collect_review_input"
         && let Some((row, rest)) = collect_step(arguments)?
     {
-        return run_tool_asking(row, &rest, Ok(context), consent).map_err(|failure| {
+        return run_tool_answering(row, &rest, Ok(context), consent).map_err(|failure| {
             in_words_of("collect_review_input with launch or checks", row, failure)
         });
     }
 
     match name {
         "send_message" => {
-            return messaging::send_message(arguments, context, named.as_ref(), consent);
+            return messaging::send_message(arguments, context, named.as_ref(), consent)
+                .map(Answered::rendered);
         }
-        "inbox" => return messaging::inbox(arguments, context, named.as_ref(), consent),
-        "list_sessions" => return messaging::list_sessions(arguments, context),
-        "deliver" => return deliver::deliver(arguments, context, named.as_ref()),
+        "inbox" => {
+            return messaging::inbox(arguments, context, named.as_ref(), consent)
+                .map(Answered::rendered);
+        }
+        "list_sessions" => {
+            return messaging::list_sessions(arguments, context).map(Answered::rendered);
+        }
+        "deliver" => {
+            return deliver::deliver(arguments, context, named.as_ref()).map(Answered::rendered);
+        }
         _ => {}
     }
 
@@ -1859,10 +1932,15 @@ fn run_tool_asking(
     {
         without_repeated_receipt(status);
     }
-    let mut text = answer_text(body, compact);
+    let body = body.unwrap_or(json!({"ok": true}));
+    let text = answer_text(Some(body.clone()), compact);
+    let mut answered = Answered {
+        body: Some(body),
+        text,
+        notices: Vec::new(),
+    };
     if let Some(notice) = checkout_notice(tool.operation, arguments, claim_worktree.as_deref()) {
-        text.push_str("\n\n");
-        text.push_str(&notice);
+        answered = answered.with_notice(notice);
     }
     // The tracker write landed, so this is not a reason to call the
     // operation failed — but the gate reads the pointer and not the tracker,
@@ -1870,20 +1948,14 @@ fn run_tool_asking(
     // the same whether the store worked or not, reporting this as an
     // ordinary success when it was a known and dropped failure.
     if recorded == Some(false) && tool.effect_with(arguments) != PointerEffect::None {
-        text.push_str(&format!(
-            "
-
-estigia: this happened on the tracker and could not be written to this run's              pointer at {}. The gate reads that pointer, so until it is written the gate              adjudicates as though this call had not been made.",
+        answered = answered.with_notice(format!(
+            "estigia: this happened on the tracker and could not be written to this run's \
+             pointer at {}. The gate reads that pointer, so until it is written the gate \
+             adjudicates as though this call had not been made.",
             session::pointer_path(&context.state_root, run_id).display()
         ));
     }
-    Ok(json!({
-        "content": [{
-            "type": "text",
-            "text": text,
-        }],
-        "isError": false,
-    }))
+    Ok(answered)
 }
 
 /// The notice `done` and `release` append when the run's own checkout still

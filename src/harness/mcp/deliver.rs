@@ -854,8 +854,12 @@ impl<H: Hands> Deliver<'_, H> {
         let _ = std::fs::remove_file(&file);
         let released =
             released.map_err(|refusal| with_merged(refused("close", refusal), merged))?;
-        if released["ok"] == false {
-            let mut answer = released;
+        if released["ok"].as_bool() != Some(true) {
+            let mut answer = match released {
+                Value::Object(fields) => Value::Object(fields),
+                other => json!({"release": other}),
+            };
+            answer["ok"] = json!(false);
             answer["delivered"] = json!(false);
             answer["merged"] = json!({"sha": merged.sha, "parents": merged.parents});
             return Err(Halt::Stopped(answer));
@@ -1238,6 +1242,17 @@ fn exec_directory<'a>(directory: &'a Path, outliving: &'a Path) -> &'a Path {
     }
 }
 
+/// One operation's structured answer, or a refusal naming the step that cannot read it.
+fn read_answer(name: &str, answer: Value) -> Result<Value, Value> {
+    if answer.is_object() {
+        return Ok(answer);
+    }
+    Err(json!({
+        "code": "tool-answer-unreadable",
+        "message": format!("`{name}` answered something a step cannot read: {answer}"),
+    }))
+}
+
 impl<'a> Live<'a> {
     fn new(context: &'a GateContext, run_id: &'a str, repo: Option<String>) -> Self {
         Live {
@@ -1261,11 +1276,8 @@ impl<'a> Live<'a> {
 
 impl Hands for Live<'_> {
     fn tool(&self, name: &str, arguments: Value) -> Result<Value, Value> {
-        match super::run_tool(name, &arguments, Ok(self.context)) {
-            Ok(result) => {
-                let text = result["content"][0]["text"].as_str().unwrap_or("{}");
-                Ok(serde_json::from_str(text).unwrap_or_else(|_| json!({"text": text})))
-            }
+        match super::run_tool_body(name, &arguments, Ok(self.context)) {
+            Ok(answer) => read_answer(name, answer),
             Err(ToolFailure::Refused(refusal)) => Err(json!({
                 "code": refusal.code,
                 "message": refusal.message,
