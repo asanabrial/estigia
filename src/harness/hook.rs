@@ -116,17 +116,18 @@ fn spelling(name: &str) -> String {
         .collect()
 }
 
-/// Every event Estigia registers **in an agent**, with the matcher each needs.
+/// Every **lifecycle** event Estigia registers in an agent, with the matcher each
+/// needs and the timeout its host is given.
 ///
 /// `PrePush` is deliberately absent: it belongs to git, not to an agent, and it
 /// is installed by `estigia guard` into a repository rather than by `setup`
 /// into a settings file.
 ///
-/// `PreToolUse` matches only the tools the gate can act on. A matcher of `*`
-/// would wake this process for every `Read` and every `Grep`, which is a cost
-/// paid thousands of times to answer "not mine".
+/// `PreToolUse` is absent too, and it is the gate rather than a lifecycle event:
+/// its matcher, timeout and failure policy differ per agent, so they are
+/// `AgentAdapter::gate_spec`'s to describe. [`Event::all`] is every event this
+/// build answers.
 pub const EVENTS: &[(Event, Option<&str>, u64)] = &[
-    (Event::PreToolUse, None, 10),
     (Event::PostToolUse, Some("Bash"), 10),
     (Event::SessionStart, None, 5),
     (Event::SessionEnd, None, 5),
@@ -2308,8 +2309,8 @@ mod tests {
 
     #[test]
     fn every_event_round_trips_through_its_slug() {
-        for (event, _, _) in EVENTS {
-            assert_eq!(Event::from_slug(event.slug()), Some(*event));
+        for event in Event::all() {
+            assert_eq!(Event::from_slug(event.slug()), Some(event));
         }
     }
 

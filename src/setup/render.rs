@@ -33,6 +33,13 @@ pub(super) struct GateSpec {
     /// Claude Code dialect" stopped being true the day another agent shared
     /// both, and Codex silently began receiving entries nobody runs.
     pub lifecycle: bool,
+    /// Whether the host is told to block the tool call when this entry fails or
+    /// times out.
+    ///
+    /// Only where the host's own reference states it: an agent told to block a
+    /// failure it does not understand is a settings file it may refuse, and one
+    /// never told is a gate turned off by a slow read.
+    pub blocks_on_failure: bool,
 }
 
 /// The shapes a hooks file comes in.
@@ -164,6 +171,9 @@ impl AgentAdapter {
                 envelope: Envelope::Settings,
                 // The only one; see the field's note on why it is declared.
                 lifecycle: true,
+                // Its hooks reference: a timed-out `PreToolUse` hook does not
+                // block the call unless the entry says so. Needs v2.1.295.
+                blocks_on_failure: true,
             }),
             // Verified from `codex-rs/hooks/src/schema.rs`: byte for byte
             // Claude Code's shape, so it shares the dialect and the envelope,
@@ -177,6 +187,7 @@ impl AgentAdapter {
                 dialect: Dialect::ClaudeCode,
                 envelope: Envelope::Settings,
                 lifecycle: false,
+                blocks_on_failure: false,
             }),
             InstructionFile::GeminiCli => Some(GateSpec {
                 events: &["BeforeTool"],
@@ -186,6 +197,7 @@ impl AgentAdapter {
                 dialect: Dialect::GeminiCli,
                 envelope: Envelope::Settings,
                 lifecycle: false,
+                blocks_on_failure: false,
             }),
             // Verified from `packages/core/src/hooks/types.ts`: a Gemini CLI
             // fork that has diverged where it counts — the event is
@@ -197,6 +209,7 @@ impl AgentAdapter {
                 dialect: Dialect::GeminiCli,
                 envelope: Envelope::Settings,
                 lifecycle: false,
+                blocks_on_failure: false,
             }),
             // Verified in `internal/hooks/hooks.go` and `internal/config/config.go`:
             // `PreToolUse`, a regex matcher against the tool name, and **exit 2
@@ -213,6 +226,7 @@ impl AgentAdapter {
                 dialect: Dialect::ClaudeCode,
                 envelope: Envelope::Settings,
                 lifecycle: false,
+                blocks_on_failure: false,
             }),
             InstructionFile::Crush => Some(GateSpec {
                 events: &["PreToolUse"],
@@ -222,6 +236,7 @@ impl AgentAdapter {
                 dialect: Dialect::ExitCode,
                 envelope: Envelope::Crush,
                 lifecycle: false,
+                blocks_on_failure: false,
             }),
             InstructionFile::Windsurf => Some(GateSpec {
                 // Two, because Windsurf has no matcher and one event per kind of
@@ -231,6 +246,7 @@ impl AgentAdapter {
                 dialect: Dialect::ExitCode,
                 envelope: Envelope::Windsurf,
                 lifecycle: false,
+                blocks_on_failure: false,
             }),
             InstructionFile::Cursor => Some(GateSpec {
                 events: &["preToolUse"],
@@ -238,6 +254,7 @@ impl AgentAdapter {
                 dialect: Dialect::Cursor,
                 envelope: Envelope::Cursor,
                 lifecycle: false,
+                blocks_on_failure: false,
             }),
             // Spelled out rather than left to a wildcard: a wildcard hands a
             // new variant a default nobody chose. OpenCode and Cline still gate
@@ -248,6 +265,15 @@ impl AgentAdapter {
             | InstructionFile::Cline
             | InstructionFile::ZCode
             | InstructionFile::DeepSeekHarness => None,
+        }
+    }
+
+    /// Whether this agent's host is told to block the tool call when the gate
+    /// fails or times out.
+    pub(crate) const fn blocks_when_the_gate_fails(&self) -> bool {
+        match self.gate_spec() {
+            Some(spec) => spec.blocks_on_failure,
+            None => false,
         }
     }
 
@@ -741,6 +767,13 @@ fn hook_command(executable: &Path, agent: &str, dialect: Dialect) -> String {
     )
 }
 
+/// The seconds a host waits for the gate before its own timeout applies.
+///
+/// Not raised along with the failure policy: the calls slow enough to reach it
+/// are the ones that read live state, and a stalled read has to stop the write
+/// rather than buy it more time.
+const GATE_TIMEOUT_SECONDS: u64 = 10;
+
 /// What every registered gate is invoked with, whoever writes the command line.
 ///
 /// One function because there were two writers and they had drifted: what is
@@ -818,7 +851,7 @@ pub(super) fn render_cursor_hooks(
         entries.retain(|entry| !is_estigia_gate(entry));
         entries.push(json!({
             "command": hook_command(executable, agent, spec.dialect),
-            "timeout": 10,
+            "timeout": GATE_TIMEOUT_SECONDS,
         }));
     }
 
@@ -920,14 +953,15 @@ pub(super) fn render_hooks(
         if let Some(matcher) = spec.matcher {
             entry.insert("matcher".to_owned(), Value::String(matcher.to_owned()));
         }
-        entry.insert(
-            "hooks".to_owned(),
-            json!([{
-                "type": "command",
-                "command": hook_command(executable, agent, spec.dialect),
-                "timeout": 10,
-            }]),
-        );
+        let mut handler = json!({
+            "type": "command",
+            "command": hook_command(executable, agent, spec.dialect),
+            "timeout": GATE_TIMEOUT_SECONDS,
+        });
+        if spec.blocks_on_failure {
+            handler["onFailure"] = json!("block");
+        }
+        entry.insert("hooks".to_owned(), json!([handler]));
         entries.insert(slot.unwrap_or(entries.len()), Value::Object(entry));
     }
 
@@ -938,11 +972,6 @@ pub(super) fn render_hooks(
     }
 
     for (event, _, _) in crate::harness::hook::EVENTS {
-        // The gate was written above; clearing it here would wipe what the
-        // block just added — a lifecycle hook and no gate.
-        if *event == crate::harness::hook::Event::PreToolUse {
-            continue;
-        }
         let entries = hooks
             .entry(event.agent_name().to_owned())
             .or_insert_with(|| Value::Array(Vec::new()));
@@ -960,9 +989,6 @@ pub(super) fn render_hooks(
     }
 
     for (event, matcher, timeout) in crate::harness::hook::EVENTS {
-        if *event == crate::harness::hook::Event::PreToolUse {
-            continue;
-        }
         let mut entry = Map::new();
         if let Some(matcher) = matcher {
             entry.insert("matcher".to_owned(), Value::String((*matcher).to_owned()));

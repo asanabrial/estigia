@@ -526,6 +526,35 @@ It waits for mail addressed to the session and wakes it by exiting 2; what it do
 duplicate, and uninstall removes it with the other Estigia hooks because it has Estigia's shape (below) while another
 tool's `Stop` entries, the loop's included, stay. Only Claude Code gets it; Codex's `Stop` is the loop's.
 
+## The Claude Code `PreToolUse` entry
+
+`estigia setup claude-code` registers the gate with the matcher
+`Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion`, a 10 s timeout, and the
+failure policy its hooks reference requires for a timeout to decide anything:
+
+```json
+{"matcher": "Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion",
+ "hooks": [{"type": "command",
+            "command": "\"<estigia>\" hook pre-tool-use --agent claude-code --dialect claude-code",
+            "timeout": 10,
+            "onFailure": "block"}]}
+```
+
+A `PreToolUse` hook that reaches its timeout does not block the tool call unless the handler says
+`"onFailure": "block"`: the call continues through the ordinary permission flow. The gate can be
+slower than 10 s by design — at a boundary past the renewal window it re-verifies the claim through
+`gh`, and [`honesty.md`](honesty.md#the-gates-boundary) bounds that wait at fifteen minutes — so the
+calls most worth stopping are the ones a slow network would otherwise release. No other event carries
+the field, because none of them decides a tool call; the `Stop` hook's own answer is an exit code.
+
+The exact matcher, timeout and policy are `GateSpec` in `src/setup/render.rs`, which is where another
+agent's difference is declared; Codex shares the envelope and gets no such field, because its host's
+schema was not shown to have one. A Claude Code older than v2.1.295 does not honour the field, and a
+Claude Code rewriting `settings.json` was reported to drop keys it does not know from a hook handler,
+so the entry can come back without it: `estigia setup` rewrites the entry on every run and `estigia
+doctor` reports one that lost it. [`honesty.md`](honesty.md#the-gates-reach-across-the-agents) records
+what is unmeasured there.
+
 ## The Claude Code `PostToolUse` entry
 
 `estigia setup claude-code` registers `PostToolUse` with the matcher `Bash` and
