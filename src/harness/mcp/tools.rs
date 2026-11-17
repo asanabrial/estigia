@@ -1016,13 +1016,20 @@ pub const TOOLS: &[Tool] = &[
         operation: "list-state",
         arguments: &[
             Argument::optional("state", "string", "The workflow state, required unless \
-                              `identities` is set.").of(crate::config::STATES),
+                              `identities` or `issue` is set.").of(crate::config::STATES),
             RUN_ID,
             Argument::optional(
                 "identities",
                 "boolean",
                 "Answer each open issue's recorded dedup key instead of one state's queue.",
             ),
+            Argument::optional(
+                "issue",
+                "integer",
+                "Read this one issue from the store instead: a provisional number answers \
+                 queued, or the number GitHub gave it.",
+            )
+            .counting_from(1),
             Argument::optional(
                 "limit",
                 "integer",

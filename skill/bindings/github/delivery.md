@@ -67,7 +67,7 @@ than proven.
 
 While the window is closed, `claim`, `transition`, `comment`, `create` and `unassign` answer
 from the local store and queue their GitHub writes; an issue created then carries a provisional number until
-the queue is sent. `estigia flush` sends the queue in order once the window is open, and every write to
+the queue is sent. GitHub answers not found for that number: read it with `list_state` and `issue`, which answers queued or the real number, and the gate answers a `gh issue` command naming it the same way. `estigia flush` sends the queue in order once the window is open, and every write to
 GitHub and every publication runs it first. A queue that does not drain refuses `outbox-pending`, naming the
 write it stopped at and how many remain: settle that write, then run `flush` again. Every closed-window answer names the next opening as `opens_at`, and a loop waits for that instant: the attempt it wakes runs `flush` first.
 

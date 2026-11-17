@@ -57,6 +57,7 @@ pub mod mcp;
 pub mod operation_window;
 pub mod person_only;
 pub mod population;
+pub mod provisional_read;
 pub mod prune;
 pub mod refusal_class;
 pub(crate) mod registry;
@@ -3284,6 +3285,13 @@ fn decide_observing(
         && let Some(changed) = issue_requirement::watched_change(context)
     {
         return changed;
+    }
+    let literal = match observed.command.as_ref().map(|seen| &seen.literal) {
+        Some(Established::Known(text)) => Some(text.as_str()),
+        _ => None,
+    };
+    if let Some(answer) = provisional_read::refusal(literal) {
+        return Decision::Deny(Box::new(answer));
     }
     let verifier = match action {
         Action::Untouched => return Decision::Outside(Aside::NotWatched),

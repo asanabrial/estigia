@@ -315,6 +315,33 @@ fn provisional_items(
         .collect())
 }
 
+/// One issue as this machine's store holds it: a provisional number reads as
+/// queued, or as the number GitHub gave it once sent, and never as not found.
+pub fn issue_reading(context: &Context, issue: u64) -> Result<serde_json::Value, Failure> {
+    let mut answer = super::outbox::reading(issue)?;
+    let number = answer
+        .get("real")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(issue);
+    if answer.get("allocated_here") == Some(&serde_json::Value::Bool(false)) {
+        answer["ok"] = serde_json::Value::Bool(true);
+        return Ok(answer);
+    }
+    let repo = super::claim::repo_of(context)?;
+    let store = super::store::open_for_read(&super::store::store_path()?)?;
+    let state = match &store {
+        Some(store) => store
+            .issue_rows(&repo)?
+            .into_iter()
+            .find(|row| row.number == number)
+            .and_then(|row| row.state),
+        None => None,
+    };
+    answer["ok"] = serde_json::Value::Bool(true);
+    answer["state"] = state.map_or(serde_json::Value::Null, serde_json::Value::String);
+    Ok(answer)
+}
+
 /// The partition a queue entry belongs in: its `domain:` label, or
 /// `unassigned` when it carries none.
 fn entry_domain(entry: &serde_json::Value) -> String {
@@ -1681,6 +1708,11 @@ fn create_offline(
         "labels": what.labels,
         "board": "deferred",
         "queued": queued,
+        "detail": format!(
+            "#{provisional} is provisional: it is in this machine's queue and not on GitHub, \
+             so a GitHub read answers not found until `estigia flush` sends the queue with the \
+             git operation window open; `list_state` with `issue` reads it from the store"
+        ),
     });
     if let Some(checked) = what.priority_checked {
         answer["priority_checked"] = serde_json::Value::Bool(checked);

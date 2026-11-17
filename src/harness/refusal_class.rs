@@ -391,6 +391,7 @@ const REFUSED: &[&str] = &[
     "payload-line-not-found",
     "payload-membership-transaction-unknown",
     "planning-protocol-retired",
+    "provisional-issue-number",
     "publication-comment-too-large",
     "publication-epoch-not-found",
     "publication-lane-forbidden",

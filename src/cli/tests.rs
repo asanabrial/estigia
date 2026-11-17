@@ -66,6 +66,8 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::decision_mode::refusal(&[], true),
         crate::harness::issue_creation::refusal(Some("gh issue create"))
             .expect("a line that files an issue is refused"),
+        crate::harness::provisional_read::refusal(Some("gh issue view 9000000000777"))
+            .expect("a provisional number is answered from the store"),
         // The role gate's only refusal, by its real constructor.
         crate::harness::roles::out_of_role(
             "builder",

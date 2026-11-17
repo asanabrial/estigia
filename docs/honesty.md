@@ -904,7 +904,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,909 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,725 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,913 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -2747,6 +2747,12 @@ pointer that leaves it names the document it points at.
   real number writes that number and the checkout `claim` started into the run pointer, read from the
   transport's answer rather than from the provisional argument the call was made with. A provisional
   issue opens its ledger without any GitHub call, and an unallocated or unrecorded number is refused.
+  A provisional number is read from this machine's store alone: `list_state` with `issue`, and the gate's
+  `provisional-issue-number` answer to `gh issue view|comment|edit|close|reopen` or a GraphQL `issue(number:)`
+  naming one. The match is on the command line's words, so a number reached through a variable or a script
+  goes to GitHub and reads as not found, and a number another machine allocated reads as never allocated
+  here. `-R` naming another repository than the allocation's is left to GitHub. The tests are
+  `provisional_read` in `src/harness/` and the offline cases in `src/transport/outbox/`.
 - **The window's wake is told, not held, on two hosts.** `opens_at` is computed from this machine's
   local zone; under a test clock the offset is held fixed, and off Unix no daylight-saving change is
   read. In the refusal it is text, not a field. Claude Code's loop only tells the turn to schedule its

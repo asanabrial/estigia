@@ -668,6 +668,12 @@ fn adjudicate_pushing(
     // an action the harness does not watch is outside whoever swore what. The
     // branch below **denies** when a run pointer will not parse, which is
     // right for a write and wrong for a tool this build does not watch.
+    if let Some(answer) = super::provisional_read::refusal(literal) {
+        return Adjudication {
+            decision: Decision::Deny(Box::new(answer)),
+            holder: None,
+        };
+    }
     if matches!(action, Action::Untouched) {
         return Adjudication {
             decision: Decision::Outside(super::Aside::NotWatched),
