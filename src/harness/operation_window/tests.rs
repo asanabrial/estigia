@@ -697,10 +697,38 @@ fn no_opening_is_named_when_the_window_is_open_or_not_enabled() {
 #[test]
 fn the_denial_names_the_next_opening() {
     at(8 * 60, || {
+        let an_hour_on = || {
+            let now = crate::harness::session::now_seconds().expect("a clock");
+            crate::harness::session::stamp_of(now - now % 60 + 3600)
+        };
+        let before = an_hour_on();
         let refusal = denial(&window("enabled 09:00-17:00"), Some(8 * 60));
+        let after = an_hour_on();
         assert_eq!(refusal.code, "git-operation-window-denied");
         let said = refusal.to_string();
-        assert!(said.contains("opens next at 20"), "{said}");
-        assert!(said.contains("(`opens_at`)"), "{said}");
+        assert!(
+            said.contains(&format!("opens next at {before} (`opens_at`)"))
+                || said.contains(&format!("opens next at {after} (`opens_at`)")),
+            "{said}"
+        );
+    });
+}
+
+#[test]
+fn the_next_opening_is_the_first_permitted_minute() {
+    at(8 * 60 + 30, || {
+        let half_an_hour_on = || {
+            let now = crate::harness::session::now_seconds().expect("a clock");
+            crate::harness::session::stamp_of(now - now % 60 + 30 * 60)
+        };
+        let before = half_an_hour_on();
+        let opening = next_opening(&window("enabled 09:00-17:00"), Some(8 * 60 + 30));
+        let after = half_an_hour_on();
+        let opening = opening.expect("a closed window opens");
+        assert!(opening == before || opening == after, "{opening}");
+        assert_eq!(
+            next_opening(&window("enabled 09:00-17:00"), Some(10 * 60)),
+            None
+        );
     });
 }

@@ -221,8 +221,9 @@ pub fn next_opening(window: &GitOperationWindow, now: Option<u16>) -> Option<Str
     let minute = i64::from(now?);
     let seconds = i64::try_from(crate::harness::session::now_seconds()?).ok()?;
     let overridden = NOW_OVERRIDE.with(|cell| cell.borrow().is_some());
+    let minute_began = seconds - seconds.rem_euclid(60);
     let projected = move |at: i64| {
-        Some((minute + (at - seconds).div_euclid(60)).rem_euclid(WEEK_MINUTES) as u16)
+        Some((minute + (at - minute_began).div_euclid(60)).rem_euclid(WEEK_MINUTES) as u16)
     };
     let opening = if overridden {
         next_opening_at(window, seconds, projected)
