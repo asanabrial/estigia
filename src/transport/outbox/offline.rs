@@ -337,6 +337,11 @@ fn a_create_while_closed_is_held_under_a_provisional_number() {
     assert!(outbox::is_provisional(provisional), "{answer}");
     assert_eq!(answer["provisional"], true);
     assert_eq!(answer["url"], serde_json::Value::Null);
+    let detail = answer["detail"].as_str().expect("a detail");
+    assert!(
+        detail.contains("queue") && detail.contains("`estigia flush`"),
+        "{detail}"
+    );
     assert_eq!(rig.state(provisional).as_deref(), Some("ready"));
     assert_eq!(
         rig.queue(),
@@ -346,6 +351,29 @@ fn a_create_while_closed_is_held_under_a_provisional_number() {
         ]
     );
     assert_eq!(rig.writes(), Vec::<String>::new());
+}
+
+#[test]
+fn one_provisional_issue_reads_as_queued_and_then_as_its_real_number() {
+    let rig = rig();
+    let provisional = created(&rig);
+    let number = provisional.to_string();
+    let waiting = rig
+        .closed("list-state", &["--issue", &number])
+        .expect("a read");
+    assert_eq!(waiting["sent"], false, "{waiting}");
+    assert!(waiting["queued"].as_u64().is_some(), "{waiting}");
+    assert_eq!(waiting["state"], "ready", "{waiting}");
+
+    let mut store = Store::open(&store_path().expect("a path")).expect("opens");
+    store
+        .rekey(&repo(), provisional, 480, None)
+        .expect("rekeys");
+    let sent = rig
+        .closed("list-state", &["--issue", &number])
+        .expect("a read");
+    assert_eq!(sent["real"], 480, "{sent}");
+    assert_eq!(sent["state"], "ready", "{sent}");
 }
 
 #[test]

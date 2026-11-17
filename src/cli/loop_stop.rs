@@ -20,6 +20,9 @@ fn retry_pause() {
 pub(super) enum Decision {
     /// Keep going; the value is the `Stop` answer that blocks.
     Continue(Value),
+    /// Keep going once and record `reason`, so the next stop for the same
+    /// reason can be let through.
+    Announce { value: Value, reason: String },
     /// End the loop; `reason` says why, `terminal` whether a later turn should
     /// stay stopped or the loop may continue, and `requested` whether a pending
     /// stop-after request is what asked for it.
@@ -36,7 +39,7 @@ impl Decision {
     pub(super) fn into_value(self) -> Value {
         match self {
             Self::Continue(value) => value,
-            Self::Stop { value, .. } => value,
+            Self::Announce { value, .. } | Self::Stop { value, .. } => value,
         }
     }
 
@@ -69,9 +72,14 @@ pub(super) fn answer(
         let run_id = session::run_id(session::runtime_of_agent(Some(agent)), &input.session_id);
         if !session::is_nameless(&run_id) {
             if agent == "codex" {
-                let decision = decide(&run_id, Invocation::Mention, None, retry_pause, || {
-                    goal_reading(context, &run_id, false)
-                });
+                let decision = decide(
+                    &run_id,
+                    Invocation::Mention,
+                    None,
+                    None,
+                    retry_pause,
+                    || goal_reading(context, &run_id, false),
+                );
                 if decision.consumes_stop_request() {
                     session::clear_stop_after(&context.state_root, &run_id);
                 }
@@ -128,10 +136,20 @@ fn claude(context: &GateContext, input: &Input, run_id: &str) -> Value {
     if background_work_outstanding(&input.transcript_path) {
         return json!({});
     }
-    let decision = decide(run_id, Invocation::Slash, goal.max, retry_pause, || {
-        goal_reading(context, run_id, goal.max.is_some())
-    });
+    let last = goal.last.as_ref().map(|last| last.reason.clone());
+    let decision = decide(
+        run_id,
+        Invocation::Slash,
+        goal.max,
+        last.as_deref(),
+        retry_pause,
+        || goal_reading(context, run_id, goal.max.is_some()),
+    );
     match decision {
+        Decision::Announce { value, reason } => {
+            session::record_loop_answer(&context.state_root, run_id, &mut goal, &reason, false);
+            value
+        }
         Decision::Continue(value) => {
             session::record_loop_answer(
                 &context.state_root,
@@ -196,13 +214,15 @@ fn waiting_on(reading: &GoalReading) -> String {
 
 /// The one loop decision, shared by Codex's `Stop` and Claude Code's.
 ///
-/// `max` is the completion cap a stored loop carries; `pause` is how the caller
-/// waits between attempts at a read that has not answered yet, and `read` is
-/// asked with the completion count wanted only when a cap is set.
+/// `max` is the completion cap a stored loop carries and `last` the reason it
+/// last recorded; `pause` is how the caller waits between attempts at a read
+/// that has not answered yet, and `read` is asked with the completion count
+/// wanted only when a cap is set.
 pub(super) fn decide(
     run_id: &str,
     invocation: Invocation,
     max: Option<u64>,
+    last: Option<&str>,
     mut pause: impl FnMut(),
     mut read: impl FnMut() -> GoalReading,
 ) -> Decision {
@@ -255,7 +275,31 @@ pub(super) fn decide(
     if reading.live
         && let Some(issue) = &reading.issue
     {
-        return Decision::Continue(stop_block(issue, run_id));
+        let Some(at) = &reading.opens_at else {
+            return Decision::Continue(stop_block(issue, run_id));
+        };
+        let waiting = crate::harness::loop_text::window_wait(at);
+        if last == Some(waiting.as_str()) {
+            return Decision::Stop {
+                value: ended(&format!(
+                    "{waiting}; the next attempt runs `estigia flush` first"
+                )),
+                reason: waiting,
+                terminal: false,
+                requested: false,
+            };
+        }
+        let mut value = stop_block(issue, run_id);
+        let told = format!(
+            "{}{}",
+            value["reason"].as_str().unwrap_or_default(),
+            crate::harness::loop_text::window_closed(at)
+        );
+        value["reason"] = json!(told);
+        return Decision::Announce {
+            value,
+            reason: waiting,
+        };
     }
     if let Some(reason) = &reading.stop_after {
         let why = format!("the agent asked to stop after the current task ({reason})");
@@ -264,6 +308,15 @@ pub(super) fn decide(
             reason: why,
             terminal: true,
             requested: true,
+        };
+    }
+    if reading.standing == "assisted" {
+        let reason = crate::harness::loop_text::assisted().to_owned();
+        return Decision::Stop {
+            value: ended(&reason),
+            reason,
+            terminal: true,
+            requested: false,
         };
     }
     let (Some(claimable), Some(dischargeable)) = (reading.claimable, reading.dischargeable) else {
@@ -276,9 +329,13 @@ pub(super) fn decide(
         };
     };
     if claimable + dischargeable > 0 {
+        let reason = match &reading.next {
+            Some(key) => crate::harness::loop_text::continuation_naming(invocation, run_id, key),
+            None => continuation(invocation, run_id, dischargeable),
+        };
         return Decision::Continue(json!({
             "decision": "block",
-            "reason": continuation(invocation, run_id, dischargeable),
+            "reason": reason,
         }));
     }
     let waiting = waiting_on(&reading);

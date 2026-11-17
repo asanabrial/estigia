@@ -1353,6 +1353,7 @@ fn run_tool_answering(
     // A run that holds one issue cannot swear to a second. Re-claiming the
     // *same* issue is a renewal and passes: the transport dedupes it on the
     // operation id this run already minted.
+    let mut park_to: Option<u64> = None;
     if matches!(tool.effect, PointerEffect::Swear | PointerEffect::Assisted) {
         let holder = named.as_ref().map_or("", |run| run.id);
         let wanted = arguments.get("issue").and_then(|value| {
@@ -1375,8 +1376,36 @@ fn run_tool_answering(
                 ),
             ))));
         }
+        let park =
+            tool.name == "claim" && arguments.get("park").and_then(Value::as_bool) == Some(true);
+        let wanted_number = wanted.as_ref().and_then(crate::identity::Identity::number);
+        if park
+            && let Some(number) = wanted_number
+            && holding.issue.as_ref() != wanted.as_ref()
+        {
+            let window = &context.operation_window;
+            let closed = !crate::harness::operation_window::permits_now(
+                window,
+                crate::harness::operation_window::now_minutes(),
+            );
+            if !holding.holds_parked(number) && !closed {
+                return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
+                    "already-holding",
+                    format!(
+                        "{holder} cannot park its held issue to claim #{number}: a claim is set \
+                         aside only while the git operation window is closed, and it is open"
+                    ),
+                    Resolution::no_command(
+                        crate::outcome::NoCommandReason::OperatorKnowledge,
+                        "commit and publish the held issue first, then claim the next one",
+                    ),
+                ))));
+            }
+            park_to = Some(number);
+        }
         let held = holding.issue;
-        if let (Some(held), Some(wanted)) = (held, wanted)
+        if park_to.is_none()
+            && let (Some(held), Some(wanted)) = (held, wanted)
             && held != wanted
         {
             let way_out = if tool.effect == PointerEffect::Assisted && !holding.assisted {
@@ -1435,6 +1464,14 @@ fn run_tool_answering(
         ))));
     }
 
+    let before_park = park_to.map(|number| {
+        let before = run.clone();
+        run = session::update(&context.state_root, run_id, |run| run.park_for(number));
+        before
+    });
+    if before_park.is_some() && run.issue_number() == Some(issue) {
+        with_sworn_horizon(&mut flags, run.horizon.as_deref());
+    }
     let mut claim_key_reused = false;
     // Recorded here rather than searched for later by matching the
     // `"--operation-id"` string in `flags`, which could also match a flag
@@ -1863,6 +1900,11 @@ fn run_tool_answering(
         },
     };
     if let Some(failure) = refusal_from_answer(tool, &answer, &mut run, context) {
+        if let Some(before) = &before_park {
+            session::update(&context.state_root, run_id, |run| {
+                run.restore_claims(before)
+            });
+        }
         return Err(failure);
     }
 
@@ -1961,6 +2003,17 @@ fn run_tool_answering(
 /// The notice `done` and `release` append when the run's own checkout still
 /// holds uncommitted files. Read after the call, so a checkout `release` took
 /// down is gone and says nothing; it never changes the answer's outcome.
+/// Puts the horizon a parked claim was sworn with in place of the one asked for, since taking it
+/// back reuses that claim's operation id and its marker.
+fn with_sworn_horizon(flags: &mut [String], sworn: Option<&str>) {
+    if let Some(sworn) = sworn
+        && let Some(at) = flags.iter().position(|flag| flag == "--horizon")
+        && let Some(value) = flags.get_mut(at + 1)
+    {
+        sworn.clone_into(value);
+    }
+}
+
 fn checkout_notice(
     operation: &str,
     arguments: &Value,
@@ -2201,9 +2254,8 @@ pub(crate) fn apply_effect(
         return true;
     }
     if effect == PointerEffect::Forget {
-        // Removing the file is the record: if it is gone, the run holds
-        // nothing, which is what was asked for.
-        session::forget(&context.state_root, &run.run_id);
+        let released = arguments.get("issue").and_then(Value::as_u64);
+        session::forget_released(&context.state_root, &run.run_id, released);
         *run = session::load(&context.state_root, &run.run_id);
         return true;
     }
@@ -2309,11 +2361,17 @@ pub(crate) fn apply_effect(
     // Against the newest pointer on disk rather than the one this call
     // loaded — a hook storing in between would otherwise make this write
     // vanish, taking the issue or the isolated checkout with it.
+    let sworn_horizon = body
+        .and_then(|body| body.get("horizon"))
+        .or_else(|| arguments.get("horizon"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let (updated, on_disk) = session::updated(&context.state_root, &run.run_id, |run| {
         match effect {
             PointerEffect::None | PointerEffect::Forget => {}
             PointerEffect::Swear => {
                 run.issue = answered_issue.clone().or_else(|| issue.clone());
+                run.horizon.clone_from(&sworn_horizon);
                 run.state = Some(state.clone());
                 run.repo_dir = Some(repo_dir.clone());
                 run.assisted = false;

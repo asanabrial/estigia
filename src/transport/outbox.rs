@@ -122,6 +122,69 @@ pub(crate) fn resolve(issue: u64) -> Result<u64, Failure> {
     }
 }
 
+/// What this machine's store says of `issue`: for a provisional number, whether
+/// it waits in the queue, which number GitHub gave it once sent, or that this
+/// store never allocated it. Only this store is read, and a provisional number
+/// names an allocation on one machine.
+pub(crate) fn reading_in(store: Option<&Store>, issue: u64) -> Result<serde_json::Value, Failure> {
+    if !is_provisional(issue) {
+        return Ok(serde_json::json!({ "issue": issue, "provisional": false }));
+    }
+    let repo = match store {
+        Some(held) => held.provisional_repo(issue)?,
+        None => None,
+    };
+    let (Some(held), Some(repo)) = (store, repo) else {
+        return Ok(serde_json::json!({
+            "issue": issue,
+            "provisional": true,
+            "allocated_here": false,
+            "detail": format!(
+                "#{issue} is a provisional number this machine's store never allocated: \
+                 another machine filed it, and GitHub has no issue under it"
+            ),
+        }));
+    };
+    let slug = format!("{}/{}", repo.owner, repo.name);
+    if let Some(real) = held.provisional_real(&repo, issue)?.flatten() {
+        return Ok(serde_json::json!({
+            "issue": issue,
+            "provisional": true,
+            "allocated_here": true,
+            "repo": slug,
+            "sent": true,
+            "real": real,
+            "detail": format!("#{issue} was provisional and GitHub filed it as #{real}"),
+        }));
+    }
+    let queued = held
+        .outbox(&repo)?
+        .into_iter()
+        .find(|row| row.issue == issue && row.kind == OutboxKind::Create)
+        .map(|row| row.seq);
+    Ok(serde_json::json!({
+        "issue": issue,
+        "provisional": true,
+        "allocated_here": true,
+        "repo": slug,
+        "sent": false,
+        "queued": queued,
+        "detail": format!(
+            "#{issue} is provisional: it waits in this machine's queue and is not on GitHub \
+             until `estigia flush` sends the queue with the git operation window open"
+        ),
+    }))
+}
+
+/// [`reading_in`] over the default store.
+pub(crate) fn reading(issue: u64) -> Result<serde_json::Value, Failure> {
+    if !is_provisional(issue) {
+        return reading_in(None, issue);
+    }
+    let held = store::open_for_read(&store::store_path()?)?;
+    reading_in(held.as_ref(), issue)
+}
+
 /// Rewrites what lives outside the store and still names a provisional issue
 /// whose real number is known: run pointers under `state_root`, and the
 /// ownership record of the worktree each one points at. Answers how many files
@@ -151,6 +214,38 @@ pub(crate) fn rekey_files(store: &Store, state_root: &Path) -> Result<usize, Fai
             )));
         }
         changed += 1;
+    }
+    for run in crate::harness::session::parked_holdings(state_root) {
+        for parked in &run.parked {
+            let Some(provisional) = parked
+                .issue
+                .number()
+                .filter(|number| is_provisional(*number))
+            else {
+                continue;
+            };
+            let real = resolve_in(store, provisional)?;
+            if real == provisional {
+                continue;
+            }
+            if let Some(worktree) = parked.worktree.as_deref() {
+                changed += usize::from(rekey_ownership(worktree, provisional, real)?);
+            }
+            let (_, landed) = crate::harness::session::updated(state_root, &run.run_id, |held| {
+                for entry in &mut held.parked {
+                    if entry.issue.number() == Some(provisional) {
+                        entry.issue = crate::identity::Identity::Number(real);
+                    }
+                }
+            });
+            if !landed {
+                return Err(Failure::Write(format!(
+                    "the pointer of {} still parks issue {provisional} after its rekey to {real}",
+                    run.run_id
+                )));
+            }
+            changed += 1;
+        }
     }
     Ok(changed)
 }

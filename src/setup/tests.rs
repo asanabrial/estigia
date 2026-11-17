@@ -2212,6 +2212,140 @@ fn each_gated_agent_gets_its_own_envelope_and_not_somebody_else_s() {
 }
 
 #[test]
+fn a_gate_that_does_not_answer_in_time_blocks_the_tool_call() {
+    let (_home, options) = sandbox();
+    let read = |slug: &str| {
+        let adapter = agent(slug);
+        let hooks = resolve_paths(adapter, &options)
+            .expect("paths resolve")
+            .hooks
+            .expect("a gated agent has a hooks file");
+        setup(adapter, &Config::default(), &options).expect("setup succeeds");
+        serde_json::from_str::<serde_json::Value>(
+            &fs::read_to_string(&hooks).expect("the hooks file is readable"),
+        )
+        .expect("valid json")
+    };
+
+    let claude = read("claude-code");
+    let handler = &claude["hooks"]["PreToolUse"][0]["hooks"][0];
+    assert_eq!(
+        handler["onFailure"], "block",
+        "a gate the host stops waiting for does not block the tool call, so the write goes \
+         through ungated: {handler}"
+    );
+    for (event, groups) in claude["hooks"]
+        .as_object()
+        .expect("claude-code's hooks wrap events")
+    {
+        if event == "PreToolUse" {
+            continue;
+        }
+        assert!(
+            !groups.to_string().contains("onFailure"),
+            "`{event}` decides nothing, so it was given a failure policy that blocks work: \
+             {groups}"
+        );
+    }
+
+    // Codex reads the same envelope and has a schema of its own; a field it
+    // does not know is a file it may refuse.
+    let codex = read("codex");
+    assert!(
+        codex["hooks"]["PreToolUse"][0]["hooks"][0]
+            .get("onFailure")
+            .is_none(),
+        "the failure policy leaked into an agent whose host does not declare it: {codex}"
+    );
+}
+
+/// A gate entry the earlier build wrote carries no failure policy, and setup
+/// replaces it rather than leaving a gate that stops blocking on a slow read.
+#[test]
+fn an_entry_an_earlier_build_wrote_is_upgraded_in_place() {
+    let (_home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let hooks = resolve_paths(adapter, &options)
+        .expect("paths resolve")
+        .hooks
+        .expect("claude-code is gated");
+    fs::create_dir_all(hooks.parent().expect("a parent")).expect("the directory");
+    let earlier = serde_json::json!({
+        "permissions": {"allow": ["Bash(ls *)"]},
+        "hooks": {
+            "PreToolUse": [{
+                "matcher": "Bash",
+                "hooks": [{
+                    "type": "command",
+                    "command": "\"/opt/estigia\" hook pre-tool-use --agent claude-code \
+                                --dialect claude-code",
+                    "timeout": 10,
+                }],
+            }],
+        },
+    });
+    fs::write(&hooks, earlier.to_string()).expect("their file");
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    let upgraded: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&hooks).expect("readable")).expect("valid json");
+    assert_eq!(
+        upgraded["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"], "block",
+        "the entry an earlier build wrote was left as it was, so a slow read still lets the \
+         write through: {upgraded}"
+    );
+    assert_eq!(
+        upgraded["hooks"]["PreToolUse"].as_array().map(Vec::len),
+        Some(1),
+        "the upgrade added a second gate beside the one it replaced: {upgraded}"
+    );
+    assert_eq!(
+        upgraded["permissions"]["allow"][0], "Bash(ls *)",
+        "setup lost a key of theirs beside the entry it rewrote: {upgraded}"
+    );
+}
+
+/// The uninstall matches the command, not the fields beside it, so a gate an
+/// earlier build wrote and one the current build writes both come out.
+#[test]
+fn an_uninstall_takes_back_the_gate_with_or_without_the_failure_field() {
+    for on_failure in [None, Some("block")] {
+        let (_home, options) = sandbox();
+        let adapter = agent("claude-code");
+        let hooks = resolve_paths(adapter, &options)
+            .expect("paths resolve")
+            .hooks
+            .expect("claude-code is gated");
+        fs::create_dir_all(hooks.parent().expect("a parent")).expect("the directory");
+        let mut handler = serde_json::json!({
+            "type": "command",
+            "command": "\"/opt/estigia\" hook pre-tool-use --agent claude-code \
+                        --dialect claude-code",
+            "timeout": 10,
+        });
+        if let Some(value) = on_failure {
+            handler["onFailure"] = serde_json::json!(value);
+        }
+        let seeded = serde_json::json!({
+            "permissions": {"allow": ["Bash(ls *)"]},
+            "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [handler]}]},
+        });
+        fs::write(&hooks, seeded.to_string()).expect("their file");
+
+        uninstall(adapter, &options).expect("uninstall succeeds");
+        let after = fs::read_to_string(&hooks).unwrap_or_default();
+        assert!(
+            !after.contains("pre-tool-use"),
+            "a gate with `onFailure: {on_failure:?}` survived the uninstall: {after}"
+        );
+        assert!(
+            after.contains("Bash(ls *)"),
+            "the uninstall took a key of theirs with the gate: {after}"
+        );
+    }
+}
+
+#[test]
 fn only_claude_code_is_given_lifecycle_hooks() {
     // Codex shares Claude Code's *dialect* and not its lifecycle. Writing
     // `SessionStart` into a file for an agent that does not have it is an entry
@@ -10578,6 +10712,14 @@ cases.counts_unknown = await scenario("counts_unknown", {
   start: started,
   turns: [empty({ claimable: 0 })],
 });
+cases.assisted = await scenario("assisted", {
+  start: started,
+  turns: [empty({ standing: "assisted" })],
+});
+cases.named = await scenario("named", {
+  start: started,
+  turns: [empty({ standing: "nothing-sworn", claimable: 1, dischargeable: 0, next: "ABC-2" })],
+});
 cases.cap = await scenario("cap", {
   start: started,
   turns: [completedAt(1), completedAt(2)],
@@ -10906,6 +11048,26 @@ fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
             .as_str()
             .is_some_and(|reason| reason.contains("did not report how much work")),
         "a queue count that could not be read was not recorded as such: {unknown_counts}"
+    );
+
+    let named = &cases["named"];
+    assert!(
+        strings(&named["texts"])
+            .last()
+            .is_some_and(|text| text.contains("/flow dev ABC-2")),
+        "the loop did not hand over the queued issue: {named}"
+    );
+
+    let assisted = &cases["assisted"];
+    assert_eq!(
+        assisted["prompts"], 1,
+        "an assisted loop continued: {assisted}"
+    );
+    assert!(
+        assisted["stopped"]["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("the person names the next issue")),
+        "an assisted stop was not told why: {assisted}"
     );
 
     let cap = &cases["cap"];
@@ -11635,6 +11797,31 @@ for (const [name, directories] of [
   clean();
 }
 
+{
+  const opens = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  const closed = {
+    exitCode: 0,
+    stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42, standing: "passed", opens_at: opens }),
+  };
+  const open = {
+    exitCode: 0,
+    stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42, standing: "passed" }),
+  };
+  const w = await world({ answers: [started, closed, closed, open] });
+  await w.run(0, "flow-loop", "do the thing");
+  await until(() => w.prompts.length >= 1, "window: the first prompt");
+  w.turn(DIRECTORY);
+  await until(() => w.prompts.length >= 2, "window: the closed-window order");
+  const told = w.prompts[1].text;
+  w.turn(DIRECTORY);
+  await until(() => w.storage.get(KEY)?.waiting, "window: the wait recorded");
+  const waiting = { prompts: w.prompts.length, next: w.storage.get(KEY).waiting.next, timers: live().map((timer) => timer.ms) };
+  await fire();
+  await until(() => w.prompts.length >= 3, "window: the opening order");
+  cases.window = { opens, told, waiting, woke: w.prompts[2].text, goal: w.storage.get(KEY) };
+  clean();
+}
+
 console.log(JSON.stringify(cases));
 process.exit(0);
 "#;
@@ -11731,6 +11918,39 @@ fn the_loop_plugin_waits_on_held_or_pending_work_and_asks_again() {
     );
     let cases: serde_json::Value =
         serde_json::from_slice(&ran.stdout).expect("the driver prints JSON");
+
+    let window = &cases["window"];
+    let opens = window["opens"].as_str().expect("an opening");
+    assert!(
+        window["told"]
+            .as_str()
+            .is_some_and(|text| text.contains(&format!("closed until {opens}"))),
+        "the closed window was not named: {window}"
+    );
+    assert_eq!(
+        window["waiting"]["prompts"], 2,
+        "the second stop enqueued: {window}"
+    );
+    assert_eq!(
+        window["waiting"]["next"], opens,
+        "the wait is not for the opening: {window}"
+    );
+    assert!(
+        window["waiting"]["timers"][0]
+            .as_u64()
+            .is_some_and(|ms| ms > 3_600_000 && ms <= 7_200_000),
+        "no timer was armed for the opening: {window}"
+    );
+    assert!(
+        window["woke"].as_str().is_some_and(
+            |text| text.contains("window is open") && text.contains("`estigia flush` first")
+        ),
+        "the woken attempt was not told to flush first: {window}"
+    );
+    assert!(
+        window["goal"].get("window").is_none(),
+        "the wait outlived the opening: {window}"
+    );
 
     let wait = &cases["wait"];
     assert_eq!(wait["first"]["prompts"], 1, "a wait enqueued: {wait}");
@@ -19168,6 +19388,24 @@ const out = {};
   use({ answer: LIVE });
   const s = await scenario();
   await start(s, "x");
+  use({ answer: { run_id: "pi-abc", live: false, standing: "assisted" } });
+  await turn(s);
+  out.assisted = snapshot(s);
+}
+
+{
+  use({ answer: LIVE });
+  const s = await scenario();
+  await start(s, "x");
+  use({ answer: { ...DEAD, claimable: 1, next: "ABC-2" } });
+  await turn(s);
+  out.named = snapshot(s);
+}
+
+{
+  use({ answer: LIVE });
+  const s = await scenario();
+  await start(s, "x");
   use({ answer: { ...DEAD, dischargeable: 1 } });
   await turn(s);
   out.dischargeable = snapshot(s);
@@ -19267,6 +19505,24 @@ const out = {};
   const waitingAgain = held.length;
   await s.handlers.session_shutdown({ type: "session_shutdown" }, s.ctx);
   out.waits = { waiting, resumed, waitingAgain, afterShutdown: held.length };
+}
+
+{
+  const opens = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  use({ answer: { ...LIVE, opens_at: opens } });
+  const s = await scenario();
+  await start(s, "x");
+  await turn(s);
+  await until(() => s.sent.length === 2);
+  const told = texts(s)[1];
+  await turn(s);
+  const waiting = snapshot(s);
+  use({ answer: LIVE });
+  const due = held.shift();
+  due.fn();
+  await until(() => s.sent.length === 3);
+  out.window = { opens, told, waiting, woke: texts(s)[2] };
+  await s.handlers.session_shutdown({ type: "session_shutdown" }, s.ctx);
 }
 
 {
@@ -19483,6 +19739,26 @@ fn the_pi_loop_continues_while_estigia_says_there_is_work() {
         "a stopped loop asked again on the next turn: {dead}"
     );
 
+    let named = &cases["named"];
+    assert!(
+        strings(&named["texts"])
+            .last()
+            .is_some_and(|text| text.contains("/flow dev ABC-2")),
+        "the loop did not hand over the queued issue: {named}"
+    );
+
+    let assisted = &cases["assisted"];
+    assert_eq!(
+        assisted["prompts"], 1,
+        "an assisted loop continued: {assisted}"
+    );
+    assert!(
+        strings(&assisted["said"])
+            .iter()
+            .any(|line| line.contains("the person names the next issue")),
+        "{assisted}"
+    );
+
     assert_eq!(cases["claimable"]["prompts"], 2, "{}", cases["claimable"]);
     let discharge = &cases["dischargeable"];
     assert_eq!(discharge["prompts"], 2, "{discharge}");
@@ -19558,6 +19834,31 @@ fn the_pi_loop_stops_on_a_live_answer_that_names_no_issue() {
 #[test]
 fn the_pi_loop_waits_on_held_or_pending_work_and_asks_again() {
     let cases = run_pi_loop_driver();
+
+    let window = &cases["window"];
+    let opens = window["opens"].as_str().expect("an opening");
+    assert!(
+        window["told"]
+            .as_str()
+            .is_some_and(|text| text.contains(&format!("closed until {opens}"))),
+        "the closed window was not named: {window}"
+    );
+    assert_eq!(
+        window["waiting"]["prompts"], 2,
+        "the second stop enqueued: {window}"
+    );
+    assert!(
+        window["waiting"]["timers"][0]
+            .as_u64()
+            .is_some_and(|ms| ms > 3_600_000 && ms <= 7_200_000),
+        "no timer was armed for the opening: {window}"
+    );
+    assert!(
+        window["woke"].as_str().is_some_and(
+            |text| text.contains("window is open") && text.contains("`estigia flush` first")
+        ),
+        "the woken attempt was not told to flush first: {window}"
+    );
 
     let waits = &cases["waits"];
     assert_eq!(waits["waiting"]["prompts"], 1, "{waits}");

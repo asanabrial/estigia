@@ -151,6 +151,36 @@ pub struct Run {
     /// The repositories whose hold on an unclaimed write this run's `SessionStart` announced.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub announced_holds: BTreeSet<PathBuf>,
+    /// The horizon the held claim was sworn with, which taking it back from the parked list must
+    /// repeat: the claim's operation id is reused, and its marker records this horizon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub horizon: Option<String>,
+    /// Claims this run still holds in the store and has set aside while it works another:
+    /// built work that waits only for the git operation window. Never covered by the gate.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parked: Vec<ParkedClaim>,
+}
+
+/// One claim a run has set aside, with what its pointer said about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParkedClaim {
+    /// The parked issue.
+    pub issue: crate::identity::Identity,
+    /// The workflow state the run believed it was in.
+    pub state: Option<String>,
+    /// The checkout holding its uncommitted work.
+    pub worktree: Option<PathBuf>,
+    /// The claim's idempotency key, so taking it back is a renewal.
+    pub operation_id: Option<String>,
+    /// The release key reserved for it.
+    pub release_id: Option<String>,
+    /// The review transaction it may spend.
+    pub review_transaction: Option<crate::transport::claim::ReviewTransaction>,
+    /// The head its review target was bound to.
+    pub reviewed_head: Option<String>,
+    /// The horizon it was sworn with.
+    #[serde(default)]
+    pub horizon: Option<String>,
 }
 
 /// One branch's publication under an assisted run.
@@ -202,6 +232,8 @@ impl Run {
             reviewed_pr: None,
             assisted_publication: None,
             announced_holds: BTreeSet::new(),
+            horizon: None,
+            parked: Vec::new(),
         }
     }
 
@@ -238,6 +270,75 @@ impl Run {
         self.issue
             .as_ref()
             .and_then(crate::identity::Identity::number)
+    }
+
+    /// Whether `issue` is one of this run's parked claims.
+    pub fn holds_parked(&self, issue: u64) -> bool {
+        self.parked
+            .iter()
+            .any(|parked| parked.issue.number() == Some(issue))
+    }
+
+    /// Sets the held claim aside and makes `issue` the active one: brought back
+    /// from the parked list when it is there, and otherwise left for the claim
+    /// that follows to fill in.
+    pub fn park_for(&mut self, issue: u64) {
+        let held = self.issue.take().map(|held| ParkedClaim {
+            issue: held,
+            state: self.state.take(),
+            worktree: self.worktree.take(),
+            operation_id: self.operation_id.take(),
+            release_id: self.release_id.take(),
+            review_transaction: self.review_transaction.take(),
+            reviewed_head: self.reviewed_head.take(),
+            horizon: self.horizon.take(),
+        });
+        if let Some(index) = self
+            .parked
+            .iter()
+            .position(|parked| parked.issue.number() == Some(issue))
+        {
+            let back = self.parked.remove(index);
+            self.issue = Some(back.issue);
+            self.state = back.state;
+            self.worktree = back.worktree;
+            self.operation_id = back.operation_id;
+            self.release_id = back.release_id;
+            self.review_transaction = back.review_transaction;
+            self.reviewed_head = back.reviewed_head;
+            self.horizon = back.horizon;
+        }
+        self.parked.extend(held);
+        self.verified_at = None;
+    }
+
+    /// Empties the active claim's slot, leaving the parked list as it is.
+    pub fn clear_active(&mut self) {
+        self.issue = None;
+        self.state = None;
+        self.worktree = None;
+        self.operation_id = None;
+        self.release_id = None;
+        self.review_transaction = None;
+        self.reviewed_head = None;
+        self.horizon = None;
+        self.verified_at = None;
+    }
+
+    /// Puts back the active and parked claims `before` held, undoing a
+    /// [`Run::park_for`] whose claim did not land.
+    pub fn restore_claims(&mut self, before: &Run) {
+        self.issue.clone_from(&before.issue);
+        self.state.clone_from(&before.state);
+        self.worktree.clone_from(&before.worktree);
+        self.operation_id.clone_from(&before.operation_id);
+        self.release_id.clone_from(&before.release_id);
+        self.review_transaction
+            .clone_from(&before.review_transaction);
+        self.reviewed_head.clone_from(&before.reviewed_head);
+        self.horizon.clone_from(&before.horizon);
+        self.verified_at = before.verified_at;
+        self.parked.clone_from(&before.parked);
     }
 
     /// Whether the last verification is still inside the renewal window.
@@ -685,6 +786,32 @@ pub fn forget(root: &Path, run_id: &str) {
     let _ = fs::remove_file(pointer_path(root, run_id));
 }
 
+/// Forgets the claim a release put down and keeps the rest: a parked claim
+/// released alone leaves the active one, and the active one released leaves the
+/// parked list. The pointer is removed only when nothing is left on it.
+pub fn forget_released(root: &Path, run_id: &str, released: Option<u64>) {
+    let _held = pointers_locked(root);
+    let mut run = load(root, run_id);
+    if released.is_some_and(|issue| !run.holds_parked(issue) && run.issue_number() != Some(issue)) {
+        return;
+    }
+    let parked_alone =
+        released.is_some_and(|issue| run.holds_parked(issue) && run.issue_number() != Some(issue));
+    if parked_alone {
+        run.parked
+            .retain(|parked| parked.issue.number() != released);
+    } else {
+        run.clear_active();
+    }
+    if run.unreadable || (run.issue.is_none() && run.parked.is_empty()) {
+        let _ = fs::remove_file(pointer_path(root, run_id));
+        return;
+    }
+    if !matches!(store_locked(root, &run), Ok(true)) && run.parked.is_empty() {
+        let _ = fs::remove_file(pointer_path(root, run_id));
+    }
+}
+
 /// What a stop-after request records when the operator gave no reason.
 const STOP_AFTER_DEFAULT: &str = "the operator asked to stop after the current task";
 
@@ -1079,6 +1206,11 @@ fn records(root: &Path, kind: Record) -> Vec<Value> {
 /// to report.
 pub fn holdings(root: &Path) -> Vec<Run> {
     pointers_where(root, |run| run.issue.is_some())
+}
+
+/// Every pointer holding parked claims, active issue or not.
+pub fn parked_holdings(root: &Path) -> Vec<Run> {
+    pointers_where(root, |run| !run.parked.is_empty())
 }
 
 /// Every pointer holding a review-only claim. Apart from [`holdings`] because

@@ -912,7 +912,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,909 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,584 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,913 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -2029,6 +2029,20 @@ pointer that leaves it names the document it points at.
 
 ## The gate's reach across the agents
 
+- **`onFailure: "block"` is honoured from Claude Code v2.1.295, and no host was run to see it.** The
+  `PreToolUse` handler carries the field because Claude Code's hooks reference says a timed-out
+  `PreToolUse` hook does not block the tool call otherwise, and the gate's own worst case is the
+  fifteen-minute transport wait `The gate's boundary` records. Read, not run: the reference states
+  v2.1.295 (read 2026-11-16); the field is absent from the published settings schema at
+  `json.schemastore.org/claude-code-settings.json` read the same day, whose `hookCommand` declares
+  `additionalProperties: false`, and whose own documentation says the schema lags; and a newer Claude
+  Code was observed elsewhere to strip keys it does not know from a hook handler when it rewrites
+  `settings.json`. So an older host may ignore the field, warn about it or drop it, and a newer one may
+  drop it on its own write; `doctor` reports a registered gate whose handler lacks it, which is the
+  only visible sign a host took it away. Codex, Gemini, Qwen, Continue and Cursor register no such
+  field — their references were not checked for one, and whether a timed-out hook blocks on those
+  hosts is unmeasured.
+
 - **`Decision mode: auto` is enforced on Claude Code alone.** The gate refuses `AskUserQuestion`, the one
   question tool its matcher is woken for, and records the recommended answer from the payload. Codex,
   OpenCode and Pi register no question tool with the gate, so on them `auto` is the contract's sentence
@@ -2755,6 +2769,29 @@ pointer that leaves it names the document it points at.
   real number writes that number and the checkout `claim` started into the run pointer, read from the
   transport's answer rather than from the provisional argument the call was made with. A provisional
   issue opens its ledger without any GitHub call, and an unallocated or unrecorded number is refused.
+  A provisional number is read from this machine's store alone: `list_state` with `issue`, and the gate's
+  `provisional-issue-number` answer to `gh issue view|comment|edit|close|reopen` or a GraphQL `issue(number:)`
+  naming one. The match is on the command line's words, so a number reached through a variable or a script
+  goes to GitHub and reads as not found, and a number another machine allocated reads as never allocated
+  here. `-R` naming another repository than the allocation's is left to GitHub. The tests are
+  `provisional_read` in `src/harness/` and the offline cases in `src/transport/outbox/`.
+- **The window's wake is told, not held, on two hosts.** `opens_at` is computed from this machine's
+  local zone; under a test clock the offset is held fixed, and off Unix no daylight-saving change is
+  read. In the refusal it is text, not a field. Claude Code's loop only tells the turn to schedule its
+  own wake and lets the second stop for one opening through, so a turn that schedules nothing is not
+  woken. Codex's `Stop` keeps no loop record, so it is told on every stop. Pi's and OpenCode's loops hold
+  the timer themselves (`windowWait`), and lose it when the host process ends. The tests are
+  `next_opening` in `src/harness/operation_window/tests.rs`, the closed-window cases in
+  `src/cli/tests.rs`, and the `window` scenarios of both loop drivers in `src/setup/tests.rs`.
+- **A parked claim is the pointer's note, and nothing renews it.** `claim` with `park: true` keeps
+  several claims under one run id, so the store's adjudication is untouched. Only the active one is
+  covered and verified. Nothing checks that a parked issue's work is built, only that the window
+  was closed when it was parked. A parked claim's horizon passes unrenewed, and once it has lapsed
+  another run may `reclaim` it without `force`. A release puts down only the claim it names: the
+  parked list outlives the active claim, a release naming an issue the run does not hold changes nothing, and the pointer goes once nothing is left on it. A pointer that still lists parked claims is kept when storing it fails; no test injects that failure. `SessionEnd` forgets the pointer and the parked list
+  with it, as it does a single claim, so after that a parked issue is found again only from the
+  store. The tests are `park_tests` in `src/harness/mcp/tests/`, plus the prune and rekey cases that
+  name a parked claim.
 - **The transition record is the store's own, and it is not a log of everything that moved a state.** Schema 16
   adds `transitions` (`at`, `run_id`, `from_state`, `to_state` per issue), append-only like `entries`, and
   `Ledger::set_state` writes the row in the same transaction as the state, so a history that cannot be written
@@ -3934,6 +3971,17 @@ pointer that leaves it names the document it points at.
 
 ## Test counts and mutation claims in a receipt
 
+- **The assisted Linear queue is the CLI user's own list, and nothing makes taking from it atomic.**
+  `query EstigiaQueue` offers only issues assigned to the `viewer` the `linear` CLI is logged in as, so a
+  shared API key makes "assigned to me" mean that key's user. A live claim on this machine keeps a second
+  local run off an issue, but nothing stops a person or another machine from starting the same issue in
+  the same moment. Moving it to the `in-progress` name, where `State names` maps one, is visible and is
+  not a lock. The estimate is the team's own number and is not normalised across estimate scales. More
+  than one page of assigned issues is refused rather than read short. The tests are
+  `the_queue_is_todo_then_backlog_by_priority_then_estimate_then_age` and
+  `a_queue_with_another_page_is_a_failed_read_not_a_short_queue` in `src/transport/linear/tests.rs`, and
+  `an_assisted_linear_loop_offers_the_head_of_its_queue_less_what_this_machine_holds` in
+  `src/cli/tests.rs`.
 - **A review transaction's evidence prose and a pull request body are not files in this repository, and
   nothing reads either: a test count or a mutation claim written into one is unchecked prose.** The
   operator decision of 2026-10-04 chose this record over rewriting a merged body. The measurement is one

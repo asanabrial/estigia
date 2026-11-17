@@ -755,6 +755,33 @@ pub fn gates(
                 };
             }
             let Some(faulty) = wires.iter().find(|wire| wire.fault().is_some()) else {
+                let gate_event = crate::harness::hook::Event::PreToolUse.slug();
+                let wants_a_blocking_failure = crate::setup::find_agent(name)
+                    .is_ok_and(crate::setup::AgentAdapter::blocks_when_the_gate_fails);
+                if wants_a_blocking_failure
+                    && let Some(wire) = wires
+                        .iter()
+                        .find(|wire| wire.event == Some(gate_event) && wire.blocks_on_failure == Some(false))
+                {
+                    let file = files
+                        .iter()
+                        .find(|(_, found)| found.iter().any(|candidate| candidate == *wire))
+                        .map(|(file, _)| file.display().to_string())
+                        .unwrap_or_default();
+                    return Check {
+                        name: "gate",
+                        about: "whether the gate this agent registers would actually run",
+                        health: Health::broken(
+                            format!(
+                                "{name}: the gate is registered and a hook that fails or reaches \
+                                 its timeout does not block \u{2014} it carries no `\"onFailure\": \
+                                 \"block\"`, so a slow verification is released and the tool call \
+                                 goes through ungated ({file})"
+                            ),
+                            Resolution::run(format!("estigia setup {name}")),
+                        ),
+                    };
+                }
                 return Check {
                     name: "gate",
                     about: "whether the gate this agent registers would actually run",
@@ -6301,6 +6328,7 @@ mod tests {
             executable: gone.clone(),
             event: Some("pre-tool-use"),
             named: "pre-tool-use".to_owned(),
+            blocks_on_failure: Some(true),
         };
         let checks = gates(
             &[("claude-code", vec![(file.clone(), vec![dead])], true)],
@@ -6331,6 +6359,7 @@ mod tests {
             executable: gone,
             event: Some("pre-tool-use"),
             named: "pre-tool-use".to_owned(),
+            blocks_on_failure: Some(true),
         };
         let checks = gates(
             &[("claude-code", vec![(file, vec![live])], true)],
@@ -6340,6 +6369,79 @@ mod tests {
         assert!(
             !checks[0].health.is_broken(),
             "a live gate was called broken"
+        );
+    }
+
+    #[test]
+    fn a_gate_that_lets_a_timed_out_hook_through_is_reported_broken() {
+        use crate::setup::wiring;
+
+        let root = tempfile::tempdir().expect("a temporary root");
+        let executable = root.path().join("estigia");
+        std::fs::write(&executable, "").expect("the executable");
+        let file = root.path().join("settings.json");
+        let settings = |on_failure: Option<&str>| {
+            let mut handler = serde_json::json!({
+                "type": "command",
+                "command": format!(
+                    "\"{}\" hook pre-tool-use --agent claude-code --dialect claude-code",
+                    executable.display()
+                ),
+                "timeout": 10,
+            });
+            if let Some(value) = on_failure {
+                handler["onFailure"] = serde_json::json!(value);
+            }
+            serde_json::json!({
+                "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [handler]}]},
+            })
+            .to_string()
+        };
+        let registration = |text: &str, file: &std::path::Path| {
+            std::fs::write(file, text).expect("the settings file");
+            vec![(file.to_path_buf(), wiring::wires(text))]
+        };
+
+        for (label, on_failure, broken) in [
+            ("no field", None, true),
+            ("`, \"onFailure\": \"block\"`", Some("block"), false),
+        ] {
+            let text = settings(on_failure);
+            let checks = gates(
+                &[("claude-code", registration(&text, &file), true)],
+                None,
+                &[],
+            );
+            assert_eq!(checks.len(), 1);
+            assert_eq!(
+                checks[0].health.is_broken(),
+                broken,
+                "{label}: {:?}",
+                checks[0].health
+            );
+            if !broken {
+                continue;
+            }
+            let Health::Broken { detail, resolution } = &checks[0].health else {
+                unreachable!("just asserted")
+            };
+            assert!(detail.contains("claude-code"), "{detail}");
+            assert!(detail.contains("onFailure"), "{detail}");
+            assert!(detail.contains("settings.json"), "{detail}");
+            assert!(
+                format!("{resolution}").contains("estigia setup claude-code"),
+                "{resolution}"
+            );
+        }
+
+        // Codex reads the same envelope and declares no failure policy of its
+        // own, so an entry without the field is not wrong there.
+        let text = settings(None);
+        let checks = gates(&[("codex", registration(&text, &file), true)], None, &[]);
+        assert!(
+            !checks[0].health.is_broken(),
+            "codex was held to another host's field: {:?}",
+            checks[0].health
         );
     }
 
@@ -6356,6 +6458,7 @@ mod tests {
             executable: executable.clone(),
             event: Some("pre-tool-use"),
             named: "pre-tool-use".to_owned(),
+            blocks_on_failure: Some(true),
         };
         let registered = || vec![(root.path().join("hooks.json"), vec![wire()])];
 
