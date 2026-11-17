@@ -749,8 +749,13 @@ fn queue_note(context: &GateContext, with_count: bool) -> Option<String> {
             )
         });
     }
+    let now = super::operation_window::now_minutes();
     let until = super::operation_window::permitted_period(window)
         .map_or_else(String::new, |period| format!(" ({period})"));
+    let until = match super::operation_window::next_opening(window, now) {
+        Some(at) => format!("{until}, at {at} (`opens_at`)"),
+        None => until,
+    };
     Some(format!(
         "{writes} queued; nothing reaches GitHub until the git operation window opens{until}. \
          Claims, comments and transitions keep working against the local store and `estigia \
@@ -4963,6 +4968,17 @@ mod tests {
                 three.starts_with(&format!("3 GitHub writes are {tail}")),
                 "{three}"
             );
+        });
+    }
+
+    #[test]
+    fn a_closed_window_queue_note_names_the_next_opening() {
+        let run = session::Run::new("claude-abcd1234".to_owned());
+        at_minutes(20 * 60, || {
+            queue_writes(1);
+            let text = session_start_text(&closed_context(), &run, None);
+            assert!(text.contains("(`opens_at`)"), "{text}");
+            assert!(text.contains(", at 20"), "{text}");
         });
     }
 

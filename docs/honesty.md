@@ -904,7 +904,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,909 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,772 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,913 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -2753,11 +2753,20 @@ pointer that leaves it names the document it points at.
   goes to GitHub and reads as not found, and a number another machine allocated reads as never allocated
   here. `-R` naming another repository than the allocation's is left to GitHub. The tests are
   `provisional_read` in `src/harness/` and the offline cases in `src/transport/outbox/`.
+- **The window's wake is told, not held, on two hosts.** `opens_at` is computed from this machine's
+  local zone; under a test clock the offset is held fixed, and off Unix no daylight-saving change is
+  read. In the refusal it is text, not a field. Claude Code's loop only tells the turn to schedule its
+  own wake and lets the second stop for one opening through, so a turn that schedules nothing is not
+  woken. Codex's `Stop` keeps no loop record, so it is told on every stop. Pi's and OpenCode's loops hold
+  the timer themselves (`windowWait`), and lose it when the host process ends. The tests are
+  `next_opening` in `src/harness/operation_window/tests.rs`, the closed-window cases in
+  `src/cli/tests.rs`, and the `window` scenarios of both loop drivers in `src/setup/tests.rs`.
 - **A parked claim is the pointer's note, and nothing renews it.** `claim` with `park: true` keeps
   several claims under one run id, so the store's adjudication is untouched. Only the active one is
   covered and verified. Nothing checks that a parked issue's work is built, only that the window
   was closed when it was parked. A parked claim's horizon passes unrenewed, and once it has lapsed
-  another run may `reclaim` it without `force`. `SessionEnd` forgets the pointer and the parked list
+  another run may `reclaim` it without `force`. A release puts down only the claim it names: the
+  parked list outlives the active claim, and the pointer goes once nothing is left on it. `SessionEnd` forgets the pointer and the parked list
   with it, as it does a single claim, so after that a parked issue is found again only from the
   store. The tests are `park_tests` in `src/harness/mcp/tests/`, plus the prune and rekey cases that
   name a parked claim.

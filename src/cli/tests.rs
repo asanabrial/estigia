@@ -6083,6 +6083,7 @@ fn goal_json_carries_the_completed_count() {
         unconditioned: None,
         unadmitted: None,
         next: None,
+        opens_at: None,
         completed: Some(2),
         stop_after: None,
     };
@@ -6113,6 +6114,7 @@ fn goal_json_carries_the_dischargeable_count() {
         unconditioned: None,
         unadmitted: None,
         next: None,
+        opens_at: None,
         completed: None,
         stop_after: None,
     };
@@ -6560,6 +6562,7 @@ fn goal_ends_an_assisted_loop_on_the_person_naming_the_issue() {
             &run_id,
             crate::harness::loop_text::Invocation::Mention,
             None,
+            None,
             || {},
             || super::goal_reading(&context, &run_id, false),
         )
@@ -6612,6 +6615,7 @@ fn goal_json_carries_what_is_held_pending_and_unconditioned() {
         unconditioned: None,
         unadmitted: None,
         next: None,
+        opens_at: None,
         completed: None,
         stop_after: None,
     };
@@ -9613,6 +9617,7 @@ fn a_loop_stops_at_its_completion_cap() {
         "claude-abc",
         harness::loop_text::Invocation::Slash,
         Some(1),
+        None,
         || {},
         || over.clone(),
     )
@@ -9635,6 +9640,7 @@ fn a_loop_stops_at_its_completion_cap() {
         "claude-abc",
         harness::loop_text::Invocation::Slash,
         Some(2),
+        None,
         || {},
         || under.clone(),
     )
@@ -9650,6 +9656,7 @@ fn a_loop_stops_at_its_completion_cap() {
         "claude-abc",
         harness::loop_text::Invocation::Slash,
         Some(2),
+        None,
         || {},
         || unknown.clone(),
     )
@@ -9676,6 +9683,7 @@ fn reading(standing: &'static str, live: bool, counts: [Option<u64>; 5]) -> supe
         unconditioned: counts[4],
         unadmitted: None,
         next: None,
+        opens_at: None,
         completed: None,
         stop_after: None,
     }
@@ -9687,6 +9695,7 @@ fn decided(readings: Vec<super::GoalReading>) -> (serde_json::Value, usize) {
     let answer = super::loop_stop::decide(
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
+        None,
         None,
         || {},
         || {
@@ -9770,6 +9779,7 @@ fn a_stop_with_unadmitted_issues_names_the_count_and_is_not_terminal() {
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
         None,
+        None,
         || {},
         || unadmitted_reading(Some(3)),
     );
@@ -9792,6 +9802,7 @@ fn a_stop_with_no_unadmitted_issues_keeps_its_terminal_reason() {
         let answer = super::loop_stop::decide(
             "codex-abc",
             crate::harness::loop_text::Invocation::Mention,
+            None,
             None,
             || {},
             || unadmitted_reading(unadmitted),
@@ -9823,6 +9834,7 @@ fn an_unconfirmed_read_waits_between_attempts() {
     let answer = super::loop_stop::decide(
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
+        None,
         None,
         || pauses += 1,
         || {
@@ -9914,6 +9926,7 @@ fn a_codex_stop_honours_a_stop_after_request_once_the_claim_is_released() {
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
         None,
+        None,
         || {},
         requested,
     );
@@ -9936,6 +9949,7 @@ fn a_codex_stop_honours_a_stop_after_request_once_the_claim_is_released() {
     let live = super::loop_stop::decide(
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
+        None,
         None,
         || {},
         || {
@@ -11275,5 +11289,78 @@ fn a_loop_whose_queue_names_an_issue_is_told_to_take_that_issue() {
             .as_str()
             .is_some_and(|reason| reason.contains("dev ABC-2")),
         "{answer}"
+    );
+}
+
+#[test]
+fn a_live_claim_in_a_closed_window_is_told_once_and_then_let_stop_until_the_opening() {
+    let mut held = reading("passed", true, [None; 5]);
+    held.opens_at = Some("2026-11-17T16:00:00Z".to_owned());
+    let first = super::loop_stop::decide(
+        "claude-abc",
+        harness::loop_text::Invocation::Slash,
+        None,
+        Some("the turn continues"),
+        || {},
+        || held.clone(),
+    );
+    let reason = match &first {
+        super::loop_stop::Decision::Announce { reason, .. } => reason.clone(),
+        _ => panic!("the first stop in a closed window was not announced"),
+    };
+    let value = first.into_value();
+    assert_eq!(value["decision"], "block", "{value}");
+    let told = value["reason"].as_str().unwrap_or_default();
+    assert!(
+        told.contains("closed until 2026-11-17T16:00:00Z") && told.contains("`estigia flush`"),
+        "{told}"
+    );
+
+    let second = super::loop_stop::decide(
+        "claude-abc",
+        harness::loop_text::Invocation::Slash,
+        None,
+        Some(&reason),
+        || {},
+        || held.clone(),
+    );
+    assert!(
+        matches!(
+            second,
+            super::loop_stop::Decision::Stop {
+                terminal: false,
+                ..
+            }
+        ),
+        "the second stop for the same opening was not let through as a wait"
+    );
+    let value = second.into_value();
+    assert!(value.get("decision").is_none(), "{value}");
+
+    held.opens_at = None;
+    let open = super::loop_stop::decide(
+        "claude-abc",
+        harness::loop_text::Invocation::Slash,
+        None,
+        Some(&reason),
+        || {},
+        || held.clone(),
+    )
+    .into_value();
+    assert_eq!(open["decision"], "block", "{open}");
+}
+
+#[test]
+fn the_goal_answer_carries_the_opening_only_when_there_is_one() {
+    let mut held = reading("passed", true, [None; 5]);
+    assert!(
+        super::goal_json("claude-abc", &held)
+            .get("opens_at")
+            .is_none()
+    );
+    held.opens_at = Some("2026-11-17T16:00:00Z".to_owned());
+    assert_eq!(
+        super::goal_json("claude-abc", &held)["opens_at"],
+        "2026-11-17T16:00:00Z"
     );
 }

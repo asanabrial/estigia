@@ -2254,9 +2254,8 @@ pub(crate) fn apply_effect(
         return true;
     }
     if effect == PointerEffect::Forget {
-        // Removing the file is the record: if it is gone, the run holds
-        // nothing, which is what was asked for.
-        session::forget(&context.state_root, &run.run_id);
+        let released = arguments.get("issue").and_then(Value::as_u64);
+        session::forget_released(&context.state_root, &run.run_id, released);
         *run = session::load(&context.state_root, &run.run_id);
         return true;
     }
