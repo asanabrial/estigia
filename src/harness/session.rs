@@ -792,6 +792,9 @@ pub fn forget(root: &Path, run_id: &str) {
 pub fn forget_released(root: &Path, run_id: &str, released: Option<u64>) {
     let _held = pointers_locked(root);
     let mut run = load(root, run_id);
+    if released.is_some_and(|issue| !run.holds_parked(issue) && run.issue_number() != Some(issue)) {
+        return;
+    }
     let parked_alone =
         released.is_some_and(|issue| run.holds_parked(issue) && run.issue_number() != Some(issue));
     if parked_alone {
@@ -804,7 +807,7 @@ pub fn forget_released(root: &Path, run_id: &str, released: Option<u64>) {
         let _ = fs::remove_file(pointer_path(root, run_id));
         return;
     }
-    if !matches!(store_locked(root, &run), Ok(true)) {
+    if !matches!(store_locked(root, &run), Ok(true)) && run.parked.is_empty() {
         let _ = fs::remove_file(pointer_path(root, run_id));
     }
 }
