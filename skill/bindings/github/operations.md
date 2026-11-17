@@ -48,7 +48,7 @@ parking whatever is active, and that re-claim reuses the parked claim's operatio
 whatever horizon the call names, so it is a renewal. A parked worktree is outside the gate's cover until it is taken back. A parked claim's
 horizon is not renewed while it is parked, `SessionStart` lists parked claims, `prune` keeps their
 worktrees, and the provisional-to-real rekey rewrites them. A park whose claim does not land puts the
-pointer back as it was. When the window opens: `estigia flush` first. Then work through the issues in
+pointer back as it was. Releasing the active issue keeps the parked ones. When the window opens: `estigia flush` first. Then work through the issues in
 the order they were claimed: take each one back, commit it with `Refs` to its real number, and
 publish it, before taking back the next.
 
