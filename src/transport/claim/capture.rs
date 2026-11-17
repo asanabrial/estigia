@@ -1255,10 +1255,10 @@ pub(super) fn collect_with(
                 std::thread::sleep(WAIT_POLL);
             }
             JobStatus::Lost => {
-                leave(&ledger, &job, &job.state, "abandoned")?;
                 if job.relayed {
                     Store::open(&store_path()?)?.record_relay_loss(&job.run_id, clock)?;
                 }
+                leave(&ledger, &job, &job.state, "abandoned")?;
                 return Err(runner_lost(&job, reviewer_relays(&job.run_id)));
             }
             JobStatus::Finished(JobResult::Refused(refusal)) => {

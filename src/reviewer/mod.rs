@@ -290,7 +290,7 @@ pub fn select_adapter() -> Result<Box<dyn Adapter>, Refusal> {
 ///
 /// The relay keeps that first place only until the local store records that it
 /// did not complete on this run: a relay that cannot finish stops standing in
-/// front of a CLI that can, and [`relay_first`] is that rule.
+/// front of a CLI that can, and `relay_first` is that rule.
 pub fn select_reviewer(run_id: &str) -> Result<Box<dyn Adapter>, Refusal> {
     let relay = crate::setup::review_relay_installed();
     let relay_first = relay_first(run_id, crate::setup::opencode_review_relay_installed());
