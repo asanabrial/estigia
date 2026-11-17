@@ -6420,6 +6420,9 @@ pub(crate) struct GoalReading {
     pub(crate) unadmitted: Option<u64>,
     /// The key of the issue an assisted loop takes next, where its queue names one.
     pub(crate) next: Option<String>,
+    /// When the git operation window next opens, for a live claim read while it
+    /// is closed: the instant a loop waits for once the local work is done.
+    pub(crate) opens_at: Option<String>,
     /// How many issues this run's own delivery has closed, when the caller
     /// asked for the count and the tracker could be read.
     ///
@@ -6956,6 +6959,7 @@ pub(crate) fn goal_human_line(
         unconditioned: None,
         unadmitted: None,
         next: None,
+        opens_at: None,
         ..reading
     };
     format!(
@@ -7238,6 +7242,21 @@ pub(crate) fn goal_reading(
     run_id: &str,
     with_completed: bool,
 ) -> GoalReading {
+    let mut reading = claim_reading(context, run_id, with_completed);
+    if reading.live {
+        reading.opens_at = harness::operation_window::next_opening(
+            &context.operation_window,
+            harness::operation_window::now_minutes(),
+        );
+    }
+    reading
+}
+
+fn claim_reading(
+    context: &harness::GateContext,
+    run_id: &str,
+    with_completed: bool,
+) -> GoalReading {
     let completed = if with_completed {
         harness::completed_work(
             &context.skill_root,
@@ -7266,6 +7285,7 @@ pub(crate) fn goal_reading(
             unconditioned: None,
             unadmitted: None,
             next: None,
+            opens_at: None,
             completed,
             stop_after,
         };
@@ -7284,6 +7304,7 @@ pub(crate) fn goal_reading(
             unconditioned: None,
             unadmitted: None,
             next: None,
+            opens_at: None,
             completed,
             stop_after,
         };
@@ -7308,6 +7329,7 @@ pub(crate) fn goal_reading(
             unconditioned: queues.unconditioned,
             unadmitted: queues.unadmitted,
             next: queues.next,
+            opens_at: None,
             completed,
             stop_after,
         };
@@ -7326,6 +7348,7 @@ pub(crate) fn goal_reading(
             unconditioned: None,
             unadmitted: None,
             next: None,
+            opens_at: None,
             completed,
             stop_after,
         };
@@ -7353,6 +7376,7 @@ pub(crate) fn goal_reading(
                 unconditioned: queues.unconditioned,
                 unadmitted: queues.unadmitted,
                 next: queues.next,
+                opens_at: None,
                 completed,
                 stop_after,
             }
@@ -7371,6 +7395,7 @@ pub(crate) fn goal_reading(
                 unconditioned: None,
                 unadmitted: None,
                 next: None,
+                opens_at: None,
                 completed,
                 stop_after,
             },
@@ -7393,6 +7418,7 @@ pub(crate) fn goal_reading(
                     unconditioned: queues.unconditioned,
                     unadmitted: queues.unadmitted,
                     next: queues.next,
+                    opens_at: None,
                     completed,
                     stop_after,
                 }
@@ -7412,6 +7438,7 @@ pub(crate) fn goal_reading(
                     unconditioned: queues.unconditioned,
                     unadmitted: queues.unadmitted,
                     next: queues.next,
+                    opens_at: None,
                     completed,
                     stop_after,
                 }
@@ -7594,6 +7621,12 @@ pub(crate) fn goal_json(run_id: &str, reading: &GoalReading) -> serde_json::Valu
     );
     if let Some(next) = &reading.next {
         object.insert("next".to_owned(), serde_json::Value::String(next.clone()));
+    }
+    if let Some(opens_at) = &reading.opens_at {
+        object.insert(
+            "opens_at".to_owned(),
+            serde_json::Value::String(opens_at.clone()),
+        );
     }
     for (key, count) in [
         ("held", reading.held),
