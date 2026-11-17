@@ -712,6 +712,10 @@ const AFFIRMED: &[(&str, u64)] = &[
     // Re-read on 2026-09-13: `git tag -l`, `git tag --list` and bare `git tag`
     // list and left the list's meaning — every other `git tag` spelling,
     // including `git tag -d`, stays gated. Still too-tight, still true.
+    //
+    // Re-read on 2026-11-16: a command now also ends at `;`, `&`, `|`, `)` or a
+    // backtick, so `git push;echo` is the push it is. The claim — these
+    // spellings are gated, and they are not the only spellings — is unchanged.
     ("irreversible-shell", 3274127317113882223),
     // `repository-shell` — the git commands that write. Same shape and same
     // limits as `write-tools`, and it exists so that composing `git worktree
@@ -858,7 +862,14 @@ const AFFIRMED: &[(&str, u64)] = &[
     // says so, and the population is unchanged: an alias, a wrapper script or a
     // renamed binary that never writes `estigia <verb>` as two words is still
     // not matched. Affirmed.
-    ("person-only-shell", 15023960501866845408),
+    //
+    // Re-read on 2026-11-16. A word after `estigia` that carries a shell
+    // expansion or a glob is refused as either person-only command, since the
+    // gate cannot read which one the shell runs and does not evaluate it. The
+    // declaration's boundary says so; a quoted span is one word of data, so
+    // `git commit -m 'estigia $(x) stand-down'` is still not an invocation, and
+    // the literal commit-message over-refusal is unchanged. Affirmed.
+    ("person-only-shell", 1173913667760716498),
     // Read on 2026-08-04 and affirmed. The fragments name the files this
     // harness reads its own answers from, and every one is crossed against
     // what `resolve_paths` produces per adapter — five of eleven were wrong

@@ -50,6 +50,56 @@ fn every_spelling_that_runs_the_stand_down_is_named() {
 }
 
 #[test]
+fn an_expansion_or_a_glob_where_the_verb_stands_is_person_only() {
+    for line in [
+        "estigia $(printf stand-down) --reason x",
+        "estigia stand-dow${x}n --reason x",
+        "estigia $(printf recover) 12 --reason x",
+        "estigia ${x} stand-down",
+        "estigia `printf recover` 12",
+        "estigia *",
+    ] {
+        let command = named_in(&line.to_ascii_lowercase())
+            .unwrap_or_else(|| panic!("`{line}` was not named"));
+        assert_eq!(
+            command.target,
+            super::UNREADABLE.target,
+            "`{line}` was named as {} and not as the command the gate cannot read",
+            command.target
+        );
+    }
+}
+
+#[test]
+fn an_expansion_inside_quoted_data_is_not_an_invocation() {
+    for line in [
+        "git commit -m 'estigia $(x) stand-down'",
+        "git commit -m \"estigia `printf recover` 12\"",
+        "echo 'estigia $(printf stand-down)'",
+    ] {
+        assert!(
+            named_in(&line.to_ascii_lowercase()).is_none(),
+            "`{line}` was read as an invocation though the shell runs one word of data"
+        );
+    }
+}
+
+#[test]
+fn a_read_only_verb_beside_a_later_mention_is_still_not_person_only() {
+    for line in [
+        "estigia status",
+        "estigia config list",
+        "estigia status --note stand-down",
+        "estigia doctor stand-down",
+    ] {
+        assert!(
+            named_in(&line.to_ascii_lowercase()).is_none(),
+            "`{line}` was named though its verb is not a person-only command"
+        );
+    }
+}
+
+#[test]
 fn a_lookalike_is_not_named() {
     for line in [
         "estigia stand-downx --reason x",
@@ -113,6 +163,7 @@ fn test_context(root: &std::path::Path) -> crate::harness::GateContext {
         state_root: root.join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),

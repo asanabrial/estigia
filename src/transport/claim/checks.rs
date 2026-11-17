@@ -224,6 +224,20 @@ fn target_moved(digest: &str) -> Failure {
     }))
 }
 
+fn worktree_unknown(published: &str, at: &Path) -> Failure {
+    Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "checks-worktree-unknown",
+        "digest": published,
+        "checkout": at.display().to_string(),
+        "action": "nothing was recorded: the run pointer names no checkout, and this repository \
+                   checkout reproduces another target than the published one, so the checks would \
+                   not run against the reviewed bytes; claim the issue with its `branch` and \
+                   `base` again so the pointer records the isolated checkout, then call \
+                   `collect_review_input` with `checks: true`",
+    }))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn collected(
     context: &Context,
@@ -382,8 +396,20 @@ pub(super) fn run_checks_with(
     if checks.is_empty() {
         return Ok(serde_json::json!({"ok": true, "declared": false}));
     }
+    let comments = ledger.timeline()?;
+    // A receipt is bound to the bytes a publication named; a tree that
+    // reproduces another target would record a result for those other bytes.
+    if request.worktree.is_none()
+        && let Some(published) = super::all_publications(&comments)?
+            .into_iter()
+            .rev()
+            .find(|publication| publication.receipt.base == base)
+        && published.receipt.digest != digest
+    {
+        return Err(worktree_unknown(&published.receipt.digest, tree));
+    }
     let commands = commands_digest(&checks);
-    if let Some(recorded) = receipt_of(&ledger.timeline()?, &digest, &commands) {
+    if let Some(recorded) = receipt_of(&comments, &digest, &commands) {
         return Ok(finished_answer(
             &digest,
             &commands,

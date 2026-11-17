@@ -381,6 +381,26 @@ fn a_dirty_tree_is_refused_before_anything_runs() {
 }
 
 #[test]
+fn a_run_whose_checkout_reproduces_another_target_is_refused_not_checked() {
+    crate::transport::store::forget_scratch_store();
+    let (_root, context, receipt) =
+        checked_change(Some(&declaration_for(&[("fmt", "echo formatted")])));
+    git(
+        &context.repo_dir,
+        &["reset", "--hard", "--quiet", &receipt.base],
+    );
+    let failure = ask(
+        &context,
+        &timeline_of(&receipt),
+        &request(0, &receipt.base),
+        &never,
+    )
+    .expect_err("the repository checkout is not the published target");
+    assert_eq!(reason(failure), "checks-worktree-unknown");
+    assert_eq!(recorded_receipts(), 0);
+}
+
+#[test]
 fn a_tree_edited_while_the_job_ran_records_nothing_and_is_refused_moved() {
     crate::transport::store::forget_scratch_store();
     let (_root, context, receipt) = checked_change(Some(&declaration_for(&[(

@@ -1284,6 +1284,7 @@ fn the_live_merge_decision_is_the_gate_s_own_and_never_allows_a_run_that_holds_n
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -1505,6 +1506,7 @@ fn an_unreadable_appendix_file_is_handed_back_before_anything_runs() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -1545,6 +1547,7 @@ fn shared_checkout_context(root: &Path, repo: &Path) -> GateContext {
         state_root: root.join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -1578,6 +1581,25 @@ fn store_holder(
     run.state = Some(state.to_owned());
     run.repo_dir = Some(repo.to_path_buf());
     run.review_transaction = receipt;
+    session::store(&context.state_root, &run).expect("the pointer writes");
+}
+
+/// A pointer for a run that holds `issue` in `state` from `checkout`, with the claim's own
+/// operation id so a release of it names the epoch the store holds.
+fn store_holder_at(
+    context: &GateContext,
+    checkout: &Path,
+    run_id: &str,
+    issue: u64,
+    state: &str,
+    operation_id: &str,
+) {
+    let mut run = session::Run::new(run_id.to_owned());
+    run.issue = Some(crate::identity::Identity::Number(issue));
+    run.state = Some(state.to_owned());
+    run.repo_dir = Some(checkout.to_path_buf());
+    run.worktree = Some(checkout.to_path_buf());
+    run.operation_id = Some(operation_id.to_owned());
     session::store(&context.state_root, &run).expect("the pointer writes");
 }
 
@@ -1850,4 +1872,127 @@ fn a_live_read_after_its_checkout_is_removed_runs_in_the_main_working_tree() {
         .exec(&["git", "rev-parse", "HEAD"], How::read())
         .expect("the read runs somewhere that still exists");
     assert_eq!(read.stdout.trim(), world.head);
+}
+
+#[test]
+fn a_release_that_stopped_part_way_is_not_read_as_delivered_beside_a_notice() {
+    let world = world("b.txt", "two\n");
+    std::fs::write(world.work.path().join("left-here.txt"), "untracked\n")
+        .expect("an untracked file in the checkout");
+    let root = tempfile::tempdir().expect("a gate root");
+    let context = shared_checkout_context(root.path(), world.work.path());
+    let run_id = "claude-abcd1234";
+    let claim_op = "a".repeat(32);
+    store_holder_at(
+        &context,
+        world.work.path(),
+        run_id,
+        218,
+        "review",
+        &claim_op,
+    );
+
+    let bin = scripted_gh();
+    let claim = crate::test_env::live_holder_issue(run_id, 218, "review");
+    let script = answers(&[
+        json!({
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        }),
+        json!({
+            "matches": "issues/218/comments",
+            "stdout": "[]",
+            "status": 0,
+        }),
+        json!({
+            "matches": "api repos/{owner}/{repo}/issues/218",
+            "stdout": json!({
+                "state": "open",
+                "repository_url": "https://api.github.com/repos/o/r",
+            })
+            .to_string(),
+            "status": 0,
+        }),
+        json!({
+            "matches": "issue view 218 --json labels",
+            "stdout": json!({"labels": [{"name": "status:done"}]}).to_string(),
+            "status": 0,
+        }),
+        claim,
+        json!({
+            "matches": "projectItems",
+            "stdout": json!({
+                "data": {"repository": {"issue": {"projectItems": {
+                    "pageInfo": {"hasNextPage": false, "endCursor": null},
+                    "nodes": [],
+                }}}},
+            }).to_string(),
+            "status": 0,
+        }),
+        json!({"matches": "issue edit", "status": 0}),
+        json!({"matches": "issue comment", "stderr": "the comment body was refused", "status": 1}),
+        json!({
+            "matches": "closingIssuesReferences",
+            "stdout": json!({"closingIssuesReferences": [{"number": 218}]}).to_string(),
+            "status": 0,
+        }),
+    ]);
+    let trace = tempfile::tempdir().expect("a log directory");
+    let (counts, log) = (
+        trace.path().join("counts.json"),
+        trace.path().join("calls.log"),
+    );
+    let receipt = holder_receipt();
+    let merged = Merged {
+        sha: world.merge.clone(),
+        parents: vec![world.base.clone(), world.head],
+    };
+    let store = root.path().join("store").join("state.db");
+    let answer = crate::transport::store::with_store_at(&store, || {
+        crate::test_env::with_counting_logging_gh(bin.path(), &script, &counts, &log, || {
+            let live = live_for(&context, run_id);
+            let request = request();
+            let started = live.instant();
+            let mut deliver = Deliver {
+                hands: &live,
+                request: &request,
+                started,
+                deadline: started + request.wait,
+                released_at: 0,
+                done: Vec::new(),
+                verdict: None,
+                released: None,
+            };
+            match deliver.close(&receipt, &merged, &json!({})) {
+                Ok(answer) => answer,
+                Err(Halt::Stopped(answer)) | Err(Halt::Pending(answer)) => answer,
+            }
+        })
+    });
+
+    assert_eq!(
+        answer["delivered"], false,
+        "a release that stopped part-way was reported as a delivery: {answer}"
+    );
+    assert_eq!(
+        answer["ok"], false,
+        "the answer does not say the release did not finish: {answer}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        !calls.contains("issue close"),
+        "the issue was closed over a release that did not finish: {calls}"
+    );
+}
+
+#[test]
+fn an_answer_a_step_cannot_read_halts_rather_than_passing() {
+    let refused =
+        read_answer("release", json!("the release stopped")).expect_err("text is not a body");
+    assert_eq!(refused["code"], "tool-answer-unreadable", "{refused}");
+    assert!(
+        read_answer("release", json!({"ok": true})).is_ok(),
+        "an object answer a step can read was refused"
+    );
 }

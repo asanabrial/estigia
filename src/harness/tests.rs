@@ -18,6 +18,7 @@ fn context(root: &Path) -> GateContext {
         state_root: root.join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -644,6 +645,62 @@ fn a_read_that_merely_starts_like_a_boundary_is_not_one() {
         let (_, how) = classify("Bash", &json!({ "command": boundary }));
         assert_eq!(how, Sensitivity::Boundary, "{boundary}");
     }
+}
+
+#[test]
+fn a_boundary_followed_directly_by_a_shell_operator_is_still_the_whole_command() {
+    for (chained, spaced) in [
+        ("git merge;echo ok", "git merge"),
+        ("git merge&&echo ok", "git merge"),
+        ("git pull;cargo build", "git pull"),
+        ("git push;echo", "git push"),
+        ("git push|cat", "git push"),
+        ("(git merge)", "git merge"),
+        ("`git merge`", "git merge"),
+        ("git merge\necho ok", "git merge"),
+    ] {
+        let (chained_action, chained_how) = classify("Bash", &json!({ "command": chained }));
+        let (spaced_action, spaced_how) = classify("Bash", &json!({ "command": spaced }));
+        assert_eq!(spaced_how, Sensitivity::Boundary, "precondition: {spaced}");
+        assert_eq!(
+            chained_how, spaced_how,
+            "{chained} was not read as the boundary its spaced spelling is: {chained_action:?}"
+        );
+        let Action::Boundary {
+            command: chained_command,
+            ..
+        } = &chained_action
+        else {
+            panic!("{chained} reached no boundary: {chained_action:?}");
+        };
+        let Action::Boundary {
+            command: spaced_command,
+            ..
+        } = &spaced_action
+        else {
+            panic!("{spaced} reached no boundary: {spaced_action:?}");
+        };
+        assert_eq!(
+            chained_command, spaced_command,
+            "{chained} was gated as `{chained_command}` rather than `{spaced_command}`"
+        );
+    }
+
+    for read_only in ["git merge-base a b", "git merge-tree a b"] {
+        let (action, how) = classify("Bash", &json!({ "command": read_only }));
+        assert_eq!(how, Sensitivity::Routine, "{read_only}");
+        assert!(matches!(action, Action::Untouched), "{read_only}");
+    }
+
+    let (action, how) = classify(
+        "Bash",
+        &json!({ "command": "git commit -m \"git merge;\"" }),
+    );
+    assert_eq!(how, Sensitivity::Routine, "a merge named in a message");
+    assert!(
+        !matches!(action, Action::Boundary { .. }),
+        "a merge named in a commit message was read as one: {action:?}"
+    );
 }
 
 #[test]

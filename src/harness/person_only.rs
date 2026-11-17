@@ -59,6 +59,19 @@ pub const LIFT: PersonOnly = PersonOnly {
     command: "estigia stand-down --lift --reason \"<why>\"",
 };
 
+/// The row a line whose verb position cannot be read is refused under: the gate cannot tell
+/// which person-only command was meant, so the refusal names both.
+pub const UNREADABLE: PersonOnly = PersonOnly {
+    verb: "",
+    target: "estigia stand-down or estigia recover",
+    code: "stand-down-is-for-a-person",
+    why: "a shell expansion or a glob where `estigia`'s command word belongs leaves the gate \
+          unable to read whether the line runs `estigia stand-down`, which lifts every refusal \
+          this gate makes, or `estigia recover`, which puts an escalated review back in play; \
+          both are a person's decision, so the line is refused",
+    command: "estigia stand-down --reason \"<why>\" or estigia recover <issue> --reason \"<why>\"",
+};
+
 /// The row a line the classifier matched to `command` is refused under: [`LIFT`] when any word
 /// of the line is `--lift`, because the gate cannot tell a lift from a declaration that only
 /// quotes the flag.
@@ -180,14 +193,18 @@ pub const PERSON_ONLY_POPULATION: Population = Population {
     disposition: super::Disposition::TooTight,
     subject: "named_in",
     text: "the shell spellings of the commands only a person may run, `estigia stand-down`, which lifts every \
-           refusal the gate makes, and `estigia recover`, which puts an escalated review back in play. Legitimate population: every command line \
-           that runs one, with options allowed between the two words. Boundary: matched on any \
-           word whose basename is `estigia` followed by the verb, wherever it stands, on the line \
-           and on a dequoted copy with every quote and backslash removed, so neither character \
-           hides a word the shell would run, and a line that merely names both, such as a commit \
-           message, is refused too; an alias, a wrapper script or a renamed binary that never \
-           writes `estigia <verb>` as two words is not matched \u{2014} the same standing every \
-           shell rule of this gate has, which `docs/honesty.md` records.",
+           refusal the gate makes, and `estigia recover`, which puts an escalated review back in play. \
+           Legitimate population: every command line that runs one, with options allowed between the \
+           two words, and every line whose command word is left to the shell by an expansion or a \
+           glob, which the gate cannot read. Boundary: matched on any word whose basename is \
+           `estigia` followed by the verb, wherever it stands, on the line and on a dequoted copy \
+           with every quote and backslash removed, so neither character hides a word the shell \
+           would run, and a line that merely names both, such as a commit message, is refused too; \
+           a word after `estigia` that carries `$`, a backtick, `{`, `*`, `?` or `[` where the verb \
+           stands is refused as either command, since neither can be told from the line, while a \
+           quoted span is one word of data and no invocation; an alias, a wrapper script or a \
+           renamed binary that never writes `estigia <verb>` as two words is not matched \u{2014} \
+           the same standing every shell rule of this gate has, which `docs/honesty.md` records.",
 };
 
 fn in_a_word(c: char) -> bool {
@@ -204,13 +221,67 @@ fn runs(words: &[&str], verb: &str) -> bool {
     })
 }
 
+/// A character that leaves the word the shell will run unreadable from the line itself: an
+/// expansion or a glob. A false negative is a hole in the gate and a false positive fails closed.
+fn unreadable(c: char) -> bool {
+    matches!(c, '$' | '`' | '{' | '*' | '?' | '[')
+}
+
+/// The words of a line as the shell splits them: whitespace and the control operators separate
+/// words, a quoted span is one word however much whitespace it holds, and a backslash is part of
+/// its word. Quotes are left in place, so a caller reads the same spelling the line wrote.
+fn shell_words(text: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut quote: Option<char> = None;
+    for (at, c) in text.char_indices() {
+        if let Some(open) = quote {
+            if c == open {
+                quote = None;
+            }
+            continue;
+        }
+        if matches!(c, '\'' | '"') {
+            quote = Some(c);
+            start.get_or_insert(at);
+        } else if c.is_whitespace() || matches!(c, '&' | ';' | '|' | '(' | ')' | '<' | '>') {
+            if let Some(from) = start.take() {
+                words.push(&text[from..at]);
+            }
+        } else {
+            start.get_or_insert(at);
+        }
+    }
+    if let Some(from) = start {
+        words.push(&text[from..]);
+    }
+    words
+}
+
+/// Whether an `estigia` invocation leaves its command word to the shell, so the gate cannot
+/// read whether it runs a person-only command.
+fn unreadable_verb(text: &str) -> bool {
+    let words = shell_words(text);
+    words.iter().enumerate().any(|(at, word)| {
+        super::binary_name(&dequoted(word)) == "estigia"
+            && words[at + 1..]
+                .iter()
+                .find(|next| !next.starts_with('-'))
+                .is_some_and(|next| next.chars().any(unreadable))
+    })
+}
+
 /// The command a lowercased line runs, wherever the binary stands and however its words are glued:
-/// any word whose basename is `estigia`, then the verb after any `-` options. Read on the line
-/// and on a copy with every `"`, `'` and `\` removed, so a quote or backslash inside either word
-/// does not split it past the matcher while the shell still runs the command. A false negative is
-/// a hole in the gate and a false positive fails closed, so a line that merely names both, such as
-/// a commit message, is refused too.
+/// any word whose basename is `estigia`, then the verb after any `-` options. A word after
+/// `estigia` that carries a shell expansion or a glob is answered as [`UNREADABLE`], because the
+/// gate cannot read which command runs. Read on the line and on a copy with every `"`, `'` and
+/// `\` removed, so a quote or backslash inside either word does not split it past the matcher
+/// while the shell still runs the command. A false negative is a hole in the gate and a false
+/// positive fails closed, so a line that merely names both, such as a commit message, is refused too.
 pub fn named_in(view: &str) -> Option<&'static PersonOnly> {
+    if unreadable_verb(view) {
+        return Some(&UNREADABLE);
+    }
     let dequoted = dequoted(view);
     let plain = words_of(view);
     let folded = words_of(&dequoted);
@@ -233,7 +304,7 @@ pub fn refusal(action: &super::Action) -> Option<Refusal> {
     };
     let command = COMMANDS
         .iter()
-        .chain([&RECORD, &LIFT])
+        .chain([&RECORD, &LIFT, &UNREADABLE])
         .find(|command| command.target == target)?;
     Some(Refusal::not_started(
         command.code,

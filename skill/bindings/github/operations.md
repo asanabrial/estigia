@@ -40,6 +40,18 @@ transition's own refusals follow; omitting the flag claims without moving, which
 the same call. A refused claim creates no checkout; a failed checkout is reported under
 `start_branch` while the claim stands.
 
+A run holds one active claim and a second is refused. The MCP tool's `park: true`
+is the exception, and it is the server's bookkeeping, never a transport flag. While the git operation
+window is closed it sets the held issue aside on the run's pointer, still claimed in the store
+under the same run id, and claims the new one. At any time it takes a parked issue back the same way,
+parking whatever is active, and that re-claim reuses the parked claim's operation id and the horizon it was sworn with,
+whatever horizon the call names, so it is a renewal. A parked worktree is outside the gate's cover until it is taken back. A parked claim's
+horizon is not renewed while it is parked, `SessionStart` lists parked claims, `prune` keeps their
+worktrees, and the provisional-to-real rekey rewrites them. A park whose claim does not land puts the
+pointer back as it was. Releasing the active issue keeps the parked ones. When the window opens: `estigia flush` first. Then work through the issues in
+the order they were claimed: take each one back, commit it with `Refs` to its real number, and
+publish it, before taking back the next.
+
 ## Handing an issue to another runtime
 
 `handoff` states where an unheld issue is going, so a session of that runtime in that repository can
@@ -612,7 +624,8 @@ second call resumes from the store without repeating a landed write. `spend` is 
 `appendix_file` is the agent's text appended to the generated evidence, required where no CI can
 run. The steps and what each hands back are in *CI, merge and delivery* in delivery.md; a stop after
 the merge landed carries `merged` and, from the release, `close_incomplete`, which is repeated as
-*Releasing an issue* says.
+*Releasing an issue* says. A release answer that does not read as a success — its `ok` is not
+`true` — stops it there with `delivered: false`, and the issue is not closed.
 
 `until` stops the tail early for a person who merges and checks neither `Merge by` nor `Delivery
 authorisation`: `verdict` records the verdict and answers `reached: verdict`; `ci` also releases CI

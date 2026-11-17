@@ -904,7 +904,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,909 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,584 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,913 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -2077,11 +2077,15 @@ pointer that leaves it names the document it points at.
   not read are a backslash-escaped quote, a word spelled through a variable, `$(…)`, an alias or script, and
   non-plain content (`git "pu\sh"`).
 
-  **What exact-literal matching leaves** (traced by reading on 2026-09-07, not run): *not matched at all* are a
-  backslash line continuation, a `.exe` suffix and a full path carrying a global option, `git update-ref
-  refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh repo sync`, `git branch
-  <name>`, `git checkout HEAD -- <path>`, `git checkout -f` and `git filter-repo`; *matched but never read as
-  a delivery* are `gh api` against the merge, release and tag-ref endpoints and the pull spelling.
+  **What exact-literal matching leaves** (traced by reading on 2026-09-07, re-read on 2026-11-16, not run):
+  *not matched at all* are a backslash line continuation, a `.exe` suffix and a full path carrying a global
+  option, `git update-ref refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh
+  repo sync`, `git branch <name>`, `git checkout HEAD -- <path>`, `git checkout -f` and `git filter-repo`; a
+  quoted argument of a command that writes is read as code, because `data_view` blanks quoted spans only for
+  commands that read and that same breadth is what refuses a stand-down named in a commit message, so `git
+  commit -m "git merge origin"` is a merge while a `;`, `&`, `|`, `)` or a backtick inside the quotes does
+  not end it — `git commit -m "git merge;"` is not; *matched but never read as a delivery* are `gh api`
+  against the merge, release and tag-ref endpoints and the pull spelling.
 
   **The gate also measures its own disarmament.** `estigia stand-down`, `guard --uninstall`, `uninstall` and
   writes to the files those decisions are read from (its state, the contract, each agent's settings entry)
@@ -2097,7 +2101,10 @@ pointer that leaves it names the document it points at.
   `estigia stand-down` (`stand-down-is-for-a-person`, any host, sub-agent or orchestrator), a file-tool,
   patch-body or shell write naming the stand-down record under `~/.estigia` (also via the control directory
   and the bare name), deleting it, and a line carrying `--lift` (it cannot be told from a declaration that
-  only quotes the flag). The person lifts with `estigia stand-down --lift --reason <why>` in their own
+  only quotes the flag). A word after `estigia` that carries a shell expansion or a glob (`$`, a
+  backtick, `{`, `*`, `?`, `[`) is refused as either command, because the gate cannot read which one
+  runs and never evaluates the expansion; a quoted span is one word of data and not an invocation.
+  The person lifts with `estigia stand-down --lift --reason <why>` in their own
   shell, or `!` in Claude Code. **Open by declaration:** a spelling that never writes `estigia stand-down`
   as two words (an alias, wrapper script, `cargo run -- stand-down`, a renamed binary), a write the shell
   reader does not recognise (an interpreter's `open(...)`), a glob or directory target that never spells the
@@ -2736,8 +2743,33 @@ pointer that leaves it names the document it points at.
   numbers start at `PROVISIONAL_BASE` from one counter in `store_meta`, so two machines can allocate the
   same number and file the same issue twice. `Store::rekey` moves a provisional issue's rows in one
   transaction and `outbox::rekey_files` follows with the run pointers and the ownership record; a branch or
-  worktree directory named with the provisional number keeps that name. A provisional issue opens its
-  ledger without any GitHub call, and an unallocated or unrecorded number is refused.
+  worktree directory named with the provisional number keeps that name. A claim whose flush issues the
+  real number writes that number and the checkout `claim` started into the run pointer, read from the
+  transport's answer rather than from the provisional argument the call was made with. A provisional
+  issue opens its ledger without any GitHub call, and an unallocated or unrecorded number is refused.
+  A provisional number is read from this machine's store alone: `list_state` with `issue`, and the gate's
+  `provisional-issue-number` answer to `gh issue view|comment|edit|close|reopen` or a GraphQL `issue(number:)`
+  naming one. The match is on the command line's words, so a number reached through a variable or a script
+  goes to GitHub and reads as not found, and a number another machine allocated reads as never allocated
+  here. `-R` naming another repository than the allocation's is left to GitHub. The tests are
+  `provisional_read` in `src/harness/` and the offline cases in `src/transport/outbox/`.
+- **The window's wake is told, not held, on two hosts.** `opens_at` is computed from this machine's
+  local zone; under a test clock the offset is held fixed, and off Unix no daylight-saving change is
+  read. In the refusal it is text, not a field. Claude Code's loop only tells the turn to schedule its
+  own wake and lets the second stop for one opening through, so a turn that schedules nothing is not
+  woken. Codex's `Stop` keeps no loop record, so it is told on every stop. Pi's and OpenCode's loops hold
+  the timer themselves (`windowWait`), and lose it when the host process ends. The tests are
+  `next_opening` in `src/harness/operation_window/tests.rs`, the closed-window cases in
+  `src/cli/tests.rs`, and the `window` scenarios of both loop drivers in `src/setup/tests.rs`.
+- **A parked claim is the pointer's note, and nothing renews it.** `claim` with `park: true` keeps
+  several claims under one run id, so the store's adjudication is untouched. Only the active one is
+  covered and verified. Nothing checks that a parked issue's work is built, only that the window
+  was closed when it was parked. A parked claim's horizon passes unrenewed, and once it has lapsed
+  another run may `reclaim` it without `force`. A release puts down only the claim it names: the
+  parked list outlives the active claim, a release naming an issue the run does not hold changes nothing, and the pointer goes once nothing is left on it. A pointer that still lists parked claims is kept when storing it fails; no test injects that failure. `SessionEnd` forgets the pointer and the parked list
+  with it, as it does a single claim, so after that a parked issue is found again only from the
+  store. The tests are `park_tests` in `src/harness/mcp/tests/`, plus the prune and rekey cases that
+  name a parked claim.
 - **The transition record is the store's own, and it is not a log of everything that moved a state.** Schema 16
   adds `transitions` (`at`, `run_id`, `from_state`, `to_state` per issue), append-only like `entries`, and
   `Ledger::set_state` writes the row in the same transaction as the state, so a history that cannot be written
@@ -3348,7 +3380,11 @@ pointer that leaves it names the document it points at.
     (that would stop every tracker write in every repository whenever one unrelated row was malformed), so a
     broken contract in a repository whose row says `assisted` leaves tracker writes open until it reads again
     (`an_unreadable_contract_names_no_workflow_at_all`,
-    `an_assisted_only_tool_is_refused_unless_the_row_says_assisted`).
+    `an_assisted_only_tool_is_refused_unless_the_row_says_assisted`). This is the contract chain — the
+    versioned block, the operator's `estigia.local.md` and an agent's own file — and not the repository's own
+    file: one that is there and cannot be read reads as the denying answers (`required` for `Unclaimed write
+    policy`, `unreadable` for `Git operation window`), so the gate refuses what those rows could have refused,
+    and the refusal that stops an unclaimed write names the file and the read error.
   - A test classifies every tool in the server's table as tracker writer, assisted-only, local writer or
     read, so a new tool fails until placed; a writer a person runs by hand through `gh` is not a tool call.
 - **The screen's door and event loop are unmeasured.** `the_screens_install_proceeds_on_a_source_build`
@@ -3913,6 +3949,17 @@ pointer that leaves it names the document it points at.
 
 ## Test counts and mutation claims in a receipt
 
+- **The assisted Linear queue is the CLI user's own list, and nothing makes taking from it atomic.**
+  `query EstigiaQueue` offers only issues assigned to the `viewer` the `linear` CLI is logged in as, so a
+  shared API key makes "assigned to me" mean that key's user. A live claim on this machine keeps a second
+  local run off an issue, but nothing stops a person or another machine from starting the same issue in
+  the same moment. Moving it to the `in-progress` name, where `State names` maps one, is visible and is
+  not a lock. The estimate is the team's own number and is not normalised across estimate scales. More
+  than one page of assigned issues is refused rather than read short. The tests are
+  `the_queue_is_todo_then_backlog_by_priority_then_estimate_then_age` and
+  `a_queue_with_another_page_is_a_failed_read_not_a_short_queue` in `src/transport/linear/tests.rs`, and
+  `an_assisted_linear_loop_offers_the_head_of_its_queue_less_what_this_machine_holds` in
+  `src/cli/tests.rs`.
 - **A review transaction's evidence prose and a pull request body are not files in this repository, and
   nothing reads either: a test count or a mutation claim written into one is unchecked prose.** The
   operator decision of 2026-10-04 chose this record over rewriting a merged body. The measurement is one
@@ -4014,6 +4061,11 @@ citation added in a form the test does not parse is prose held by review alone.
     it, on the reading that some hosts give up near 60 seconds; no host was run to confirm.
   - **A timed-out job records nothing**, so a check that always overruns 30 minutes never yields a
     receipt, and the runner's cause of death is not read back (`checks-runner-lost`).
+  - **Which checkout ran them is not in the key.** A receipt names the target digest, not the directory
+    that produced it: a worktree the pointer names is trusted, and one that reproduces another target
+    records under that other digest, which the verdict gate then refuses as a missing receipt. Only the
+    fallback to this repository's own checkout is refused before anything runs
+    (`checks-worktree-unknown`).
   - **The detaching launch is not crossed for this job.** The `__check-job` pipe test, Unix only, runs the
     subcommand directly; the launch that detaches it is the one `__review-job` uses, crossed by
     `tests/pipe/review_job.rs` for that subcommand alone, and nothing exercises the Windows flags.
@@ -4071,7 +4123,10 @@ real `git` repository with a bare origin; the happy path, each hand-back, a resu
 and a merge whose answer was lost). What it does not measure:
 
 - **The live tools and the gate are not driven end to end.** One pipe test drives the real MCP server up
-  to the receipt hand-back; nothing runs the whole tail against the real store and gate.
+  to the receipt hand-back, and
+  `a_release_that_stopped_part_way_is_not_read_as_delivered_beside_a_notice` drives `Live::tool` and a
+  real store across the close alone, against a scripted `gh`; nothing runs the whole tail against the
+  real store and gate.
 - **The required set is the pull request's whole rollup.** The host's required names and the repository's
   own lanes are not resolved: a failing check nobody requires hands back `ci-red`, and a required check
   that never reported is not noticed while the rest are green.

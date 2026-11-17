@@ -1089,8 +1089,9 @@ impl Context {
     /// and a gate that cannot start because a file is unreadable is a gate
     /// somebody switches off. What it leaves absent is only the *unmodelled*
     /// rows — a label this crate has no `Setting` for. Every *modelled* row
-    /// still arrives, because `installed_config_in_keeping_what_parses` falls
-    /// back to `Config::default()` and the merge below folds in that default's
+    /// still arrives, because `installed_config_in_keeping_what_parses` keeps
+    /// the rows that parsed, and falls back to `Config::default()` only when
+    /// none did, while the merge below folds in that default's
     /// `render_rows()` unconditionally. [`Context::get`] answers that effective table,
     /// so a rendered default reads the same as a written answer there;
     /// [`Context::get_written`] answers only rows somebody wrote, so a caller that must

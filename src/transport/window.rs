@@ -131,8 +131,8 @@ pub(crate) fn tripwire(args: &[&str], how: How) -> Option<Failure> {
              was asked to hold it",
             args.join(" ")
         ),
-        "action": "wait for the git operation window to open, or set `Git operation window` to \
-                   `disabled`",
+        "action": "wait for the git operation window to open: this write was not queued, so \
+                   nothing reached GitHub",
     })))
 }
 

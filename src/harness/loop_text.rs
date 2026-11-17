@@ -100,6 +100,13 @@ const CAP: &str = ", or when the completion cap is reached";
 
 const CLOSE: &str = "; there is no completion string to write.";
 
+const ASSISTED: &str = "assisted: the person names the next issue, and this loop cannot select one";
+
+/// Why a loop with nothing held ends where the repository is assisted.
+pub fn assisted() -> &'static str {
+    ASSISTED
+}
+
 const HELD: &str = "estigia: issue #{issue} is still held by {run_id} \u{2014} the claim is still open, \
 so the turn continues. Finish the work the claim covers before stopping.";
 
@@ -107,6 +114,38 @@ so the turn continues. Finish the work the claim covers before stopping.";
 /// run, and nothing of the objective.
 pub fn held(issue: &str, run_id: &str) -> String {
     filled(HELD, &[("issue", issue), ("run_id", run_id)])
+}
+
+const WINDOW_CLOSED: &str = " The git operation window is closed until {at} (`opens_at`): \
+commits, pushes and GitHub writes wait for it, local work does not. Finish the local work in the \
+worktree. Then schedule this session's next attempt for {at} with the host's own scheduling and end \
+the turn: the loop lets that stop through and does not wake the session itself. The next attempt \
+runs `estigia flush` first, then renews the claim.";
+
+const WINDOW_TIMED: &str = " The git operation window is closed until {at} (`opens_at`): \
+commits, pushes and GitHub writes wait for it, local work does not. Finish the local work in the \
+worktree, then end the turn: this loop waits until {at} and resumes the session then, starting with \
+`estigia flush`.";
+
+const WINDOW_WAIT: &str = "waiting for the git operation window to open at {at}";
+
+const WINDOW_OPEN: &str = "estigia: the git operation window is open. Run `estigia flush` first, \
+then renew the claim on issue #{issue} under {run_id}, then commit and publish the work it holds.";
+
+/// What a turn holding a live claim is told while the window is closed.
+pub fn window_closed(at: &str) -> String {
+    filled(WINDOW_CLOSED, &[("at", at)])
+}
+
+/// The loop's record of a stop that waits on the window, the same text each
+/// time for one opening so a second stop can be told from the first.
+pub fn window_wait(at: &str) -> String {
+    filled(WINDOW_WAIT, &[("at", at)])
+}
+
+/// What the attempt that resumes at the opening is told first.
+pub fn window_open(issue: &str, run_id: &str) -> String {
+    filled(WINDOW_OPEN, &[("issue", issue), ("run_id", run_id)])
 }
 
 fn filled(template: &str, values: &[(&str, &str)]) -> String {
@@ -148,6 +187,16 @@ pub fn continuation(invocation: Invocation, run_id: &str, dischargeable: u64) ->
     )
 }
 
+/// The prompt that hands an assisted loop the issue its queue named, so the agent takes that
+/// issue rather than choosing one.
+pub fn continuation_naming(invocation: Invocation, run_id: &str, key: &str) -> String {
+    format!(
+        "{}\n\n{}",
+        preamble(run_id, 0, false),
+        objective(invocation, &format!("dev {key}"))
+    )
+}
+
 /// The same pieces as data, for the JavaScript plugin to render its own
 /// `preamble` from.
 pub fn preamble_parts() -> Value {
@@ -158,6 +207,11 @@ pub fn preamble_parts() -> Value {
         "cap": CAP,
         "close": CLOSE,
         "held": HELD,
+        "assisted": ASSISTED,
+        "window_closed": WINDOW_CLOSED,
+        "window_timed": WINDOW_TIMED,
+        "window_wait": WINDOW_WAIT,
+        "window_open": WINDOW_OPEN,
     })
 }
 

@@ -33,6 +33,7 @@ fn context(root: &Path, window: GitOperationWindow) -> GateContext {
         boundaries: Vec::new(),
         operation_window: window,
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -109,6 +110,10 @@ fn a_commit_outside_the_period_is_denied_before_the_renewal_window() {
             panic!("a commit at 20:00 rode the renewal window past 09:00-17:00");
         };
         assert_eq!(refusal.code, "git-operation-window-denied");
+        let text = refusal.to_string();
+        assert!(text.contains("uncommitted"), "{text}");
+        assert!(text.contains("inside 09:00-17:00 local"), "{text}");
+        assert!(!text.contains("disabled"), "{text}");
     });
 }
 
@@ -546,6 +551,32 @@ fn a_present_but_unparsable_row_is_invalid_not_disabled() {
 }
 
 #[test]
+fn a_repository_file_that_cannot_be_read_is_unreadable_not_disabled() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    let file = crate::skill::repository_config_path(&repo);
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the repository directory");
+    std::fs::write(&file, [0xff, 0xfe]).expect("an unreadable repository override");
+    let window = effective_in(&repo, &GitOperationWindow::Disabled);
+    assert_eq!(
+        window,
+        GitOperationWindow::Unreadable,
+        "an unreadable repository file fell back to the fallback"
+    );
+    let context = context(root.path(), window);
+    installed(&context);
+    let mut run = sworn(&context.repo_dir);
+    at(12 * 60, || {
+        let Decision::Deny(refusal) =
+            crate::harness::gate(&context, &mut run, &commit(), Sensitivity::Routine)
+        else {
+            panic!("an unreadable repository file permitted a commit");
+        };
+        assert_eq!(refusal.code, "git-operation-window-denied");
+    });
+}
+
+#[test]
 fn a_commit_on_a_day_outside_the_set_is_denied_and_the_denial_names_the_days() {
     let root = tempfile::tempdir().expect("a temporary root");
     let window = GitOperationWindow::parse("enabled mon-fri 09:00-17:00").expect("a schedule");
@@ -578,4 +609,126 @@ fn a_midnight_crossing_range_permits_the_morning_after_its_start_day_only() {
     assert!(permits_now(&window, Some(5 * 1440 + 3 * 60)));
     assert!(!permits_now(&window, Some(4 * 1440 + 3 * 60)));
     assert!(!permits_now(&window, Some(5 * 1440 + 23 * 60)));
+}
+
+const MONDAY: i64 = 1_794_787_200;
+
+fn utc_clock(at: i64) -> Option<u16> {
+    Some(((at - MONDAY).div_euclid(60)).rem_euclid(7 * 1440) as u16)
+}
+
+fn local(day: i64, hour: i64, minute: i64) -> i64 {
+    MONDAY + day * 86_400 + hour * 3_600 + minute * 60
+}
+
+fn window(text: &str) -> GitOperationWindow {
+    GitOperationWindow::parse(text).expect("a schedule")
+}
+
+#[test]
+fn the_next_opening_is_later_the_same_day() {
+    let opening = next_opening_at(&window("enabled 09:00-17:00"), local(0, 8, 0), utc_clock);
+    assert_eq!(opening, Some(local(0, 9, 0)));
+}
+
+#[test]
+fn the_next_opening_after_the_close_is_past_midnight() {
+    let opening = next_opening_at(&window("enabled 09:00-17:00"), local(0, 18, 30), utc_clock);
+    assert_eq!(opening, Some(local(1, 9, 0)));
+}
+
+#[test]
+fn the_next_opening_wraps_the_week() {
+    let opening = next_opening_at(
+        &window("enabled mon-fri 09:00-17:00"),
+        local(4, 18, 0),
+        utc_clock,
+    );
+    assert_eq!(opening, Some(local(7, 9, 0)));
+}
+
+#[test]
+fn an_inverted_window_opens_when_the_range_ends() {
+    let opening = next_opening_at(
+        &window("enabled mon-fri 08:00-17:00 inverted"),
+        local(0, 10, 15),
+        utc_clock,
+    );
+    assert_eq!(opening, Some(local(0, 17, 0)));
+}
+
+#[test]
+fn a_daylight_saving_change_moves_the_instant_not_the_local_minute() {
+    let change = local(6, 2, 0);
+    let fall_back = |at: i64| utc_clock(if at < change { at + 3_600 } else { at });
+    let opening = next_opening_at(&window("enabled 09:00-17:00"), local(5, 20, 0), fall_back);
+    assert_eq!(
+        fall_back(opening.expect("an opening")),
+        utc_clock(local(6, 9, 0))
+    );
+    assert_eq!(opening, Some(local(6, 9, 0)));
+
+    let spring_forward = |at: i64| utc_clock(if at < change { at } else { at + 3_600 });
+    let opening = next_opening_at(
+        &window("enabled 09:00-17:00"),
+        local(5, 20, 0),
+        spring_forward,
+    );
+    assert_eq!(opening, Some(local(6, 8, 0)));
+    assert_eq!(spring_forward(local(6, 8, 0)), utc_clock(local(6, 9, 0)));
+}
+
+#[test]
+fn no_opening_is_named_when_the_window_is_open_or_not_enabled() {
+    assert_eq!(
+        next_opening_at(&window("enabled 09:00-17:00"), local(0, 10, 0), utc_clock),
+        None
+    );
+    assert_eq!(
+        next_opening_at(&GitOperationWindow::Disabled, local(0, 8, 0), utc_clock),
+        None
+    );
+    assert_eq!(
+        next_opening_at(&GitOperationWindow::Invalid, local(0, 8, 0), utc_clock),
+        None
+    );
+}
+
+#[test]
+fn the_denial_names_the_next_opening() {
+    at(8 * 60, || {
+        let an_hour_on = || {
+            let now = crate::harness::session::now_seconds().expect("a clock");
+            crate::harness::session::stamp_of(now - now % 60 + 3600)
+        };
+        let before = an_hour_on();
+        let refusal = denial(&window("enabled 09:00-17:00"), Some(8 * 60));
+        let after = an_hour_on();
+        assert_eq!(refusal.code, "git-operation-window-denied");
+        let said = refusal.to_string();
+        assert!(
+            said.contains(&format!("opens next at {before} (`opens_at`)"))
+                || said.contains(&format!("opens next at {after} (`opens_at`)")),
+            "{said}"
+        );
+    });
+}
+
+#[test]
+fn the_next_opening_is_the_first_permitted_minute() {
+    at(8 * 60 + 30, || {
+        let half_an_hour_on = || {
+            let now = crate::harness::session::now_seconds().expect("a clock");
+            crate::harness::session::stamp_of(now - now % 60 + 30 * 60)
+        };
+        let before = half_an_hour_on();
+        let opening = next_opening(&window("enabled 09:00-17:00"), Some(8 * 60 + 30));
+        let after = half_an_hour_on();
+        let opening = opening.expect("a closed window opens");
+        assert!(opening == before || opening == after, "{opening}");
+        assert_eq!(
+            next_opening(&window("enabled 09:00-17:00"), Some(10 * 60)),
+            None
+        );
+    });
 }

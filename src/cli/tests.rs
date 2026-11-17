@@ -66,6 +66,8 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::decision_mode::refusal(&[], true),
         crate::harness::issue_creation::refusal(Some("gh issue create"))
             .expect("a line that files an issue is refused"),
+        crate::harness::provisional_read::refusal(Some("gh issue view 9000000000777"))
+            .expect("a provisional number is answered from the store"),
         // The role gate's only refusal, by its real constructor.
         crate::harness::roles::out_of_role(
             "builder",
@@ -6080,6 +6082,8 @@ fn goal_json_carries_the_completed_count() {
         pending: None,
         unconditioned: None,
         unadmitted: None,
+        next: None,
+        opens_at: None,
         completed: Some(2),
         stop_after: None,
     };
@@ -6109,6 +6113,8 @@ fn goal_json_carries_the_dischargeable_count() {
         pending: None,
         unconditioned: None,
         unadmitted: None,
+        next: None,
+        opens_at: None,
         completed: None,
         stop_after: None,
     };
@@ -6179,6 +6185,32 @@ fn goal_answers_nothing_sworn_when_the_pointer_holds_no_issue() {
     assert_eq!(json["standing"], "nothing-sworn");
     assert_eq!(json["live"], false);
     assert!(json["issue"].is_null());
+}
+
+#[test]
+fn an_assisted_run_holding_nothing_reads_no_queue_rather_than_empty_ones() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let state = root.path().join("state");
+    let repo = root.path().join("repo");
+    let run_id = harness::session::run_id("claude", "goal-assisted-1");
+    goal_pointer(&state, &run_id, None);
+    let mut context = release_context(&repo, &state);
+    context.workflow = Some(crate::config::Workflow::Assisted);
+
+    let reading = super::goal_reading(&context, &run_id, false);
+    assert_eq!(reading.standing, "assisted");
+    assert_eq!(reading.claimable, None);
+    assert_eq!(reading.dischargeable, None);
+    assert_eq!(reading.held, None);
+    assert_eq!(reading.pending, None);
+}
+
+#[test]
+fn an_assisted_loop_with_nothing_held_ends_on_the_person_naming_the_issue() {
+    let (answer, _) = decided(vec![reading("assisted", false, [None; 5])]);
+    let said = answer["systemMessage"].as_str().unwrap_or_default();
+    assert!(said.contains("the person names the next issue"), "{answer}");
+    assert!(!said.contains("no claimable"), "{answer}");
 }
 
 /// A tracker answer that could not be read never continues a loop: whatever
@@ -6496,7 +6528,7 @@ fn goal_answers_claimable_work_when_the_run_has_no_live_claim() {
 }
 
 #[test]
-fn goal_answers_no_work_when_the_repository_is_assisted() {
+fn goal_ends_an_assisted_loop_on_the_person_naming_the_issue() {
     let root = tempfile::tempdir().expect("a temporary root");
     let state = root.path().join("state");
     let repo = root.path().join("repo");
@@ -6521,8 +6553,8 @@ fn goal_answers_no_work_when_the_repository_is_assisted() {
     assert!(!reading.live);
     assert_eq!(
         (reading.claimable, reading.dischargeable),
-        (Some(0), Some(0)),
-        "an assisted repository offered work to a loop: {}",
+        (None, None),
+        "an assisted repository reported queues it never read: {}",
         super::goal_line(&run_id, &reading)
     );
     let stop = crate::test_env::with_scripted_gh(bin.path(), &script, || {
@@ -6530,15 +6562,15 @@ fn goal_answers_no_work_when_the_repository_is_assisted() {
             &run_id,
             crate::harness::loop_text::Invocation::Mention,
             None,
+            None,
             || {},
             || super::goal_reading(&context, &run_id, false),
         )
         .into_value()
     });
     assert!(
-        stop.to_string()
-            .contains("no claimable or dischargeable work"),
-        "the loop was not told to stop: {stop}"
+        stop.to_string().contains("the person names the next issue"),
+        "the loop was not told why it stops: {stop}"
     );
 }
 
@@ -6562,7 +6594,7 @@ fn goal_tells_a_person_the_queues_were_not_read_where_the_repository_is_assisted
         "zeros were printed as though they were measured: {line}"
     );
     let reading = super::goal_reading(&context, &run_id, false);
-    assert_eq!(super::goal_json(&run_id, &reading)["claimable"], 0);
+    assert!(super::goal_json(&run_id, &reading)["claimable"].is_null());
 }
 
 /// The JSON the loop plugin reads carries `held`, `pending` and `unconditioned`
@@ -6582,6 +6614,8 @@ fn goal_json_carries_what_is_held_pending_and_unconditioned() {
         pending: Some(1),
         unconditioned: None,
         unadmitted: None,
+        next: None,
+        opens_at: None,
         completed: None,
         stop_after: None,
     };
@@ -8480,6 +8514,7 @@ fn release_context(
         state_root: state_root.to_path_buf(),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -9582,6 +9617,7 @@ fn a_loop_stops_at_its_completion_cap() {
         "claude-abc",
         harness::loop_text::Invocation::Slash,
         Some(1),
+        None,
         || {},
         || over.clone(),
     )
@@ -9604,6 +9640,7 @@ fn a_loop_stops_at_its_completion_cap() {
         "claude-abc",
         harness::loop_text::Invocation::Slash,
         Some(2),
+        None,
         || {},
         || under.clone(),
     )
@@ -9619,6 +9656,7 @@ fn a_loop_stops_at_its_completion_cap() {
         "claude-abc",
         harness::loop_text::Invocation::Slash,
         Some(2),
+        None,
         || {},
         || unknown.clone(),
     )
@@ -9644,6 +9682,8 @@ fn reading(standing: &'static str, live: bool, counts: [Option<u64>; 5]) -> supe
         pending: counts[3],
         unconditioned: counts[4],
         unadmitted: None,
+        next: None,
+        opens_at: None,
         completed: None,
         stop_after: None,
     }
@@ -9655,6 +9695,7 @@ fn decided(readings: Vec<super::GoalReading>) -> (serde_json::Value, usize) {
     let answer = super::loop_stop::decide(
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
+        None,
         None,
         || {},
         || {
@@ -9738,6 +9779,7 @@ fn a_stop_with_unadmitted_issues_names_the_count_and_is_not_terminal() {
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
         None,
+        None,
         || {},
         || unadmitted_reading(Some(3)),
     );
@@ -9760,6 +9802,7 @@ fn a_stop_with_no_unadmitted_issues_keeps_its_terminal_reason() {
         let answer = super::loop_stop::decide(
             "codex-abc",
             crate::harness::loop_text::Invocation::Mention,
+            None,
             None,
             || {},
             || unadmitted_reading(unadmitted),
@@ -9791,6 +9834,7 @@ fn an_unconfirmed_read_waits_between_attempts() {
     let answer = super::loop_stop::decide(
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
+        None,
         None,
         || pauses += 1,
         || {
@@ -9882,6 +9926,7 @@ fn a_codex_stop_honours_a_stop_after_request_once_the_claim_is_released() {
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
         None,
+        None,
         || {},
         requested,
     );
@@ -9904,6 +9949,7 @@ fn a_codex_stop_honours_a_stop_after_request_once_the_claim_is_released() {
     let live = super::loop_stop::decide(
         "codex-abc",
         crate::harness::loop_text::Invocation::Mention,
+        None,
         None,
         || {},
         || {
@@ -11161,5 +11207,160 @@ fn releasing_an_assisted_run_from_another_repository_forgets_nothing() {
     assert_eq!(
         harness::session::load(state.path(), "claude-assisted1").issue,
         Some(issue)
+    );
+}
+
+fn linear_context(repo: &std::path::Path, state: &std::path::Path) -> harness::GateContext {
+    let mut context = release_context(repo, state);
+    context.workflow = Some(crate::config::Workflow::Assisted);
+    context.tracker = crate::config::Tracker::Linear {
+        team: "ABC".to_owned(),
+    };
+    context
+}
+
+#[test]
+fn an_assisted_linear_loop_offers_the_head_of_its_queue_less_what_this_machine_holds() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let state = root.path().join("state");
+    let repo = root.path().join("repo");
+    let run_id = harness::session::run_id("claude", "goal-linear-1");
+    goal_pointer(&state, &run_id, None);
+    let mut other = harness::session::Run::new("claude-other0000".to_owned());
+    other.issue = Some(crate::identity::Identity::Key("ABC-1".to_owned()));
+    harness::session::store(&state, &other).expect("the pointer writes");
+    let context = linear_context(&repo, &state);
+
+    let stdout = serde_json::json!({
+        "data": { "viewer": { "assignedIssues": {
+            "nodes": [
+                { "identifier": "ABC-1", "priority": 1, "estimate": 1, "createdAt": "2026-01-01T00:00:00Z", "state": { "type": "unstarted" } },
+                { "identifier": "ABC-2", "priority": 2, "estimate": 1, "createdAt": "2026-01-01T00:00:00Z", "state": { "type": "unstarted" } }
+            ],
+            "pageInfo": { "hasNextPage": false }
+        } } }
+    })
+    .to_string();
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    let reading = crate::test_env::with_counting_logging_gh(
+        crate::test_env::fake_cli_directory(&["linear"]).path(),
+        &crate::test_env::answers(&[
+            serde_json::json!({ "matches": "EstigiaQueue", "stdout": stdout }),
+        ]),
+        &scratch.path().join("counts.json"),
+        &scratch.path().join("calls.log"),
+        || super::goal_reading(&context, &run_id, false),
+    );
+    assert_eq!(reading.standing, "nothing-sworn");
+    assert_eq!(reading.claimable, Some(1));
+    assert_eq!(reading.next.as_deref(), Some("ABC-2"));
+}
+
+#[test]
+fn an_assisted_claim_this_machine_holds_keeps_the_loop_going() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let state = root.path().join("state");
+    let repo = root.path().join("repo");
+    let run_id = harness::session::run_id("claude", "goal-linear-2");
+    std::fs::create_dir_all(&state).expect("the state directory");
+    let mut run = harness::session::Run::new(run_id.clone());
+    run.issue = Some(crate::identity::Identity::Key("ABC-2".to_owned()));
+    run.assisted = true;
+    harness::session::store(&state, &run).expect("the pointer writes");
+    let context = linear_context(&repo, &state);
+
+    let reading = super::goal_reading(&context, &run_id, false);
+    assert!(reading.live, "{}", super::goal_line(&run_id, &reading));
+    assert_eq!(reading.standing, "assisted-held");
+}
+
+#[test]
+fn a_loop_whose_queue_names_an_issue_is_told_to_take_that_issue() {
+    let mut named = reading(
+        "nothing-sworn",
+        false,
+        [Some(1), Some(0), Some(0), Some(0), Some(0)],
+    );
+    named.next = Some("ABC-2".to_owned());
+    let (answer, _) = decided(vec![named]);
+    assert_eq!(answer["decision"], "block", "{answer}");
+    assert!(
+        answer["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("dev ABC-2")),
+        "{answer}"
+    );
+}
+
+#[test]
+fn a_live_claim_in_a_closed_window_is_told_once_and_then_let_stop_until_the_opening() {
+    let mut held = reading("passed", true, [None; 5]);
+    held.opens_at = Some("2026-11-17T16:00:00Z".to_owned());
+    let first = super::loop_stop::decide(
+        "claude-abc",
+        harness::loop_text::Invocation::Slash,
+        None,
+        Some("the turn continues"),
+        || {},
+        || held.clone(),
+    );
+    let reason = match &first {
+        super::loop_stop::Decision::Announce { reason, .. } => reason.clone(),
+        _ => panic!("the first stop in a closed window was not announced"),
+    };
+    let value = first.into_value();
+    assert_eq!(value["decision"], "block", "{value}");
+    let told = value["reason"].as_str().unwrap_or_default();
+    assert!(
+        told.contains("closed until 2026-11-17T16:00:00Z") && told.contains("`estigia flush`"),
+        "{told}"
+    );
+
+    let second = super::loop_stop::decide(
+        "claude-abc",
+        harness::loop_text::Invocation::Slash,
+        None,
+        Some(&reason),
+        || {},
+        || held.clone(),
+    );
+    assert!(
+        matches!(
+            second,
+            super::loop_stop::Decision::Stop {
+                terminal: false,
+                ..
+            }
+        ),
+        "the second stop for the same opening was not let through as a wait"
+    );
+    let value = second.into_value();
+    assert!(value.get("decision").is_none(), "{value}");
+
+    held.opens_at = None;
+    let open = super::loop_stop::decide(
+        "claude-abc",
+        harness::loop_text::Invocation::Slash,
+        None,
+        Some(&reason),
+        || {},
+        || held.clone(),
+    )
+    .into_value();
+    assert_eq!(open["decision"], "block", "{open}");
+}
+
+#[test]
+fn the_goal_answer_carries_the_opening_only_when_there_is_one() {
+    let mut held = reading("passed", true, [None; 5]);
+    assert!(
+        super::goal_json("claude-abc", &held)
+            .get("opens_at")
+            .is_none()
+    );
+    held.opens_at = Some("2026-11-17T16:00:00Z".to_owned());
+    assert_eq!(
+        super::goal_json("claude-abc", &held)["opens_at"],
+        "2026-11-17T16:00:00Z"
     );
 }

@@ -257,6 +257,24 @@ const waited = (pi, ctx, session, on, retries = 0) => {
   arm(pi, ctx, session, minutes * MINUTE_MS);
 };
 
+const windowWait = (pi, ctx, session, opens) => {
+  const goal = loops.get(session);
+  if (!running(goal) || stopRequested.has(session)) return;
+  const now = Date.now();
+  const at = new Date(now).toISOString();
+  const on = fill(PREAMBLE.window_wait, { at: opens });
+  const delay = Date.parse(opens) - now;
+  goal.waiting = { since: goal.waiting?.since ?? at, next: opens, on };
+  goal.last = { at, outcome: `waiting: ${on}` };
+  arm(pi, ctx, session, Number.isFinite(delay) ? Math.max(delay, 1000) : MINUTE_MS);
+};
+
+const tell = (pi, text) =>
+  pi.sendMessage(
+    { customType: MESSAGE_TYPE, content: text, display: true },
+    { triggerTurn: true, deliverAs: "followUp" },
+  );
+
 const unconfirmed = (read) =>
   !read.read || read.said?.standing === "unread" || read.said?.standing === "unreadable";
 
@@ -317,6 +335,7 @@ const consider = async (pi, ctx, session) => {
     }
   }
   let dischargeable = 0;
+  let next = null;
   let issue = null;
   if (read.said?.live === true) {
     const named = read.said?.issue;
@@ -325,6 +344,27 @@ const consider = async (pi, ctx, session) => {
       return;
     }
     issue = String(named);
+    const opens = typeof read.said?.opens_at === "string" ? read.said.opens_at : "";
+    if (opens !== "") {
+      if (goal.window === opens) {
+        windowWait(pi, ctx, session, opens);
+        return;
+      }
+      if (!running(loops.get(session)) || stopRequested.has(session)) return;
+      goal.window = opens;
+      disarm(session);
+      tell(pi, held(issue, goal.run_id) + fill(PREAMBLE.window_timed, { at: opens }));
+      reacted(goal, "enqueued");
+      return;
+    }
+    if (typeof goal.window === "string") {
+      if (!running(loops.get(session)) || stopRequested.has(session)) return;
+      delete goal.window;
+      disarm(session);
+      tell(pi, fill(PREAMBLE.window_open, { issue, run_id: goal.run_id }));
+      reacted(goal, "enqueued");
+      return;
+    }
   } else {
     if (typeof read.said?.stop_after === "string" && read.said.stop_after !== "") {
       stop(
@@ -337,6 +377,10 @@ const consider = async (pi, ctx, session) => {
       return;
     }
     const standing = read.said?.standing;
+    if (standing === "assisted") {
+      stop(ctx, session, PREAMBLE.assisted);
+      return;
+    }
     if (standing !== "stopped" && standing !== "nothing-sworn") {
       stop(ctx, session, `Estigia could not confirm this run's claim (${standing ?? "no standing"})`);
       return;
@@ -370,10 +414,11 @@ const consider = async (pi, ctx, session) => {
       return;
     }
     dischargeable = discharged;
+    if (typeof read.said?.next === "string" && read.said.next !== "") next = read.said.next;
   }
   if (!running(loops.get(session)) || stopRequested.has(session)) return;
   disarm(session);
-  enqueue(pi, goal, dischargeable, issue);
+  enqueue(pi, next === null ? goal : { ...goal, prompt: objective(`dev ${next}`) }, dischargeable, issue);
   reacted(goal, "enqueued");
 };
 

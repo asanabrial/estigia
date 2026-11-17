@@ -54,10 +54,12 @@ pub fn local_minutes_now() -> Option<u16> {
 
 #[cfg(unix)]
 fn system_local_minutes() -> Option<u16> {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs() as libc::time_t;
+    local_minutes_at(i64::try_from(crate::harness::session::now_seconds()?).ok()?)
+}
+
+#[cfg(unix)]
+fn local_minutes_at(seconds: i64) -> Option<u16> {
+    let seconds = seconds as libc::time_t;
     let mut broken: libc::tm = unsafe { std::mem::zeroed() };
     let broken = unsafe { libc::localtime_r(&seconds, &mut broken) };
     if broken.is_null() {
@@ -174,38 +176,127 @@ pub fn permitted_period(window: &GitOperationWindow) -> Option<String> {
     ))
 }
 
+const WEEK_MINUTES: i64 = 7 * 1440;
+
+/// The first permitted minute after `now` (Unix seconds), as Unix seconds:
+/// `None` while the window is open, for a window that never opens, and for one
+/// that is not enabled. `local_at` answers the local minute since Monday
+/// midnight at an instant, which is where a daylight-saving change is read.
+pub fn next_opening_at(
+    window: &GitOperationWindow,
+    now: i64,
+    local_at: impl Fn(i64) -> Option<u16>,
+) -> Option<i64> {
+    if !matches!(window, GitOperationWindow::Enabled { .. }) {
+        return None;
+    }
+    let here = i64::from(local_at(now)?);
+    if window.permits(here as u16) {
+        return None;
+    }
+    let minutes =
+        (1..=WEEK_MINUTES).find(|ahead| window.permits(((here + ahead) % WEEK_MINUTES) as u16))?;
+    let permits_at = |at: i64| local_at(at).is_some_and(|minute| window.permits(minute));
+    let mut at = now - now.rem_euclid(60) + minutes * 60;
+    for _ in 0..180 {
+        if at - 60 > now && permits_at(at - 60) {
+            at -= 60;
+        } else {
+            break;
+        }
+    }
+    for _ in 0..180 {
+        if permits_at(at) {
+            break;
+        }
+        at += 60;
+    }
+    Some(at)
+}
+
+/// [`next_opening_at`] from this machine's clock, as an RFC 3339 instant in
+/// UTC. `now` is the local minute the caller read; under a test clock the
+/// offset is held fixed, since the machine's zone says nothing about it.
+pub fn next_opening(window: &GitOperationWindow, now: Option<u16>) -> Option<String> {
+    let minute = i64::from(now?);
+    let seconds = i64::try_from(crate::harness::session::now_seconds()?).ok()?;
+    let overridden = NOW_OVERRIDE.with(|cell| cell.borrow().is_some());
+    let minute_began = seconds - seconds.rem_euclid(60);
+    let projected = move |at: i64| {
+        Some((minute + (at - minute_began).div_euclid(60)).rem_euclid(WEEK_MINUTES) as u16)
+    };
+    let opening = if overridden {
+        next_opening_at(window, seconds, projected)
+    } else {
+        next_opening_at(window, seconds, |at| local_at_or(at, projected))
+    }?;
+    Some(crate::harness::session::stamp_of(
+        u64::try_from(opening).ok()?,
+    ))
+}
+
+#[cfg(unix)]
+fn local_at_or(at: i64, _fallback: impl Fn(i64) -> Option<u16>) -> Option<u16> {
+    local_minutes_at(at)
+}
+
+#[cfg(not(unix))]
+fn local_at_or(at: i64, fallback: impl Fn(i64) -> Option<u16>) -> Option<u16> {
+    fallback(at)
+}
+
+/// What a run does while the window is closed: it keeps working, and nothing
+/// waits on the window but the commit and what follows it.
+pub const LOCAL_WORK: &str = "Local work goes on while the window is closed: edits, builds and \
+                              tests are not denied, and the work stays uncommitted in the \
+                              worktree until the window opens";
+
+/// The sentence naming the next opening, empty when there is none to name.
+pub fn opens_sentence(window: &GitOperationWindow, now: Option<u16>) -> String {
+    next_opening(window, now)
+        .map(|at| format!(". The window opens next at {at} (`opens_at`)"))
+        .unwrap_or_default()
+}
+
 /// The denial for a protected operation outside the permitted period.
 pub fn denial(window: &GitOperationWindow, now: Option<u16>) -> Refusal {
-    let (code_detail, remedy) = match (window, now) {
+    let (code_detail, remedy): (String, String) = match (window, now) {
         (GitOperationWindow::Invalid, _) => (
             "the repository's git operation window is enabled and does not parse, so no minute \
              can be shown inside it"
                 .to_owned(),
-            "a usable value, or `disabled`",
+            "a usable value, or `disabled`".to_owned(),
         ),
         (GitOperationWindow::Unreadable, _) => (
-            "the repository this write is aimed at has no checkout on this machine whose git \
-             operation window can be read, so no minute can be shown inside it"
+            "the repository this write is aimed at has no checkout on this machine whose rows \
+             this process can read, or the file carrying them cannot be read, so no minute can \
+             be shown inside its git operation window"
                 .to_owned(),
-            "a checkout of that repository carrying its own rows, or `disabled` written in them",
+            "a readable checkout of that repository carrying its own rows, or `disabled` written \
+             in them"
+                .to_owned(),
         ),
         (_, None) => (
             "this machine could not say what time it is, so no minute can be shown inside the \
              repository's git operation window"
                 .to_owned(),
-            "a working system clock",
+            "a working system clock".to_owned(),
         ),
         (window @ GitOperationWindow::Enabled { .. }, Some(_)) => (
             format!(
                 "outside the repository's git operation window: commits, pushes, branch \
-                 creation, and writes to GitHub may run only {}",
+                 creation, and writes to GitHub may run only {}{}",
+                permitted_period(window).unwrap_or_default(),
+                opens_sentence(window, now)
+            ),
+            format!(
+                "{LOCAL_WORK} ({})",
                 permitted_period(window).unwrap_or_default()
             ),
-            "that range to arrive, or `disabled`",
         ),
         (GitOperationWindow::Disabled, _) => (
             "the repository's git operation window is disabled".to_owned(),
-            "nothing: this denial should not have been raised",
+            "nothing: this denial should not have been raised".to_owned(),
         ),
     };
     Refusal::not_started(
@@ -247,12 +338,17 @@ pub fn permits_now(window: &GitOperationWindow, now: Option<u16>) -> bool {
 ///
 /// A row that is present and does not parse is [`GitOperationWindow::Invalid`],
 /// never the fallback: an unknown schedule denies rather than disabling
-/// itself. No contract or machine document is consulted, and `fallback` is the
-/// repository layer's own answer, [`GitOperationWindow::Disabled`] when it has
-/// none.
+/// itself. A file that is present and cannot be read is
+/// [`GitOperationWindow::Unreadable`], for the same reason. No contract or
+/// machine document is consulted, and `fallback` is the repository layer's own
+/// answer, [`GitOperationWindow::Disabled`] when it has none.
 pub fn effective_in(repo_dir: &Path, fallback: &GitOperationWindow) -> GitOperationWindow {
     let mut raw: Option<String> = None;
-    if let Some((_, text)) = crate::skill::repository_rows(repo_dir).ok().flatten() {
+    let rows = match crate::skill::repository_rows(repo_dir) {
+        Ok(rows) => rows,
+        Err(_) => return GitOperationWindow::Unreadable,
+    };
+    if let Some((_, text)) = rows {
         for (label, value) in crate::config::table_rows(&text) {
             if Setting::from_label(&label) == Some(Setting::GitOperationWindow) {
                 raw = Some(value);

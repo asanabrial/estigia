@@ -1709,12 +1709,10 @@ pub(crate) fn schedule_denial(window: &crate::config::GitOperationWindow) -> Fai
     use crate::harness::operation_window as schedule;
     let refusal = schedule::denial(window, schedule::now_minutes());
     let action = match super::outbox::queued_writes() {
-        0 => "run inside the repository's git operation window, or set `Git operation window` \
-              to `disabled`"
-            .to_owned(),
+        0 => format!("{}.", schedule::LOCAL_WORK),
         queued => format!(
-            "work stays uncommitted in the worktree; {queued} writes are queued; `estigia flush` \
-             runs when the window opens."
+            "{}; {queued} writes are queued; `estigia flush` runs when the window opens.",
+            schedule::LOCAL_WORK
         ),
     };
     Failure::Stop(serde_json::json!({

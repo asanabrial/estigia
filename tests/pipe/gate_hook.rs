@@ -3126,6 +3126,23 @@ fn a_refused_person_only_call_is_in_the_ledger_on_the_hook_road() {
 }
 
 #[test]
+fn the_hook_denies_a_stand_down_whose_verb_is_a_shell_expansion() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    let cwd = home.path().display().to_string().replace('\\', "\\\\");
+    let payload = format!(
+        "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"Bash\",\
+         \"tool_input\":{{\"command\":\"estigia $(printf stand-down) --reason x\"}}}}"
+    );
+    let (out, error, _) = run(home.path(), &["hook", "pre-tool-use"], &payload);
+    assert!(
+        out.contains("\"permissionDecision\":\"deny\"")
+            && out.contains("stand-down-is-for-a-person"),
+        "an expanded verb reached the stand-down: {out}{error}"
+    );
+}
+
+#[test]
 fn a_refused_person_only_call_is_in_the_ledger_on_the_gate_road() {
     let home = tempfile::tempdir().expect("a temporary home");
     std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
@@ -3352,4 +3369,53 @@ fn gate_refuses_an_input_on_standard_input_that_is_not_json_or_is_missing() {
             "{stdin:?} was refused for another reason: {said}{error}"
         );
     }
+}
+
+#[test]
+fn an_unreadable_repository_configuration_denies_the_commit_it_could_have_denied() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    run(home.path(), &["setup", "claude-code"], "");
+
+    let repo = tempfile::tempdir().expect("a checkout");
+    checked_git(repo.path(), &["init", "--quiet"]);
+    checked_git(
+        repo.path(),
+        &["remote", "add", "origin", "https://github.com/acme/web.git"],
+    );
+    let file = repo
+        .path()
+        .join(".git")
+        .join("estigia")
+        .join("estigia.local.md");
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+    let mut rows =
+        b"| Setting | Value here |\n|---|---|\n| Unclaimed write policy | required |\n".to_vec();
+    rows.extend_from_slice(&[0xff, 0xfe]);
+    std::fs::write(&file, rows).expect("an unreadable repository file");
+
+    let cwd = repo.path().display().to_string().replace('\\', "\\\\");
+    let payload = format!(
+        "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"Bash\",\
+         \"tool_input\":{{\"command\":\"git commit -m x\"}}}}"
+    );
+    let (out, err, _) = run_in(
+        home.path(),
+        repo.path(),
+        &["hook", "pre-tool-use"],
+        &payload,
+    );
+    let shown = format!("{out}{err}");
+    assert!(
+        out.contains("\"permissionDecision\":\"deny\""),
+        "an unreadable repository configuration permitted a commit: {shown}"
+    );
+    assert!(
+        out.contains("config-local-unreadable"),
+        "the denial did not say the configuration could not be read: {shown}"
+    );
+    assert!(
+        out.contains("estigia.local.md") && out.contains("UTF-8"),
+        "the denial does not name the file and the read error: {shown}"
+    );
 }

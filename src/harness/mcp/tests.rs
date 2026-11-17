@@ -185,6 +185,7 @@ use super::*;
 use crate::test_env::repository_with_commit;
 
 mod facade_tests;
+mod park_tests;
 
 /// Registers a real worktree of `repo` at `path`, and writes an ownership
 /// marker inside it naming `run_id` and `issue` — the same shape
@@ -238,6 +239,7 @@ fn bare_context(root: &tempfile::TempDir, repo_dir: &std::path::Path) -> GateCon
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -379,6 +381,7 @@ fn a_claim_records_the_key_its_retry_depends_on() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -447,6 +450,7 @@ fn releasing_another_issue_leaves_the_held_ones_retry_key_alone() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -577,6 +581,7 @@ fn a_record_nothing_can_read_stops_every_tool_that_names_a_run() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -679,6 +684,7 @@ fn a_record_that_will_not_open_stops_every_tool_that_names_a_run() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -765,6 +771,7 @@ fn a_run_id_that_holds_another_checkout_is_not_one_to_act_under() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -884,6 +891,7 @@ fn a_run_whose_pointer_will_not_parse_cannot_swear_to_another_issue() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -1891,6 +1899,7 @@ fn a_run_that_already_holds_an_issue_cannot_swear_to_a_second() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -1933,6 +1942,7 @@ fn re_claiming_the_same_issue_is_a_renewal_and_is_not_refused() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -1970,6 +1980,7 @@ fn holding_nothing_is_not_holding_something_else() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -2006,6 +2017,7 @@ fn a_pointer_is_never_written_under_an_empty_run_id() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -2267,6 +2279,7 @@ fn a_transition_cannot_be_made_without_saying_whose_run_it_is() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -2334,6 +2347,7 @@ fn publication_refusals_invalidate_only_when_a_remote_write_cannot_be_excluded()
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -2432,6 +2446,7 @@ fn a_malformed_call_and_a_refusal_are_not_the_same_failure() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -2969,6 +2984,7 @@ fn a_call_that_wrote_nothing_leaves_the_run_pointer_alone() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -3032,6 +3048,7 @@ fn isolating_a_run_records_the_checkout_it_was_adjudicated_from() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -3105,6 +3122,50 @@ fn isolating_a_run_records_the_checkout_it_was_adjudicated_from() {
 }
 
 #[test]
+fn a_claim_that_renumbers_a_provisional_issue_records_the_answer_not_the_argument() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, &root.path().join("repo"));
+    let claim = super::tools::find("claim").expect("the operation is still reachable");
+    let worktree = root.path().join("trees").join("issue-424");
+    let run_id = "opencode-abcd1234";
+
+    let mut run = crate::harness::session::Run::new(run_id.to_owned());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+
+    super::apply_effect(
+        claim,
+        &serde_json::json!({
+            "issue": crate::transport::outbox::PROVISIONAL_BASE + 27,
+            "run_id": run_id,
+            "transition_to": "in-progress",
+        }),
+        Some(&serde_json::json!({
+            "ok": true,
+            "issue": 424,
+            "start_branch": {
+                "ok": true,
+                "issue": 424,
+                "worktree": worktree.display().to_string(),
+            },
+        })),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, run_id);
+    assert_eq!(
+        after.issue,
+        Some(crate::identity::Identity::Number(424)),
+        "the pointer kept the provisional number the call was made with"
+    );
+    assert_eq!(
+        after.worktree.as_ref(),
+        Some(&worktree),
+        "the pointer lost the checkout the claim started"
+    );
+}
+
+#[test]
 fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
@@ -3117,6 +3178,7 @@ fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -3829,6 +3891,7 @@ fn every_receipt_effect_recovers_the_complete_receipt_atomically() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -3888,6 +3951,7 @@ fn a_claim_adopts_the_complete_review_transaction_its_answer_carries() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -3963,6 +4027,7 @@ fn a_partial_review_transaction_invalidates_old_local_authority() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4067,6 +4132,7 @@ fn discovering_a_takeover_does_not_make_the_run_its_holder() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4126,6 +4192,7 @@ fn reclaiming_review_leaves_the_pointer_reading_review() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4217,6 +4284,7 @@ fn no_tool_bound_to_a_run_accepts_the_name_that_names_none() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4294,6 +4362,7 @@ fn refusing_a_nameless_run_names_a_way_out_that_is_one() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4367,6 +4436,7 @@ fn a_run_id_with_no_runtime_is_refused_at_the_mcp_boundary() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4406,6 +4476,7 @@ fn a_dashless_run_id_is_refused_at_the_mcp_boundary() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4450,6 +4521,7 @@ fn a_run_id_with_an_unsafe_runtime_is_refused_at_the_mcp_boundary() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -4504,6 +4576,7 @@ fn arg_context(root: &tempfile::TempDir) -> GateContext {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -5277,6 +5350,7 @@ fn start_branch_through_the_server_is_not_stopped_by_the_schedule_outside_the_pe
         boundaries: Vec::new(),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -6905,6 +6979,7 @@ fn transition_pointer_fixture() -> (tempfile::TempDir, GateContext, session::Run
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -6994,7 +7069,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 46_607;
+const TOOLS_LIST_CEILING: usize = 46_930;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -9728,6 +9803,7 @@ fn an_incomplete_close_leaves_the_pointer_the_run_still_needs() {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
@@ -9804,7 +9880,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 12_407;
+const ALWAYS_LOADED_CEILING: usize = 12_553;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
@@ -9849,6 +9925,25 @@ fn a_compact_answer_omits_build_and_a_plain_one_keeps_it() {
     let compact = super::answer_text(Some(json!({"ok": true})), true);
     assert_eq!(compact, r#"{"ok":true}"#);
     assert_eq!(super::answer_text(None, true), r#"{"ok":true}"#);
+}
+
+#[test]
+fn a_notice_is_owed_to_the_model_and_never_reaches_the_body() {
+    let answered = super::Answered {
+        body: Some(json!({"ok": false, "close_incomplete": {"step": "evidence"}})),
+        text: r#"{"ok":false,"close_incomplete":{"step":"evidence"}}"#.to_owned(),
+        notices: vec!["estigia: this run's checkout `x` still holds 1 uncommitted file".to_owned()],
+    };
+    let envelope = answered.envelope();
+    let text = envelope["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(
+        text.ends_with("estigia: this run's checkout `x` still holds 1 uncommitted file"),
+        "the notice was dropped from the text the model reads: {text}"
+    );
+    assert!(
+        text.starts_with(r#"{"ok":false,"close_incomplete":{"step":"evidence"}}"#),
+        "the notice was folded into the body: {text}"
+    );
 }
 
 #[test]

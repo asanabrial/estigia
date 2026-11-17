@@ -103,6 +103,18 @@ from both totals.
 - **No path is needed for the kept rows.** Each is a decision the model or a person makes, or a wait the
   runtime already holds.
 
+## The git window's opening
+
+A run whose claim is live while the `Git operation window` is closed waits for a known instant, not
+for an answer. `next_opening` in `src/harness/operation_window.rs` computes it in this machine's local
+time, daylight-saving change included, and it is carried as `opens_at`: in the
+`git-operation-window-denied` text, in the queue note `SessionStart` prints, and in `estigia goal
+--json`. The loops hold the wait instead of nudging. Pi's and OpenCode's arm one timer for `opens_at`
+on the second stop and wake the session then, telling it to run `estigia flush` first. Claude Code's
+`Stop` hook cannot hold a timer. It tells the turn once to schedule its own wake with the host
+(`ScheduleWakeup` or `Monitor`) and end the turn, and lets the second stop for the same opening
+through. A run under no loop tells the person to nudge it at `opens_at`.
+
 ## What this page is not
 
 It is not a saving. 72.95 M tokens of context is what the matched calls' requests carried. A call
