@@ -4817,9 +4817,10 @@ fn mcp() -> Result<(), Refusal> {
 /// Runs one lifecycle event. Never fails the agent's tool call.
 fn hook(event: &str, dialect: &str, agent: Option<&str>, wait_mail: bool) -> Result<(), Refusal> {
     let Some(event) = harness::hook::Event::from_slug(event) else {
-        let known = harness::hook::EVENTS
-            .iter()
-            .map(|(event, _, _)| event.slug())
+        let known = harness::hook::Event::all()
+            .into_iter()
+            .filter(|event| !harness::hook::is_git(*event))
+            .map(|event| event.slug())
             .collect::<Vec<_>>()
             .join(", ");
         // This one *is* a refusal: it can only happen if a settings file names

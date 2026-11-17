@@ -2021,6 +2021,20 @@ pointer that leaves it names the document it points at.
 
 ## The gate's reach across the agents
 
+- **`onFailure: "block"` is honoured from Claude Code v2.1.295, and no host was run to see it.** The
+  `PreToolUse` handler carries the field because Claude Code's hooks reference says a timed-out
+  `PreToolUse` hook does not block the tool call otherwise, and the gate's own worst case is the
+  fifteen-minute transport wait `The gate's boundary` records. Read, not run: the reference states
+  v2.1.295 (read 2026-11-16); the field is absent from the published settings schema at
+  `json.schemastore.org/claude-code-settings.json` read the same day, whose `hookCommand` declares
+  `additionalProperties: false`, and whose own documentation says the schema lags; and a newer Claude
+  Code was observed elsewhere to strip keys it does not know from a hook handler when it rewrites
+  `settings.json`. So an older host may ignore the field, warn about it or drop it, and a newer one may
+  drop it on its own write; `doctor` reports a registered gate whose handler lacks it, which is the
+  only visible sign a host took it away. Codex, Gemini, Qwen, Continue and Cursor register no such
+  field — their references were not checked for one, and whether a timed-out hook blocks on those
+  hosts is unmeasured.
+
 - **`Decision mode: auto` is enforced on Claude Code alone.** The gate refuses `AskUserQuestion`, the one
   question tool its matcher is woken for, and records the recommended answer from the payload. Codex,
   OpenCode and Pi register no question tool with the gate, so on them `auto` is the contract's sentence

@@ -21,6 +21,10 @@ pub struct Wire {
     pub event: Option<&'static str>,
     /// The event name as written, whether or not this build knows it.
     pub named: String,
+    /// Whether the handler carries `onFailure: "block"`, when the file was JSON
+    /// whose handler shape this build could read. `None` is a file read as text,
+    /// where the fields beside the command are not visible at all.
+    pub blocks_on_failure: Option<bool>,
 }
 
 impl Wire {
@@ -135,6 +139,7 @@ fn plugin_wire(text: &str) -> Option<Wire> {
             "tool.execute.before"
         }
         .to_owned(),
+        blocks_on_failure: None,
     })
 }
 
@@ -145,10 +150,11 @@ fn plugin_wire(text: &str) -> Option<Wire> {
 pub fn wires(text: &str) -> Vec<Wire> {
     // JSON where it is JSON: the commands inside are escaped, and reading them
     // as text would hand back a doubled-backslash path that does not exist.
-    let candidates: Vec<String> = match super::render::parse_settings(text) {
+    let parsed = super::render::parse_settings(text);
+    let candidates: Vec<String> = match &parsed {
         Some(value) => {
             let mut found = Vec::new();
-            collect_strings(&value, &mut found);
+            collect_strings(value, &mut found);
             found
         }
         None => super::render::without_mark(text)
@@ -156,7 +162,45 @@ pub fn wires(text: &str) -> Vec<Wire> {
             .map(str::to_owned)
             .collect(),
     };
-    candidates.iter().filter_map(|line| wire_in(line)).collect()
+    let mut wires: Vec<Wire> = candidates.iter().filter_map(|line| wire_in(line)).collect();
+    if let Some(root) = parsed.as_ref() {
+        let mut policies = Vec::new();
+        collect_failure_policies(root, &mut policies);
+        for wire in &mut wires {
+            wire.blocks_on_failure = policies
+                .iter()
+                .find(|(command, _)| *command == wire.command)
+                .map(|(_, blocks)| *blocks);
+        }
+    }
+    wires
+}
+
+/// Every handler object in a settings file: its command, and whether it tells
+/// the host to block the tool call when the handler fails.
+fn collect_failure_policies(value: &serde_json::Value, into: &mut Vec<(String, bool)>) {
+    match value {
+        serde_json::Value::Object(fields) => {
+            if let Some(command) = fields
+                .get("command")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+            {
+                let blocks =
+                    fields.get("onFailure").and_then(serde_json::Value::as_str) == Some("block");
+                into.push((command.to_owned(), blocks));
+            }
+            for field in fields.values() {
+                collect_failure_policies(field, into);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_failure_policies(item, into);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Every string in a JSON document, however deep.
@@ -201,6 +245,7 @@ fn wire_in(line: &str) -> Option<Wire> {
             executable: PathBuf::from(executable),
             event: crate::harness::hook::Event::from_slug(&named).map(|event| event.slug()),
             named,
+            blocks_on_failure: None,
         });
     }
     // A whole command line sitting inside a quoted string, which is how a

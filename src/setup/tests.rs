@@ -2212,6 +2212,140 @@ fn each_gated_agent_gets_its_own_envelope_and_not_somebody_else_s() {
 }
 
 #[test]
+fn a_gate_that_does_not_answer_in_time_blocks_the_tool_call() {
+    let (_home, options) = sandbox();
+    let read = |slug: &str| {
+        let adapter = agent(slug);
+        let hooks = resolve_paths(adapter, &options)
+            .expect("paths resolve")
+            .hooks
+            .expect("a gated agent has a hooks file");
+        setup(adapter, &Config::default(), &options).expect("setup succeeds");
+        serde_json::from_str::<serde_json::Value>(
+            &fs::read_to_string(&hooks).expect("the hooks file is readable"),
+        )
+        .expect("valid json")
+    };
+
+    let claude = read("claude-code");
+    let handler = &claude["hooks"]["PreToolUse"][0]["hooks"][0];
+    assert_eq!(
+        handler["onFailure"], "block",
+        "a gate the host stops waiting for does not block the tool call, so the write goes \
+         through ungated: {handler}"
+    );
+    for (event, groups) in claude["hooks"]
+        .as_object()
+        .expect("claude-code's hooks wrap events")
+    {
+        if event == "PreToolUse" {
+            continue;
+        }
+        assert!(
+            !groups.to_string().contains("onFailure"),
+            "`{event}` decides nothing, so it was given a failure policy that blocks work: \
+             {groups}"
+        );
+    }
+
+    // Codex reads the same envelope and has a schema of its own; a field it
+    // does not know is a file it may refuse.
+    let codex = read("codex");
+    assert!(
+        codex["hooks"]["PreToolUse"][0]["hooks"][0]
+            .get("onFailure")
+            .is_none(),
+        "the failure policy leaked into an agent whose host does not declare it: {codex}"
+    );
+}
+
+/// A gate entry the earlier build wrote carries no failure policy, and setup
+/// replaces it rather than leaving a gate that stops blocking on a slow read.
+#[test]
+fn an_entry_an_earlier_build_wrote_is_upgraded_in_place() {
+    let (_home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let hooks = resolve_paths(adapter, &options)
+        .expect("paths resolve")
+        .hooks
+        .expect("claude-code is gated");
+    fs::create_dir_all(hooks.parent().expect("a parent")).expect("the directory");
+    let earlier = serde_json::json!({
+        "permissions": {"allow": ["Bash(ls *)"]},
+        "hooks": {
+            "PreToolUse": [{
+                "matcher": "Bash",
+                "hooks": [{
+                    "type": "command",
+                    "command": "\"/opt/estigia\" hook pre-tool-use --agent claude-code \
+                                --dialect claude-code",
+                    "timeout": 10,
+                }],
+            }],
+        },
+    });
+    fs::write(&hooks, earlier.to_string()).expect("their file");
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    let upgraded: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&hooks).expect("readable")).expect("valid json");
+    assert_eq!(
+        upgraded["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"], "block",
+        "the entry an earlier build wrote was left as it was, so a slow read still lets the \
+         write through: {upgraded}"
+    );
+    assert_eq!(
+        upgraded["hooks"]["PreToolUse"].as_array().map(Vec::len),
+        Some(1),
+        "the upgrade added a second gate beside the one it replaced: {upgraded}"
+    );
+    assert_eq!(
+        upgraded["permissions"]["allow"][0], "Bash(ls *)",
+        "setup lost a key of theirs beside the entry it rewrote: {upgraded}"
+    );
+}
+
+/// The uninstall matches the command, not the fields beside it, so a gate an
+/// earlier build wrote and one the current build writes both come out.
+#[test]
+fn an_uninstall_takes_back_the_gate_with_or_without_the_failure_field() {
+    for on_failure in [None, Some("block")] {
+        let (_home, options) = sandbox();
+        let adapter = agent("claude-code");
+        let hooks = resolve_paths(adapter, &options)
+            .expect("paths resolve")
+            .hooks
+            .expect("claude-code is gated");
+        fs::create_dir_all(hooks.parent().expect("a parent")).expect("the directory");
+        let mut handler = serde_json::json!({
+            "type": "command",
+            "command": "\"/opt/estigia\" hook pre-tool-use --agent claude-code \
+                        --dialect claude-code",
+            "timeout": 10,
+        });
+        if let Some(value) = on_failure {
+            handler["onFailure"] = serde_json::json!(value);
+        }
+        let seeded = serde_json::json!({
+            "permissions": {"allow": ["Bash(ls *)"]},
+            "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [handler]}]},
+        });
+        fs::write(&hooks, seeded.to_string()).expect("their file");
+
+        uninstall(adapter, &options).expect("uninstall succeeds");
+        let after = fs::read_to_string(&hooks).unwrap_or_default();
+        assert!(
+            !after.contains("pre-tool-use"),
+            "a gate with `onFailure: {on_failure:?}` survived the uninstall: {after}"
+        );
+        assert!(
+            after.contains("Bash(ls *)"),
+            "the uninstall took a key of theirs with the gate: {after}"
+        );
+    }
+}
+
+#[test]
 fn only_claude_code_is_given_lifecycle_hooks() {
     // Codex shares Claude Code's *dialect* and not its lifecycle. Writing
     // `SessionStart` into a file for an agent that does not have it is an entry
