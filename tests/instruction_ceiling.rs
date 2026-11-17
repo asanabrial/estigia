@@ -27,7 +27,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/agents/review-validator.md", 1_998),
     ("skill/assets/analyst-issue-template.md", 4_503),
     ("skill/bindings/github.md", 20_689),
-    ("skill/bindings/github/delivery.md", 42_584),
+    ("skill/bindings/github/delivery.md", 42_772),
     ("skill/bindings/github/operations-guarantees.md", 40_758),
     ("skill/bindings/github/operations.md", 58_290),
     ("skill/bindings/github/recovery.md", 6_609),

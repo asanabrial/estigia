@@ -21,7 +21,8 @@ pub const ISSUE_CREATION_POPULATION: Population = Population {
            `create` is the one place the analyst template is checked.",
 };
 
-const OPTIONS_WITH_A_VALUE: &[&str] = &["-r", "--repo", "--hostname"];
+/// The `gh` options that take a value, skipped when reading the words after `gh`.
+pub(crate) const OPTIONS_WITH_A_VALUE: &[&str] = &["-r", "--repo", "--hostname"];
 
 /// Whether a lowercased, option-stripped command line files an issue.
 pub fn names_issue_creation(normalized: &str) -> bool {

@@ -735,7 +735,20 @@ fn run_operation(
             let limit = limit
                 .and_then(|limit| limit.trim().parse::<u32>().ok())
                 .unwrap_or(200);
-            if f.on("identities") {
+            let issue = f.get("issue").map(|issue| issue.trim().parse::<u64>());
+            if let Some(issue) = issue {
+                if f.on("identities") || f.get("state").is_some() {
+                    return Err(capture_argument_defect(
+                        operation,
+                        "--issue",
+                        "give --issue alone: it reads one issue, not a queue",
+                    ));
+                }
+                let number = issue.map_err(|_| {
+                    capture_argument_defect(operation, "--issue", "--issue is not an issue number")
+                })?;
+                super::commands::issue_reading(context, number)
+            } else if f.on("identities") {
                 super::commands::list_identities(context, limit)
             } else {
                 let state = f.get("state").ok_or_else(|| {
