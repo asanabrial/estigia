@@ -11663,6 +11663,31 @@ for (const [name, directories] of [
   clean();
 }
 
+{
+  const opens = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  const closed = {
+    exitCode: 0,
+    stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42, standing: "passed", opens_at: opens }),
+  };
+  const open = {
+    exitCode: 0,
+    stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42, standing: "passed" }),
+  };
+  const w = await world({ answers: [started, closed, closed, open] });
+  await w.run(0, "flow-loop", "do the thing");
+  await until(() => w.prompts.length >= 1, "window: the first prompt");
+  w.turn(DIRECTORY);
+  await until(() => w.prompts.length >= 2, "window: the closed-window order");
+  const told = w.prompts[1].text;
+  w.turn(DIRECTORY);
+  await until(() => w.storage.get(KEY)?.waiting, "window: the wait recorded");
+  const waiting = { prompts: w.prompts.length, next: w.storage.get(KEY).waiting.next, timers: live().map((timer) => timer.ms) };
+  await fire();
+  await until(() => w.prompts.length >= 3, "window: the opening order");
+  cases.window = { opens, told, waiting, woke: w.prompts[2].text, goal: w.storage.get(KEY) };
+  clean();
+}
+
 console.log(JSON.stringify(cases));
 process.exit(0);
 "#;
@@ -11759,6 +11784,39 @@ fn the_loop_plugin_waits_on_held_or_pending_work_and_asks_again() {
     );
     let cases: serde_json::Value =
         serde_json::from_slice(&ran.stdout).expect("the driver prints JSON");
+
+    let window = &cases["window"];
+    let opens = window["opens"].as_str().expect("an opening");
+    assert!(
+        window["told"]
+            .as_str()
+            .is_some_and(|text| text.contains(&format!("closed until {opens}"))),
+        "the closed window was not named: {window}"
+    );
+    assert_eq!(
+        window["waiting"]["prompts"], 2,
+        "the second stop enqueued: {window}"
+    );
+    assert_eq!(
+        window["waiting"]["next"], opens,
+        "the wait is not for the opening: {window}"
+    );
+    assert!(
+        window["waiting"]["timers"][0]
+            .as_u64()
+            .is_some_and(|ms| ms > 3_600_000 && ms <= 7_200_000),
+        "no timer was armed for the opening: {window}"
+    );
+    assert!(
+        window["woke"].as_str().is_some_and(
+            |text| text.contains("window is open") && text.contains("`estigia flush` first")
+        ),
+        "the woken attempt was not told to flush first: {window}"
+    );
+    assert!(
+        window["goal"].get("window").is_none(),
+        "the wait outlived the opening: {window}"
+    );
 
     let wait = &cases["wait"];
     assert_eq!(wait["first"]["prompts"], 1, "a wait enqueued: {wait}");
@@ -19316,6 +19374,24 @@ const out = {};
 }
 
 {
+  const opens = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  use({ answer: { ...LIVE, opens_at: opens } });
+  const s = await scenario();
+  await start(s, "x");
+  await turn(s);
+  await until(() => s.sent.length === 2);
+  const told = texts(s)[1];
+  await turn(s);
+  const waiting = snapshot(s);
+  use({ answer: LIVE });
+  const due = held.shift();
+  due.fn();
+  await until(() => s.sent.length === 3);
+  out.window = { opens, told, waiting, woke: texts(s)[2] };
+  await s.handlers.session_shutdown({ type: "session_shutdown" }, s.ctx);
+}
+
+{
   use({ answer: LIVE });
   const s = await scenario();
   await start(s, "x");
@@ -19624,6 +19700,31 @@ fn the_pi_loop_stops_on_a_live_answer_that_names_no_issue() {
 #[test]
 fn the_pi_loop_waits_on_held_or_pending_work_and_asks_again() {
     let cases = run_pi_loop_driver();
+
+    let window = &cases["window"];
+    let opens = window["opens"].as_str().expect("an opening");
+    assert!(
+        window["told"]
+            .as_str()
+            .is_some_and(|text| text.contains(&format!("closed until {opens}"))),
+        "the closed window was not named: {window}"
+    );
+    assert_eq!(
+        window["waiting"]["prompts"], 2,
+        "the second stop enqueued: {window}"
+    );
+    assert!(
+        window["waiting"]["timers"][0]
+            .as_u64()
+            .is_some_and(|ms| ms > 3_600_000 && ms <= 7_200_000),
+        "no timer was armed for the opening: {window}"
+    );
+    assert!(
+        window["woke"].as_str().is_some_and(
+            |text| text.contains("window is open") && text.contains("`estigia flush` first")
+        ),
+        "the woken attempt was not told to flush first: {window}"
+    );
 
     let waits = &cases["waits"];
     assert_eq!(waits["waiting"]["prompts"], 1, "{waits}");
