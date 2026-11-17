@@ -382,21 +382,43 @@ fn a_usage_write_that_fails_leaves_the_answer_as_the_outcome() {
 
 #[test]
 fn the_writer_never_emits_the_empty_counter_map_the_reader_refuses() {
-    let (_root, dir) = prepared();
+    let (_root, empty_dir) = prepared();
     let empty = Usage {
         provider: "claude".to_owned(),
         counters: std::collections::BTreeMap::new(),
     };
-    let select =
+    let reports_empty =
         move || -> Result<Box<dyn Adapter>, Refusal> { Ok(Box::new(Reports(Some(empty.clone())))) };
-    OnThread(select).start(&dir).expect("the runner starts");
+    OnThread(reports_empty)
+        .start(&empty_dir)
+        .expect("the runner starts");
 
-    assert_eq!(finished(&dir), JobResult::Answer(b"the answer".to_vec()));
+    assert_eq!(
+        finished(&empty_dir),
+        JobResult::Answer(b"the answer".to_vec())
+    );
     assert!(
-        !dir.join(USAGE).exists(),
+        !empty_dir.join(USAGE).exists(),
         "the writer emitted an empty counter map"
     );
-    assert_eq!(read_usage(&dir).expect("readable"), None);
+    assert_eq!(read_usage(&empty_dir).expect("readable"), None);
+
+    let (_root, counted_dir) = prepared();
+    let reports_counters =
+        || -> Result<Box<dyn Adapter>, Refusal> { Ok(Box::new(Reports(Some(usage())))) };
+    OnThread(reports_counters)
+        .start(&counted_dir)
+        .expect("the runner starts");
+
+    assert_eq!(
+        finished(&counted_dir),
+        JobResult::Answer(b"the answer".to_vec())
+    );
+    assert!(
+        counted_dir.join(USAGE).is_file(),
+        "the writer dropped a non-empty counter map, so the empty case proves nothing"
+    );
+    assert_eq!(read_usage(&counted_dir).expect("readable"), Some(usage()));
 }
 
 fn usage_artifact(dir: &std::path::Path, content: &str) {
