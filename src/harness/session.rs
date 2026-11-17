@@ -312,6 +312,19 @@ impl Run {
         self.verified_at = None;
     }
 
+    /// Empties the active claim's slot, leaving the parked list as it is.
+    pub fn clear_active(&mut self) {
+        self.issue = None;
+        self.state = None;
+        self.worktree = None;
+        self.operation_id = None;
+        self.release_id = None;
+        self.review_transaction = None;
+        self.reviewed_head = None;
+        self.horizon = None;
+        self.verified_at = None;
+    }
+
     /// Puts back the active and parked claims `before` held, undoing a
     /// [`Run::park_for`] whose claim did not land.
     pub fn restore_claims(&mut self, before: &Run) {
@@ -771,6 +784,29 @@ pub fn updated(root: &Path, run_id: &str, mut change: impl FnMut(&mut Run)) -> (
 pub fn forget(root: &Path, run_id: &str) {
     let _held = pointers_locked(root);
     let _ = fs::remove_file(pointer_path(root, run_id));
+}
+
+/// Forgets the claim a release put down and keeps the rest: a parked claim
+/// released alone leaves the active one, and the active one released leaves the
+/// parked list. The pointer is removed only when nothing is left on it.
+pub fn forget_released(root: &Path, run_id: &str, released: Option<u64>) {
+    let _held = pointers_locked(root);
+    let mut run = load(root, run_id);
+    let parked_alone =
+        released.is_some_and(|issue| run.holds_parked(issue) && run.issue_number() != Some(issue));
+    if parked_alone {
+        run.parked
+            .retain(|parked| parked.issue.number() != released);
+    } else {
+        run.clear_active();
+    }
+    if run.unreadable || (run.issue.is_none() && run.parked.is_empty()) {
+        let _ = fs::remove_file(pointer_path(root, run_id));
+        return;
+    }
+    if !matches!(store_locked(root, &run), Ok(true)) {
+        let _ = fs::remove_file(pointer_path(root, run_id));
+    }
 }
 
 /// What a stop-after request records when the operator gave no reason.

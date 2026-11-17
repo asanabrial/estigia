@@ -2759,7 +2759,8 @@ pointer that leaves it names the document it points at.
   several claims under one run id, so the store's adjudication is untouched. Only the active one is
   covered and verified. Nothing checks that a parked issue's work is built, only that the window
   was closed when it was parked. A parked claim's horizon passes unrenewed, and once it has lapsed
-  another run may `reclaim` it without `force`. `SessionEnd` forgets the pointer and the parked list
+  another run may `reclaim` it without `force`. A release puts down only the claim it names: the
+  parked list outlives the active claim, and the pointer goes once nothing is left on it. `SessionEnd` forgets the pointer and the parked list
   with it, as it does a single claim, so after that a parked issue is found again only from the
   store. The tests are `park_tests` in `src/harness/mcp/tests/`, plus the prune and rekey cases that
   name a parked claim.

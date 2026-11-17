@@ -168,3 +168,62 @@ fn parking_carries_the_sworn_horizon_with_the_claim() {
     run.park_for(34);
     assert_eq!(run.horizon.as_deref(), Some("2026-08-01T18:00Z"));
 }
+
+fn forget(context: &GateContext, run: &mut session::Run, issue: u64) -> session::Run {
+    let release = tools::find("release").expect("the tool is listed");
+    apply_effect(
+        release,
+        &json!({"issue": issue, "run_id": "claude-abcd1234"}),
+        Some(&json!({"ok": true})),
+        run,
+        context,
+    );
+    session::load(&context.state_root, "claude-abcd1234")
+}
+
+#[test]
+fn releasing_the_active_claim_keeps_the_parked_ones() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path());
+    let mut run = holding(&context, 34, &[12, 56]);
+    let after = forget(&context, &mut run, 34);
+    assert!(
+        session::pointer_path(&context.state_root, "claude-abcd1234").exists(),
+        "the release removed a pointer that still names parked claims"
+    );
+    assert_eq!(after.issue, None);
+    assert_eq!(after.worktree, None);
+    assert_eq!(after.operation_id, None);
+    assert!(after.holds_parked(12) && after.holds_parked(56));
+    assert_eq!(session::parked_holdings(&context.state_root).len(), 1);
+}
+
+#[test]
+fn releasing_a_parked_claim_keeps_the_active_one() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path());
+    let mut run = holding(&context, 34, &[12, 56]);
+    let after = forget(&context, &mut run, 12);
+    assert_eq!(after.issue, Some(Identity::Number(34)));
+    assert_eq!(after.operation_id.as_deref(), Some("op-34"));
+    assert!(!after.holds_parked(12) && after.holds_parked(56));
+}
+
+#[test]
+fn releasing_the_only_claim_removes_the_pointer() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path());
+    let mut run = holding(&context, 34, &[]);
+    forget(&context, &mut run, 34);
+    assert!(!session::pointer_path(&context.state_root, "claude-abcd1234").exists());
+}
+
+#[test]
+fn releasing_the_last_parked_claim_with_none_active_removes_the_pointer() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path());
+    let mut run = holding(&context, 34, &[12]);
+    forget(&context, &mut run, 34);
+    forget(&context, &mut run, 12);
+    assert!(!session::pointer_path(&context.state_root, "claude-abcd1234").exists());
+}
