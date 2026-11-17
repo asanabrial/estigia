@@ -1535,10 +1535,12 @@ continuation word beside its harness line.
 ### The oath binds once sworn
 
 A run that has claimed nothing is not under Estigia's authority, except where the repository's
-`Unclaimed write policy` says otherwise: by default a repository write by such a run that the gate can
-place inside the checkout is put to the person first, a write it cannot place runs and the person is
-asked on the next call only if the checkout changed, and with the row `off` every write it makes goes
-through untouched. Gating every session would be a lock, not workflow authority.
+`Unclaimed write policy` says otherwise: by default (`off`) every repository write such a run makes
+goes through untouched, while the boundary rows below still hold what they hold; under `watch` a
+repository write the gate can place inside the checkout is put to the person
+first, a write it cannot place runs and the person is asked on the next call only if the checkout
+changed; under `required` both are refused. Gating every session would be a lock, not workflow
+authority.
 
 **One exception, and the operator opts into it.** In a checkout where `estigia guard` installed the
 `pre-push` hook, a run holding no claim is refused every commit (`git commit`, `cherry-pick`,
@@ -1548,10 +1550,10 @@ claim an issue and work through `claim` with `branch` and `base`, whose isolated
 ungated, edits and tests are held only by `Unclaimed write policy`, and a checkout without the guard
 has no commit refusal, as does one with no tracker transport or no installed contract.
 
-**The other exception is a repository setting, and it is on by default.** `Unclaimed write policy`
+**The other exception is a repository setting, and it is off by default.** `Unclaimed write policy`
 (`watch`, `off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`) governs a run
 holding no claim in a checkout with a tracker. `required` refuses every repository write it cannot
-place outside the checkout, with `issue-required`; `watch`, the default, asks the person on Claude Code
+place outside the checkout, with `issue-required`; `watch` asks the person on Claude Code
 for one it can place inside, refuses it on a host that cannot ask, and lets one it cannot place run,
 recording the checkout's `git status` and asking on the next call, naming the changed paths, only
 if it differs; a `git push` is held as a commit is, and a write carried on a line beside any other
@@ -1561,7 +1563,8 @@ default, or `allowed`, answered only by the same file): an unclaimed `gh pr merg
 `git tag`, release, `gh api` mutation or `gh pr review` is asked under `watch` and refused under
 `required`, never run and compared, and `Merge by` is not read on this path; `allowed` lets those
 boundaries pass while commits, pushes and file writes stay held, and [`honesty.md`](honesty.md) says what
-that costs; `off` is the behaviour described above.
+that costs; `off` holds none of these boundaries, and `Unclaimed write policy` is the only row that can
+hold a commit, a push or a file write.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.
 

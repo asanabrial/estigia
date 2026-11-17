@@ -654,7 +654,7 @@ fn a_rendered_table_reads_back_identically() {
         git_operation_window: GitOperationWindow::Disabled,
         evidence: Evidence::Measuring,
         publication_lane: crate::config::PublicationLane::Off,
-        issue_requirement: crate::config::IssueRequirement::Watch,
+        issue_requirement: crate::config::IssueRequirement::Off,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: crate::config::Workflow::Autonomous,
