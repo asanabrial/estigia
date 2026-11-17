@@ -14,7 +14,7 @@ use crate::transport::claim::capture::jobs_dir;
 use crate::transport::claim::capture::{
     ANSWER_SCOPED, Batch, CaptureInput, Check, Lens, MAX_WAIT_SECONDS, REFUTATION_ANSWER_SCOPED,
     after_a_write, collect_with, launch_with, offered_role, patience_for, prepare_with,
-    record_lens_answer, record_refuter_answer, record_validator_answer, take_slot,
+    record_lens_answer, record_refuter_answer, record_validator_answer, runner_lost, take_slot,
 };
 #[cfg(unix)]
 use crate::transport::generated::checks::{commands_digest, declared_at};
@@ -808,6 +808,14 @@ fn job_state(world: &World, launched: &serde_json::Value) -> String {
         .state
 }
 
+fn job_of(world: &World, launched: &serde_json::Value) -> crate::transport::store::Job {
+    let id = launched["job"].as_str().expect("a job id").to_owned();
+    open_ledger(world)
+        .transact(|tx| tx.job_by_id(&id))
+        .expect("the job is readable")
+        .expect("the job is recorded")
+}
+
 fn capture(
     world: &World,
     name: &str,
@@ -1409,6 +1417,51 @@ fn a_relayed_answer_is_admitted_against_the_job_receipt() {
     let (findings, reports) = on_the_timeline(&world);
     assert_eq!(findings.len(), 1);
     assert_eq!(reports, [RELIABILITY_LENS]);
+}
+
+#[test]
+fn a_relay_loss_is_recorded_on_its_run_and_a_cli_lost_job_is_not() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    let relayed = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launch");
+    assert!(
+        !crate::transport::store::relay_loss_recorded(run),
+        "a launch recorded a loss before any job was collected"
+    );
+
+    let collected = collect_as(&world, run, RELIABILITY_LENS, LAUNCHED_AT);
+
+    assert_eq!(refused_as(&collected), "capture-runner-lost");
+    assert_eq!(job_state(&world, &relayed), "abandoned");
+    assert!(
+        job_of(&world, &relayed).relayed,
+        "the job is not marked relayed"
+    );
+    assert!(
+        crate::transport::store::relay_loss_recorded(run),
+        "the relay loss was not recorded against the run it happened on"
+    );
+}
+
+#[test]
+fn a_relay_loss_with_no_cli_names_installing_one_and_never_a_relaunch() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    let relayed = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launch");
+    let job = job_of(&world, &relayed);
+
+    let envelope = runner_lost(&job, true).envelope();
+    let action = envelope["action"].as_str().expect("an action");
+
+    assert_eq!(envelope["reason"], "capture-runner-lost");
+    assert!(
+        action.contains("`claude`") && action.contains("`codex`"),
+        "the action does not name the CLI to install: {action}"
+    );
+    assert!(
+        !action.contains("launch: true"),
+        "the action names a relaunch that cannot finish on this host: {action}"
+    );
 }
 
 #[test]
@@ -3772,6 +3825,10 @@ fn a_runner_that_died_is_lost_the_job_is_abandoned_and_the_slot_launches_again()
 
     assert_eq!(refused_as(&outcome), "capture-runner-lost");
     assert_eq!(job_state(&world, &dead), "abandoned");
+    assert!(
+        !crate::transport::store::relay_loss_recorded("claude-a"),
+        "a CLI job's loss was recorded as a relay loss"
+    );
     let again = launched(&world, RELIABILITY_LENS, answer_of(&[]));
     wait_until_done(&again);
     assert!(collect(&world, RELIABILITY_LENS).is_ok());
@@ -3884,6 +3941,7 @@ fn a_finished_job_of_another_run_gives_up_its_slot_to_a_new_launch() {
         started_at: LAUNCHED_AT,
         deadline_at: LAUNCHED_AT,
         dir: "unused",
+        relayed: false,
     };
 
     assert!(
@@ -3917,6 +3975,7 @@ fn a_job_recorded_against_other_bytes_than_the_offered_receipt_is_stale_even_in_
         started_at: LAUNCHED_AT,
         deadline_at: LAUNCHED_AT,
         dir: "unused",
+        relayed: false,
     };
     assert!(
         take_slot(&ledger, &new, "claude-a")

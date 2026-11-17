@@ -351,4 +351,11 @@ pub(super) const MIGRATIONS: &[&str] = &[
     ALTER TABLE record_failures ADD COLUMN last_at INTEGER;
     ALTER TABLE record_failures ADD COLUMN last_error TEXT;
     ",
+    "
+    ALTER TABLE review_jobs ADD COLUMN relayed INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE relay_losses (
+        run_id TEXT PRIMARY KEY,
+        recorded_at INTEGER NOT NULL
+    );
+    ",
 ];

@@ -189,6 +189,22 @@ pub fn jobs_root(home: Option<&Path>) -> Result<PathBuf, Failure> {
     Ok(jobs_beside(&default_path(home)?))
 }
 
+/// Whether the local store recorded that the review relay did not complete on
+/// `run_id`.
+///
+/// A store that is absent or unreadable answers `false`: the marker only ever
+/// narrows what selection prefers, so the absence of a readable one leaves the
+/// order selection had before any marker existed.
+pub(crate) fn relay_loss_recorded(run_id: &str) -> bool {
+    let Ok(path) = store_path() else {
+        return false;
+    };
+    match open_for_read(&path) {
+        Ok(Some(store)) => store.relay_lost(run_id).unwrap_or(false),
+        _ => false,
+    }
+}
+
 /// Opens the store for reading alone when its file exists, and answers `None`
 /// when there is none yet: a read must not create the store it reads. A file
 /// another schema wrote is refused rather than read as this one.

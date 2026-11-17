@@ -11,7 +11,7 @@ use crate::transport::Failure;
 const TERMINAL_STATES: [&str; 3] = ["admitted", "stale", "abandoned"];
 
 const COLUMNS: &str = "id, run_id, name, epoch, pr, head, base, digest, payload_digest, offered, \
-                       attempt, pid, started_at, deadline_at, dir, state";
+                       attempt, pid, started_at, deadline_at, dir, state, relayed";
 
 #[derive(Debug)]
 pub(crate) enum Inserted {
@@ -29,6 +29,7 @@ pub(crate) struct NewJob<'a> {
     pub(crate) started_at: u64,
     pub(crate) deadline_at: u64,
     pub(crate) dir: &'a str,
+    pub(crate) relayed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +45,7 @@ pub(crate) struct Job {
     pub(crate) deadline_at: u64,
     pub(crate) dir: String,
     pub(crate) state: String,
+    pub(crate) relayed: bool,
 }
 
 fn job_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
@@ -69,6 +71,7 @@ fn job_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         deadline_at: u64::try_from(row.get::<_, i64>(13)?).unwrap_or_default(),
         dir: row.get(14)?,
         state: row.get(15)?,
+        relayed: row.get(16)?,
     })
 }
 
@@ -140,12 +143,37 @@ impl Store {
                 rusqlite::params![run_id, name],
                 |row| {
                     let job = job_of(row)?;
-                    let issue = u64::try_from(row.get::<_, i64>(16)?).unwrap_or_default();
+                    let issue = u64::try_from(row.get::<_, i64>(17)?).unwrap_or_default();
                     Ok((issue, job))
                 },
             )
             .optional()
             .map_err(unreadable("read a relay review job"))
+    }
+
+    /// Whether this store recorded that the review relay did not complete on
+    /// `run_id`.
+    pub(crate) fn relay_lost(&self, run_id: &str) -> Result<bool, Failure> {
+        self.connection()
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM relay_losses WHERE run_id = ?1)",
+                [run_id],
+                |row| row.get(0),
+            )
+            .map_err(unreadable("read a relay loss"))
+    }
+
+    /// Records that the review relay did not complete on `run_id`, which is what
+    /// makes selection stop preferring it for that run.
+    pub(crate) fn record_relay_loss(&self, run_id: &str, at: u64) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "INSERT INTO relay_losses (run_id, recorded_at) VALUES (?1, ?2)
+                 ON CONFLICT (run_id) DO NOTHING",
+                rusqlite::params![run_id, int(at)],
+            )
+            .map(|_| ())
+            .map_err(unreadable("record a relay loss"))
     }
 
     /// Bounds the job directories under `jobs_root` and settles `running` rows
@@ -270,9 +298,10 @@ impl Tx<'_> {
         self.transaction
             .execute(
                 "INSERT INTO review_jobs (id, repo_id, issue, run_id, name, epoch, pr, head, base,
-                    digest, payload_digest, offered, attempt, started_at, deadline_at, dir, state)
+                    digest, payload_digest, offered, attempt, started_at, deadline_at, dir, state,
+                    relayed)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-                    'running')",
+                    'running', ?17)",
                 rusqlite::params![
                     job.id,
                     self.repo_id,
@@ -290,6 +319,7 @@ impl Tx<'_> {
                     int(job.started_at),
                     int(job.deadline_at),
                     job.dir,
+                    job.relayed,
                 ],
             )
             .map(|_| Inserted::Recorded)

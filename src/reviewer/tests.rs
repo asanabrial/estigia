@@ -648,6 +648,43 @@ fn a_run_that_is_not_opencode_keeps_the_cli_first_order_with_a_relay_installed()
     });
 }
 
+const LOST_RELAY_RUN: &str = "opencode-ses12345deadbeef";
+
+fn record_relay_loss(run_id: &str) {
+    let path = crate::transport::store::store_path().expect("the store path");
+    crate::transport::store::Store::open(&path)
+        .expect("the scratch store opens")
+        .record_relay_loss(run_id, 1)
+        .expect("the relay loss is recorded");
+}
+
+#[test]
+fn a_recorded_relay_loss_gives_an_opencode_run_the_installed_cli() {
+    let variables: [(&'static str, &OsStr); 0] = [];
+    with_fake_clis(&["claude"], &variables, |bin| {
+        record_relay_loss(LOST_RELAY_RUN);
+        let adapter = select_with(bin, true, relay_first(LOST_RELAY_RUN, true))
+            .expect("the installed CLI is selected");
+        assert!(
+            !adapter.relays(),
+            "the relay was preferred after it lost a job on this run"
+        );
+    });
+}
+
+#[test]
+fn an_opencode_run_with_no_recorded_relay_loss_keeps_the_relay_first() {
+    let variables: [(&'static str, &OsStr); 0] = [];
+    with_fake_clis(&["claude", "codex"], &variables, |bin| {
+        let adapter = select_with(bin, true, relay_first(LOST_RELAY_RUN, true))
+            .expect("the relay is selected");
+        assert!(
+            adapter.relays(),
+            "an installed CLI displaced the relay with no recorded loss"
+        );
+    });
+}
+
 #[test]
 fn only_an_opencode_run_id_prefers_the_relay() {
     assert!(runs_on_opencode("opencode-ses12345deadbeef"));

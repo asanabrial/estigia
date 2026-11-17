@@ -835,16 +835,35 @@ fn still_running(job: &Job) -> Failure {
     }))
 }
 
-fn runner_lost(job: &Job) -> Failure {
-    stop(
-        "capture-runner-lost",
+fn reviewer_relays(run_id: &str) -> bool {
+    crate::reviewer::select_reviewer(run_id).is_ok_and(|adapter| adapter.relays())
+}
+
+pub(super) fn runner_lost(job: &Job, relay_is_all_that_is_left: bool) -> Failure {
+    let detail = if job.relayed {
+        format!(
+            "the host relayed job {} for `{}` and ended it without leaving an answer",
+            job.id, job.name
+        )
+    } else {
         format!(
             "the process running job {} for `{}` ended without leaving an answer",
             job.id, job.name
-        ),
+        )
+    };
+    let action = if !job.relayed {
         "the job is abandoned and nothing was recorded; call `collect_review_input` with \
-         `launch: true` again for the same name",
-    )
+         `launch: true` again for the same name"
+    } else if relay_is_all_that_is_left {
+        "no `claude` or `codex` CLI resolves on PATH, so no reviewer can run on this host and \
+         relaunching the relay cannot finish: install one of them, and this review stays owed \
+         until a reviewer has answered"
+    } else {
+        "the relay did not complete, so this run's next launch uses the installed `claude` or \
+         `codex` CLI instead; call `collect_review_input` with `launch: true` again for the same \
+         name"
+    };
+    stop("capture-runner-lost", detail, action)
 }
 
 fn result_stale(job: &Job) -> Failure {
@@ -1105,6 +1124,7 @@ pub(super) fn launch_with(
         started_at,
         deadline_at,
         dir: &dir_text,
+        relayed: spawner.relayed(),
     };
     let ledger = &prepared.ledger;
     let taken = take_slot(ledger, &new, input.run_id).inspect_err(|_| {
@@ -1235,8 +1255,11 @@ pub(super) fn collect_with(
                 std::thread::sleep(WAIT_POLL);
             }
             JobStatus::Lost => {
+                if job.relayed {
+                    Store::open(&store_path()?)?.record_relay_loss(&job.run_id, clock)?;
+                }
                 leave(&ledger, &job, &job.state, "abandoned")?;
-                return Err(runner_lost(&job));
+                return Err(runner_lost(&job, reviewer_relays(&job.run_id)));
             }
             JobStatus::Finished(JobResult::Refused(refusal)) => {
                 leave(&ledger, &job, &job.state, "abandoned")?;

@@ -1797,6 +1797,7 @@ fn status_with_job(
         started_at: 1,
         deadline_at: planted.deadline_at,
         dir: &dir_text,
+        relayed: false,
     };
     crate::test_env::with_scripted_gh(bin.path(), &script, || {
         let ledger = Ledger::open(&named(context), 42, RECLAIM_NOW).expect("the issue is imported");

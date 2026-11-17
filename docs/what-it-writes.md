@@ -674,7 +674,9 @@ installed `claude` or `codex`. On every other run, and on an OpenCode run withou
 order is the first installed `claude` or `codex` CLI, then a review relay installed for any host,
 then a coded `unavailable` naming the CLI to install. A run id whose runtime cannot be read keeps that
 second order and never takes the relay ahead of a CLI. The detached runner's own selection has no host
-and never relays.
+and never relays. A relay's job that is abandoned without an answer records its loss against the run,
+and from then on that run takes the CLI-first order too: a relay that cannot finish stops standing in
+front of a CLI that can.
 
 The OpenCode relay supports foreground review only. A request with `background: true` is refused
 before the host spawns a child. A foreground tool that returns a running child, including a host-side
@@ -684,9 +686,12 @@ admission; their raw output is replaced with a diagnostic. Asynchronous completi
 correlated private notification channel, which this plugin does not register.
 
 After such a refusal, the relay job has no completed result. Call `collect_review_input` once to
-abandon its runner-less slot (`capture-runner-lost`), then ask `review_status` and relaunch foreground
-on the unchanged publication. Do not republish or count a later visible background notification as
-review evidence. If foreground completion is unavailable, retain the exact receipt and hand off.
+abandon its runner-less slot (`capture-runner-lost`), which records the relay's loss against the run,
+then ask `review_status`. The next launch of that slot runs the installed `claude` or `codex` CLI
+instead of the relay; with neither installed it refuses, naming the CLI to install and no relaunch
+that could finish, and the review stays owed. Do not republish or count a later visible background
+notification as review evidence. If neither foreground completion nor a CLI is available, retain the
+exact receipt and hand off.
 
 The slot a launch was relayed for is remembered from `execute.before` by the call's `id`, because the
 prompt `before` puts in the task input carries no marker and the sub-agent is `general`; `execute.after` reads it

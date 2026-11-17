@@ -287,9 +287,13 @@ pub fn select_adapter() -> Result<Box<dyn Adapter>, Refusal> {
 /// A run id whose runtime cannot be read keeps the CLI-first order. Where no CLI
 /// and no relay exist, delivery blocks with a coded `unavailable` that names the
 /// CLI to install — never a skip and never a silent absence.
+///
+/// The relay keeps that first place only until the local store records that it
+/// did not complete on this run: a relay that cannot finish stops standing in
+/// front of a CLI that can, and `relay_first` is that rule.
 pub fn select_reviewer(run_id: &str) -> Result<Box<dyn Adapter>, Refusal> {
     let relay = crate::setup::review_relay_installed();
-    let relay_first = runs_on_opencode(run_id) && crate::setup::opencode_review_relay_installed();
+    let relay_first = relay_first(run_id, crate::setup::opencode_review_relay_installed());
     match select_adapter_with(crate::setup::resolve_on_path, relay, relay_first) {
         Ok(adapter) => Ok(adapter),
         Err(_) => Err(ReviewerCode::Unavailable.refusal(
@@ -298,6 +302,18 @@ pub fn select_reviewer(run_id: &str) -> Result<Box<dyn Adapter>, Refusal> {
              so it resolves on PATH",
         )),
     }
+}
+
+/// Whether the relay is asked before any installed CLI for `run_id`, given that
+/// this host has an OpenCode relay installed.
+///
+/// A run the store recorded a relay loss against answers `false`: the relay had
+/// its turn on this run and left no answer, so the CLI that can answer goes
+/// first. Everything else keeps the relay ahead on OpenCode.
+pub(crate) fn relay_first(run_id: &str, opencode_relay_installed: bool) -> bool {
+    opencode_relay_installed
+        && runs_on_opencode(run_id)
+        && !crate::transport::store::relay_loss_recorded(run_id)
 }
 
 pub(crate) fn runs_on_opencode(run_id: &str) -> bool {
