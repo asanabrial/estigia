@@ -233,6 +233,14 @@ pointer that leaves it names the document it points at.
   no host-routable definition, so a host with no agent to route to launches nothing and the review
   stays owed. A result for a receipt the review has moved past is refused `capture-result-stale`.
 
+  - **A recorded relay loss changes the order for that run, and records one abandoned job.** When a
+    relayed job is collected without an answer (`capture-runner-lost`), `collect_with` records the loss
+    against the run in the local store's `relay_losses` table, and [the selection rule](what-it-writes.md#the-opencode-review-relay-plugin)
+    then takes the CLI-first order for that run, asking an installed `claude` or `codex` first. It
+    proves one job ended without an answer, not that the host cannot relay: a foreground relay that
+    crashed records the same loss, and a lost CLI job records none. The marker is per run, not per
+    host, so a later session on the same machine starts from the relay again.
+
   - **Coverage uses `node` stand-ins; live foreground transport was measured once.** The tests drive
     the generated plugin with a stand-in whose command objects honour the `<` redirect and have no
     `.stdin()`; none runs it under Bun, which would make `bun` a second required interpreter in CI. The

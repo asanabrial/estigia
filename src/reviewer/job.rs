@@ -76,6 +76,12 @@ pub enum JobStatus<T = JobResult> {
 pub trait Spawner {
     /// Starts the runner for `dir` and returns once it holds the lock.
     fn start(&self, dir: &Path) -> Result<u32, Failure>;
+
+    /// Whether the host runs the reviewer itself, so that nothing this process
+    /// started will ever leave a result for the job.
+    fn relayed(&self) -> bool {
+        false
+    }
 }
 
 /// The spawner that re-executes a binary as `__review-job <dir>`, detached from
@@ -122,6 +128,10 @@ pub struct Relayed;
 impl Spawner for Relayed {
     fn start(&self, _dir: &Path) -> Result<u32, Failure> {
         Ok(std::process::id())
+    }
+
+    fn relayed(&self) -> bool {
+        true
     }
 }
 
