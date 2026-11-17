@@ -210,6 +210,17 @@ fn releasing_a_parked_claim_keeps_the_active_one() {
 }
 
 #[test]
+fn releasing_an_issue_the_run_does_not_hold_changes_nothing() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path());
+    let mut run = holding(&context, 34, &[12]);
+    let after = forget(&context, &mut run, 99);
+    assert_eq!(after.issue, Some(Identity::Number(34)));
+    assert_eq!(after.operation_id.as_deref(), Some("op-34"));
+    assert!(after.holds_parked(12));
+}
+
+#[test]
 fn releasing_the_only_claim_removes_the_pointer() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = context(root.path());
