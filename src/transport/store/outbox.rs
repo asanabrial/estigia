@@ -389,7 +389,6 @@ impl Store {
     /// What the store knows of a provisional number: `None` when it never
     /// allocated it, `Some(None)` while GitHub has given it no number, and
     /// `Some(Some(real))` once it has.
-    #[cfg(test)]
     pub(crate) fn provisional_real(
         &self,
         repo: &Repo,

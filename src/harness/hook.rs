@@ -750,12 +750,18 @@ fn queue_note(context: &GateContext, with_count: bool) -> Option<String> {
             )
         });
     }
+    let now = super::operation_window::now_minutes();
     let until = super::operation_window::permitted_period(window)
         .map_or_else(String::new, |period| format!(" ({period})"));
+    let until = match super::operation_window::next_opening(window, now) {
+        Some(at) => format!("{until}, at {at} (`opens_at`)"),
+        None => until,
+    };
     Some(format!(
         "{writes} queued; nothing reaches GitHub until the git operation window opens{until}. \
          Claims, comments and transitions keep working against the local store and `estigia \
-         flush` sends them in order."
+         flush` sends them in order. {}.",
+        super::operation_window::LOCAL_WORK
     ))
 }
 
@@ -940,6 +946,7 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
         None => String::new(),
     };
     let children = several_claims_paragraph(context, run);
+    let parked = parked_paragraph(run);
     let dirt = unclaimed_dirt_note(context, run);
     // Which roles this run's delegated contexts actually ran as, from the
     // pointer. Absent when the set is empty, and that absence is deliberately
@@ -1008,7 +1015,7 @@ This session carries no identity Estigia can derive a run id from, so nothing ca
             "additionalContext": format!(
                 "## Estigia
 
-Run id `{}`. {held}{handoff}{isolation}{children}{dirt}{delegated}{inline}{}{}{}{}",
+Run id `{}`. {held}{handoff}{isolation}{children}{parked}{dirt}{delegated}{inline}{}{}{}{}",
                 run.run_id,
                 drift_note(context),
                 build_note(context),
@@ -1017,6 +1024,31 @@ Run id `{}`. {held}{handoff}{isolation}{children}{dirt}{delegated}{inline}{}{}{}
             ),
         }
     })
+}
+
+fn parked_paragraph(run: &session::Run) -> String {
+    if run.parked.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<String> = run
+        .parked
+        .iter()
+        .map(|parked| {
+            format!(
+                "- #{} in `{}`",
+                parked.issue,
+                parked.worktree.as_ref().map_or_else(
+                    || "no checkout".to_owned(),
+                    |path| path.display().to_string()
+                )
+            )
+        })
+        .collect();
+    format!(
+        "\n\nThis run has parked claims, still held, whose worktrees the gate does not cover until \
+         one is taken back with `claim` and `park: true`:\n{}",
+        lines.join("\n")
+    )
 }
 
 fn several_claims_paragraph(context: &GateContext, run: &session::Run) -> String {
@@ -4850,6 +4882,10 @@ mod tests {
                 "{text}"
             );
             assert!(text.contains("inside 09:00-17:00 local"), "{text}");
+            assert!(
+                text.contains("Local work goes on while the window is closed"),
+                "{text}"
+            );
             assert_eq!(
                 flush_requests(),
                 0,
@@ -4933,6 +4969,17 @@ mod tests {
                 three.starts_with(&format!("3 GitHub writes are {tail}")),
                 "{three}"
             );
+        });
+    }
+
+    #[test]
+    fn a_closed_window_queue_note_names_the_next_opening() {
+        let run = session::Run::new("claude-abcd1234".to_owned());
+        at_minutes(20 * 60, || {
+            queue_writes(1);
+            let text = session_start_text(&closed_context(), &run, None);
+            assert!(text.contains("(`opens_at`)"), "{text}");
+            assert!(text.contains(", at 20"), "{text}");
         });
     }
 

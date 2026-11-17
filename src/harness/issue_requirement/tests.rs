@@ -1044,8 +1044,8 @@ fn a_stand_down_lets_an_asked_write_through() {
 }
 
 #[test]
-fn the_row_defaults_to_watch_and_only_the_repository_file_sets_it() {
-    assert_eq!(Config::default().issue_requirement, IssueRequirement::Watch);
+fn the_row_defaults_to_off_and_only_the_repository_file_sets_it() {
+    assert_eq!(Config::default().issue_requirement, IssueRequirement::Off);
     let setting = crate::config::Setting::IssueRequirement;
     assert_eq!(setting.scope(), crate::config::Scope::Repository);
     assert!(!crate::config::AGENT_SETTINGS.contains(&setting));
@@ -1085,7 +1085,7 @@ fn the_repository_file_sets_it_and_the_contract_and_agent_files_do_not() {
         crate::config::Scope::Agent,
     )
     .expect("a read");
-    assert_eq!(from_contract.issue_requirement, IssueRequirement::Watch);
+    assert_eq!(from_contract.issue_requirement, IssueRequirement::Off);
     assert!(owned.is_empty());
     let (from_contract, _) = Config::read_scope_over(
         &Config::default(),
@@ -1093,7 +1093,7 @@ fn the_repository_file_sets_it_and_the_contract_and_agent_files_do_not() {
         crate::config::Scope::Everywhere,
     )
     .expect("a read");
-    assert_eq!(from_contract.issue_requirement, IssueRequirement::Watch);
+    assert_eq!(from_contract.issue_requirement, IssueRequirement::Off);
 }
 
 #[test]
@@ -1105,7 +1105,7 @@ fn a_contract_row_for_it_is_read_by_nobody_and_the_repository_file_renders_it() 
     assert!(!config.render_rows().contains("Issue requirement"));
     let rendered = config.render_some_repository_rows(&[crate::config::Setting::IssueRequirement]);
     assert!(
-        rendered.contains("| Unclaimed write policy | required | watch |"),
+        rendered.contains("| Unclaimed write policy | required | off |"),
         "{rendered}"
     );
     let read = Config::read(
@@ -1113,7 +1113,7 @@ fn a_contract_row_for_it_is_read_by_nobody_and_the_repository_file_renders_it() 
         Some(&rendered),
     )
     .expect("a table");
-    assert_eq!(read.issue_requirement, IssueRequirement::Watch);
+    assert_eq!(read.issue_requirement, IssueRequirement::Off);
 }
 
 fn holder_of(context: &GateContext, worktree: &Path) {

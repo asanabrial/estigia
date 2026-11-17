@@ -392,6 +392,12 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "Path to a file stating why a live claim is being taken. Required with `force`.",
             ),
+            Argument::optional(
+                "park",
+                "boolean",
+                "Park the held claim and claim this one: while the git window is closed, or to take a \
+                 parked issue back.",
+            ),
         ],
         effect: PointerEffect::Swear,
         writes: true,
@@ -1010,13 +1016,20 @@ pub const TOOLS: &[Tool] = &[
         operation: "list-state",
         arguments: &[
             Argument::optional("state", "string", "The workflow state, required unless \
-                              `identities` is set.").of(crate::config::STATES),
+                              `identities` or `issue` is set.").of(crate::config::STATES),
             RUN_ID,
             Argument::optional(
                 "identities",
                 "boolean",
                 "Answer each open issue's recorded dedup key instead of one state's queue.",
             ),
+            Argument::optional(
+                "issue",
+                "integer",
+                "Read this one issue from the store instead: a provisional number answers \
+                 queued, or the number GitHub gave it.",
+            )
+            .counting_from(1),
             Argument::optional(
                 "limit",
                 "integer",
@@ -2251,6 +2264,7 @@ pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("assist", "several"),
     ("create", "repo"),
     ("claim", "state"),
+    ("claim", "park"),
     ("collect_review_input", "launch"),
     ("collect_review_input", "checks"),
     ("review_read", "parent_head"),

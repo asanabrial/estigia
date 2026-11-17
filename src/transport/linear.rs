@@ -2,7 +2,8 @@
 //!
 //! Linear holds an issue's title and description behind a GraphQL API. Under
 //! `Workflow: assisted` Estigia reads those two fields and the issue's state
-//! type, and refuses a finished issue. It writes one thing, and only where the
+//! type, and refuses a finished issue. It also reads the CLI user's own Todo and Backlog for
+//! the assisted loop's queue, through [`QUEUE_QUERY`]. It writes one thing, and only where the
 //! repository's `State names` row maps a state: the issue's workflow state,
 //! through [`MOVE_MUTATION`], read back afterwards. Every operation this source
 //! can send is a constant in this module.
@@ -44,6 +45,111 @@ pub const STATES_QUERY: &str = "query EstigiaStates($id: String!) { issue(id: $i
 /// The query that reads where an issue stands: its URL and its state's name and type.
 pub const STANDING_QUERY: &str =
     "query EstigiaStanding($id: String!) { issue(id: $id) { url state { name type } } }";
+
+/// The query that reads the queue an assisted loop selects from: the open issues of one team
+/// assigned to the CLI's own user, in Todo or Backlog.
+pub const QUEUE_QUERY: &str = "query EstigiaQueue($team: String!) { viewer { \
+                               assignedIssues(first: 100, filter: { team: { key: { eq: $team } \
+                               }, state: { type: { in: [\"unstarted\", \"backlog\"] } } }) { \
+                               nodes { identifier priority estimate createdAt state { type } } \
+                               pageInfo { hasNextPage } } } }";
+
+/// One issue in the assisted queue.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Queued {
+    /// The issue's key, such as `ENG-123`.
+    pub key: String,
+    /// `unstarted` or `backlog`.
+    pub state_type: String,
+    /// Linear's priority: 1 urgent to 4 low, 0 none.
+    pub priority: u64,
+    /// The team's own estimate, when the issue carries one.
+    pub estimate: Option<f64>,
+    /// When the issue was created, as Linear's ISO 8601 text.
+    pub created_at: String,
+}
+
+/// Reads one team's queue for the CLI's own user, in the order it is worked.
+///
+/// A page that says more follow is a failed read, never a short queue: the head of a partial
+/// list is not the head of the queue.
+pub fn read_queue(team: &str) -> Result<Vec<Queued>, Failure> {
+    let variables = serde_json::json!({ "team": team });
+    let value = json_of(&post(QUEUE_QUERY, &variables, How::read())?)?;
+    let connection = value
+        .get("data")
+        .and_then(|data| data.get("viewer"))
+        .and_then(|viewer| viewer.get("assignedIssues"))
+        .filter(|connection| !connection.is_null());
+    let Some(connection) = connection else {
+        if graphql_errors(&value)
+            .into_iter()
+            .any(is_authentication_error)
+        {
+            return Err(credential_rejected());
+        }
+        return Err(Failure::Read(format!(
+            "Linear answered no assigned issues for team {team}"
+        )));
+    };
+    if connection
+        .get("pageInfo")
+        .and_then(|page| page.get("hasNextPage"))
+        .and_then(serde_json::Value::as_bool)
+        != Some(false)
+    {
+        return Err(Failure::Read(
+            "Linear holds more assigned issues than one page, so the head of the queue is unknown"
+                .to_owned(),
+        ));
+    }
+    let nodes = connection
+        .get("nodes")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut queue = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        let text = |field: &str| node.get(field).and_then(serde_json::Value::as_str);
+        let Some(key) = text("identifier") else {
+            return Err(Failure::Read(
+                "Linear answered a queued issue with no identifier".to_owned(),
+            ));
+        };
+        queue.push(Queued {
+            key: key.to_owned(),
+            state_type: node
+                .get("state")
+                .and_then(|state| state.get("type"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            priority: node
+                .get("priority")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+            estimate: node.get("estimate").and_then(serde_json::Value::as_f64),
+            created_at: text("createdAt").unwrap_or_default().to_owned(),
+        });
+    }
+    queue.sort_by(|left, right| {
+        queue_rank(left)
+            .partial_cmp(&queue_rank(right))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| left.created_at.cmp(&right.created_at))
+    });
+    Ok(queue)
+}
+
+fn queue_rank(issue: &Queued) -> (u8, u64, f64) {
+    let state = u8::from(issue.state_type != "unstarted");
+    let priority = if issue.priority == 0 {
+        5
+    } else {
+        issue.priority
+    };
+    (state, priority, issue.estimate.unwrap_or(f64::INFINITY))
+}
 
 /// The workflow state `assist` moves an issue into, as `State names` keys it.
 pub const STARTED: &str = "in-progress";

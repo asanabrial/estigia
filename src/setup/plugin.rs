@@ -1959,6 +1959,30 @@ const waited = async (ctx, sessionID, on, retries = 0) => {{
   arm(ctx, sessionID, minutes * MINUTE_MS);
 }};
 
+const windowWait = async (ctx, sessionID, opens) => {{
+  if (disposed.has(ctx)) return;
+  const goal = await ctx.storage.get(KEY + sessionID);
+  if (!running(goal) || disposed.has(ctx) || stopRequested.has(sessionID)) return;
+  const now = Date.now();
+  const at = new Date(now).toISOString();
+  const on = fill(PREAMBLE.window_wait, {{ at: opens }});
+  const delay = Date.parse(opens) - now;
+  await ctx.storage.set(KEY + sessionID, {{
+    ...goal,
+    waiting: {{ since: goal.waiting?.since ?? at, next: opens, on }},
+    last: {{ at, outcome: `waiting: ${{on}}` }},
+  }});
+  if (
+    !running(await ctx.storage.get(KEY + sessionID)) ||
+    disposed.has(ctx) ||
+    stopRequested.has(sessionID)
+  ) return;
+  arm(ctx, sessionID, Number.isFinite(delay) ? Math.max(delay, 1000) : MINUTE_MS);
+}};
+
+const tell = (ctx, sessionID, text) =>
+  ctx.session.prompt({{ sessionID, text, delivery: "queue" }});
+
 const observed = async (ctx, outcome) => {{
   try {{
     await ctx.storage.set(WATCH + locationOf(ctx), {{ at: new Date().toISOString(), outcome }});
@@ -2172,6 +2196,7 @@ const consider = async (ctx, sessionID, lapsed) => {{
     }}
   }}
   let dischargeable = 0;
+  let next = null;
   let issue = null;
   if (read.said?.live === true) {{
     const named = read.said?.issue;
@@ -2180,6 +2205,30 @@ const consider = async (ctx, sessionID, lapsed) => {{
       return;
     }}
     issue = String(named);
+    const opens = typeof read.said?.opens_at === "string" ? read.said.opens_at : "";
+    if (opens !== "") {{
+      if (goal.window === opens) {{
+        await windowWait(ctx, sessionID, opens);
+        return;
+      }}
+      const fresh = await ctx.storage.get(KEY + sessionID);
+      if (!running(fresh) || stopRequested.has(sessionID)) return;
+      await ctx.storage.set(KEY + sessionID, {{ ...fresh, window: opens }});
+      disarm(sessionID);
+      await tell(ctx, sessionID, held(issue, goal.run_id) + fill(PREAMBLE.window_timed, {{ at: opens }}));
+      await reacted(ctx, sessionID, "enqueued");
+      return;
+    }}
+    if (typeof goal.window === "string") {{
+      const fresh = await ctx.storage.get(KEY + sessionID);
+      if (!running(fresh) || stopRequested.has(sessionID)) return;
+      const {{ window, ...rest }} = fresh;
+      await ctx.storage.set(KEY + sessionID, rest);
+      disarm(sessionID);
+      await tell(ctx, sessionID, fill(PREAMBLE.window_open, {{ issue, run_id: goal.run_id }}));
+      await reacted(ctx, sessionID, "enqueued");
+      return;
+    }}
   }} else {{
     if (typeof read.said?.stop_after === "string" && read.said.stop_after !== "") {{
       await stop(
@@ -2192,6 +2241,10 @@ const consider = async (ctx, sessionID, lapsed) => {{
       return;
     }}
     const standing = read.said?.standing;
+    if (standing === "assisted") {{
+      await stop(ctx, sessionID, PREAMBLE.assisted);
+      return;
+    }}
     if (standing !== "stopped" && standing !== "nothing-sworn") {{
       await stop(
         ctx,
@@ -2233,6 +2286,7 @@ const consider = async (ctx, sessionID, lapsed) => {{
       return;
     }}
     dischargeable = discharged;
+    if (typeof read.said?.next === "string" && read.said.next !== "") next = read.said.next;
   }}
   if (!running(await ctx.storage.get(KEY + sessionID)) || stopRequested.has(sessionID)) return;
   const awaited = [...sighted(ctx).children]
@@ -2247,7 +2301,13 @@ const consider = async (ctx, sessionID, lapsed) => {{
     return;
   }}
   disarm(sessionID);
-  await enqueue(ctx, goal, sessionID, dischargeable, issue);
+  await enqueue(
+    ctx,
+    next === null ? goal : {{ ...goal, prompt: objective(`dev ${{next}}`) }},
+    sessionID,
+    dischargeable,
+    issue,
+  );
   await reacted(ctx, sessionID, "enqueued");
 }};
 
