@@ -10382,3 +10382,28 @@ fn a_comment_kind_is_refused_without_the_mode_that_accepts_it() {
         assert!(said.contains(kind), "{said}");
     }
 }
+
+#[test]
+fn a_checks_rerun_reaches_run_checks_and_needs_checks() {
+    let (row, rest) = super::collect_step(&json!({
+        "issue": 7,
+        "run_id": "claude-abcd1234",
+        "checks": true,
+        "rerun": true,
+    }))
+    .expect("a checks rerun is well formed")
+    .expect("it is carried out by a row");
+    assert_eq!(row, "run_checks");
+    assert_eq!(rest["rerun"], true, "{rest}");
+    assert!(rest.get("checks").is_none(), "{rest}");
+
+    let refused = super::collect_step(&json!({
+        "issue": 7,
+        "run_id": "claude-abcd1234",
+        "rerun": true,
+    }));
+    assert!(
+        matches!(&refused, Err(ToolFailure::Malformed(message)) if message.contains("`checks: true`")),
+        "{refused:?}"
+    );
+}
