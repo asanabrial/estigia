@@ -1160,10 +1160,19 @@ fn confirm_removes_only_what_the_sweep_marked_for_deletion() {
 fn an_open_branch_checkout_ahead_of_its_upstream_but_on_another_remote_ref_is_kept() {
     let (root, clone, trees) = sweep_fixture();
     let target = trees.join("issue-2-open");
-    git(&target, &["push", "--quiet", "origin", "issue-2-open:archive"]);
     git(
         &target,
-        &["commit", "--quiet", "--allow-empty", "-m", "on archive only"],
+        &["push", "--quiet", "origin", "issue-2-open:archive"],
+    );
+    git(
+        &target,
+        &[
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "on archive only",
+        ],
     );
     git(&target, &["push", "--quiet", "origin", "HEAD:archive"]);
     git(&clone, &["fetch", "--quiet", "origin"]);
@@ -1205,7 +1214,13 @@ fn confirmation_keeps_an_open_branch_checkout_that_moved_ahead_of_its_upstream()
     assert_eq!(decision.reason, PUSHED_OPEN);
     git(
         &target,
-        &["commit", "--quiet", "--allow-empty", "-m", "late, on archive only"],
+        &[
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "late, on archive only",
+        ],
     );
     git(&target, &["push", "--quiet", "origin", "HEAD:archive"]);
     git(&clone, &["fetch", "--quiet", "origin"]);
