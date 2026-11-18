@@ -233,6 +233,13 @@ pointer that leaves it names the document it points at.
   no host-routable definition, so a host with no agent to route to launches nothing and the review
   stays owed. A result for a receipt the review has moved past is refused `capture-result-stale`.
 
+  - **A pull request review relays too, and its slot carries no loss record.** Under a `pr_review`
+    claim the relayed slot is marked in its job directory and found by `estigia review prompt` and
+    `admit` when no issue's job matches (`a_relayed_panel_waits_for_its_answers_and_admits_them_against_the_claim`).
+    A relayed slot that passes its deadline unanswered is abandoned and records nothing in
+    `relay_losses`, so the selection order does not change for that run; the generated plugin was not
+    driven against this road.
+
   - **A recorded relay loss changes the order for that run, and records one abandoned job.** When a
     relayed job is collected without an answer (`capture-runner-lost`), `collect_with` records the loss
     against the run in the local store's `relay_losses` table, and [the selection rule](what-it-writes.md#the-opencode-review-relay-plugin)

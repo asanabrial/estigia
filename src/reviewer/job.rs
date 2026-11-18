@@ -125,6 +125,30 @@ impl Detached {
 /// `estigia review admit` records the answer the host hands back.
 pub struct Relayed;
 
+const RELAYED: &str = "relayed";
+
+/// Marks `dir` as a job the host runs: no runner holds its lock, so it is
+/// waiting rather than lost until its answer is recorded or its deadline passes.
+pub(crate) fn mark_relayed(dir: &Path) -> Result<(), Failure> {
+    replace_atomically(&dir.join(RELAYED), "")
+        .map_err(|e| unwritten("mark a relayed review job", e))
+}
+
+/// Whether `dir` is a relayed job with no answer recorded yet.
+pub(crate) fn awaits_relay(dir: &Path) -> bool {
+    dir.join(RELAYED).exists() && !dir.join(RESULT).exists()
+}
+
+/// Records the answer a host's relay produced as the job's result, in the form
+/// a runner leaves, so the job is read as finished by whoever collects it.
+pub(crate) fn record_relayed_answer(dir: &Path, answer: &[u8]) -> Result<(), Failure> {
+    replace_atomically(
+        &dir.join(RESULT),
+        &result_json(&Ok(answer.to_vec())).to_string(),
+    )
+    .map_err(|e| unwritten("record a relayed review answer", e))
+}
+
 impl Spawner for Relayed {
     fn start(&self, _dir: &Path) -> Result<u32, Failure> {
         Ok(std::process::id())

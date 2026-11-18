@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use super::{held_by, stop};
+use super::held_by;
 use crate::config::ModelRouting;
 use crate::identity::Identity;
 use crate::reviewer::job::{JobResult, JobStatus, Spawner, job_status, write_job};
@@ -426,13 +426,17 @@ fn job_id(held: &PullReview, name: &str, now: u64) -> String {
 pub fn launch(context: &Context, run_id: &str) -> Result<serde_json::Value, Failure> {
     let adapter = crate::reviewer::select_reviewer(run_id).map_err(reviewer_failure)?;
     if adapter.relays() {
-        return Err(stop(
-            "pull-review-needs-a-detached-reviewer",
-            "the only reviewer here is a host relay, whose jobs are recorded against an issue"
-                .to_owned(),
-            "install the `claude` or the `codex` CLI so it resolves on PATH, or leave this review \
-             to a person",
-        ));
+        let mut answer = launch_with(context, run_id, &crate::reviewer::job::Relayed, clock()?)?;
+        answer["relay"] = serde_json::Value::Bool(true);
+        if crate::reviewer::runs_on_opencode(run_id)
+            && let Some(launched) = answer["launched"].as_array_mut()
+        {
+            for slot in launched {
+                let name = slot["name"].as_str().unwrap_or_default().to_owned();
+                slot["launch"] = crate::transport::claim::opencode_relay_launch(&name);
+            }
+        }
+        return Ok(answer);
     }
     launch_with(
         context,
@@ -440,6 +444,36 @@ pub fn launch(context: &Context, run_id: &str) -> Result<serde_json::Value, Fail
         &crate::reviewer::job::Detached::current(),
         clock()?,
     )
+}
+
+/// The job directory of the relayed reviewer `name` the review `run_id` holds
+/// is waiting on, or `None` when it holds no such slot.
+pub(crate) fn relayed_slot(
+    run_id: &str,
+    name: &str,
+) -> Result<Option<std::path::PathBuf>, Failure> {
+    let store = Store::open(&store_path()?)?;
+    let Some(held) = store.pull_review_of(run_id)? else {
+        return Ok(None);
+    };
+    Ok(store
+        .pull_review_slots(&held.epoch)?
+        .into_iter()
+        .find(|slot| slot.name == name && slot.state == "running")
+        .map(|slot| std::path::PathBuf::from(slot.dir))
+        .filter(|dir| crate::reviewer::job::awaits_relay(dir)))
+}
+
+/// Records a relayed reviewer's answer for the review `run_id` holds and
+/// collects it the way a finished detached reviewer is collected.
+pub fn admit_relayed(
+    context: &Context,
+    run_id: &str,
+    dir: &Path,
+    answer: &[u8],
+) -> Result<serde_json::Value, Failure> {
+    crate::reviewer::job::record_relayed_answer(dir, answer)?;
+    collect(context, run_id, 0)
 }
 
 pub(crate) fn launch_with(
@@ -496,6 +530,11 @@ pub(crate) fn launch_with(
         )?;
         let deadline = now + JOB_SECONDS;
         store.insert_pull_review_slot(&held.epoch, &name, &dir.to_string_lossy(), deadline)?;
+        if spawner.relayed() {
+            crate::reviewer::job::mark_relayed(&dir)?;
+            launched.push(serde_json::json!({ "name": name, "job": id, "deadline_at": deadline }));
+            continue;
+        }
         match spawner.start(&dir) {
             Ok(pid) => store.mark_pull_review_slot_spawned(&held.epoch, &name, pid)?,
             Err(failure) => {
@@ -588,6 +627,11 @@ pub(crate) fn collect_with(
         let mut still = 0;
         for slot in running {
             let now = clock()?;
+            let relayed = crate::reviewer::job::awaits_relay(Path::new(&slot.dir));
+            if relayed && now < slot.deadline_at + GRACE_SECONDS {
+                still += 1;
+                continue;
+            }
             match job_status(Path::new(&slot.dir))? {
                 JobStatus::Finished(finished) => {
                     collected.push(settle_finished(&store, &held, &slot, finished)?);
