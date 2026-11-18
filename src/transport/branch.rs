@@ -1693,6 +1693,17 @@ fn retire_remote_branch(
             }
         }
     }
+    delete_leased(context, branch, &reference, &head)
+}
+
+/// Deletes `branch` on the remote only while it still points at `head`, then
+/// reads the deletion back.
+fn delete_leased(context: &Context, branch: &str, reference: &str, head: &str) -> RemoteRetired {
+    let kept = |reason: String| RemoteRetired {
+        branch: branch.to_owned(),
+        deleted: false,
+        reason: Some(reason),
+    };
     // `--no-verify`: the push guard refuses a push no live claim authorises, and
     // the sweep deletes from a checkout that holds none. A deletion is not work
     // entering the flow — the guard's own script calls `--no-verify` a guard rail
@@ -1715,7 +1726,7 @@ fn retire_remote_branch(
     // Read back regardless: a push that failed after the server applied it is
     // not a head that stayed, and a push that succeeded before a stale read is
     // not a head that went.
-    match remote_head(context, &reference) {
+    match remote_head(context, reference) {
         Ok(None) => RemoteRetired {
             branch: branch.to_owned(),
             deleted: true,

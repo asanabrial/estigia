@@ -2446,3 +2446,45 @@ fn a_release_deletes_only_the_remote_heads_its_delivery_contains() {
     assert!(swept[0].deleted, "{:?}", swept[0]);
     assert!(!remote_has(repo, "slice-b"));
 }
+
+#[test]
+fn a_remote_head_pushed_after_the_read_is_not_deleted() {
+    let rig = assist_rig();
+    let repo = &rig.repo;
+    shell(repo, &["switch", "--quiet", "-c", "slice-a", "main"]);
+    shell(repo, &["commit", "--allow-empty", "--quiet", "-m", "read"]);
+    shell(repo, &["push", "--quiet", "origin", "slice-a"]);
+    let head_of = |reference: &str| {
+        crate::transport::run(
+            &["git", "rev-parse", reference],
+            Some(repo),
+            crate::transport::How::read(),
+        )
+        .expect("a commit")
+        .stdout
+        .trim()
+        .to_owned()
+    };
+    let read = head_of("HEAD");
+    shell(
+        repo,
+        &["commit", "--allow-empty", "--quiet", "-m", "pushed later"],
+    );
+    shell(repo, &["push", "--quiet", "origin", "slice-a"]);
+
+    let stale = delete_leased(&rig.context, "slice-a", "refs/heads/slice-a", &read);
+    assert!(!stale.deleted, "{stale:?}");
+    assert!(
+        remote_has(repo, "slice-a"),
+        "a head pushed after the read was deleted"
+    );
+
+    let current = delete_leased(
+        &rig.context,
+        "slice-a",
+        "refs/heads/slice-a",
+        &head_of("HEAD"),
+    );
+    assert!(current.deleted, "{current:?}");
+    assert!(!remote_has(repo, "slice-a"));
+}
