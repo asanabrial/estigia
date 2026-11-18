@@ -23,6 +23,8 @@
 
 #[path = "pipe/check_job.rs"]
 mod check_job;
+#[path = "pipe/claims_and_delivery.rs"]
+mod claims_and_delivery;
 #[path = "pipe/cli_process.rs"]
 mod cli_process;
 #[path = "pipe/config.rs"]
@@ -33,22 +35,20 @@ mod filing;
 mod fixture_flags;
 #[path = "pipe/gate_hook.rs"]
 mod gate_hook;
-#[path = "pipe/part_04.rs"]
-mod part_04;
-#[path = "pipe/part_05.rs"]
-mod part_05;
-#[path = "pipe/part_06.rs"]
-mod part_06;
-#[path = "pipe/part_07.rs"]
-mod part_07;
-#[path = "pipe/part_08.rs"]
-mod part_08;
-#[path = "pipe/part_09.rs"]
-mod part_09;
-#[path = "pipe/part_10.rs"]
-mod part_10;
+#[path = "pipe/labels_and_findings.rs"]
+mod labels_and_findings;
+#[path = "pipe/merge_boundary.rs"]
+mod merge_boundary;
+#[path = "pipe/observed_checkout.rs"]
+mod observed_checkout;
+#[path = "pipe/publication_lane.rs"]
+mod publication_lane;
+#[path = "pipe/publish_guard.rs"]
+mod publish_guard;
 #[path = "pipe/release.rs"]
 mod release;
+#[path = "pipe/repair_budget.rs"]
+mod repair_budget;
 #[path = "pipe/review_family.rs"]
 mod review_family;
 #[cfg(unix)]
@@ -95,6 +95,15 @@ fn estigia_command() -> Command {
     command.env_remove("PI_CODING_AGENT_DIR");
     command.env_remove("HERDR_PANE_ID");
     command
+}
+
+/// The detached review runner of this binary, clearing what `estigia_command` clears.
+fn estigia_runner() -> estigia::reviewer::job::Detached {
+    estigia::reviewer::job::Detached::of(estigia())
+        .without_env("CLAUDE_CONFIG_DIR")
+        .without_env("DSH_HOME")
+        .without_env("PI_CODING_AGENT_DIR")
+        .without_env("HERDR_PANE_ID")
 }
 
 /// Guards `std::env::vars()` inside [`run_with_path_locked`] against the one

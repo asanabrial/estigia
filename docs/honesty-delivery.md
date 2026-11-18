@@ -243,7 +243,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   holders and its first write refuses `several-runs-hold-this-checkout`. Only doctor's stranded bucket
   names the leftover; delivery still reports success when release is skipped.
   `releasing_a_delivered_issue_puts_its_checkout_and_branch_down` and
-  `a_delivery_that_follows_the_sequence_puts_its_own_claim_down` in `tests/pipe/part_09.rs` read back
+  `a_delivery_that_follows_the_sequence_puts_its_own_claim_down` in `tests/pipe/claims_and_delivery.rs` read back
   directory, registry and branch removal. Production cleanup remains best-effort/self-reported, and
   no guard test covers a single recognised-delivery holder (the single-stale test covers other closes).
 

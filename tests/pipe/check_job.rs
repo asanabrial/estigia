@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 fn manifest(dir: &std::path::Path, tree: &std::path::Path, scripts: &[(&str, &str)]) {
     let checks: Vec<serde_json::Value> = scripts
@@ -39,7 +39,7 @@ fn the_hidden_check_job_runs_each_check_and_leaves_a_result_before_it_exits() {
         ],
     );
 
-    let status = Command::new(env!("CARGO_BIN_EXE_estigia"))
+    let status = crate::estigia_command()
         .arg("__check-job")
         .arg(&dir)
         .stdin(Stdio::null())
@@ -64,7 +64,7 @@ fn the_hidden_check_job_runs_each_check_and_leaves_a_result_before_it_exits() {
 
 #[test]
 fn the_hidden_check_job_is_not_a_visible_subcommand() {
-    let help = Command::new(env!("CARGO_BIN_EXE_estigia"))
+    let help = crate::estigia_command()
         .arg("--help")
         .output()
         .expect("help");

@@ -314,7 +314,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   indistinguishable. The timeline records role, receipt and launching run, not adapter, arguments or
   template. Two labels can be one model on one account, and the launcher may be the author. Distinctness
   rests on a process boundary, not a signed answer or recorded requested/reported model.
-  `a_quota_failure_on_a_lens_records_nothing_and_leaves_release_ci_refused` in `tests/pipe/part_09.rs`
+  `a_quota_failure_on_a_lens_records_nothing_and_leaves_release_ci_refused` in `tests/pipe/claims_and_delivery.rs`
   holds refusal of an absent answer (`reviewer-unavailable`, `reviewer-exited-nonzero` or
   `reviewer-cli-missing`); hand reports, refutations, validator results and lens findings refuse
   `recorded-by-capture-only`. No test establishes independence of a present answer.

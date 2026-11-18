@@ -54,7 +54,7 @@ fn a_detached_runner_returns_before_a_slow_reviewer_finishes_and_leaves_its_answ
     let dir = root.path().join("job");
     write_job(&dir, &invocation()).expect("the job is written");
 
-    let spawner = Detached::of(env!("CARGO_BIN_EXE_estigia"))
+    let spawner = crate::estigia_runner()
         .with_env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
         .with_env("HOME", &home);
     let pid = spawner.start(&dir).expect("the runner starts");
@@ -93,7 +93,7 @@ fn a_runner_with_no_reviewer_on_the_path_leaves_a_refusal_not_silence() {
     let root = tempfile::tempdir().expect("a directory");
     let dir = root.path().join("job");
     write_job(&dir, &invocation()).expect("the job is written");
-    Detached::of(env!("CARGO_BIN_EXE_estigia"))
+    crate::estigia_runner()
         .with_env("PATH", root.path().display().to_string())
         .start(&dir)
         .expect("the runner starts");

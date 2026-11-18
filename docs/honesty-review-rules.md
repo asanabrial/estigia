@@ -367,7 +367,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   bound has to be reserved or they do not compose, and the reservations are conservative (the manifest
   ceiling is charged even on a first publication) because a comment GitHub rejects leaves the branch pushed
   with no receipt. Nothing is pushed on refusal
-  (`an_oversize_topology_is_refused_before_any_remote_write`, `tests/pipe/part_10.rs`). Measured in the
+  (`an_oversize_topology_is_refused_before_any_remote_write`, `tests/pipe/repair_budget.rs`). Measured in the
   percent-encoded quantity: the largest manifest across the 109 merge commits then in this history encoded
   to 1,452 characters over 64 paths, a second larger repository to 13,095 over 195 (4% and 40% of the
   ceiling); the encoded-to-raw ratio on real path sets is 1.03 to 1.10, while bytes outside the marker's

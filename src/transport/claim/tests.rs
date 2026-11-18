@@ -1953,7 +1953,7 @@ fn takeover(run_id: &str, operation_id: &str, forced: bool) -> ownership::Event 
 /// `claim`'s own early check recognises a lapsed self-acquisition whichever
 /// call wrote it — not only the `reclaim`-origin shape
 /// `a_lapsed_self_claim_that_originated_as_a_reclaim_can_be_claimed_again`
-/// (`tests/pipe/part_09.rs`) poses. `event.kind` never enters the predicate, and this
+/// (`tests/pipe/claims_and_delivery.rs`) poses. `event.kind` never enters the predicate, and this
 /// is what would catch it if it did: narrowing `is_dead_self_operation` to
 /// `event.kind == "reclaim" && …` leaves the first assertion here false.
 #[test]
@@ -3285,7 +3285,7 @@ fn every_says_nothing_word_earns_its_place() {
 /// a legitimate basis when stated plainly, so a short honest answer must
 /// survive `says_nothing` even though it shares a word with an entry on the
 /// list (`"nothing"` alone is refused; this is not alone). See
-/// `a_verdict_names_what_it_measured_or_says_it_did_not` in `tests/pipe/part_08.rs`
+/// `a_verdict_names_what_it_measured_or_says_it_did_not` in `tests/pipe/labels_and_findings.rs`
 /// for the same string carried through the real MCP call end to end.
 #[test]
 fn the_honest_short_basis_survives_the_predicate() {
