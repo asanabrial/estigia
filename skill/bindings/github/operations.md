@@ -614,7 +614,8 @@ landed and the claim is still held: repeat with the same `spend` (it replays), a
 
 ## Delivering in one call
 
-`deliver` is the tool that runs the tail of a publication that needs no judgement: the computed
+`deliver` is the tool that runs the tail of a publication that needs no judgement: collecting each
+slot whose reviewer finished (`collect_review_input`, once per slot, never a launch), the computed
 verdict (`record_computed_verdict`), `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
 topology readback and the close, each through the operation that owns it. The merge goes through the
 decision the `gh pr merge` boundary makes. It answers `delivered`; `pending` with `ask_after`, after
