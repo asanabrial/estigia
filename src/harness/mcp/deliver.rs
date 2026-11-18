@@ -441,6 +441,7 @@ impl<H: Hands> Deliver<'_, H> {
 
     fn review(&mut self, receipt: &ReviewTransaction) -> Step<Position> {
         let mut recorded = false;
+        let mut collected: Vec<String> = Vec::new();
         loop {
             let status = self.call(
                 "review",
@@ -481,6 +482,21 @@ impl<H: Hands> Deliver<'_, H> {
                 "execute" if reason == "approved" => return Ok(Position::Open),
                 "stop" if reason == "released" => return Ok(Position::Open),
                 "stop" if reason == "delivered" => return Ok(Position::Delivered),
+                "collect" if !finished(&next, &collected).is_empty() => {
+                    let names = finished(&next, &collected);
+                    self.call(
+                        "review",
+                        "collect_review_input",
+                        json!({
+                            "issue": self.request.issue,
+                            "run_id": self.request.run_id,
+                            "names": names,
+                            "compact": true,
+                        }),
+                    )?;
+                    self.done.push("collect_review_input");
+                    collected.extend(names);
+                }
                 "collect" if all_running(&next) => {
                     self.wait("review", "inputs-running", next["ask_after"].as_u64())?;
                 }
@@ -1023,6 +1039,26 @@ impl<H: Hands> Deliver<'_, H> {
                 .collect(),
         }
     }
+}
+
+/// The slots `review_status` offers for collection that have finished and that
+/// this delivery has not collected yet; a slot still offered after its one
+/// collect is left to the stop that follows.
+fn finished(next: &Value, collected: &[String]) -> Vec<String> {
+    next["inputs"]
+        .as_array()
+        .map(|inputs| {
+            inputs
+                .iter()
+                .filter(|input| {
+                    input["capture"] == "collect_review_input" && input["launch"] != true
+                })
+                .filter_map(|input| input["name"].as_str())
+                .filter(|name| !collected.iter().any(|done| done == name))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn all_running(next: &Value) -> bool {
