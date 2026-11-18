@@ -1603,10 +1603,14 @@ pointer that leaves it names the document it points at.
   - **What the prune sweep cannot see.** It attributes a head or checkout to an issue by the `issue-<n>-…`
     convention in a branch name or by a run pointer, so a head naming no issue and carrying no pointer is
     listed only when merged into the base, while a checkout is always listed, kept when nothing says it is
-    finished. The remote-gone orphan route recognises a clean checkout whose commits remain on any refreshed
-    remote ref even when the branch is neither merged nor closed
+    finished. The orphan route recognises a clean checkout whose commits remain on any refreshed
+    remote ref even when the branch is neither merged nor closed, and one whose upstream is still present
+    when its head is contained in what that upstream lists
     ([what-it-writes.md](what-it-writes.md#explicit-orphan-pruning);
-    `a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confirmation`). The legacy route's
+    `a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confirmation`,
+    `a_clean_pushed_checkout_of_an_open_branch_is_removed_only_on_confirmation`). A session that died
+    without its registry row recording an end still holds its checkout here, so the dead-session case
+    that route exists for is cleared only once that row is ended. The legacy route's
     "a live claim holds it" is a readable run pointer whose issue the tracker still reports open, not a re-read
     of the claim (a pointer left behind reads as live, a claim the pointer never recorded as unheld, and
     `held_worktree` stops protecting a readable one when its issue reads closed). The orphan route keeps every
