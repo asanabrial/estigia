@@ -20468,3 +20468,20 @@ fn a_publication_opens_the_ledger_once_and_syncs_comments_before_the_pull_reques
         .count();
     assert_eq!((open_checks, syncs), (1, 2), "{calls}");
 }
+
+#[test]
+fn a_horizon_whose_offset_is_not_ascii_is_invalid() {
+    for horizon in [
+        "2026-11-17T10:00+1é2",
+        "2026-11-17T10:00+é12",
+        "2026-11-17T10:00+12é",
+        "2026-11-17T10:00-1é2",
+    ] {
+        match require_horizon(horizon, None) {
+            Err(Failure::Stop(value)) => {
+                assert_eq!(value["reason"], "invalid-horizon", "{horizon}");
+            }
+            other => panic!("{horizon}: {other:?}"),
+        }
+    }
+}

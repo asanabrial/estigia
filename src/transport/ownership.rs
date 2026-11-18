@@ -99,7 +99,9 @@ fn split_offset(time: &str) -> (&str, Stamp) {
     let digits = &sign_and_offset[1..];
     let (hours, minutes) = match digits.split_once(':') {
         Some((hours, minutes)) => (hours, minutes),
-        None if digits.len() == 4 => digits.split_at(2),
+        None if digits.len() == 4 && digits.bytes().all(|byte| byte.is_ascii_digit()) => {
+            digits.split_at(2)
+        }
         // Not an offset this build knows. Left where it is so the clock parser
         // refuses the whole stamp rather than silently reading it as UTC.
         None => return (time, 0),
