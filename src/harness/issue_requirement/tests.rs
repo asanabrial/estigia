@@ -2160,3 +2160,24 @@ fn a_host_automatic_mode_leaves_the_hook_answer_a_refusal_or_a_question() {
         assert!(answer.to_string().contains(CODE), "codex {mode}: {answer}");
     }
 }
+
+#[test]
+fn an_unreadable_repository_file_holds_a_github_write_even_where_writes_are_allowed() {
+    let (_repo, _root, context) = rig(IssueRequirement::Off);
+    let mut context = with_github_writes(context, crate::config::UnclaimedGithubWrites::Allowed);
+    context.repository_config_unreadable = Some(Refusal::not_started(
+        "config-local-unreadable",
+        "estigia.local.md: stream did not contain valid UTF-8",
+        Resolution::no_command(NoCommandReason::OperatorKnowledge, "that file readable"),
+    ));
+    for line in ["git merge topic", "gh pr merge 3 --merge"] {
+        let decision = on_a_shell_line(&context, line);
+        assert!(
+            matches!(&decision, Decision::Deny(refusal)
+                if refusal.code == "config-local-unreadable"
+                    && refusal.message.contains("estigia.local.md")
+                    && refusal.message.contains("UTF-8")),
+            "{line}: {decision:?}"
+        );
+    }
+}

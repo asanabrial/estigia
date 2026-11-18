@@ -5247,11 +5247,7 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
             installed.issue_requirement
         },
         repository_config_unreadable: repository_unreadable,
-        unclaimed_github_writes: if repository_unknown {
-            crate::config::UnclaimedGithubWrites::Held
-        } else {
-            installed.unclaimed_github_writes
-        },
+        unclaimed_github_writes: installed.unclaimed_github_writes,
         decision_mode: installed.decision_mode,
         workflow: effective_workflow(unreadable || repository_unknown, installed.workflow),
         // Read off `installed` so the crossing in `tests/honesty.rs` sees which
