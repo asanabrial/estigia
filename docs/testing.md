@@ -208,11 +208,11 @@ and with `tar` as well:
 `the_npm_installer_refuses_an_archive_with_no_published_sum` and
 `the_npm_installer_places_nothing_the_lifecycle_record_refused`.
 
-One more interpreter joined that list with the transcript accounting: the nine tests in
+One more interpreter joined that list with the transcript accounting: the ten tests in
 [`tests/usage_accounting.rs`](../tests/usage_accounting.rs) run the measurement script under
 `python3`, the interpreter that script is written in, and they are `#[cfg(unix)]` because `python3`
 is not the name Windows ships. They fail, never skip, without it, so the honest line is that one
-test requires `bash`, nine require `python3` on Unix, and nothing else does but the `sh` the checks tests
+test requires `bash`, ten require `python3` on Unix, and nothing else does but the `sh` the checks tests
 spawn; all of those read a
 missing interpreter as a broken build rather than an unbuilt fixture.
 

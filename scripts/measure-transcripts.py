@@ -25,6 +25,13 @@ splits the usage classes by the model that answered, and `sessions` lists each
 session with its wall-clock span and the subagents it launched. A field a record
 does not carry is counted under `unknown`, never guessed, and a session holding a
 timestamp with no offset has an unknown span.
+
+`skill_reads` lists, per context, every `Read` of a file inside a skill root —
+a path holding `/skills/flow/`, or under a `--skill-root` — with the bytes the
+read returned, the assistant turn it happened at and the turns that followed in
+that context. `skill_reference_reads` aggregates it per file: the share of
+sessions whose orchestrator read it, and the mean turns it was carried. A
+subagent's reads are reported under its own kind, never added to the parent's.
 """
 
 import argparse
@@ -281,7 +288,99 @@ def session_usage(records):
     return total
 
 
-def measure_session(path):
+DEFAULT_SKILL_MARKERS = ("/skills/flow/",)
+
+
+def skill_file_of(path, roots):
+    if not isinstance(path, str):
+        return None
+    for root in roots:
+        at = path.find(root)
+        if at != -1:
+            return path[at + len(root) :].lstrip("/")
+    return None
+
+
+def result_bytes(block):
+    content = block.get("content")
+    if isinstance(content, str):
+        return len(content.encode("utf-8"))
+    if isinstance(content, list):
+        return sum(
+            len(part.get("text", "").encode("utf-8"))
+            for part in content
+            if isinstance(part, dict)
+        )
+    return 0
+
+
+def skill_reads(records, roots):
+    turns = 0
+    seen_turns = set()
+    pending = {}
+    returned = {}
+    for record in records:
+        message = record.get("message") or {}
+        content = message.get("content")
+        if record.get("type") == "assistant":
+            identity = message.get("id") or record.get("uuid")
+            if identity not in seen_turns:
+                seen_turns.add(identity)
+                turns += 1
+            for block in content if isinstance(content, list) else []:
+                if not isinstance(block, dict) or block.get("type") != "tool_use":
+                    continue
+                if block.get("name") != "Read":
+                    continue
+                name = skill_file_of((block.get("input") or {}).get("file_path"), roots)
+                if name is not None and block.get("id"):
+                    pending[block["id"]] = (name, turns)
+        elif record.get("type") == "user":
+            for block in content if isinstance(content, list) else []:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    returned[block.get("tool_use_id")] = result_bytes(block)
+    return [
+        {
+            "file": name,
+            "bytes": returned.get(identity),
+            "turn": turn,
+            "turns_after": turns - turn,
+        }
+        for identity, (name, turn) in pending.items()
+    ]
+
+
+def summarise_skill_reads(sessions):
+    by_file = collections.defaultdict(lambda: {"sessions": set(), "carried": [], "bytes": []})
+    by_subagent = collections.defaultdict(lambda: collections.Counter())
+    for index, session in enumerate(sessions):
+        for kind, reads in session["skill_reads"].items():
+            for read in reads:
+                if kind != "orchestrator":
+                    by_subagent[kind][read["file"]] += 1
+                    continue
+                entry = by_file[read["file"]]
+                entry["sessions"].add(index)
+                entry["carried"].append(read["turns_after"])
+                if read["bytes"] is not None:
+                    entry["bytes"].append(read["bytes"])
+    count = len(sessions)
+    return {
+        "orchestrator": {
+            name: {
+                "sessions_reading": len(entry["sessions"]),
+                "share_of_sessions": (len(entry["sessions"]) / count) if count else None,
+                "reads": len(entry["carried"]),
+                "mean_turns_carried": statistics.mean(entry["carried"]),
+                "mean_bytes": statistics.mean(entry["bytes"]) if entry["bytes"] else None,
+            }
+            for name, entry in sorted(by_file.items())
+        },
+        "subagents": {kind: dict(sorted(files.items())) for kind, files in sorted(by_subagent.items())},
+    }
+
+
+def measure_session(path, roots=DEFAULT_SKILL_MARKERS):
     records = read_jsonl(path)
     counts = issue_counts(records)
     stamps = list(timestamps(records))
@@ -297,6 +396,7 @@ def measure_session(path):
         "turn_profile": {"orchestrator": turn_profile(records)},
         "usage_by_model": usage_by_model(records),
         "subagents_launched": 0,
+        "skill_reads": {"orchestrator": skill_reads(records, roots)},
     }
     directory = path[:-6]
     for subagent_path in sorted(glob.glob(os.path.join(directory, "subagents", "*.jsonl"))):
@@ -310,6 +410,7 @@ def measure_session(path):
             session["turn_profile"].get(kind, new_turn_profile()), turn_profile(transcripts)
         )
         merge_usage_by_model(session["usage_by_model"], usage_by_model(transcripts))
+        session["skill_reads"].setdefault(kind, []).extend(skill_reads(transcripts, roots))
         session["subagents_launched"] += 1
         stamps.extend(timestamps(transcripts))
     session["wall_clock_seconds"] = wall_clock_seconds(stamps)
@@ -381,6 +482,7 @@ def summarise(sessions):
         ),
         "per_issue_input_tokens": per_issue,
         "last_modified": last_modified,
+        "skill_reference_reads": summarise_skill_reads(sessions),
     }
 
 
@@ -390,6 +492,7 @@ def session_row(projects_dir, session):
         "issue": session["issue"],
         "wall_clock_seconds": session["wall_clock_seconds"],
         "subagents_launched": session["subagents_launched"],
+        "skill_reads": session["skill_reads"],
         "turn_profile": dict(sorted(session["turn_profile"].items())),
         "usage": {kind: dict(total["tokens"]) for kind, total in sorted(session["usage"].items())},
         "usage_by_model": {
@@ -433,6 +536,14 @@ def render_table(label, summary):
             f"sessions naming several issues: {summary['sessions_with_several_issues']}"
             " (each is attributed to its dominant issue)"
         )
+    reads = summary["skill_reference_reads"]["orchestrator"]
+    if reads:
+        lines.append("skill references read by the orchestrator (share of sessions, mean turns carried):")
+        for name, entry in reads.items():
+            lines.append(
+                f"  {name}: {entry['sessions_reading']}/{summary['session_count']}"
+                f" sessions, {entry['mean_turns_carried']:.1f} turns, {entry['mean_bytes']} bytes"
+            )
     if summary["last_modified"] is not None:
         lines.append(f"most recent session: {summary['last_modified']}")
     return "\n".join(lines)
@@ -448,13 +559,22 @@ def main(argv):
     parser.add_argument(
         "--json", action="store_true", help="Print JSON only, no table."
     )
+    parser.add_argument(
+        "--skill-root",
+        action="append",
+        default=[],
+        help="Another directory a skill file can be read from; repeatable.",
+    )
     args = parser.parse_args(argv)
+    roots = tuple(DEFAULT_SKILL_MARKERS) + tuple(
+        os.path.join(root, "") for root in args.skill_root
+    )
 
     by_repo = find_project_sessions(args.projects)
     per_repo_summary = {}
     all_sessions = []
     for repo, paths in by_repo.items():
-        sessions = [measure_session(path) for path in paths]
+        sessions = [measure_session(path, roots) for path in paths]
         all_sessions.extend(sessions)
         per_repo_summary[repo] = summarise(sessions)
     overall = summarise(all_sessions)
