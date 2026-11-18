@@ -1973,11 +1973,8 @@ fn run_tool_answering(
         route_through_deliver(tool.name, body, || delivers(context));
         capture_through_collect(tool.name, body);
     }
-    if compact
-        && tool.name == "review_status"
-        && let Some(status) = body.as_mut()
-    {
-        without_repeated_receipt(status);
+    if compact && let Some(body) = body.as_mut() {
+        compact_review_status(tool.name, body);
     }
     let body = body.unwrap_or(json!({"ok": true}));
     let text = answer_text(Some(body.clone()), compact);
@@ -2634,6 +2631,14 @@ fn delivers(context: &GateContext) -> bool {
 
 /// The shape of a compact `review_status` answer, which [`expanded_receipt`] reads back.
 const COMPACT_REVIEW_VERSION: u64 = 1;
+
+/// Drops the receipt `next.arguments` repeats from the `review_status` an answer
+/// is or embeds, so `compact` reaches the status a publication carries too.
+fn compact_review_status(tool: &str, body: &mut Value) {
+    if let Some(status) = review_status_of(tool, body) {
+        without_repeated_receipt(status);
+    }
+}
 
 fn without_repeated_receipt(status: &mut Value) {
     if let Some(object) = status.as_object_mut() {

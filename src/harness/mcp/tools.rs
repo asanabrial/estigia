@@ -229,8 +229,7 @@ const SPEND_PHASES: &[&str] = crate::transport::claim::SPEND_PHASES;
 const TOPOLOGY: Argument = Argument::optional(
     "topology",
     "string",
-    "How this delivery was executed: `inline`, `analyst`, `developer:<n>` or free text, per \
-     SKILL.md's Direct Work Delegation table. Declared, not observed.",
+    "How this delivery ran: `inline`, `analyst`, `developer:<n>` or free text; declared.",
 );
 const TOPOLOGY_REASON: Argument = Argument::optional(
     "topology_reason",
@@ -240,8 +239,7 @@ const TOPOLOGY_REASON: Argument = Argument::optional(
 const INTEGRATE_REASON: Argument = Argument::optional(
     "integrate_reason",
     "string",
-    "Why a base advance the platform does not require is integrated; recorded. Without it that \
-     publication is refused `base-integration-not-required`.",
+    "Why a base advance nothing requires is integrated; without it, refused.",
 );
 const FOCUS: Argument = Argument::optional(
     "focus",
@@ -266,17 +264,14 @@ const RAISE_REASON: Argument = Argument::optional(
 const EXPECTED_EPOCH: Argument = Argument::optional(
     "expected_epoch",
     "string",
-    "The epoch of the newest publication on this branch's pull request, or `none`. Refused \
-     `expected-epoch-moved` before any push when it differs. Omit to ask nothing.",
+    "The newest publication's epoch, or `none`; a mismatch is refused before any push.",
 );
 // Shared between `publish_review` and `republish_review`, so one wording
 // cannot drift from the other.
 const INLINE_PAYLOAD: Argument = Argument::optional(
     "inline_payload",
     "boolean",
-    "Carry the payload's full diff text in the answer; default false. It can make the \
-     answer too large to return, and a `launch: true` call needs none. Ask at publication \
-     time: publishing again mints a new epoch.",
+    "Carry the payload's full diff in the answer; default false.",
 );
 
 // Shared between `publish_review` and `republish_review`, so one wording
@@ -284,16 +279,14 @@ const INLINE_PAYLOAD: Argument = Argument::optional(
 const WITH_REVIEW: Argument = Argument::optional(
     "with_review",
     "boolean",
-    "Add the tier and the first `review_status` to this answer; a failed read is reported \
-     under `review_reads_unavailable`.",
+    "Add the tier and the first `review_status` to this answer.",
 );
 
 const START_REVIEW: Argument = Argument::optional(
     "start_review",
     "boolean",
-    "Also move the issue to review and launch every slot the first `review_status` offers, \
-     unless the lane is red or unreadable, or declared checks are red or running. Implies \
-     `with_review`.",
+    "Also move to review and launch every slot offered, unless the lane or the declared \
+     checks are red, unreadable or running. Implies `with_review`.",
 );
 
 const NO_LINK: Argument = Argument::optional(
@@ -324,10 +317,8 @@ pub const TOOLS: &[Tool] = &[
         name: "claim",
         contract_name: "claim",
         description: "Swear to an issue. Adjudicated by the local store; the earliest live \
-                      claim wins. From then on a repository write the gate sees is measured against \
-                      it, and a push it does not justify is refused. `takeover` displaces an \
-                      abandoned holder: discovery is read-only and answers the epoch to name; \
-                      repeat with `target_operation`.",
+                      claim wins, and a repository write the gate sees is then measured \
+                      against it. `takeover` answers twice: repeat with `target_operation`.",
         operation: "claim",
         arguments: &[
             ISSUE,
@@ -373,24 +364,22 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "takeover",
                 "boolean",
-                "Displace an abandoned holder instead of swearing a new claim. Discovery \
-                 is read-only and answers the epoch to name; repeat with `target_operation`.",
+                "Displace an abandoned holder; discover first, then repeat with `target_operation`.",
             ),
             Argument::optional(
                 "target_operation",
                 "string",
-                "The holder's operation epoch, exactly as the takeover discovery call reported \
-                 it. Read only with `takeover`.",
+                "The epoch the takeover discovery reported.",
             ),
             Argument::optional(
                 "force",
                 "boolean",
-                "Take a claim that is still live. Needs `reason_file`; with `takeover` only.",
+                "Take a live claim; with `takeover` and `reason_file`.",
             ),
             Argument::optional(
                 "reason_file",
                 "string",
-                "Path to a file stating why a live claim is being taken. Required with `force`.",
+                "Why a live claim is taken; with `force`.",
             ),
             Argument::optional(
                 "park",
@@ -430,9 +419,8 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "transition",
         contract_name: "transition",
-        description: "Move the workflow state. Projects it onto every project the issue belongs \
-                      to, swaps the label, then reads both back and repairs a disagreement. A \
-                      move to `blocked` also records or clears what discharges it.",
+        description: "Move the workflow state onto every project and label, read back and \
+                      repaired. A move to `blocked` also records or clears what discharges it.",
         operation: "transition",
         arguments: &[
             ISSUE,
@@ -715,9 +703,8 @@ pub const TOOLS: &[Tool] = &[
         description: "Put the issue down. Discovery is read-only and answers the epoch to name; \
                       repeat with `target_operation`, or omit it when this run holds the \
                       issue. With `evidence_file` or `spend` it closes the delivery \
-                      from `review`: spend, `done`, evidence, release. Converges the `dev:` \
-                      label, and puts down this run's checkout when the close is its own \
-                      delivery and nothing in it is unpublished; otherwise it is kept, and why.",
+                      from `review`: spend, `done`, evidence, release. Puts down this run's \
+                      checkout unless something in it is unpublished, and says why it kept one.",
         operation: "unassign",
         arguments: &[
             ISSUE,
@@ -940,10 +927,8 @@ pub const TOOLS: &[Tool] = &[
                       unless `wait_seconds` is given; a batch reports it and goes on. A bad answer \
                       or a repeat call writes nothing. `launch: true` starts each named slot's \
                       reviewer as a detached job and returns at once; nothing launches without it. \
-                      `checks: true` runs the checks the base declares and records a receipt bound \
-                      to the published digest: `declared: false`, `cached` or `running` with \
-                      `ask_after`; the verdict and CI release refuse without a passing one. \
-                      Requires a live review claim.",
+                      `checks: true` runs the declared checks and records a receipt bound to the \
+                      published digest. Requires a live review claim.",
         operation: "collect-review-input",
         arguments: &[
             ISSUE,
@@ -961,15 +946,13 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "wait_seconds",
                 "integer",
-                "Seconds to wait for a running job before refusing `capture-running`; omitted \
-                 checks once. Capped at 900; with `checks`, at 50.",
+                "Seconds to wait for a running job; capped at 900, with `checks` at 50.",
             )
             .counting_from(1),
             Argument::optional(
                 "record_verdict",
                 "boolean",
-                "Also record the computed verdict when no slot is running and `review_status` \
-                 then reads `verdict-computable`; otherwise records nothing.",
+                "Also record the verdict once `review_status` reads `verdict-computable`.",
             ),
             Argument::optional(
                 "launch",
@@ -990,17 +973,9 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "review_status",
         contract_name: "review_status",
-        description: "The one next step of this issue's review, so the route is followed rather \
-                      than chosen. `next.kind` is `execute` (run `next.operation` with \
-                      `next.arguments`, adding your run id, an operation id and the tool's own \
-                      non-receipt arguments; with `compact`, `epoch` alone; the server adds \
-                      the rest), `collect` (obtain each of `next.inputs` with its \
-                      `capture` operation, then ask again) or `stop` (`next.reason_code` and \
-                      `next.continuation`). The answer carries the `receipt` it was read \
-                      against and a `forecast` horizon; each named command carries that \
-                      receipt, or `expected_epoch`, so a later publication makes it refuse as \
-                      stale. An unreadable store, pull request or lane is an `unavailable` \
-                      refusal, never a state. Read-only, no claim.",
+        description: "The one next step of this issue's review, as `next`, read against the \
+                      `receipt` it names. An unreadable store, pull request or lane is an \
+                      `unavailable` refusal, never a state. Read-only, no claim.",
         operation: "review-status",
         arguments: &[ISSUE],
         effect: PointerEffect::None,
@@ -1105,10 +1080,8 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "publish_review",
         contract_name: "publish_review",
-        description: "Push and publish the shared review target. Head and base are read back \
-                      until the remote agrees. The answer carries the identity fields, the \
-                      digests, the lane's state word and `next`; `review_read` (`view: \
-                      transaction`) answers the rest.",
+        description: "Push and publish the shared review target, read back until the remote \
+                      agrees; `review_read` (`view: transaction`) answers what the answer omits.",
         operation: "publish-review",
         arguments: &[
             ISSUE,
