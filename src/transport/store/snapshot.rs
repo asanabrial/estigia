@@ -69,48 +69,63 @@ pub(super) fn take_snapshot(
 /// The prefix of a snapshot taken before a migration, `schema-<version>-<stamp>`.
 const PRE_MIGRATION: &str = "schema-";
 
-/// Writes a snapshot of a store in schema `schema`, before a migration moves it
-/// past that schema, whatever the cadence says.
+/// Writes a snapshot of a store whose schema is behind `known`, before a
+/// migration moves it, whatever the cadence says.
 ///
+/// Named for the schema the copy holds, read back from the copy itself: another
+/// opener can finish migrating between the caller's read and this one, and a
+/// copy that is already in `known` is not a pre-migration copy and is dropped.
 /// Refuses rather than recording: the step after it cannot be undone. Keeps the
 /// newest such snapshot of each schema; the cadence's pruning never reads them.
 pub(super) fn take_pre_migration_snapshot(
     connection: &Connection,
     store_path: &Path,
-    schema: u32,
+    known: u32,
     now: u64,
 ) -> Result<(), Failure> {
     let directory = snapshots_dir(store_path);
     let refused = |why: String| {
         Failure::Read(format!(
-            "the local store was not migrated past schema {schema}: its snapshot could not be \
-             written to {}: {why}",
+            "the local store was not migrated: its pre-migration snapshot could not be written \
+             to {}: {why}",
             directory.display()
         ))
     };
     std::fs::create_dir_all(&directory).map_err(|error| refused(error.to_string()))?;
-    let destination = directory.join(format!("{PRE_MIGRATION}{schema}-{now}"));
-    if !destination.exists() {
-        let staged = crate::paths::staged_path(&destination, "");
-        let written = connection
-            .execute("VACUUM INTO ?1", [staged.to_string_lossy().as_ref()])
-            .map_err(|error| refused(error.to_string()))
-            .and_then(|_| {
-                std::fs::rename(&staged, &destination)
-                    .or_else(|error| {
-                        if destination.exists() {
-                            Ok(())
-                        } else {
-                            Err(error)
-                        }
-                    })
-                    .map_err(|error| refused(error.to_string()))
-            });
-        let _ = std::fs::remove_file(&staged);
-        written?;
+    let staged = crate::paths::staged_path(&directory.join(format!("{PRE_MIGRATION}{now}")), "");
+    let kept = stage_and_name(connection, &staged, &directory, known, now);
+    let _ = std::fs::remove_file(&staged);
+    if let Some(schema) = kept.map_err(refused)? {
+        prune_pre_migration(store_path, schema);
     }
-    prune_pre_migration(store_path, schema);
     Ok(())
+}
+
+/// Copies the store to `staged` and moves the copy to the name of the schema it
+/// holds; `None` when it holds no schema a migration is about to leave.
+fn stage_and_name(
+    connection: &Connection,
+    staged: &Path,
+    directory: &Path,
+    known: u32,
+    now: u64,
+) -> Result<Option<u32>, String> {
+    connection
+        .execute("VACUUM INTO ?1", [staged.to_string_lossy().as_ref()])
+        .map_err(|error| error.to_string())?;
+    let schema: u32 = Connection::open(staged)
+        .and_then(|copy| copy.query_row("SELECT schema_version FROM meta", [], |row| row.get(0)))
+        .map_err(|error| format!("the copy's schema could not be read: {error}"))?;
+    if schema == 0 || schema >= known {
+        return Ok(None);
+    }
+    let destination = directory.join(format!("{PRE_MIGRATION}{schema}-{now}"));
+    match std::fs::rename(staged, &destination) {
+        Ok(()) => Ok(Some(schema)),
+        // Another opener renamed its copy of the same schema into place first.
+        Err(_) if destination.exists() => Ok(Some(schema)),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 fn prune_pre_migration(store_path: &Path, schema: u32) {
