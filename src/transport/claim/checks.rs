@@ -31,6 +31,9 @@ pub struct RunChecks<'a> {
     pub wait_seconds: u64,
     /// The moment the claim is judged.
     pub now: &'a str,
+    /// Run the checks again over a failed receipt for these exact bytes, which
+    /// is admitted once.
+    pub rerun: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,11 +47,20 @@ fn receipt_of(
     digest: &str,
     commands: &str,
 ) -> Option<ChecksReceipt> {
+    receipts_of(comments, digest, commands).pop()
+}
+
+/// Every receipt recorded for these bytes and commands, oldest first.
+fn receipts_of(
+    comments: &[ownership::Comment],
+    digest: &str,
+    commands: &str,
+) -> Vec<ChecksReceipt> {
     comments
         .iter()
         .filter(|comment| comment.viewer_did_author && !comment.includes_created_edit)
         .flat_map(|comment| markers::parse(&comment.body))
-        .find_map(|marker| {
+        .filter_map(|marker| {
             let is = |key: &str, value: &str| marker.get(key).map(String::as_str) == Some(value);
             if !(is("kind", "checks-receipt") && is("digest", digest) && is("commands", commands)) {
                 return None;
@@ -63,6 +75,28 @@ fn receipt_of(
                 results: marker.get("results").cloned().unwrap_or_default(),
             })
         })
+        .collect()
+}
+
+/// Whether a rerun is admitted: the only receipt for these bytes failed.
+fn rerun_admitted(receipts: &[ChecksReceipt]) -> Result<(), &'static str> {
+    match receipts {
+        [] => Err("no receipt is recorded for these bytes yet, so there is nothing to run again"),
+        [only] if !only.passed => Ok(()),
+        [.., latest] if latest.passed => Err("the latest receipt for these bytes passed"),
+        _ => Err("the one rerun for these bytes is spent"),
+    }
+}
+
+fn rerun_refused(digest: &str, why: &str) -> Failure {
+    Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "checks-rerun-not-admitted",
+        "digest": digest,
+        "detail": why,
+        "action": "a rerun is admitted once, over a failed receipt for the same bytes; otherwise \
+                   correct what the checks name and `republish_review`",
+    }))
 }
 
 fn results_line(runs: &[CheckRun]) -> String {
@@ -324,15 +358,24 @@ pub(super) fn holding(
         return Ok(None);
     }
     let commands = commands_digest(&checks);
-    match receipt_of(comments, &receipt.digest, &commands) {
+    let receipts = receipts_of(comments, &receipt.digest, &commands);
+    match receipts.last() {
         Some(recorded) if recorded.passed => return Ok(None),
         Some(_) => {
+            let continuation = if rerun_admitted(&receipts).is_ok() {
+                "the declared checks failed for these exact bytes, so no lens is launched: \
+                 correct what they name and `republish_review`, or, when the failure was the \
+                 machine's rather than the change's, call `collect_review_input` with \
+                 `checks: true` and `rerun: true` once to run them again on the same bytes"
+            } else {
+                "the declared checks failed for these exact bytes and their one rerun is spent, \
+                 so no lens is launched: correct what they name and `republish_review`"
+            };
             return Ok(Some(serde_json::json!({
                 "kind": "stop",
                 "reason_code": "checks-failed",
                 "operation": null,
-                "continuation": "the declared checks failed for these exact bytes, so no lens is \
-                                 launched: correct what they name and `republish_review`",
+                "continuation": continuation,
             })));
         }
         None => {}
@@ -409,7 +452,10 @@ pub(super) fn run_checks_with(
         return Err(worktree_unknown(&published.receipt.digest, tree));
     }
     let commands = commands_digest(&checks);
-    if let Some(recorded) = receipt_of(&comments, &digest, &commands) {
+    let receipts = receipts_of(&comments, &digest, &commands);
+    if request.rerun {
+        rerun_admitted(&receipts).map_err(|why| rerun_refused(&digest, why))?;
+    } else if let Some(recorded) = receipts.last() {
         return Ok(finished_answer(
             &digest,
             &commands,

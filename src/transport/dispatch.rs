@@ -27,6 +27,7 @@ use super::{Context, Failure};
 /// not on this list takes the next word as its value unconditionally.
 const SWITCHES: &[&str] = &[
     "force",
+    "rerun",
     "full",
     "held-by-other",
     "manifest",
@@ -392,6 +393,7 @@ fn checks_clear(
         worktree: start.worktree,
         wait_seconds: 0,
         now: start.now,
+        rerun: false,
     };
     checks_hold(super::claim::run_checks(context, &request))
 }
@@ -1551,6 +1553,7 @@ fn run_operation(
                     None => 0,
                 },
                 now,
+                rerun: f.on("rerun"),
             },
         ),
         "release-ci" => super::claim::release_ci(
