@@ -10397,6 +10397,20 @@ fn a_checks_rerun_reaches_run_checks_and_needs_checks() {
     assert_eq!(rest["rerun"], true, "{rest}");
     assert!(rest.get("checks").is_none(), "{rest}");
 
+    let tool = tools::find(row).expect("the row is a declared tool");
+    let sent = super::flags_for(tool, &rest).expect("the row takes what collect_step carries");
+    assert!(
+        sent.contains(&"--rerun".to_owned()),
+        "the row dropped the rerun: {sent:?}"
+    );
+    let mut plain = rest.clone();
+    plain.as_object_mut().expect("an object").remove("rerun");
+    let unsent = super::flags_for(tool, &plain).expect("well formed");
+    assert!(
+        !unsent.contains(&"--rerun".to_owned()),
+        "a call that asked for no rerun sent one: {unsent:?}"
+    );
+
     let refused = super::collect_step(&json!({
         "issue": 7,
         "run_id": "claude-abcd1234",
