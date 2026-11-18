@@ -382,15 +382,11 @@ pub fn protected_write_target(normalized: &str) -> Option<&'static str> {
     if normalized.contains("git commit") {
         return Some("git commit");
     }
-    if normalized.contains("git checkout -b") || normalized.contains("git checkout --orphan") {
-        return Some("git checkout -b");
-    }
-    if normalized.contains("git switch -c")
-        || normalized.contains("git switch --create")
-        || normalized.contains("git switch --force-create")
-        || normalized.contains("git switch --orphan")
+    if let Some(rule) = [&CHECKOUT_BRANCH, &SWITCH_CREATE]
+        .into_iter()
+        .find(|rule| rule.matches_in(normalized))
     {
-        return Some("git switch -c");
+        return Some(rule.name);
     }
     if worktree_add_creates_branch(normalized) {
         return Some("git worktree add -b");
@@ -463,6 +459,93 @@ pub fn is_branch_creation(normalized: &str) -> bool {
         }
     }
     false
+}
+
+/// A git subcommand that writes when one of its option words is present,
+/// read per invocation so that another option between the subcommand and the
+/// deciding one changes nothing.
+pub struct GitWrite {
+    /// The name the gate reports for it.
+    pub name: &'static str,
+    /// The subcommand, the word after `git`.
+    pub subcommand: &'static str,
+    /// Whole option words, or a word's part before `=`, that make it a write.
+    pub long: &'static [&'static str],
+    /// A short flag that makes it a write, alone or combined (`-qc` holds `c`).
+    pub short: Option<char>,
+    /// Whether a word that starts with `.`, a path, makes it a write.
+    pub dotted_path: bool,
+    /// Whether the subcommand writes whatever follows it.
+    pub always: bool,
+}
+
+/// `git checkout -b`, `-B` and `--orphan`.
+pub const CHECKOUT_BRANCH: GitWrite = GitWrite {
+    name: "git checkout -b",
+    subcommand: "checkout",
+    long: &["--orphan"],
+    short: Some('b'),
+    dotted_path: false,
+    always: false,
+};
+
+/// `git switch -c`, `-C`, `--create`, `--force-create` and `--orphan`.
+pub const SWITCH_CREATE: GitWrite = GitWrite {
+    name: "git switch -c",
+    subcommand: "switch",
+    long: &["--create", "--force-create", "--orphan"],
+    short: Some('c'),
+    dotted_path: false,
+    always: false,
+};
+
+impl GitWrite {
+    /// Whether any git invocation on this lowercased line is this write.
+    pub fn matches_in(&self, text: &str) -> bool {
+        git_invocations(text)
+            .iter()
+            .any(|(subcommand, words)| subcommand == self.subcommand && self.decides(words))
+    }
+
+    fn decides(&self, words: &[String]) -> bool {
+        self.always
+            || words.iter().any(|word| {
+                let flag = word.split_once('=').map_or(word.as_str(), |(flag, _)| flag);
+                self.long.contains(&flag)
+                    || (self.dotted_path && word.starts_with('.'))
+                    || self.short.is_some_and(|short| {
+                        word.strip_prefix('-').is_some_and(|letters| {
+                            !letters.starts_with('-')
+                                && letters.chars().all(|c| c.is_ascii_alphabetic())
+                                && letters.contains(short)
+                        })
+                    })
+            })
+    }
+}
+
+/// Every git invocation on a line, as its subcommand and the words after it
+/// up to the end of that command.
+fn git_invocations(text: &str) -> Vec<(String, Vec<String>)> {
+    let mut found = Vec::new();
+    for command in shell_commands(text) {
+        let words: Vec<&str> = command.split_whitespace().collect();
+        for (at, word) in words.iter().enumerate() {
+            if *word != "git" {
+                continue;
+            }
+            let Some(subcommand) = words.get(at + 1) else {
+                continue;
+            };
+            let rest = words[at + 2..]
+                .iter()
+                .take_while(|word| !SEPARATORS.contains(word) && **word != "git")
+                .map(|word| (*word).to_owned())
+                .collect();
+            found.push(((*subcommand).to_owned(), rest));
+        }
+    }
+    found
 }
 
 /// Whether this lowercased `git worktree add` line carries a spelling that

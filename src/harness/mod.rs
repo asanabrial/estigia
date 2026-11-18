@@ -1734,22 +1734,33 @@ pub const REPOSITORY_SHELL_POPULATION: Population = Population {
     disposition: Disposition::TooTight,
     subject: "REPOSITORY_SHELL",
     text: "the git commands that change the working tree, the index or a ref. Legitimate \
-           population: every spelling of a repository write that *names git*. Boundary: \
-           matched on substrings, so an alias or a script wrapping one of these is not matched. \
-           `git stash list` and `git stash show` are reads and are exempt at every occurrence.",
+           population: every spelling of a repository write that *names git*. Boundary: a \
+           subcommand that writes whatever follows it is matched on its substring here; one \
+           that writes only with a deciding option (`checkout -b`, `checkout --`, `switch -c`, \
+           `branch -d`) is read per invocation in `GIT_WRITES`, so options in any order and \
+           combined short flags count, and every `git reset` is a write. An alias or a script \
+           wrapping one of these is not matched. `git stash list` and `git stash show` are \
+           reads and are exempt at every occurrence.",
 };
 
 fn repository_write_in(code: &str, normalized: &str) -> Option<String> {
     if let Some(matched) = REPOSITORY_SHELL
         .iter()
         .find(|fragment| names_fragment(code, fragment))
+        .copied()
+        .or_else(|| {
+            GIT_WRITES
+                .iter()
+                .find(|rule| rule.matches_in(code))
+                .map(|rule| rule.name)
+        })
     {
         // A compound line carries one fragment per command, and the gate
         // decides on the one reported here: when any of them is one the
         // operation schedule may deny, that is the one reported, so the
         // schedule sees the commit riding beside the worktree it would
         // otherwise read alone.
-        let target = operation_window::protected_write_target(normalized).unwrap_or(*matched);
+        let target = operation_window::protected_write_target(normalized).unwrap_or(matched);
         return Some(target.to_owned());
     }
     // Plain and porcelain local branch creation, which no fragment above
@@ -1803,20 +1814,10 @@ fn names_fragment(code: &str, fragment: &str) -> bool {
 /// Shell fragments that write to the repository without being irreversible.
 const REPOSITORY_SHELL: &[&str] = &[
     "git worktree add",
-    "git checkout -b",
-    "git switch -c",
-    "git switch --create",
-    "git switch --force-create",
-    "git switch --orphan",
     "git commit",
     "git rebase",
-    "git reset --hard",
     "git cherry-pick",
     "gh issue develop",
-    "git branch -d",
-    "git branch --delete",
-    "git checkout --",
-    "git checkout .",
     "git restore",
     "git stash",
     "git clean",
@@ -1825,11 +1826,39 @@ const REPOSITORY_SHELL: &[&str] = &[
     "git rm",
     "git mv",
     "git revert",
-    "git reset --keep",
-    "git reset --merge",
     "git submodule update",
     "git worktree remove",
     "git filter-branch",
+];
+
+/// The repository writes decided by an option word, read per invocation.
+const GIT_WRITES: &[operation_window::GitWrite] = &[
+    operation_window::CHECKOUT_BRANCH,
+    operation_window::SWITCH_CREATE,
+    operation_window::GitWrite {
+        name: "git checkout --",
+        subcommand: "checkout",
+        long: &["--", "--force", "--ours", "--theirs"],
+        short: Some('f'),
+        dotted_path: true,
+        always: false,
+    },
+    operation_window::GitWrite {
+        name: "git branch -d",
+        subcommand: "branch",
+        long: &["--delete"],
+        short: Some('d'),
+        dotted_path: false,
+        always: false,
+    },
+    operation_window::GitWrite {
+        name: "git reset",
+        subcommand: "reset",
+        long: &[],
+        short: None,
+        dotted_path: false,
+        always: true,
+    },
 ];
 
 /// The population and boundary `DELIVERS` enforces.

@@ -417,11 +417,19 @@ fn every_gated_spelling_has_a_command_line_written_out() {
         IRREVERSIBLE.len(),
         "a boundary was added to the list and no command line was written for it"
     );
-    assert_eq!(
-        WRITES.len(),
-        REPOSITORY_SHELL.len(),
-        "a repository write was added to the list and no command line was written for it"
-    );
+    for fragment in REPOSITORY_SHELL {
+        assert!(
+            WRITES.iter().any(|line| line.contains(fragment)),
+            "`{fragment}` was added to the list and no command line was written for it"
+        );
+    }
+    for rule in GIT_WRITES {
+        assert!(
+            WRITES.iter().any(|line| rule.matches_in(line)),
+            "`{}` was added to the list and no command line was written for it",
+            rule.name
+        );
+    }
     assert_eq!(
         LANDS.len(),
         DELIVERS.len(),
@@ -8641,4 +8649,35 @@ fn a_merge_reads_its_ci_release_and_an_unreadable_store_refuses() {
 
     let (push, _) = classify("Bash", &json!({"command": "git push"}));
     assert!(super::unreleased_merge(&push, &run, &|_, _| Ok(false)).is_none());
+}
+
+#[test]
+fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
+    for line in [
+        "git reset -q --hard HEAD~3",
+        "git reset HEAD --hard",
+        "git reset --soft HEAD~1",
+        "git checkout -q -b x",
+        "git switch -qc x",
+        "git branch -f -D x",
+        "git checkout HEAD -- src/x.rs",
+        "git checkout -f",
+    ] {
+        let (action, _) = classify("Bash", &json!({ "command": line }));
+        assert!(
+            matches!(action, Action::Write { .. }),
+            "`{line}` was read as {action:?}"
+        );
+    }
+    for line in [
+        "git stash list",
+        "grep \"git reset --hard\" notes.md",
+        "git log --hard",
+    ] {
+        let (action, _) = classify("Bash", &json!({ "command": line }));
+        assert!(
+            !matches!(action, Action::Write { .. }),
+            "`{line}` was read as a write: {action:?}"
+        );
+    }
 }

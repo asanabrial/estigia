@@ -739,7 +739,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // Re-read on 2026-10-07: `git switch --orphan` joined it. It
     // creates a ref exactly as `git switch -c` does, and the claim is unchanged
     // by adding one more gated spelling.
-    ("repository-shell", 11936916847651860326),
+    ("repository-shell", 2698723702781307116),
     ("issue-creation-shell", 3013093601863561019),
     // `exit-code` — genuinely fail-closed. `0` to `5`
     // is the whole contract the transport implements, and the `_` arm sends
