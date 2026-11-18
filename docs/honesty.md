@@ -2106,7 +2106,10 @@ pointer that leaves it names the document it points at.
   **What exact-literal matching leaves** (traced by reading on 2026-09-07, re-read on 2026-11-16, not run):
   *not matched at all* are a backslash line continuation, a `.exe` suffix and a full path carrying a global
   option, `git update-ref refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh
-  repo sync`, `git branch <name>`, `git checkout HEAD -- <path>`, `git checkout -f` and `git filter-repo`; a
+  repo sync`, `git branch <name>` and `git filter-repo`. A subcommand that writes only with a deciding
+  option (`checkout -b`/`--`/`-f`, `switch -c`, `branch -d`, and every `reset`) is read per invocation,
+  so an option between the subcommand and the deciding one no longer hides it
+  (`a_git_write_is_a_write_whatever_order_its_options_come_in`); a
   quoted argument of a command that writes is read as code, because `data_view` blanks quoted spans only for
   commands that read and that same breadth is what refuses a stand-down named in a commit message, so `git
   commit -m "git merge origin"` is a merge while a `;`, `&`, `|`, `)` or a backtick inside the quotes does

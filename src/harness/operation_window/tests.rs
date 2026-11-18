@@ -732,3 +732,15 @@ fn the_next_opening_is_the_first_permitted_minute() {
         );
     });
 }
+
+#[test]
+fn a_branch_created_behind_another_option_is_still_a_protected_creation() {
+    assert_eq!(
+        protected_write_target("git checkout -q -b x"),
+        Some("git checkout -b")
+    );
+    assert_eq!(
+        protected_write_target("git switch -qc x"),
+        Some("git switch -c")
+    );
+}
