@@ -1,4 +1,6 @@
 use super::calls::{self, Kind};
+use std::path::Path;
+
 use super::{Imported, Repo, Store};
 use crate::transport::{Failure, claim, ownership};
 
@@ -842,7 +844,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     let path = directory.path().join("state.db");
     let slow = Store::connect(&path, std::time::Duration::from_secs(5)).expect("connects");
 
-    slow.migrate_after_read(|| {
+    slow.migrate_after_read(&path, || {
         drop(Store::open(&path).expect("the faster opener migrates"));
     })
     .expect("the slower opener finds the schema already laid down");
@@ -3962,4 +3964,151 @@ fn a_need_for_a_person_is_written_once_per_key_and_read_back_newest_first() {
     assert_eq!(rows[0].delivery, "not delivered: no notifier");
     assert_eq!(rows[0].issue, Some(7));
     assert_eq!(store.needs_person(1).expect("reads").len(), 1);
+}
+
+fn one_version_back(path: &Path) -> u32 {
+    let older = rusqlite::Connection::open(path).expect("a file to age");
+    let before = super::schema::MIGRATIONS.len() - 1;
+    older
+        .execute_batch("CREATE TABLE meta (schema_version INTEGER NOT NULL);")
+        .expect("the version table");
+    for sql in &super::schema::MIGRATIONS[..before] {
+        older.execute_batch(sql).expect("an old migration applies");
+    }
+    older
+        .execute(
+            "INSERT INTO meta (schema_version) VALUES (?1)",
+            [i64::try_from(before).expect("small")],
+        )
+        .expect("the old version is recorded");
+    u32::try_from(before).expect("small")
+}
+
+fn snapshot_names(path: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(super::snapshot::snapshots_dir(path))
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+fn snapshot_schema(snapshot: &Path) -> u32 {
+    rusqlite::Connection::open(snapshot)
+        .expect("the snapshot opens")
+        .query_row("SELECT schema_version FROM meta", [], |row| row.get(0))
+        .expect("the snapshot records its schema")
+}
+
+#[test]
+fn a_store_about_to_migrate_is_snapshotted_first_whatever_the_cadence_says() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let before = one_version_back(&path);
+    let snapshots = super::snapshot::snapshots_dir(&path);
+    std::fs::create_dir_all(&snapshots).expect("the snapshots directory");
+    let now = crate::harness::session::now_seconds().expect("a clock");
+    std::fs::write(snapshots.join(now.to_string()), "a recent cadence snapshot")
+        .expect("a recent snapshot");
+
+    let migrated = Store::open(&path).expect("the older store migrates");
+    assert!(migrated.schema_version().expect("reads") > before);
+
+    let taken: Vec<String> = snapshot_names(&path)
+        .into_iter()
+        .filter(|name| name.starts_with(&format!("schema-{before}-")))
+        .collect();
+    assert_eq!(taken.len(), 1, "{:?}", snapshot_names(&path));
+    assert_eq!(snapshot_schema(&snapshots.join(&taken[0])), before);
+}
+
+#[test]
+fn a_pre_migration_snapshot_that_cannot_be_written_leaves_the_store_unmigrated() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let before = one_version_back(&path);
+    std::fs::write(super::snapshot::snapshots_dir(&path), "not a directory")
+        .expect("a file where the snapshots directory goes");
+
+    let Err(refused) = Store::open(&path) else {
+        panic!("the open was not refused");
+    };
+    assert!(
+        refused.detail().contains("snapshots"),
+        "the refusal does not name the snapshot directory: {}",
+        refused.detail()
+    );
+    let version: u32 = rusqlite::Connection::open(&path)
+        .expect("the store opens")
+        .query_row("SELECT schema_version FROM meta", [], |row| row.get(0))
+        .expect("reads");
+    assert_eq!(version, before);
+}
+
+#[test]
+fn pruning_keeps_the_pre_migration_snapshot() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let before = one_version_back(&path);
+    let store = Store::open(&path).expect("the older store migrates");
+
+    for now in [1_000_000u64, 2_000_000, 3_000_000, 4_000_000, 5_000_000] {
+        store.snapshot(&path, now);
+    }
+
+    let names = snapshot_names(&path);
+    assert!(
+        names
+            .iter()
+            .any(|name| name.starts_with(&format!("schema-{before}-"))),
+        "{names:?}"
+    );
+    assert_eq!(
+        names
+            .iter()
+            .filter(|name| !name.starts_with("schema-"))
+            .count(),
+        super::snapshot::SNAPSHOT_KEEP,
+        "{names:?}"
+    );
+}
+
+#[test]
+fn many_openers_of_an_older_store_all_open_and_its_old_schema_is_kept() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let before = one_version_back(&path);
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+
+    let openers: Vec<_> = (0..8)
+        .map(|_| {
+            let (path, barrier) = (path.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                Store::open(&path).map(|_| ())
+            })
+        })
+        .collect();
+    for opener in openers {
+        opener.join().expect("joins").expect("every opener opens");
+    }
+
+    let names = snapshot_names(&path);
+    let kept: Vec<&String> = names
+        .iter()
+        .filter(|name| name.starts_with(&format!("schema-{before}-")))
+        .collect();
+    assert!(!kept.is_empty(), "{names:?}");
+    assert!(
+        names.iter().all(|name| !name.ends_with(".tmp")),
+        "a staged copy was left behind: {names:?}"
+    );
+    let snapshots = super::snapshot::snapshots_dir(&path);
+    for name in kept {
+        assert_eq!(snapshot_schema(&snapshots.join(name)), before, "{name}");
+    }
 }

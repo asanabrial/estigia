@@ -312,7 +312,7 @@ impl Store {
     pub(crate) fn open_waiting(path: &Path, wait: Duration) -> Result<Self, Failure> {
         let _opening = Opening::begin();
         let store = Self::connect(path, wait)?;
-        store.migrate()?;
+        store.migrate(path)?;
         Ok(store)
     }
 
@@ -356,11 +356,11 @@ impl Store {
         found.ok_or_else(|| Failure::Read("the local store records no schema version".to_owned()))
     }
 
-    fn migrate(&self) -> Result<(), Failure> {
-        self.migrate_after_read(|| {})
+    fn migrate(&self, path: &Path) -> Result<(), Failure> {
+        self.migrate_after_read(path, || {})
     }
 
-    fn migrate_after_read(&self, after_read: impl FnOnce()) -> Result<(), Failure> {
+    fn migrate_after_read(&self, path: &Path, after_read: impl FnOnce()) -> Result<(), Failure> {
         let known = u32::try_from(schema::MIGRATIONS.len()).unwrap_or(u32::MAX);
         self.connection
             .execute_batch("CREATE TABLE IF NOT EXISTS meta (schema_version INTEGER NOT NULL);")
@@ -375,6 +375,14 @@ impl Store {
             return Err(Failure::Read(format!(
                 "the local store is schema {current} and this build understands up to {known}"
             )));
+        }
+        if current > 0 && current < known {
+            snapshot::take_pre_migration_snapshot(
+                &self.connection,
+                path,
+                current,
+                crate::harness::session::now_seconds().unwrap_or_default(),
+            )?;
         }
         after_read();
         for (index, sql) in schema::MIGRATIONS.iter().enumerate().skip(current as usize) {

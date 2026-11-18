@@ -3498,6 +3498,12 @@ pointer that leaves it names the document it points at.
   `VACUUM INTO` takes a snapshot when none exists or the newest is at least 24 hours old, keeping
   three in `~/.estigia/snapshots/`. Failures are counted with when they last happened and the reason
   the last one gave, not fatal; a later successful snapshot clears the snapshot row. Restoration is manual.
+  A store about to migrate is copied first, in its old schema, and the migration is refused when the
+  copy fails ([lifecycle](lifecycle.md)); a write another process lands between that copy and the
+  migration's lock is in neither. A store mid-migration looks like an older one, so openers racing a
+  fresh store or an upgrade may each stage a copy, of whatever schema they found; the rename keeps
+  one per name and pruning one per schema, which leaves copies of intermediate schemas nobody shipped
+  (`many_openers_of_an_older_store_all_open_and_its_old_schema_is_kept`).
   Doctor reports age, not a verified restore. Append-only triggers do not resist an OS user
   able to drop them. `store-unwritable` rejects detected network mounts on macOS/Linux, not Windows.
   `foreign-projection` refuses unexplained GitHub owners across stores; reclaim overrides it.
