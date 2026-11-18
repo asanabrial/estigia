@@ -1028,20 +1028,25 @@ fn ends_a_command(text: &str, at: usize) -> bool {
 fn inside_quotes(text: &str, at: usize) -> bool {
     let mut quote = None;
     let mut escaped = false;
+    let mut previous = None;
     for byte in text[..at].bytes() {
         if escaped {
             escaped = false;
+            previous = None;
             continue;
         }
         match (quote, byte) {
             (Some(b'\''), b'\'') => quote = None,
             (Some(b'\''), _) => {}
+            (Some(b'$'), b'\'') => quote = None,
             (_, b'\\') => escaped = true,
+            (None, b'\'') if previous == Some(b'$') => quote = Some(b'$'),
             (None, b'\'') => quote = Some(b'\''),
             (None, b'"') => quote = Some(b'"'),
             (Some(b'"'), b'"') => quote = None,
             _ => {}
         }
+        previous = Some(byte);
     }
     quote.is_some()
 }

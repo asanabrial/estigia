@@ -2113,7 +2113,10 @@ pointer that leaves it names the document it points at.
   quoted argument of a command that writes is read as code, because `data_view` blanks quoted spans only for
   commands that read and that same breadth is what refuses a stand-down named in a commit message, so `git
   commit -m "git merge origin"` is a merge while a `;`, `&`, `|`, `)` or a backtick inside the quotes does
-  not end it — `git commit -m "git merge;"` is not; *matched but never read as a delivery* are `gh api`
+  not end it — `git commit -m "git merge;"` is not. The quote scan reads `'…'` with a literal
+  backslash, `"…"` with backslash escapes and the ANSI-C `$'…'`, where a backslash escapes the next
+  byte (`a_quote_scan_reads_an_ansi_c_span_and_an_escaped_double_quote_as_bash_does`), and no other
+  quoting style; *matched but never read as a delivery* are `gh api`
   against the merge, release and tag-ref endpoints and the pull spelling.
 
   **The gate also measures its own disarmament.** `estigia stand-down`, `guard --uninstall`, `uninstall` and
