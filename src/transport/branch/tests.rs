@@ -2385,3 +2385,64 @@ fn a_slice_whose_head_the_delivery_does_not_contain_is_kept() {
         "{retired:?}"
     );
 }
+
+fn remote_has(repo: &std::path::Path, branch: &str) -> bool {
+    crate::transport::run(
+        &["git", "ls-remote", "--heads", "origin", branch],
+        Some(repo),
+        crate::transport::How::read(),
+    )
+    .expect("the remote reads")
+    .stdout
+    .contains(&format!("refs/heads/{branch}"))
+}
+
+#[test]
+fn a_release_deletes_only_the_remote_heads_its_delivery_contains() {
+    let rig = assist_rig();
+    let repo = &rig.repo;
+    for branch in ["slice-a", "slice-b"] {
+        shell(repo, &["switch", "--quiet", "-c", branch, "main"]);
+        shell(repo, &["commit", "--allow-empty", "--quiet", "-m", branch]);
+        shell(repo, &["push", "--quiet", "origin", branch]);
+    }
+    shell(repo, &["switch", "--quiet", "main"]);
+    shell(
+        repo,
+        &["merge", "--quiet", "--no-ff", "-m", "deliver", "slice-a"],
+    );
+    let delivering = crate::transport::run(
+        &["git", "rev-parse", "HEAD"],
+        Some(repo),
+        crate::transport::How::read(),
+    )
+    .expect("the delivering commit")
+    .stdout
+    .trim()
+    .to_owned();
+
+    let retired = retire_remote_branches(
+        &rig.context,
+        &["slice-a".to_owned(), "slice-b".to_owned()],
+        Some(&delivering),
+    );
+    assert!(retired[0].deleted, "{:?}", retired[0]);
+    assert!(!remote_has(repo, "slice-a"));
+    assert!(!retired[1].deleted, "{:?}", retired[1]);
+    assert!(
+        retired[1]
+            .reason
+            .as_deref()
+            .is_some_and(|why| why.contains("not contained")),
+        "{:?}",
+        retired[1]
+    );
+    assert!(
+        remote_has(repo, "slice-b"),
+        "an uncontained head was deleted"
+    );
+
+    let swept = retire_remote_branches(&rig.context, &["slice-b".to_owned()], None);
+    assert!(swept[0].deleted, "{:?}", swept[0]);
+    assert!(!remote_has(repo, "slice-b"));
+}

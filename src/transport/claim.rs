@@ -12412,7 +12412,7 @@ fn put_down_checkout(
             // longer exists.
             let branches = recorded_branches(comments, run_id);
             let remote = (!branches.is_empty()).then(|| {
-                super::branch::retire_remote_branches(context, &branches)
+                super::branch::retire_remote_branches(context, &branches, Some(&own.delivering_sha))
                     .iter()
                     .map(super::branch::RemoteRetired::to_json)
                     .collect::<Vec<_>>()

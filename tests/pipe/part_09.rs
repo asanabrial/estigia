@@ -2057,7 +2057,12 @@ fn a_delivery_deletes_a_recorded_remote_head_that_is_not_the_pull_requests() {
     let login = "fixture";
     let head = rig.head.clone();
     let base = rig.head.clone();
-    let merge_sha = "f".repeat(40);
+    let merge_sha = checked_git_stdout(
+        repo,
+        &["commit-tree", "HEAD^{tree}", "-p", &head, "-m", "deliver"],
+    )
+    .trim()
+    .to_owned();
 
     // A remote the recorded head is pushed to.
     let remote = tempfile::tempdir().expect("a remote directory");
