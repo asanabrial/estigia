@@ -1155,3 +1155,68 @@ fn confirm_removes_only_what_the_sweep_marked_for_deletion() {
         "the remote deletion was not read back: {answers:?}"
     );
 }
+
+#[test]
+fn an_open_branch_checkout_ahead_of_its_upstream_but_on_another_remote_ref_is_kept() {
+    let (root, clone, trees) = sweep_fixture();
+    let target = trees.join("issue-2-open");
+    git(&target, &["push", "--quiet", "origin", "issue-2-open:archive"]);
+    git(
+        &target,
+        &["commit", "--quiet", "--allow-empty", "-m", "on archive only"],
+    );
+    git(&target, &["push", "--quiet", "origin", "HEAD:archive"]);
+    git(&clone, &["fetch", "--quiet", "origin"]);
+    let context = Context::live(root.path().join("skill"), clone, None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(&trees),
+        ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
+    };
+    let decision = orphan_decision(&view);
+    assert!(!decision.delete, "{decision:?}");
+    assert!(
+        decision
+            .reason
+            .contains("carries commits not on its remote branch"),
+        "{decision:?}"
+    );
+    assert!(target.exists());
+}
+
+#[test]
+fn confirmation_keeps_an_open_branch_checkout_that_moved_ahead_of_its_upstream() {
+    let (root, clone, trees) = sweep_fixture();
+    let target = trees.join("issue-2-open");
+    let context = Context::live(root.path().join("skill"), clone.clone(), None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(&trees),
+        ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
+    };
+    let decision = orphan_decision(&view);
+    assert!(decision.delete, "{decision:?}");
+    assert_eq!(decision.reason, PUSHED_OPEN);
+    git(
+        &target,
+        &["commit", "--quiet", "--allow-empty", "-m", "late, on archive only"],
+    );
+    git(&target, &["push", "--quiet", "origin", "HEAD:archive"]);
+    git(&clone, &["fetch", "--quiet", "origin"]);
+    let answers = confirm(&view, &[decision]);
+    assert_eq!(answers[0]["outcome"], "kept", "{answers:?}");
+    assert!(
+        answers[0]["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("carries commits not on its remote branch"),
+        "{answers:?}"
+    );
+    assert!(target.exists());
+}
