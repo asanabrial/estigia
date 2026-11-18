@@ -4112,3 +4112,60 @@ fn many_openers_of_an_older_store_all_open_and_its_old_schema_is_kept() {
         assert_eq!(snapshot_schema(&snapshots.join(name)), before, "{name}");
     }
 }
+
+#[test]
+fn a_fresh_store_opens_and_writes_no_pre_migration_snapshot() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+
+    Store::open(&path).expect("a fresh store opens");
+
+    let names = snapshot_names(&path);
+    assert!(
+        names.iter().all(|name| !name.starts_with("schema-")),
+        "{names:?}"
+    );
+}
+
+#[test]
+fn a_copy_already_in_the_builds_schema_is_not_kept_as_a_pre_migration_snapshot() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let migrated = Store::open(&path).expect("opens");
+    let known = u32::try_from(super::schema::MIGRATIONS.len()).expect("small");
+
+    super::snapshot::take_pre_migration_snapshot(migrated.connection(), &path, known, 7)
+        .expect("a copy of a migrated store is no failure");
+
+    let names = snapshot_names(&path);
+    assert!(
+        names.iter().all(|name| !name.starts_with("schema-")),
+        "a post-migration copy was kept under a schema name: {names:?}"
+    );
+}
+
+#[test]
+fn only_the_newest_pre_migration_snapshot_of_a_schema_is_kept() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    let before = one_version_back(&path);
+    let snapshots = super::snapshot::snapshots_dir(&path);
+    std::fs::create_dir_all(&snapshots).expect("the snapshots directory");
+    for stamp in [100, 200] {
+        std::fs::write(snapshots.join(format!("schema-{before}-{stamp}")), "older")
+            .expect("an older copy");
+    }
+
+    Store::open(&path).expect("the older store migrates");
+
+    let kept: Vec<String> = snapshot_names(&path)
+        .into_iter()
+        .filter(|name| name.starts_with(&format!("schema-{before}-")))
+        .collect();
+    assert_eq!(kept.len(), 1, "{kept:?}");
+    assert!(
+        !kept[0].ends_with("-100") && !kept[0].ends_with("-200"),
+        "{kept:?}"
+    );
+    assert_eq!(snapshot_schema(&snapshots.join(&kept[0])), before);
+}
