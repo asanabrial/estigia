@@ -1996,3 +1996,76 @@ fn an_answer_a_step_cannot_read_halts_rather_than_passing() {
         "an object answer a step can read was refused"
     );
 }
+
+#[test]
+fn the_live_merge_decision_reads_the_window_the_repository_answers_now() {
+    let root = tempfile::tempdir().expect("a gate root");
+    let repo = crate::test_env::repository_with_commit();
+    let mut context = shared_checkout_context(root.path(), repo.path());
+    context.operation_window = crate::config::GitOperationWindow::parse("enabled 09:00-17:00")
+        .expect("a window that parses");
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-caller000",
+        12,
+        "review",
+        Some(holder_receipt()),
+    );
+    let receipt = holder_receipt();
+    let marker = crate::transport::markers::render(
+        "ci-release",
+        &[
+            ("run-id", "claude-caller000"),
+            ("epoch", &receipt.epoch),
+            ("pr", "7"),
+            ("head", &receipt.head),
+            ("base", &receipt.base),
+            ("digest", &receipt.digest),
+        ],
+    )
+    .expect("the marker renders");
+    let store = root.path().join("store").join("state.db");
+    std::fs::create_dir_all(store.parent().expect("a parent")).expect("a store directory");
+    let rows = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(rows.parent().expect("a parent")).expect("the rows directory");
+    let bin = scripted_gh();
+    let script = answers(&[
+        crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
+        pr_head_answer(&receipt.head),
+    ]);
+    let decide = |window: &str| {
+        std::fs::write(
+            &rows,
+            format!("| Setting | Value |\n|---|---|\n| Git operation window | {window} |\n"),
+        )
+        .expect("the repository's rows");
+        crate::transport::store::with_store_at(&store, || {
+            crate::test_env::with_scripted_gh(bin.path(), &script, || {
+                crate::harness::operation_window::with_now_override(Some(|| Some(20 * 60)), || {
+                    live_for(&context, "claude-caller000").merge_decision(7)
+                })
+            })
+        })
+    };
+    crate::transport::store::with_store_at(&store, || {
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            let transport = transport::Context::live(
+                context.skill_root.clone(),
+                context.repo_dir.clone(),
+                None,
+            );
+            crate::transport::store::Ledger::open(&transport, 12, "2026-10-27T00:00:00Z")
+                .expect("the issue is imported")
+                .append(
+                    &format!("CI released.\n\n{marker}\n"),
+                    "2026-10-27T00:00:01Z",
+                )
+                .expect("the release is recorded");
+        })
+    });
+
+    let closed = decide("enabled 09:00-17:00").expect_err("outside the window");
+    assert_eq!(closed["code"], "git-operation-window-denied", "{closed}");
+    decide("disabled").expect("the repository answers disabled now");
+}

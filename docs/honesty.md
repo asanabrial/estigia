@@ -2660,6 +2660,14 @@ pointer that leaves it names the document it points at.
   hook on every edit, and a `tokio` runtime spun up per process was judged too expensive to pay that
   often. Synchronous stdio JSON-RPC over a fixed, small tool list avoids spinning one up at all, but
   nothing here has measured what either approach costs per invocation.
+- **The MCP server decides with the settings it read when it started.** `estigia mcp` builds its gate
+  context once and keeps it for the session, while the hook builds one per call. `deliver`'s merge
+  decision reads the `Git operation window` again before asking the gate
+  (`operation_window::current`;
+  `the_live_merge_decision_reads_the_window_the_repository_answers_now`), and the transport reads it
+  on every dispatch. Every other field of that context, the window `claim` with `park` consults among
+  them, still answers what was configured when the server started. A server whose binary was
+  replaced keeps running the old build, which no check names.
 - **The renewal window is a cadence, and a cadence is a gap.** A routine write inside two minutes of
   the last answer is not re-verified, and neither is a Claude Code `Stop`: it keeps a successful
   answer for the window and records its own, because reading the tracker at every turn end spent the

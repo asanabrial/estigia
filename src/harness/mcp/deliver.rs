@@ -1305,8 +1305,12 @@ impl Hands for Live<'_> {
             target: CommitTarget::Checkout,
         };
         let mut run = session::load(&self.context.state_root, self.run_id);
+        let context = GateContext {
+            operation_window: crate::harness::operation_window::current(self.context),
+            ..self.context.clone()
+        };
         let decided = crate::harness::gate_observing(
-            self.context,
+            &context,
             &mut run,
             &action,
             Sensitivity::Boundary,
