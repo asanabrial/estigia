@@ -980,8 +980,9 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "checks",
                 "boolean",
-                "Run the declared checks instead of collecting. Takes only `wait_seconds`.",
+                "Run the declared checks instead of collecting. Takes only `wait_seconds`, `rerun`.",
             ),
+            Argument::optional("rerun", "boolean", "With `checks`: rerun a failed receipt, once."),
         ],
         effect: PointerEffect::Renew,
         writes: true,
@@ -1806,6 +1807,11 @@ pub const INTERNAL: &[Tool] = &[
                  Capped at 50.",
             )
             .counting_from(1),
+            Argument::optional(
+                "rerun",
+                "boolean",
+                "Run again over a failed receipt for these bytes; admitted once.",
+            ),
         ],
         effect: PointerEffect::Renew,
         writes: true,
@@ -2267,6 +2273,7 @@ pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("claim", "park"),
     ("collect_review_input", "launch"),
     ("collect_review_input", "checks"),
+    ("collect_review_input", "rerun"),
     ("review_read", "parent_head"),
     ("review_read", "clearing_finding"),
     ("review_read", "focus"),

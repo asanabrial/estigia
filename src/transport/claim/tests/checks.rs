@@ -86,6 +86,7 @@ fn request(wait_seconds: u64, base: &str) -> RunChecks<'_> {
         worktree: None,
         wait_seconds,
         now: NOW,
+        rerun: false,
     }
 }
 
@@ -584,4 +585,131 @@ fn a_failed_receipt_for_other_bytes_with_no_lens_report_is_still_refused() {
         envelope["reason"], "republish-before-panel-reported",
         "{envelope}"
     );
+}
+
+fn rerun(base: &str) -> RunChecks<'_> {
+    RunChecks {
+        rerun: true,
+        ..request(30, base)
+    }
+}
+
+#[test]
+fn a_failed_receipt_is_run_again_once_and_the_latest_receipt_decides() {
+    crate::transport::store::forget_scratch_store();
+    let flag = tempfile::tempdir().expect("a directory");
+    let marker = flag.path().join("ran-once");
+    let (_root, context, receipt) = checked_change(Some(&declaration_for(&[(
+        "flaky",
+        &format!(
+            "if [ -f {0} ]; then exit 0; fi; touch {0}; exit 1",
+            marker.display()
+        ),
+    )])));
+    let comments = timeline_of(&receipt);
+
+    let first = ask(
+        &context,
+        &comments,
+        &request(30, &receipt.base),
+        &on_a_thread,
+    )
+    .expect("the first run");
+    assert_eq!(first["passed"], false, "{first}");
+    let cached = ask(&context, &comments, &request(30, &receipt.base), &never)
+        .expect("without a rerun the failed receipt stands");
+    assert_eq!(cached["cached"], true, "{cached}");
+    assert_eq!(cached["passed"], false, "{cached}");
+
+    let again =
+        ask(&context, &comments, &rerun(&receipt.base), &on_a_thread).expect("the rerun runs");
+    assert_eq!(again["cached"], false, "{again}");
+    assert_eq!(again["passed"], true, "{again}");
+    assert_eq!(recorded_receipts(), 2, "the failed receipt was not kept");
+
+    let cleared = verdict(&context, &comments, &receipt).expect("the latest receipt decides");
+    assert_eq!(cleared["outcome"], "approved", "{cleared}");
+
+    let refused = ask(&context, &comments, &rerun(&receipt.base), &never)
+        .expect_err("a passing receipt is not run again");
+    assert_eq!(reason(refused), "checks-rerun-not-admitted");
+}
+
+#[test]
+fn a_second_rerun_of_the_same_bytes_is_refused() {
+    crate::transport::store::forget_scratch_store();
+    let (_root, context, receipt) = checked_change(Some(&declaration_for(&[("tests", "exit 7")])));
+    let comments = timeline_of(&receipt);
+
+    let first = ask(
+        &context,
+        &comments,
+        &request(30, &receipt.base),
+        &on_a_thread,
+    )
+    .expect("the first run");
+    assert_eq!(first["passed"], false, "{first}");
+    let again =
+        ask(&context, &comments, &rerun(&receipt.base), &on_a_thread).expect("the one rerun runs");
+    assert_eq!(again["passed"], false, "{again}");
+
+    let refused =
+        ask(&context, &comments, &rerun(&receipt.base), &never).expect_err("the rerun is spent");
+    assert_eq!(reason(refused), "checks-rerun-not-admitted");
+    assert_eq!(recorded_receipts(), 2);
+}
+
+#[test]
+fn a_rerun_with_no_receipt_yet_is_refused() {
+    crate::transport::store::forget_scratch_store();
+    let (_root, context, receipt) =
+        checked_change(Some(&declaration_for(&[("fmt", "echo formatted")])));
+    let comments = timeline_of(&receipt);
+
+    let refused =
+        ask(&context, &comments, &rerun(&receipt.base), &never).expect_err("nothing failed yet");
+    assert_eq!(reason(refused), "checks-rerun-not-admitted");
+}
+
+#[test]
+fn the_failed_stop_names_the_rerun_until_it_is_spent() {
+    let (_root, context, receipt) = checked_change(Some(&declaration_for(&[("tests", "exit 7")])));
+    let commands =
+        commands_digest(&declared_at(&context.repo_dir, &receipt.base).expect("declared"));
+    let failed = |id: &str| {
+        wrote(
+            id,
+            markers::render(
+                "checks-receipt",
+                &[
+                    ("run-id", "claude-a"),
+                    ("digest", &receipt.digest),
+                    ("commands", &commands),
+                    ("passed", "false"),
+                    ("results", "tests=7:1"),
+                ],
+            )
+            .expect("a checks marker"),
+        )
+    };
+    let continuation = |comments: &[ownership::Comment]| {
+        super::super::checks::holding(&context, comments, 42, &receipt)
+            .expect("reads")
+            .expect("a failed receipt holds the review")["continuation"]
+            .as_str()
+            .expect("a continuation")
+            .to_owned()
+    };
+
+    let mut comments = timeline_of(&receipt);
+    comments.push(failed("8"));
+    assert!(
+        continuation(&comments).contains("`rerun: true`"),
+        "{}",
+        continuation(&comments)
+    );
+    comments.push(failed("9"));
+    let spent = continuation(&comments);
+    assert!(!spent.contains("`rerun: true`"), "{spent}");
+    assert!(spent.contains("spent"), "{spent}");
 }

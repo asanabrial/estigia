@@ -997,6 +997,11 @@ fn read_view_step(
 /// named slot.
 fn collect_step(arguments: &Value) -> Result<Option<(&'static str, Value)>, ToolFailure> {
     let on = |key: &str| arguments.get(key) == Some(&json!(true));
+    if on("rerun") && !on("checks") {
+        return Err(ToolFailure::Malformed(
+            "`rerun` runs the declared checks again and is given with `checks: true`".to_owned(),
+        ));
+    }
     match (on("launch"), on("checks")) {
         (false, false) => Ok(None),
         (true, true) => Err(ToolFailure::Malformed(
