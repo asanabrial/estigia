@@ -79,6 +79,15 @@ store too and is named in the report. The store file itself, `<home>/.estigia/st
 `-shm` neighbours, goes with that last adapter, and
 [`what-it-writes.md`](what-it-writes.md) says what it is.
 
+**A new binary snapshots the store before it migrates it.** The first writing open of a store whose
+schema is older than the build's writes `~/.estigia/snapshots/schema-<old version>-<stamp>`, a
+`VACUUM INTO` copy in the old schema, before any migration runs and whatever the daily cadence says.
+When that copy cannot be written the open is refused, naming the directory, and the store stays in its
+old schema: the next step cannot be undone, and the build that refused still understands the file.
+The newest such copy of each schema is kept; the cadence's three-snapshot retention never removes
+one. A fresh store has nothing to copy, and the read-only openers never migrate. Rolling back means
+restoring that copy by hand under the older binary.
+
 The official release installers now extract the checksum-verified archive and ask that extracted
 candidate to run the hidden, argument-free `__record-install` admission command before replacing the
 installed executable. The candidate resolves its own `current_exe`, hashes bytes reopened through

@@ -66,6 +66,77 @@ pub(super) fn take_snapshot(
     Ok(())
 }
 
+/// The prefix of a snapshot taken before a migration, `schema-<version>-<stamp>`.
+const PRE_MIGRATION: &str = "schema-";
+
+/// Writes a snapshot of a store in schema `schema`, before a migration moves it
+/// past that schema, whatever the cadence says.
+///
+/// Refuses rather than recording: the step after it cannot be undone. Keeps the
+/// newest such snapshot of each schema; the cadence's pruning never reads them.
+pub(super) fn take_pre_migration_snapshot(
+    connection: &Connection,
+    store_path: &Path,
+    schema: u32,
+    now: u64,
+) -> Result<(), Failure> {
+    let directory = snapshots_dir(store_path);
+    let refused = |why: String| {
+        Failure::Read(format!(
+            "the local store was not migrated past schema {schema}: its snapshot could not be \
+             written to {}: {why}",
+            directory.display()
+        ))
+    };
+    std::fs::create_dir_all(&directory).map_err(|error| refused(error.to_string()))?;
+    let destination = directory.join(format!("{PRE_MIGRATION}{schema}-{now}"));
+    if !destination.exists() {
+        let staged = crate::paths::staged_path(&destination, "");
+        let written = connection
+            .execute("VACUUM INTO ?1", [staged.to_string_lossy().as_ref()])
+            .map_err(|error| refused(error.to_string()))
+            .and_then(|_| {
+                std::fs::rename(&staged, &destination)
+                    .or_else(|error| {
+                        if destination.exists() {
+                            Ok(())
+                        } else {
+                            Err(error)
+                        }
+                    })
+                    .map_err(|error| refused(error.to_string()))
+            });
+        let _ = std::fs::remove_file(&staged);
+        written?;
+    }
+    prune_pre_migration(store_path, schema);
+    Ok(())
+}
+
+fn prune_pre_migration(store_path: &Path, schema: u32) {
+    let prefix = format!("{PRE_MIGRATION}{schema}-");
+    let Ok(entries) = std::fs::read_dir(snapshots_dir(store_path)) else {
+        return;
+    };
+    let mut taken: Vec<(u64, PathBuf)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let stamp = entry
+                .file_name()
+                .to_str()?
+                .strip_prefix(&prefix)?
+                .parse()
+                .ok()?;
+            Some((stamp, entry.path()))
+        })
+        .collect();
+    taken.sort_unstable();
+    taken.pop();
+    for (_, older) in taken {
+        let _ = std::fs::remove_file(older);
+    }
+}
+
 fn stamps(store_path: &Path) -> Vec<u64> {
     let Ok(entries) = std::fs::read_dir(snapshots_dir(store_path)) else {
         return Vec::new();
