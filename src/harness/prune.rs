@@ -11,7 +11,8 @@
 //! reads `sweep` rows pass `--confirm`, operator or run, without asking again.
 //!
 //! **Nothing is dropped from the listing.** A checkout whose branch is neither
-//! merged nor closed can also qualify as a remote-gone orphan. Otherwise it is
+//! merged nor closed can also qualify as a clean orphan whose every commit is on
+//! a remote, whether its upstream is gone or still open. Otherwise it is
 //! kept with its reason, so the sweep never hides work it declines to delete.
 //!
 //! Two rules are never relaxed, and they are the whole reason the decision is a
@@ -273,10 +274,10 @@ fn observe_worktrees(
                         Some(format!("issue #{} is closed", issue.unwrap_or_default()))
                     }
                     _ => outside_the_root(view, &entry.path).or_else(|| {
-                        match remote_gone(view, &entry.path, branch, &mut refreshed) {
-                            Ok(_) => {
+                        match orphaned(view, &entry.path, branch, &mut refreshed) {
+                            Ok((_, reason)) => {
                                 unpublished = false;
-                                Some(REMOTE_GONE.to_owned())
+                                Some(reason.to_owned())
                             }
                             Err(why) => {
                                 kept = Some(why);
@@ -373,6 +374,8 @@ fn observe_heads(
 }
 
 const REMOTE_GONE: &str = "its remote branch is gone and every commit is on a remote";
+const PUSHED_OPEN: &str =
+    "its branch is open, the checkout is clean and every commit is on its remote branch";
 
 fn check_ownership(view: &View<'_>, path: &Path) -> Result<(), String> {
     if let Some(pointer) = view.holdings.iter().find(|pointer| {
@@ -464,12 +467,12 @@ fn config_one(path: &Path, key: &str) -> Result<Option<String>, String> {
     }
 }
 
-fn remote_gone(
+fn orphaned(
     view: &View<'_>,
     path: &Path,
     branch: &str,
     refreshed: &mut Option<Result<(), String>>,
-) -> Result<String, String> {
+) -> Result<(String, &'static str), String> {
     check_ownership(view, path)?;
     check_branch(path, branch)?;
     let files = super::changes::uncommitted(path)
@@ -508,11 +511,26 @@ fn remote_gone(
         How::tolerated(),
     )
     .map_err(|failure| format!("remote state could not be read: {}", failure.detail()))?;
-    match remote.status {
-        0 => return Err("its branch is neither merged nor closed on this tracker; its remote branch still exists".to_owned()),
-        2 if remote.stdout.trim().is_empty() => {}
-        _ => return Err(format!("remote state could not be read: {}", remote.stderr.trim())),
-    }
+    let upstream = match remote.status {
+        0 => match remote.stdout.trim().split_once('\t') {
+            Some((oid, listed)) if listed == reference && !remote.stdout.trim().contains('\n') => {
+                Some(oid.to_owned())
+            }
+            _ => {
+                return Err(format!(
+                    "remote state could not be read: {}",
+                    remote.stdout.trim()
+                ));
+            }
+        },
+        2 if remote.stdout.trim().is_empty() => None,
+        _ => {
+            return Err(format!(
+                "remote state could not be read: {}",
+                remote.stderr.trim()
+            ));
+        }
+    };
     let head = run(
         &["git", "rev-parse", "--verify", "HEAD^{commit}"],
         Some(path),
@@ -529,8 +547,22 @@ fn remote_gone(
     )
     .map_err(|failure| format!("checkout commits could not be read: {}", failure.detail()))?;
     match commits.stdout.trim().parse::<u64>() {
-        Ok(0) => Ok(head),
-        Ok(_) => Err(carries(&[])),
+        Ok(0) => {}
+        Ok(_) => return Err(carries(&[])),
+        Err(_) => return Err("checkout commits could not be read".to_owned()),
+    }
+    let Some(upstream) = upstream else {
+        return Ok((head, REMOTE_GONE));
+    };
+    let ahead = run(
+        &["git", "rev-list", "--count", &format!("{upstream}..{head}")],
+        Some(path),
+        How::read(),
+    )
+    .map_err(|failure| format!("checkout commits could not be read: {}", failure.detail()))?;
+    match ahead.stdout.trim().parse::<u64>() {
+        Ok(0) => Ok((head, PUSHED_OPEN)),
+        Ok(_) => Err("carries commits not on its remote branch".to_owned()),
         Err(_) => Err("checkout commits could not be read".to_owned()),
     }
 }
@@ -770,14 +802,14 @@ fn confirm_worktree_after(
         value["kind"] = serde_json::json!("worktree");
         value
     };
-    let proven = if entry.reason == REMOTE_GONE {
+    let proven = if entry.reason == REMOTE_GONE || entry.reason == PUSHED_OPEN {
         let checked = entry
             .branch
             .as_deref()
             .ok_or_else(|| "checkout branch could not be read".to_owned())
-            .and_then(|branch| remote_gone(view, &path, branch, &mut None));
+            .and_then(|branch| orphaned(view, &path, branch, &mut None));
         match checked {
-            Ok(head) => Some(head),
+            Ok((head, _)) => Some(head),
             Err(why) => return kept(why),
         }
     } else {

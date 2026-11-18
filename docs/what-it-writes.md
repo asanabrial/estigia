@@ -18,20 +18,23 @@ the permission bits of the file it replaces (on Windows, the read-only flag), so
 a `branch` marker in the local store. `release` — the last step of a delivery — deletes every
 remote head those markers name, reading each one back, then puts down every isolated checkout those markers name that the run owns and the delivery
 contains, with its local branch. `estigia prune` is the sweep for what no delivery owned: merged or closed
-heads and checkouts, plus [remote-gone orphan checkouts](#explicit-orphan-pruning), kept when a live claim holds them or they carry commits the remote does not
+heads and checkouts, plus [clean orphan checkouts whose commits are all on a remote](#explicit-orphan-pruning), kept when a live claim holds them or they carry commits the remote does not
 have, removed only on `--confirm`. The rules, and what each still cannot see, are in the contract's
 delivery reference and [`honesty.md`](honesty.md).
 
 ## Explicit orphan pruning
 
 `estigia prune` keeps its merged/closed cleanup. One further route handles
-a branch checkout that would otherwise be kept: its configured upstream must be absent after
-`git fetch --prune --all`, its working tree must be clean, and `git rev-list --count <proven-head>
---not --remotes` must be zero. The upstream identity comes from `branch.<name>.remote` and
-`branch.<name>.merge`, not the local branch name or a presumed `origin`. Reachability from any refreshed remote-tracking
-branch suffices, not only the default branch. A configured upstream still present on its actual remote
-is never eligible here. Absent, incomplete, multiple, invalid, local-only (`remote = .`) or unknown tracking identities
-are not inferred to mean a deleted remote branch: the checkout is kept.
+a branch checkout that would otherwise be kept — a branch neither merged nor closed, such as one whose
+pull request is still open: its working tree must be clean, and `git rev-list --count <proven-head>
+--not --remotes` must be zero after `git fetch --prune --all`. The upstream identity comes from
+`branch.<name>.remote` and `branch.<name>.merge`, not the local branch name or a presumed `origin`.
+When that upstream is gone, reachability from any refreshed remote-tracking branch suffices, not only
+the default branch. When it is still present on its actual remote, the head must also be contained in
+the commit that remote lists for it (`<listed>..<proven-head>` is empty), so a checkout of an open
+pull request's branch that a dead session left behind is put down without asking anybody, because
+nothing in it can be lost. Absent, incomplete, multiple, invalid, local-only (`remote = .`) or unknown
+tracking identities are never read as either case: the checkout is kept.
 
 The route keeps any checkout named by a run pointer, even when its issue is closed, and any named by a session registry entry not explicitly ended; a stale heartbeat is
 not an ended session. Unreadable pointers, registry reads, remote reads and local Git reads keep the
@@ -1633,7 +1636,7 @@ latter. `estigia prune` clears what no delivery owned: it lists the merged or cl
 checkouts, keeps any a live claim holds or that carries commits the remote does not have, and removes
 the rest only on `--confirm`. The main checkout is never a candidate, from whichever checkout the
 command runs, and neither is the checkout it runs in. It also finds clean orphan checkouts whose
-remote branch is gone and whose commits remain on another remote ref;
+commits are all on a remote, whether their remote branch is gone or still open;
 [the pruning rules](#explicit-orphan-pruning) describe that additional route and its conservative
 ownership checks.
 

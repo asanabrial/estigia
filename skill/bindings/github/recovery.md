@@ -58,7 +58,8 @@ does move, but the legacy path is the raw template, which no build created: what
 `~<run-id>` appended. So on upgrade, a run resuming such a branch is not stopped here; it is stopped by
 `branch-checked-out-elsewhere`, which names the checkout still holding the branch, before any remote
 state is written. The recovery is the same `git worktree remove`, and it is written here because nothing else
-tells you.
+tells you. A clean, fully pushed checkout no pointer or unended session holds is
+put down by `estigia prune --confirm`, open pull request or not.
 
 **"Not registered" and "the registry could not be read" are different answers, and only one of them
 is a clearance.** That question is answered by `git worktree list`, so how it is read decides

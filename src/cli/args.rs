@@ -384,9 +384,10 @@ pub enum Command {
     /// It lists every remote head that is merged or
     /// closed and every registered checkout, keeps any a live claim holds or that
     /// carries uncommitted work or commits the remote does not have, and removes
-    /// eligible entries only when the operator confirms. Clean remote-gone orphan
-    /// checkouts also qualify when every commit remains on a remote and no known
-    /// session or pointer holds them; unreadable eligibility keeps them.
+    /// eligible entries only when the operator confirms. Clean orphan checkouts
+    /// also qualify, whether their upstream is gone or still open, when every
+    /// commit remains on a remote and no known session or pointer holds them;
+    /// unreadable eligibility keeps them.
     Prune {
         /// Remove what the sweep lists, rather than only listing it.
         #[arg(long)]

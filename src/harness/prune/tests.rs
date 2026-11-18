@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn correction_configured_upstream_presence_keeps_the_checkout() {
+fn correction_the_configured_upstream_decides_which_route_removes_the_checkout() {
     for alternative_remote in [false, true] {
         let (root, clone, trees) = sweep_fixture();
         let upstream = if alternative_remote {
@@ -41,12 +41,8 @@ fn correction_configured_upstream_presence_keeps_the_checkout() {
             ownership_root: Some(root.path().join("runs")),
         };
         let decision = orphan_decision(&view);
-        assert!(!decision.delete, "{upstream}: {decision:?}");
-        assert!(
-            decision.reason.contains("remote branch still exists"),
-            "{decision:?}"
-        );
-        assert!(confirm(&view, &[decision]).is_empty());
+        assert!(decision.delete, "{upstream}: {decision:?}");
+        assert_eq!(decision.reason, PUSHED_OPEN, "{upstream}: {decision:?}");
         assert!(trees.join("issue-2-open").exists());
         git(
             &context.repo_dir,
@@ -316,6 +312,81 @@ fn a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confi
     });
 }
 
+#[test]
+fn a_clean_pushed_checkout_of_an_open_branch_is_removed_only_on_confirmation() {
+    let (root, clone, trees) = sweep_fixture();
+    let context = Context::live(root.path().join("skill"), clone.clone(), None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(&trees),
+        ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
+    };
+    let decision = orphan_decision(&view);
+    assert!(decision.delete, "{decision:?}");
+    assert_eq!(decision.reason, PUSHED_OPEN);
+    assert!(trees.join("issue-2-open").exists(), "discovery removed it");
+    let answer = confirm(&view, &[decision]);
+    assert_eq!(answer[0]["worktree_removed"], true, "{answer:?}");
+    assert_eq!(answer[0]["branch_deleted"], true, "{answer:?}");
+    assert!(!trees.join("issue-2-open").exists());
+    let remote = run(
+        &["git", "ls-remote", "--heads", "origin", "issue-2-open"],
+        Some(&clone),
+        How::read(),
+    )
+    .unwrap();
+    assert!(
+        remote.stdout.contains("refs/heads/issue-2-open"),
+        "{remote:?}"
+    );
+}
+
+#[test]
+fn an_open_branch_checkout_that_is_dirty_unpushed_or_held_is_kept() {
+    for (case, reason) in [
+        ("dirty", "scratch.txt"),
+        ("unpushed", "commits not on the remote"),
+        ("pointer", "ownership is held or unknown"),
+        ("session", "session not known ended"),
+    ] {
+        let (root, clone, trees) = sweep_fixture();
+        let target = trees.join("issue-2-open");
+        let mut holdings = Vec::new();
+        let mut ownership = Ok(Vec::new());
+        match case {
+            "dirty" => std::fs::write(target.join("scratch.txt"), "keep\n").unwrap(),
+            "unpushed" => git(
+                &target,
+                &["commit", "--quiet", "--allow-empty", "-m", "unpushed"],
+            ),
+            "pointer" => {
+                let mut pointer = Run::new("opencode-held".to_owned());
+                pointer.issue = Some(crate::identity::Identity::Number(2));
+                pointer.worktree = Some(target.clone());
+                holdings.push(pointer);
+            }
+            _ => ownership = Ok(vec![target.clone()]),
+        }
+        let context = Context::live(root.path().join("skill"), clone, None);
+        let view = View {
+            context: &context,
+            base: "main",
+            holdings: &holdings,
+            root: Some(&trees),
+            ownership,
+            ownership_root: Some(root.path().join("runs")),
+        };
+        let decision = orphan_decision(&view);
+        assert!(!decision.delete, "{case}: {decision:?}");
+        assert!(decision.reason.contains(reason), "{case}: {decision:?}");
+        assert!(confirm(&view, &[decision]).is_empty());
+        assert!(target.exists(), "{case}");
+    }
+}
+
 fn orphan_decision(view: &View<'_>) -> Swept {
     let bin = crate::test_env::scripted_gh();
     let script = crate::test_env::answers(&[
@@ -345,19 +416,16 @@ fn remote_gone_eligibility_keeps_dirty_unique_held_present_and_unreadable_checko
         ("session", "session not known ended"),
         ("unreadable-pointer", "ownership is held or unknown"),
         ("unreadable-ownership", "ownership could not be read"),
-        ("present", "remote branch still exists"),
         ("unreadable-remote", "remote state could not be read"),
         ("unreadable-local", "checkout state could not be read"),
     ] {
         let (root, clone, trees) = sweep_fixture();
         let target = trees.join("issue-2-open");
         git(&clone, &["push", "origin", "issue-2-open:archive"]);
-        if case != "present" {
-            git(
-                &root.path().join("work"),
-                &["push", "origin", "--delete", "issue-2-open"],
-            );
-        }
+        git(
+            &root.path().join("work"),
+            &["push", "origin", "--delete", "issue-2-open"],
+        );
         let mut holdings = Vec::new();
         let mut ownership = Ok(Vec::new());
         match case {
@@ -421,7 +489,7 @@ fn confirmation_rechecks_remote_gone_work_before_removing_it() {
     let (root, clone, trees) = sweep_fixture();
     git(&clone, &["push", "origin", "issue-2-open:archive"]);
     git(&clone, &["push", "origin", "--delete", "issue-2-open"]);
-    let context = Context::live(root.path().join("skill"), clone.clone(), None);
+    let context = Context::live(root.path().join("skill"), clone, None);
     let view = View {
         context: &context,
         base: "main",
@@ -432,17 +500,26 @@ fn confirmation_rechecks_remote_gone_work_before_removing_it() {
     };
     let decision = orphan_decision(&view);
     assert!(decision.delete);
-    git(&clone, &["push", "origin", "issue-2-open"]);
+    git(
+        &trees.join("issue-2-open"),
+        &[
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "late unique commit",
+        ],
+    );
     let answers = confirm(&view, std::slice::from_ref(&decision));
     assert_eq!(answers[0]["outcome"], "kept");
     assert!(
         answers[0]["detail"]
             .as_str()
             .unwrap()
-            .contains("still exists")
+            .contains("commits not on the remote"),
+        "{answers:?}"
     );
     assert!(trees.join("issue-2-open").exists());
-    git(&clone, &["push", "origin", "--delete", "issue-2-open"]);
     std::fs::write(trees.join("issue-2-open").join("late.txt"), "late\n").unwrap();
     let answers = confirm(&view, &[decision]);
     assert_eq!(answers[0]["outcome"], "kept");
@@ -797,12 +874,11 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
         "a merged checkout was kept"
     );
     let open = find(Kind::Worktree, "issue-2-open");
-    assert!(!open.delete, "an open checkout was swept");
     assert!(
-        open.reason.contains("neither merged nor closed"),
-        "the open checkout is kept without a reason: {}",
-        open.reason
+        open.delete,
+        "a clean pushed open checkout was kept: {open:?}"
     );
+    assert_eq!(open.reason, PUSHED_OPEN);
     assert!(
         !find(Kind::Worktree, "issue-3-closed").delete,
         "a checkout carrying unpublished work was swept"
