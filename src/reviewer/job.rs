@@ -291,16 +291,16 @@ pub(crate) fn begin(dir: &Path) -> Result<File, Refusal> {
 
 /// The runner: holds the job's lock for as long as it runs, asks the selected
 /// adapter for the reviewer's answer exactly as a synchronous launch would, and
-/// leaves `result.json` with the provider's own usage in `usage.json` beside it
-/// when the reviewer's CLI reported any. The answer is the outcome whatever
-/// happens to the usage: a usage write that fails is reported on the runner's
-/// standard error rather than turning a review that succeeded into a refusal,
-/// and the result is then written without the artifact. The usage is written
-/// before the result and never inside it, so the admitted answer's bytes do not
-/// move with it, and a reader of a result with no usage beside it must read the
-/// counters as unknown, never as zero. It writes nothing else outside `dir`, and
-/// never the ledger. A manifest it cannot read, or an adapter it cannot select,
-/// is recorded as a refusal rather than left as a silent absence.
+/// leaves `result.json` with the provider's own counters in `usage.json` beside
+/// it when the reviewer's CLI reported counters. The answer is the outcome
+/// whatever happens to the usage: a usage write that fails is reported on the
+/// runner's standard error rather than turning a review that succeeded into a
+/// refusal, and the result is then written without the artifact. The usage is
+/// written before the result and never inside it, so the admitted answer's bytes
+/// do not move with it, and a reader of a result with no usage beside it must
+/// read the counters as unknown, never as zero. It writes nothing else outside
+/// `dir`, and never the ledger. A manifest it cannot read, or an adapter it
+/// cannot select, is recorded as a refusal rather than left as a silent absence.
 pub fn run(
     dir: &Path,
     select: &dyn Fn() -> Result<Box<dyn Adapter>, Refusal>,

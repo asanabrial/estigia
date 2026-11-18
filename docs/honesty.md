@@ -3867,6 +3867,12 @@ pointer that leaves it names the document it points at.
   carries a non-whole counter is an `Err`, never a zero. No consumer exists yet to read `None` as
   unknown.
 
+  **The failed-write diagnostic is emitted but unproved.** `report_usage_failure` writes to the
+  runner's standard error, and no test added by this change reads that stream: the outcome a failed
+  write leaves is asserted, the message is not, so a change that stopped emitting it would pass every
+  test while the promise in `run`'s own comment stayed. The test that would capture `runner.err`
+  drives the detached runner, and it lives outside the paths this change may touch.
+
 ## Refusals, and the way out they name
 
 - **A refusal that names no way out is measured at build time, and the 67 the guard reports are frozen
