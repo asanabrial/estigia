@@ -376,11 +376,12 @@ impl Store {
                 "the local store is schema {current} and this build understands up to {known}"
             )));
         }
-        if current > 0 && current < known {
+        let fresh = current == 0;
+        if !fresh && current < known {
             snapshot::take_pre_migration_snapshot(
                 &self.connection,
                 path,
-                current,
+                known,
                 crate::harness::session::now_seconds().unwrap_or_default(),
             )?;
         }
