@@ -702,3 +702,15 @@ fn a_legacy_takeover_may_not_displace_a_modern_acquisition() {
         Some(ReclaimDiscard::LegacyTakeover)
     );
 }
+
+#[test]
+fn an_offset_of_four_bytes_that_are_not_four_digits_is_unreadable() {
+    for written in [
+        "2026-11-17T10:00+1é2",
+        "2026-11-17T10:00+é12",
+        "2026-11-17T10:00+12é",
+        "2026-11-17T10:00-1é2",
+    ] {
+        assert_eq!(super::parse_stamp(written), None, "{written}");
+    }
+}
