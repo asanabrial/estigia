@@ -69,7 +69,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   **Still open.**
 
   - No derived directory family is compiler-forced: `skills_root_fragment` matches `SkillsRoot`, whose
-    variants a new adapter reuses. The `_` arms on the instruction enum are in the previous section.
+    variants a new adapter reuses. The `_` arms on the instruction enum are in
+    [What the gate writes, and who else reads](honesty-gate-surface.md#what-the-gate-writes-and-who-else-reads).
   - **The roles a run's delegated contexts ran as are recorded, within the run and durably.** New
     `agent_type` values reach the session pointer and append-only `roles` table independently of claim
     decisions, including `Outside`; `estigia roles` reads by run/issue. Model/effort are declarations.

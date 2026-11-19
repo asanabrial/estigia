@@ -233,8 +233,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     and only the host's stale `tools:` line refuses, if it enforces one. `reviewer_is_static` accepts any body
     `Evidence::all()` × `RESERVED_REVIEWERS` renders, and `reviewer_is_static_for_seal`, which a launch reads,
     cannot see the drift either.
-  - **Only one of the two derived families is compiler-forced.** The measurement is in the roles
-    entry's *Still open* list, under the bullet beginning *"Only one of the two derived families"*.
+  - **Only one of the two derived families is compiler-forced.** The measurement is in the
+    [roles entry](honesty-review-rules.md#roles-and-the-definitions-they-need)'s *Still open* list, under the bullet beginning *"Only one of the two derived families"*.
   - **Plugin-provided sub-agent definitions are the same shape as `.opencode/agent/`.**
     `~/.claude/plugins/**/agents/*.md` and `.opencode/agent/` (singular) are `Boundary`, but
     `roles::definition_for` searches neither, so such a definition is `Ok(None)` on read, which
