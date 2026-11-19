@@ -98,6 +98,7 @@ fn estigia_command() -> Command {
 }
 
 /// The detached review runner of this binary, clearing what `estigia_command` clears.
+#[cfg(unix)]
 fn estigia_runner() -> estigia::reviewer::job::Detached {
     estigia::reviewer::job::Detached::of(estigia())
         .without_env("CLAUDE_CONFIG_DIR")
