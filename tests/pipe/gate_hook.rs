@@ -3395,27 +3395,29 @@ fn an_unreadable_repository_configuration_denies_the_commit_it_could_have_denied
     std::fs::write(&file, rows).expect("an unreadable repository file");
 
     let cwd = repo.path().display().to_string().replace('\\', "\\\\");
-    let payload = format!(
-        "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"Bash\",\
-         \"tool_input\":{{\"command\":\"git commit -m x\"}}}}"
-    );
-    let (out, err, _) = run_in(
-        home.path(),
-        repo.path(),
-        &["hook", "pre-tool-use"],
-        &payload,
-    );
-    let shown = format!("{out}{err}");
-    assert!(
-        out.contains("\"permissionDecision\":\"deny\""),
-        "an unreadable repository configuration permitted a commit: {shown}"
-    );
-    assert!(
-        out.contains("config-local-unreadable"),
-        "the denial did not say the configuration could not be read: {shown}"
-    );
-    assert!(
-        out.contains("estigia.local.md") && out.contains("UTF-8"),
-        "the denial does not name the file and the read error: {shown}"
-    );
+    for command in ["git commit -m x", "git merge foo"] {
+        let payload = format!(
+            "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"Bash\",\
+             \"tool_input\":{{\"command\":\"{command}\"}}}}"
+        );
+        let (out, err, _) = run_in(
+            home.path(),
+            repo.path(),
+            &["hook", "pre-tool-use"],
+            &payload,
+        );
+        let shown = format!("{out}{err}");
+        assert!(
+            out.contains("\"permissionDecision\":\"deny\""),
+            "an unreadable repository configuration permitted `{command}`: {shown}"
+        );
+        assert!(
+            out.contains("config-local-unreadable"),
+            "`{command}`: the denial did not say the configuration could not be read: {shown}"
+        );
+        assert!(
+            out.contains("estigia.local.md") && out.contains("UTF-8"),
+            "`{command}`: the denial does not name the file and the read error: {shown}"
+        );
+    }
 }

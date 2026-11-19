@@ -2069,3 +2069,92 @@ fn the_live_merge_decision_reads_the_window_the_repository_answers_now() {
     assert_eq!(closed["code"], "git-operation-window-denied", "{closed}");
     decide("disabled").expect("the repository answers disabled now");
 }
+
+fn finished_slots(names: &[&str]) -> Value {
+    json!({
+        "kind": "collect", "reason_code": "lens-report-missing", "operation": null,
+        "arguments": {},
+        "inputs": names
+            .iter()
+            .map(|name| json!({"name": name, "capture": "collect_review_input", "job": "j"}))
+            .collect::<Vec<_>>(),
+    })
+}
+
+#[test]
+fn a_finished_slot_is_collected_and_the_delivery_goes_on() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let receipt = receipt_of(&world);
+    fake.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![
+            status(
+                &receipt,
+                finished_slots(&["review-risk", "review-readback"]),
+            ),
+            status(&receipt, execute("deliver", "verdict-computable")),
+            status(&receipt, execute("deliver", "approved")),
+        ],
+    );
+    fake.scripts.borrow_mut().insert(
+        "collect_review_input".into(),
+        vec![Ok(json!({"ok": true, "collected": []}))],
+    );
+    let ran = drive(&fake, &green_script(&world), &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    let sent = fake.sent.borrow();
+    let collect = sent
+        .iter()
+        .find(|(name, _)| name == "collect_review_input")
+        .expect("the finished slots were collected");
+    assert_eq!(
+        collect.1["names"],
+        json!(["review-risk", "review-readback"]),
+        "{:?}",
+        collect.1
+    );
+    assert!(collect.1.get("launch").is_none(), "{:?}", collect.1);
+}
+
+#[test]
+fn a_slot_still_offered_after_its_collect_is_handed_back_not_collected_again() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let receipt = receipt_of(&world);
+    fake.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![status(&receipt, finished_slots(&["review-risk"]))],
+    );
+    fake.scripts.borrow_mut().insert(
+        "collect_review_input".into(),
+        vec![Ok(json!({"ok": true, "collected": []}))],
+    );
+    let ran = drive(&fake, &[], &request());
+    assert_eq!(stopped(&ran), ("review", "lens-report-missing"));
+    let collects = called(&fake)
+        .iter()
+        .filter(|name| *name == "collect_review_input")
+        .count();
+    assert_eq!(collects, 1);
+}
+
+#[test]
+fn a_refused_collect_stops_the_delivery_at_review() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let receipt = receipt_of(&world);
+    fake.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![status(&receipt, finished_slots(&["review-risk"]))],
+    );
+    fake.scripts.borrow_mut().insert(
+        "collect_review_input".into(),
+        vec![Err(
+            json!({"code": "capture-job-missing", "message": "gone"}),
+        )],
+    );
+    let ran = drive(&fake, &[], &request());
+    assert_eq!(ran.answer["stopped"]["step"], "review", "{}", ran.answer);
+    assert!(!called(&fake).contains(&"record_computed_verdict".to_owned()));
+}
