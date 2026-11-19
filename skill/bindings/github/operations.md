@@ -459,7 +459,7 @@ receipt exists to escalate.
 
 ## Running declared checks
 
-`collect_review_input` with `checks: true` (the `run_checks` operation; it takes `wait_seconds` and nothing else) runs the `[[check]]` tables the base's `estigia.generated.toml` declares, as a detached job against the clean checkout, and records a receipt for the published target's digest and the declared commands. It answers `declared: false` and records nothing when the base declares none, `cached` with the latest receipt when one already stands, and `running` with `ask_after` while a job is out: call again, with `wait_seconds` (at most 50) to wait. `rerun: true` runs them once more over a failed receipt for the same bytes, for a failure that was the machine's; the latest receipt decides. A finished answer carries each check's exit, seconds and output tail. `publish_review` and `republish_review` with `start_review` call it before launching any lens (waiting no time): while the receipt is running or red it launches none and says why under `launch_skipped`, and `review_status` answers a `collect` with no input and `ask_after` (Unix seconds) while it runs, or a `stop` `checks-failed`, naming the rerun while it is unspent, instead of offering a lens, and that failed receipt admits the republish that corrects it; nothing declared launches as before. While the base declares checks, the verdict and `release_ci` refuse without a passing receipt for the exact digest: `checks-receipt-missing`, or `checks-failed`.
+`collect_review_input` with `checks: true` (the `run_checks` operation; it takes `wait_seconds` and `rerun` and nothing else) runs the `[[check]]` tables the base's `estigia.generated.toml` declares, as a detached job against the clean checkout, and records a receipt for the published target's digest and the declared commands. It answers `declared: false` and records nothing when the base declares none, `cached` with the latest receipt when one already stands, and `running` with `ask_after` while a job is out: call again, with `wait_seconds` (at most 50) to wait. `rerun: true` runs them once more over a failed receipt for the same bytes, for a machine failure; the latest receipt decides. A finished answer carries each check's exit, seconds and output tail. `publish_review` and `republish_review` with `start_review` call it before launching any lens (waiting no time): while the receipt is running or red it launches none and says why under `launch_skipped`, and `review_status` answers a `collect` with no input and `ask_after` (Unix seconds) while it runs, or a `stop` `checks-failed`, naming the rerun while it is unspent, instead of offering a lens, and that failed receipt admits the republish that corrects it; nothing declared launches as before. While the base declares checks, the verdict and `release_ci` refuse without a passing receipt for the exact digest: `checks-receipt-missing`, or `checks-failed`.
 
 ## Recording a computed verdict
 
@@ -614,7 +614,8 @@ landed and the claim is still held: repeat with the same `spend` (it replays), a
 
 ## Delivering in one call
 
-`deliver` is the tool that runs the tail of a publication that needs no judgement: the computed
+`deliver` is the tool that runs the tail of a publication that needs no judgement: collecting each
+slot whose reviewer finished (`collect_review_input`, once per slot, never a launch), the computed
 verdict (`record_computed_verdict`), `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
 topology readback and the close, each through the operation that owns it. The merge goes through the
 decision the `gh pr merge` boundary makes. It answers `delivered`; `pending` with `ask_after`, after

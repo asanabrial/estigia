@@ -8789,6 +8789,30 @@ pub(super) fn publish_schedule(context: &Context) -> Result<(), Failure> {
     }
 }
 
+/// Refuses a publication whose checkout is not on the branch it publishes: the
+/// payload is read from the checkout's `HEAD` and the push moves the branch, so
+/// the two must be one commit.
+fn checkout_on_branch(at: &std::path::Path, branch: &str) -> Result<(), Failure> {
+    let current = super::run(
+        &["git", "symbolic-ref", "--quiet", "HEAD"],
+        Some(at),
+        super::How::tolerated(),
+    )?;
+    let on = (current.status == 0).then(|| current.stdout.trim().to_owned());
+    if on.as_deref() == Some(format!("refs/heads/{branch}").as_str()) {
+        return Ok(());
+    }
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "publication-checkout-not-on-branch",
+        "branch": branch,
+        "checkout": at.display().to_string(),
+        "checkout_head": on.unwrap_or_else(|| "detached".to_owned()),
+        "action": "pass `worktree` naming the checkout of this branch, which the run pointer \
+                   records, and publish again; nothing was pushed and no pull request was opened",
+    })))
+}
+
 fn publish_with(
     context: &Context,
     what: &Publication<'_>,
@@ -8881,6 +8905,7 @@ fn publish_with_sleep(
         })));
     }
     let at = worktree.unwrap_or(&context.repo_dir);
+    checkout_on_branch(at, branch)?;
     super::run(
         &["git", "fetch", "origin", "--", base],
         Some(at),
@@ -12412,7 +12437,7 @@ fn put_down_checkout(
             // longer exists.
             let branches = recorded_branches(comments, run_id);
             let remote = (!branches.is_empty()).then(|| {
-                super::branch::retire_remote_branches(context, &branches)
+                super::branch::retire_remote_branches(context, &branches, Some(&own.delivering_sha))
                     .iter()
                     .map(super::branch::RemoteRetired::to_json)
                     .collect::<Vec<_>>()

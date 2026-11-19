@@ -164,6 +164,7 @@ const UNKNOWN: &[&str] = &[
 ];
 const REFUSED: &[&str] = &[
     "ambiguous-issue",
+    "publication-checkout-not-on-branch",
     "where-reference-malformed",
     "feed-repo-unknown",
     "feed-since-malformed",

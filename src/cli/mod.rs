@@ -7249,6 +7249,11 @@ pub(crate) fn goal_reading(
             &context.operation_window,
             harness::operation_window::now_minutes(),
         );
+        if reading.opens_at.is_some() {
+            let queues = queue_reading(context, run_id);
+            reading.claimable = queues.claimable;
+            reading.dischargeable = queues.dischargeable;
+        }
     }
     reading
 }
