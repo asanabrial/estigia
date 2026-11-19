@@ -33,50 +33,34 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `the_pre_push_hook_refuses_an_unclaimed_push_where_the_guard_is_installed`; nothing drives the two shell
   entry points (`estigia gate` with no session, the dialect hook with an empty session id) end to end.
 - **`Unclaimed write policy` holds the writes the hook sees, and cannot hold the rest.** With the row
-  `required` or `watch`, a run holding no claim is refused (`issue-required`) or asked before a routine write
+  `required`, a run holding no claim is refused (`issue-required`) before a routine write
   the gate can place inside a checkout whose tracker can name an issue there and that has an installed
   contract (a file edit or write, or a shell line carrying a `REPOSITORY_SHELL` fragment such as
-  `git commit`), and, under `required`, before one it **cannot place** when the call was launched in a repository or
-  from a directory whose repository could not be established. Under `watch` such an unplaceable write
-  **runs**: launched in a repository, the checkout's `git status` (untracked files included, with each
-  path's time and size, so a second write to a modified file still counts) is recorded first and
-  compared on the run's next call, which is put to the person naming the changed paths only when it
-  differs; launched where the repository could not be established it is asked; launched outside every
-  repository it is allowed, and the checkout it may have dirtied is named at the next session start (at
-  most eight paths, then a count; it cannot prove they came from an allowed write rather than the
-  operator's own work). **What `watch` cannot see:** the write has already landed when the person
-  hears of it, and nothing is reverted; a change made by anyone else in the same checkout between the
-  two calls is reported as the watched write's; ignored files and writes outside the checkout are not
-  in `git status`; a call issued in parallel with the watched one can compare before it finished, so
-  the change is reported on a later call, or not at all when a write the gate can place is asked in
-  between, which drops the record; and on a host other than Claude Code the last call of a session is
-  compared by nobody until the next session start names the dirty checkout; Claude Code's `PostToolUse`
-  entry compares right after each `Bash` call and says what changed at once, a note the person sees but
-  is not asked about until the next call. Held by
-  `an_unplaceable_shell_write_runs_under_watch_and_the_next_call_asks_only_when_the_checkout_changed`,
-  `a_write_placed_inside_the_checkout_is_still_asked_under_watch` and
-  `the_shell_call_that_changed_a_watched_checkout_is_reported_as_soon_as_it_ran`. What it does not hold:
+  `git commit`), and before one it **cannot place** when the call was launched in a repository, from
+  a directory whose repository could not be established, or from outside every repository. The row has
+  no value that lets an unplaceable write run and compares the checkout afterwards: nothing records or
+  compares a checkout's `git status`, and a stored `watch` or `ask` reads as `required`. Held by
+  `a_write_placed_inside_the_checkout_is_still_refused_under_required`,
+  `an_unplaceable_shell_write_launched_in_a_repository_is_refused_under_required` and
+  `a_stored_watch_reads_as_required_and_refuses_an_unclaimed_edit`. What it does not hold:
   - **A boundary is held as a commit is, unless the repository says `Unclaimed GitHub writes: allowed`, and
     `Merge by` is not read on this path.** An unclaimed `gh pr merge`, `git merge`, `git pull`, `git tag`,
-    release, `gh api` mutation or declared irreversible command is asked under `watch` and refused under
-    `required`, and so is `Action::Remote` (`gh pr review`, `gh pr comment`), through
-    `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`. It is **asked,
-    never watched**: a boundary reaches other people and leaves no trace in the checkout to compare, so the
-    `watch` that lets an unplaceable local write run does not apply. `allowed` is the operator's own
+    release, `gh api` mutation or declared irreversible command is refused under `required`, and so is
+    `Action::Remote` (`gh pr review`, `gh pr comment`), through
+    `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`. `allowed` is the operator's own
     declaration that a skill writing through `gh api`, `gh pr review` and `gh pr merge` unclaimed is not to
-    be stopped on each call; it drops no question on a commit, a push, a branch or a worktree command, and a
+    be stopped on each call; it drops no refusal on a commit, a push, a branch or a worktree command, and a
     write carried beside a boundary stays held under both values (`harness::write_beside_a_boundary`, the
     classifier answering with a line's strongest command, which once let `gh pr merge 3; git worktree remove
     /x` run unasked). **What this costs:** a person's own `git merge`, `git pull` or `git tag` in a session
-    that holds no claim is asked too; under `held` a skill that reviews and then merges meets one question
+    that holds no claim is refused too; under `held` a skill that reviews and then merges meets one refusal
     per merge; and a pull request approved at the exact head does not clear it, because the skills that
     need this road do not take it. A command the fragment lists do not name is not found, and a GraphQL
     mutation behind a shell variable still passes. A call launched outside every repository is left alone,
     as a push is, and the git operation window's own refusals are unchanged. Held by
-    `an_unclaimed_github_write_is_put_to_the_person_under_watch`,
     `an_unclaimed_github_write_is_refused_under_required`, `an_unclaimed_github_write_passes_when_the_policy_is_off`,
     `a_github_read_passes_under_every_value`, `an_unclaimed_github_write_is_held_through_the_gate_command_too`,
-    `allowed_lets_the_github_writes_pass_under_watch_and_required` and `allowed_still_holds_what_the_policy_holds`.
+    `allowed_lets_the_github_writes_pass_under_required` and `allowed_still_holds_what_the_policy_holds`.
   - **An assisted run cannot carry a GitHub write past the claim beside an admitted boundary.** `git pull;
     gh pr review 3 --approve` and a declared boundary followed by a GitHub write are refused
     `assisted-remote-write-unverified`, checked only after `assisted-does-not-deliver`,
@@ -96,12 +80,6 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     `a_named_repository_holds_the_write_where_the_checkout_has_no_remote`,
     `a_write_into_a_nested_checkout_that_has_a_remote_is_still_held`,
     `a_failed_remote_read_is_not_zero_remotes` and `a_guarded_checkout_with_no_remote_refuses_no_commit`.
-  - **`watch` asks on Claude Code and on Pi's terminal UI only, and its answer cannot be read back.** Pi
-    is asked through `estigia gate --runtime pi --can-ask` (exit `4`; the extension passes the flag only
-    when `ctx.mode === "tui"` and shows `ctx.ui.confirm`), **unverified against a live Pi** (the `confirm`
-    call is read from Pi 1.1.0's `docs/extensions.md` and `types.d.ts`); `rpc`, `json` and print modes are
-    never asked. Every other agent is refused with the same code (an `ask` a host ignores is an allow), and
-    the gate never learns whether the person approved, so it **asks on every such write**.
   - **A write the hook does not intercept is not held** (a tool no matcher wakes for, a script or formatter
     whose shell line names no git fragment, another clone), and **only a routine write, a boundary and a GitHub write are
     held**: a push is held as a commit is (`an_unclaimed_push_is_held_as_an_unclaimed_commit_is`), while an
@@ -124,9 +102,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     one plain printing command (`echo`, `printf`, `cat`, `ls`, `grep`, `rg`, `head`, `tail`, `wc`, `date`,
     `pwd`) with no quote, `$`, backtick, backslash, `<`, `|`, `;`, `&`, parenthesis, line break or `..`.
     **Everything else a shell line can write is unplaceable** (a `cd` before a redirect, a variable, `&&`, a
-    second writer, inline interpreter code): refused under `required`; under `watch` run and compared against the
-    checkout's recorded `git status` on the next call when launched in a repository, put to the person from
-    an unestablished directory, and allowed from outside every repository; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
+    second writer, inline interpreter code): refused under `required`, wherever the call was launched; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
     (`shell::quoted_heredoc_target`): `cat > TARGET <<'DELIM'`, `cat >> TARGET <<'DELIM'` or `cat <<'DELIM' >
     TARGET`, a literal absolute `TARGET` without `..`, any body (**not read**; how an issue body is drafted in
     the scratchpad) and a closing `DELIM` line. An "any shape" relaxation was abandoned after five review

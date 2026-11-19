@@ -8953,6 +8953,33 @@ fn the_issue_requirement_is_written_to_the_repository_file_and_nowhere_else() {
 }
 
 #[test]
+fn the_unclaimed_write_policy_refuses_watch_and_ask_like_any_unknown_value() {
+    let rig = authorisation_rig(&Config::default());
+    for value in ["watch", "ask", "sometimes"] {
+        let refusal = super::config_set(
+            "Unclaimed write policy",
+            value,
+            None,
+            true,
+            false,
+            &rig.options,
+            false,
+        )
+        .expect_err("a retired value was accepted");
+        assert_eq!(refusal.code, "config-value-unrecognised", "{value}");
+        assert!(
+            refusal
+                .resolution
+                .to_string()
+                .contains("`off` or `required`"),
+            "{value}: {:?}",
+            refusal.resolution
+        );
+    }
+    assert!(!crate::skill::repository_config_path(rig.repo.path()).exists());
+}
+
+#[test]
 fn unclaimed_github_writes_are_written_to_the_repository_file_and_nowhere_else() {
     let rig = authorisation_rig(&Config::default());
     super::repository_set(

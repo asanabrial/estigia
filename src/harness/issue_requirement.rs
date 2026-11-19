@@ -64,19 +64,6 @@ fn remotes(root: &Path) -> Option<Vec<String>> {
     )
 }
 
-/// The requirement in force for a write landing in the checkout the call runs in.
-///
-/// [`in_force`] answers for the configuration alone; this narrows it by the checkout, because a
-/// GitHub tracker with no named repository has nothing to claim against in a checkout with no
-/// remote.
-pub(super) fn in_force_here(context: &GateContext) -> Option<IssueRequirement> {
-    let requirement = in_force(context)?;
-    match scope_of(&context.repo_dir) {
-        Scope::Repository(root) if !names_an_issue(context, &root) => None,
-        _ => Some(requirement),
-    }
-}
-
 /// Where the directory a call was launched from sits with respect to Git.
 ///
 /// Three answers, not two: *no repository* exempts a write the requirement does
@@ -113,14 +100,10 @@ pub(crate) enum Reach {
 /// A routine write is one, and so is `git push`: it publishes this repository's refs, so it is held
 /// as a commit is. So is every other boundary and every GitHub write that is no boundary
 /// ([`Action::Remote`]), unless `Unclaimed GitHub writes` is `allowed` in a repository file this
-/// process could read, and it is always asked
-/// under `watch`, never watched: it reaches other people and leaves no trace here to compare. A
-/// write its line also carries is held under both values, and a write that lands outside every
-/// repository the gate can place is not a write to this repository. `declared` are the paths a write tool named in a patch body, empty for every other
-/// call; they are placed one by one, and a write to any repository is held. Under `ask` a write
-/// the gate cannot place is put to the person when the call was launched in a repository, or from
-/// a directory whose repository could not be established, and allowed from outside every
-/// repository; `required` holds it either way.
+/// process could read. A write its line also carries is held as well, and a write that lands
+/// outside every repository the gate can place is not a write to this repository. `declared` are
+/// the paths a write tool named in a patch body, empty for every other call; they are placed one by
+/// one, and a write to any repository is held. A write the gate cannot place is held.
 pub fn decision(
     context: &GateContext,
     action: &Action,
@@ -128,9 +111,6 @@ pub fn decision(
     literal: Option<&str>,
     declared: &[String],
 ) -> Option<Decision> {
-    if let Some(changed) = watched_change(context) {
-        return Some(changed);
-    }
     let beside = super::write_beside_a_boundary(action, literal);
     if super::unclaimed::is_a_push(action) || beside.as_deref() == Some("git push") {
         let requirement = in_force(context)?;
@@ -183,16 +163,7 @@ pub fn decision(
             None
         }
         Placement::Inside => held(context, requirement, &scope, Reach::Placed),
-        Placement::Unplaceable => match (requirement, &scope) {
-            (IssueRequirement::Watch, Scope::Outside) => {
-                Some(Decision::Allow(allowed(requirement, target)))
-            }
-            (IssueRequirement::Watch, Scope::Repository(root)) => match watch(context, root) {
-                Some(()) => Some(Decision::Allow(watching(target))),
-                None => held(context, requirement, &scope, Reach::Unplaceable),
-            },
-            _ => held(context, requirement, &scope, Reach::Unplaceable),
-        },
+        Placement::Unplaceable => held(context, requirement, &scope, Reach::Unplaceable),
     }
 }
 
@@ -304,9 +275,6 @@ fn held(
         return Some(Decision::Deny(Box::new(refusal.clone())));
     }
     let assisted = context.workflow == Some(crate::config::Workflow::Assisted);
-    if let (IssueRequirement::Watch, Scope::Repository(root)) = (requirement, scope) {
-        let _ = std::fs::remove_file(watched_path(context, root));
-    }
     match requirement {
         IssueRequirement::Required => Some(Decision::Deny(Box::new(refusal(
             assisted,
@@ -314,174 +282,8 @@ fn held(
             scope,
             reach,
         )))),
-        IssueRequirement::Watch => Some(Decision::Ask(Box::new(refusal(
-            assisted,
-            requirement,
-            scope,
-            reach,
-        )))),
         IssueRequirement::Off => None,
     }
-}
-
-fn watching(target: &str) -> String {
-    format!(
-        "this run holds no issue and `Unclaimed write policy` is `watch`; this call's write ({target}) \
-         cannot be placed without running it, so it runs and this checkout's status is compared \
-         on the next call, which is put to the person only if the checkout changed"
-    )
-}
-
-/// Records the status of the checkout rooted at `root` before a write it cannot place, or `None`
-/// when the status could not be read or recorded.
-fn watch(context: &GateContext, root: &Path) -> Option<()> {
-    let status = status_of(root)?;
-    let path = watched_path(context, root);
-    std::fs::create_dir_all(path.parent()?).ok()?;
-    let body = serde_json::to_vec(&WatchedStatus {
-        root: root.to_path_buf(),
-        status,
-    })
-    .ok()?;
-    crate::paths::replace_bytes_atomically(&path, &body).ok()
-}
-
-/// The question owed when the checkout a watched write ran in has changed since, which also
-/// stops the watch; `None` when nothing is watched, the status is unchanged or unreadable.
-pub(super) fn watched_change(context: &GateContext) -> Option<Decision> {
-    let (path, named) = change_since_watch(context)?;
-    let _ = std::fs::remove_file(&path);
-    Some(Decision::Ask(Box::new(Refusal::not_started(
-        CODE,
-        format!(
-            "this run holds no issue, and `Unclaimed write policy` is `watch`: since a write the gate \
-             could not place ran, this checkout changed: {named}. Nothing was reverted"
-        ),
-        Resolution::no_command(
-            NoCommandReason::OperatorKnowledge,
-            "whether these changes stay: `git diff` and `git status` show them, and a claimed \
-             issue is the way to keep them",
-        ),
-    ))))
-}
-
-/// What a shell call that just ran changed in the watched checkout, said at once; the record
-/// stays, so the run's next call is still put to the person.
-pub(super) fn watched_note(context: &GateContext) -> Option<String> {
-    let (_, named) = change_since_watch(context)?;
-    Some(format!(
-        "estigia: this run holds no issue and the command that just ran changed this checkout: \
-         {named}. Nothing was reverted; the next call is put to the person"
-    ))
-}
-
-/// The watch record of the launch checkout and the paths changed since it was taken, or `None`
-/// when `watch` is not in force, nothing is watched, or the status is unchanged or unreadable.
-fn change_since_watch(context: &GateContext) -> Option<(PathBuf, String)> {
-    if in_force(context) != Some(IssueRequirement::Watch) {
-        return None;
-    }
-    let Scope::Repository(root) = scope_of(&context.repo_dir) else {
-        return None;
-    };
-    let path = watched_path(context, &root);
-    let recorded: WatchedStatus = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
-    let now = status_of(&root)?;
-    let mut changed: Vec<&str> = now
-        .symmetric_difference(&recorded.status)
-        .map(|entry| entry.path.as_str())
-        .collect();
-    changed.dedup();
-    if changed.is_empty() {
-        return None;
-    }
-    let shown = changed.len().min(8);
-    let named = changed[..shown]
-        .iter()
-        .map(|path| format!("`{path}`"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let more = if changed.len() > shown {
-        format!(", and {} more", changed.len() - shown)
-    } else {
-        String::new()
-    };
-    Some((path, format!("{named}{more}")))
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct WatchedStatus {
-    root: PathBuf,
-    status: std::collections::BTreeSet<StatusEntry>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-struct StatusEntry {
-    path: String,
-    code: String,
-    modified: Option<u128>,
-    length: Option<u64>,
-}
-
-fn watched_path(context: &GateContext, root: &Path) -> PathBuf {
-    use sha2::Digest;
-    let digest = sha2::Sha256::digest(root.to_string_lossy().as_bytes());
-    let name: String = digest[..8]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
-    let state = &context.state_root;
-    state
-        .parent()
-        .unwrap_or(state)
-        .join("watched")
-        .join(format!("{name}.json"))
-}
-
-/// Every path `git status` reports in the checkout, untracked files included, with the time and
-/// size it has on disk, so a second write to an already modified file is still a change.
-fn status_of(root: &Path) -> Option<std::collections::BTreeSet<StatusEntry>> {
-    let answer = super::proof_git_command(
-        root,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-    )
-    .output()
-    .ok()
-    .filter(|answer| answer.status.success())?;
-    let mut entries = std::collections::BTreeSet::new();
-    let mut fields = answer.stdout.split(|byte| *byte == 0);
-    while let Some(field) = fields.next() {
-        if field.len() < 4 {
-            continue;
-        }
-        let code = String::from_utf8_lossy(&field[..2]).into_owned();
-        let path = String::from_utf8_lossy(&field[3..]).into_owned();
-        if code.starts_with(['R', 'C']) {
-            fields.next();
-        }
-        let metadata = std::fs::symlink_metadata(root.join(&path)).ok();
-        entries.insert(StatusEntry {
-            modified: metadata
-                .as_ref()
-                .and_then(|metadata| metadata.modified().ok())
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|since| since.as_nanos()),
-            length: metadata.as_ref().map(std::fs::Metadata::len),
-            path,
-            code,
-        });
-    }
-    Some(entries)
-}
-
-fn allowed(requirement: IssueRequirement, target: &str) -> String {
-    let requirement = requirement.as_value();
-    format!(
-        "this run holds no issue and `Unclaimed write policy` is `{requirement}`; this call's write ({target}) \
-         cannot be placed inside or outside a repository without running it, and this directory \
-         is outside every repository, so it is allowed, and a checkout it dirties is named when \
-         the next session starts"
-    )
 }
 
 fn placement(

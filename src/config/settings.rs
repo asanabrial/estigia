@@ -638,8 +638,7 @@ impl Setting {
                 "how many corrections one review lineage may spend before a person decides"
             }
             Self::IssueRequirement => {
-                "whether a run holding no claim may write in this repository: watched, allowed, or \
-                 refused"
+                "whether a run holding no claim may write in this repository: allowed or refused"
             }
             Self::UnclaimedGithubWrites => {
                 "whether a run holding no claim may merge, tag, release or write to GitHub: held \
@@ -729,7 +728,7 @@ impl Setting {
             Self::ReviewBudget => Answers::some(&["none", "150000"]),
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::CorrectionsPerLineage => Answers::some(&["3", "1"]),
-            Self::IssueRequirement => Answers::all(&["watch", "off", "required"]),
+            Self::IssueRequirement => Answers::all(&["off", "required"]),
             Self::UnclaimedGithubWrites => Answers::all(&["held", "allowed"]),
             Self::Workflow => Answers::all(&["autonomous", "assisted"]),
             // `custom` is accepted and not offered, for the reason `Profile`'s is.
@@ -922,10 +921,6 @@ impl Setting {
             (Self::PublicationLane, "off") => {
                 "accepted verdicts do not read check runs; the answer says the lane was not consulted"
             }
-            (Self::IssueRequirement, "watch") => {
-                "a write by a run holding no claim that the gate can place is put to the person; one \
-                 it cannot place runs, and the person is asked only if the checkout changed"
-            }
             (Self::IssueRequirement, "off") => "a run holding no claim may write here freely",
             (Self::IssueRequirement, "required") => {
                 "a write by a run holding no claim is refused until an issue is claimed"
@@ -1082,7 +1077,7 @@ impl Setting {
             Self::DecisionMode => "`ask`, or `auto`",
             Self::Evidence => "`reading`, or `measuring`",
             Self::PublicationLane => "`on`, or `off`",
-            Self::IssueRequirement => "`watch`, `off`, or `required`",
+            Self::IssueRequirement => "`off` or `required`",
             Self::UnclaimedGithubWrites => "`held`, or `allowed`",
             Self::Workflow => "`autonomous`, or `assisted`",
             Self::DeliveryPreset => "`autonomous`, `assisted`, `team`, or `custom`",
@@ -1339,8 +1334,6 @@ impl Setting {
             }
             Self::IssueRequirement => {
                 config.issue_requirement = match lower(value).trim() {
-                    "watch" => IssueRequirement::Watch,
-                    "ask" => IssueRequirement::Watch,
                     "off" => IssueRequirement::Off,
                     "required" => IssueRequirement::Required,
                     _ => return Err(self.reject(value)),
@@ -1421,6 +1414,15 @@ impl Setting {
 
     /// Reads one written value, or refuses.
     pub fn apply(self, config: &mut Config, value: &str) -> Result<(), Refusal> {
+        self.parse_into(config, value)
+    }
+
+    /// Reads one value already stored in a file: a retired `Unclaimed write policy` answer reads
+    /// as `required`, never as `off`.
+    pub(crate) fn apply_stored(self, config: &mut Config, value: &str) -> Result<(), Refusal> {
+        if self == Self::IssueRequirement && matches!(lower(value).trim(), "watch" | "ask") {
+            return self.parse_into(config, "required");
+        }
         self.parse_into(config, value)
     }
 
