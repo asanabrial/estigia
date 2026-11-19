@@ -975,3 +975,45 @@ fn a_queue_with_another_page_is_a_failed_read_not_a_short_queue() {
     let (read, _) = queue_answering(&stdout);
     assert!(read.is_err(), "{read:?}");
 }
+
+#[test]
+fn an_accepted_move_whose_read_back_fails_is_an_unknown_world() {
+    let entries = vec![
+        serde_json::json!({ "matches": "EstigiaStates", "nth": 1, "stdout": states_in("Todo") }),
+        serde_json::json!({
+            "matches": "EstigiaStates",
+            "nth": 2,
+            "status": 1,
+            "stderr": "✗ API request failed: socket hang up",
+        }),
+        accepted(),
+    ];
+    let (answer, _) = moved(&entries, "Done");
+    let failure = answer.expect_err("an accepted move that could not be read back");
+    let envelope = failure.envelope();
+    assert_eq!(envelope["world"], "unknown", "{envelope}");
+    assert_eq!(
+        a_reason(&failure),
+        "linear-move-not-read-back",
+        "{envelope}"
+    );
+    assert!(
+        !envelope.to_string().contains("nothing was created"),
+        "{envelope}"
+    );
+}
+
+#[test]
+fn a_read_that_fails_before_any_move_is_still_unreachable() {
+    let entries = vec![serde_json::json!({
+        "matches": "EstigiaStates",
+        "status": 1,
+        "stderr": "✗ API request failed: socket hang up",
+    })];
+    let (answer, calls) = moved(&entries, "Done");
+    assert_eq!(
+        a_reason(&answer.expect_err("nothing could be read")),
+        "linear-unreachable"
+    );
+    assert!(mutations(&calls).is_empty(), "{calls:?}");
+}
