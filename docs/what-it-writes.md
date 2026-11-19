@@ -546,7 +546,7 @@ failure policy its hooks reference requires for a timeout to decide anything:
 A `PreToolUse` hook that reaches its timeout does not block the tool call unless the handler says
 `"onFailure": "block"`: the call continues through the ordinary permission flow. The gate can be
 slower than 10 s by design — at a boundary past the renewal window it re-verifies the claim through
-`gh`, and [`honesty.md`](honesty.md#the-gates-boundary) bounds that wait at fifteen minutes — so the
+`gh`, and [`honesty.md`](honesty-gate-boundary.md#the-gates-boundary) bounds that wait at fifteen minutes — so the
 calls most worth stopping are the ones a slow network would otherwise release. No other event carries
 the field, because none of them decides a tool call; the `Stop` hook's own answer is an exit code.
 
