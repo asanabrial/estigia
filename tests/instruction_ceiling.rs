@@ -13,35 +13,64 @@
 
 use std::path::{Path, PathBuf};
 
+#[rustfmt::skip]
 const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/SKILL.md", 26_469),
+
     ("skill/agents/analyst.md", 2_052),
+
     ("skill/agents/developer.md", 3_298),
+
     ("skill/agents/review-blind.md", 7_984),
+
     ("skill/agents/review-lens.md", 3_398),
+
     ("skill/agents/review-readability.md", 4_516),
+
     ("skill/agents/review-readback.md", 4_618),
+
     ("skill/agents/review-refuter.md", 2_438),
+
     ("skill/agents/review-reliability.md", 4_620),
+
     ("skill/agents/review-risk.md", 4_276),
+
     ("skill/agents/review-validator.md", 1_998),
+
     ("skill/assets/analyst-issue-template.md", 4_503),
+
     ("skill/bindings/github.md", 20_689),
+
     ("skill/bindings/github/delivery.md", 42_913),
+
     ("skill/bindings/github/operations-guarantees.md", 40_758),
+
     ("skill/bindings/github/operations.md", 58_640),
+
     ("skill/bindings/github/recovery.md", 6_744),
+
     ("skill/bindings/github/refusals.md", 62_999),
+
     ("skill/bindings/github/setup.md", 1_672),
+
     ("skill/bindings/linear.md", 7_394),
+
     ("skill/policies/blind-judges.md", 42_909),
+
     ("skill/policies/judgment-day.md", 16_022),
+
     ("skill/protocols/rdd.md", 7_863),
+
     ("skill/references/analyst.md", 3_188),
+
     ("skill/references/decision-gates.md", 5_108),
+
     ("skill/references/domain-composition.md", 9_798),
+
     ("skill/references/repository-delivery.md", 23_332),
+
     ("skill/references/runtime-notes.md", 23_020),
+
     ("skill/references/safety-incidents.md", 16_216),
 ];
 
@@ -53,7 +82,7 @@ const LINE_CEILING: usize = 2_000;
 /// else's agent, and `AGENTS.md` is read by every session that works here, so its size is paid per
 /// session rather than per install. Inventory belongs in a document that answers its own question;
 /// this is what fails when it comes back here.
-const OWN_INSTRUCTIONS: &[(&str, usize)] = &[("AGENTS.md", 13_357)];
+const OWN_INSTRUCTIONS: &[(&str, usize)] = &[("AGENTS.md", 13_299)];
 
 const LINE_EXCEPTIONS: &[LineException] = &[];
 
