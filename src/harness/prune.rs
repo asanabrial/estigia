@@ -771,7 +771,7 @@ pub fn confirm(view: &View<'_>, swept: &[Swept]) -> Vec<serde_json::Value> {
 }
 
 fn confirm_head(view: &View<'_>, branch: &str) -> serde_json::Value {
-    let retired = branch::retire_remote_branches(view.context, &[branch.to_owned()]);
+    let retired = branch::retire_remote_branches(view.context, &[branch.to_owned()], None);
     let mut value = retired
         .first()
         .map(branch::RemoteRetired::to_json)

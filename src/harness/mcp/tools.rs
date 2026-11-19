@@ -1160,9 +1160,10 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "deliver",
         contract_name: "deliver",
-        description: "The tail after `publish_review` in one call: computed verdict, CI release, \
-                      CI, merge through the `gh pr merge` gate's decision, topology readback, close \
-                      with generated evidence. `until` stops earlier, for a person who merges. \
+        description: "The tail after `publish_review` in one call: finished lenses collected, \
+                      computed verdict, CI release, \
+                      CI, merge through the `gh pr merge` gate, topology readback, close \
+                      with generated evidence. `until` stops earlier. \
                       Answers `delivered`, `pending` with `ask_after` (call again; no landed write \
                       repeats) or `stopped` with `step`, `reason` and any `next`; nothing is \
                       written past a stop.",

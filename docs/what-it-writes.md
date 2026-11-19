@@ -16,7 +16,7 @@ the permission bits of the file it replaces (on Windows, the read-only flag), so
 
 **Not only setup writes, and not only uninstall takes back.** A run records the branch it started as
 a `branch` marker in the local store. `release` — the last step of a delivery — deletes every
-remote head those markers name, reading each one back, then puts down every isolated checkout those markers name that the run owns and the delivery
+remote head those markers name whose head the delivering commit contains, leased on the head it read and reading each one back, then puts down every isolated checkout those markers name that the run owns and the delivery
 contains, with its local branch. `estigia prune` is the sweep for what no delivery owned: merged or closed
 heads and checkouts, plus [clean orphan checkouts whose commits are all on a remote](#explicit-orphan-pruning), kept when a live claim holds them or they carry commits the remote does not
 have, removed only on `--confirm`. The rules, and what each still cannot see, are in the contract's
@@ -1632,7 +1632,9 @@ run created — every slice's, not only the last — and the local branch checke
 tracker recognises the delivery and nothing unpublished remains; what it kept, and why, is named in
 its answer. It deletes every remote head the run recorded starting, too, because the branch
 `claim` linked is not always the branch published and GitHub's own auto-delete removes only the
-latter. `estigia prune` clears what no delivery owned: it lists the merged or closed branches and
+latter — but only a head the delivering commit contains, and leased on the head it read: an abandoned
+slice, a head pushed after the read, or a branch delivered by squash or rebase rather than this
+repository's merge commit is kept and named in the answer. `estigia prune` clears what no delivery owned: it lists the merged or closed branches and
 checkouts, keeps any a live claim holds or that carries commits the remote does not have, and removes
 the rest only on `--confirm`. The main checkout is never a candidate, from whichever checkout the
 command runs, and neither is the checkout it runs in. It also finds clean orphan checkouts whose

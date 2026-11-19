@@ -10418,3 +10418,42 @@ fn a_compact_publication_drops_the_receipt_its_embedded_status_repeats() {
         "the publication's own fields were touched: {body}"
     );
 }
+
+#[test]
+fn a_checks_rerun_reaches_run_checks_and_needs_checks() {
+    let (row, rest) = super::collect_step(&json!({
+        "issue": 7,
+        "run_id": "claude-abcd1234",
+        "checks": true,
+        "rerun": true,
+    }))
+    .expect("a checks rerun is well formed")
+    .expect("it is carried out by a row");
+    assert_eq!(row, "run_checks");
+    assert_eq!(rest["rerun"], true, "{rest}");
+    assert!(rest.get("checks").is_none(), "{rest}");
+
+    let tool = tools::find(row).expect("the row is a declared tool");
+    let sent = super::flags_for(tool, &rest).expect("the row takes what collect_step carries");
+    assert!(
+        sent.contains(&"--rerun".to_owned()),
+        "the row dropped the rerun: {sent:?}"
+    );
+    let mut plain = rest;
+    plain.as_object_mut().expect("an object").remove("rerun");
+    let unsent = super::flags_for(tool, &plain).expect("well formed");
+    assert!(
+        !unsent.contains(&"--rerun".to_owned()),
+        "a call that asked for no rerun sent one: {unsent:?}"
+    );
+
+    let refused = super::collect_step(&json!({
+        "issue": 7,
+        "run_id": "claude-abcd1234",
+        "rerun": true,
+    }));
+    assert!(
+        matches!(&refused, Err(ToolFailure::Malformed(message)) if message.contains("`checks: true`")),
+        "{refused:?}"
+    );
+}
