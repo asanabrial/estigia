@@ -20485,3 +20485,68 @@ fn a_horizon_whose_offset_is_not_ascii_is_invalid() {
         }
     }
 }
+
+#[test]
+fn a_publication_whose_checkout_is_not_on_its_branch_is_refused_before_anything_is_pushed() {
+    for detached in [false, true] {
+        let (_root, remote, work) = repository_with_remote();
+        git(&work, &["push", "-u", "origin", "--", "main"]);
+        git(&work, &["checkout", "--quiet", "-b", "fix/1-x", "main"]);
+        std::fs::write(work.join("three.txt"), "three\n").expect("content");
+        git(&work, &["add", "three.txt"]);
+        git(&work, &["commit", "--quiet", "-m", "three"]);
+        git(&work, &["branch", "fix/1-y", "main"]);
+        if detached {
+            git(&work, &["checkout", "--quiet", "--detach"]);
+        }
+        let context = Context {
+            skill_dir: work.clone(),
+            repo_dir: work.clone(),
+            config: Vec::new(),
+            repo: None,
+        };
+        let what = Publication {
+            issue: 277,
+            run_id: "claude-abcd1234",
+            expect_state: "in-progress",
+            base: "main",
+            branch: "fix/1-y",
+            title: "example",
+            pr_body_file: None,
+            worktree: Some(&work),
+            inline_payload: false,
+            topology: None,
+            topology_reason: None,
+            integrate_reason: None,
+            focus: None,
+            declaration: Default::default(),
+            expected_epoch: None,
+            now: "2026-01-01T00:05:00Z",
+        };
+        let bin = crate::test_env::scripted_gh();
+        let script = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+            what.run_id,
+            what.issue,
+            what.expect_state,
+        )]);
+        let failure = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            super::publish_review(&context, &what)
+        })
+        .expect_err("a checkout on another branch was published");
+        let envelope = failure.envelope();
+        assert_eq!(
+            envelope["reason"], "publication-checkout-not-on-branch",
+            "{envelope}"
+        );
+        assert_eq!(envelope["branch"], "fix/1-y", "{envelope}");
+        let pushed = crate::transport::run(
+            &["git", "ls-remote", "--heads", "origin", "fix/1-y"],
+            Some(&work),
+            crate::transport::How::read(),
+        )
+        .expect("the remote reads")
+        .stdout;
+        assert!(pushed.trim().is_empty(), "{detached}: pushed {pushed}");
+        drop(remote);
+    }
+}

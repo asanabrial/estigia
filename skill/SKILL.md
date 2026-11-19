@@ -124,7 +124,7 @@ authority nor independence.
    `next` until it stops: `collect_review_input` for every slot it offers, with `launch: true` to
    start its reviewer and without it to record the answer (`names` batches either; `record_verdict`
    on the collect records the verdict once `review_status` names it); then `deliver`, with `until`
-   where it names that. Call `escalate_review` when a spent correction leaves the decision
+   where it names that; it collects finished slots itself. Call `escalate_review` when a spent correction leaves the decision
    to a person, and `handoff_review` when this run cannot obtain the required distinct context.
    [Blind judges](policies/blind-judges.md) owns the settlement order, the refutation batch, the
    targeted validator, the one-correction rule, the classification of findings and the release

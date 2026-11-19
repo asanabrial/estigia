@@ -12,7 +12,7 @@ page without reddening anything.
 
 ## The generated JavaScript, and `node`
 
-One hundred and eleven tests **require** `node` on the path, and one hundred and six of them drive the
+Of the tests that **require** `node` on the path ([counted once](#interpreters-and-what-happens-without-one)), one hundred and six drive the
 OpenCode plugins and the Pi extensions this crate generates — because those are JavaScript, and
 asserting on their source text is what let a gate defect stand.
 

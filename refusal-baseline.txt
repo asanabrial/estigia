@@ -14,7 +14,8 @@
 #
 # `population` is the last known count of reasons the walk extracts. The guard's
 # floor is derived from it: a walk that finds fewer is broken, or a removal took
-# reasons with it. Raise it when the population grows, so a later drop is caught.
+# reasons with it. It is raised when a version is cut, beside the changelog, not by
+# each change that adds a reason: the guard only needs the walk to reach at least it.
 population 224
 already-owned-by-different-operation
 already-yours

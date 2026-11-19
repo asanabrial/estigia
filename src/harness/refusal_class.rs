@@ -164,6 +164,7 @@ const UNKNOWN: &[&str] = &[
 ];
 const REFUSED: &[&str] = &[
     "ambiguous-issue",
+    "publication-checkout-not-on-branch",
     "where-reference-malformed",
     "feed-repo-unknown",
     "feed-since-malformed",
@@ -402,7 +403,6 @@ const REFUSED: &[&str] = &[
     "pull-review-escalated",
     "pull-review-held",
     "pull-review-incomplete",
-    "pull-review-needs-a-detached-reviewer",
     "pull-review-not-held",
     "pull-review-not-open",
     "pull-review-own-pull-request",

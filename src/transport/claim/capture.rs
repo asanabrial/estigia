@@ -1000,13 +1000,31 @@ fn relay_store() -> Result<Store, Failure> {
 /// live is `capture-job-missing`: the review has moved past it, or it was already
 /// admitted.
 pub fn relay_prompt(_context: &Context, run_id: &str, name: &str) -> Result<Vec<u8>, Failure> {
-    let job = live_relay_job(run_id, name)?;
-    let prompt = prompt_of(Path::new(&job.dir))?;
+    let (dir, id) = relayed_dir(run_id, name)?;
+    let prompt = prompt_of(&dir)?;
     Ok(if crate::reviewer::runs_on_opencode(run_id) {
-        crate::reviewer::relay::framed_prompt(prompt, &job.id)
+        crate::reviewer::relay::framed_prompt(prompt, &id)
     } else {
         prompt
     })
+}
+
+/// The directory and job id of the relayed reviewer `name` this run is waiting
+/// on: an issue's review job, or else a slot of the pull request review it holds.
+fn relayed_dir(run_id: &str, name: &str) -> Result<(std::path::PathBuf, String), Failure> {
+    match live_relay_job(run_id, name) {
+        Ok(job) => Ok((std::path::PathBuf::from(&job.dir), job.id)),
+        Err(missing) => match crate::transport::pull_review::panel::relayed_slot(run_id, name)? {
+            Some(dir) => {
+                let id = dir
+                    .file_name()
+                    .map(|id| id.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                Ok((dir, id))
+            }
+            None => Err(missing),
+        },
+    }
 }
 
 /// The model the `reviewer` routing row named when the relay job was launched, or
@@ -1020,7 +1038,7 @@ pub fn relay_model(
     run_id: &str,
     name: &str,
 ) -> Result<Option<String>, Failure> {
-    model_of(Path::new(&live_relay_job(run_id, name)?.dir))
+    model_of(&relayed_dir(run_id, name)?.0)
 }
 
 fn live_relay_job(run_id: &str, name: &str) -> Result<Job, Failure> {
@@ -1051,7 +1069,28 @@ pub fn relay_admit(
 ) -> Result<serde_json::Value, Failure> {
     let store = relay_store()?;
     let Some((issue, job)) = store.relay_job(run_id, name)? else {
-        return Err(job_missing(name));
+        let Some(dir) = crate::transport::pull_review::panel::relayed_slot(run_id, name)? else {
+            return Err(job_missing(name));
+        };
+        let bytes = if crate::reviewer::runs_on_opencode(run_id) {
+            let (answered_job, answer) =
+                crate::reviewer::relay::framed_result(bytes).map_err(reviewer_failure)?;
+            if dir
+                .file_name()
+                .is_none_or(|id| id.to_string_lossy() != answered_job)
+            {
+                return Err(stop(
+                    "capture-result-stale",
+                    format!("the answer names job {answered_job}, not the current attempt"),
+                    "discard this answer and launch the agent/prompt returned for the current \
+                     attempt",
+                ));
+            }
+            answer
+        } else {
+            bytes
+        };
+        return crate::transport::pull_review::panel::admit_relayed(context, run_id, &dir, bytes);
     };
     if job.run_id != run_id {
         return Err(job_other_run(&job));
