@@ -233,6 +233,13 @@ pointer that leaves it names the document it points at.
   no host-routable definition, so a host with no agent to route to launches nothing and the review
   stays owed. A result for a receipt the review has moved past is refused `capture-result-stale`.
 
+  - **A pull request review relays too, and its slot carries no loss record.** Under a `pr_review`
+    claim the relayed slot is marked in its job directory and found by `estigia review prompt` and
+    `admit` when no issue's job matches (`a_relayed_panel_waits_for_its_answers_and_admits_them_against_the_claim`).
+    A relayed slot that passes its deadline unanswered is abandoned and records nothing in
+    `relay_losses`, so the selection order does not change for that run; the generated plugin was not
+    driven against this road.
+
   - **A recorded relay loss changes the order for that run, and records one abandoned job.** When a
     relayed job is collected without an answer (`capture-runner-lost`), `collect_with` records the loss
     against the run in the local store's `relay_losses` table, and [the selection rule](what-it-writes.md#the-opencode-review-relay-plugin)
@@ -2113,7 +2120,10 @@ pointer that leaves it names the document it points at.
   quoted argument of a command that writes is read as code, because `data_view` blanks quoted spans only for
   commands that read and that same breadth is what refuses a stand-down named in a commit message, so `git
   commit -m "git merge origin"` is a merge while a `;`, `&`, `|`, `)` or a backtick inside the quotes does
-  not end it — `git commit -m "git merge;"` is not; *matched but never read as a delivery* are `gh api`
+  not end it — `git commit -m "git merge;"` is not. The quote scan reads `'…'` with a literal
+  backslash, `"…"` with backslash escapes and the ANSI-C `$'…'`, where a backslash escapes the next
+  byte (`a_quote_scan_reads_an_ansi_c_span_and_an_escaped_double_quote_as_bash_does`), and no other
+  quoting style; *matched but never read as a delivery* are `gh api`
   against the merge, release and tag-ref endpoints and the pull spelling.
 
   **The gate also measures its own disarmament.** `estigia stand-down`, `guard --uninstall`, `uninstall` and
@@ -2795,7 +2805,9 @@ pointer that leaves it names the document it points at.
   read. In the refusal it is text, not a field. Claude Code's loop only tells the turn to schedule its
   own wake and lets the second stop for one opening through, so a turn that schedules nothing is not
   woken. Codex's `Stop` keeps no loop record, so it is told on every stop. Pi's and OpenCode's loops hold
-  the timer themselves (`windowWait`), and lose it when the host process ends. The tests are
+  the timer themselves (`windowWait`), and lose it when the host process ends; they wait at the first
+  closed-window stop even while another issue is claimable, where Claude Code's and Codex's `Stop` keep
+  the turn going and name `park: true`. The tests are
   `next_opening` in `src/harness/operation_window/tests.rs`, the closed-window cases in
   `src/cli/tests.rs`, and the `window` scenarios of both loop drivers in `src/setup/tests.rs`.
 - **A parked claim is the pointer's note, and nothing renews it.** `claim` with `park: true` keeps
@@ -3970,7 +3982,9 @@ pointer that leaves it names the document it points at.
   `MOVE_MUTATION` are sent only through `move_issue`, which `follow_state` calls only for a state the
   repository's `State names` row maps and only for a Linear key
   (`follow_state_moves_only_a_mapped_state_of_a_linear_issue`). A move is read back, reported under
-  `linear_state` and never retried, so a run that ignores a failed one leaves Linear behind the work. Every
+  `linear_state` and never retried; a read-back that cannot be completed after Linear accepted the move
+  answers `linear-move-not-read-back` with `world: unknown`, never the not-done `linear-unreachable`
+  (`an_accepted_move_whose_read_back_fails_is_an_unknown_world`), so a run that ignores a failed one leaves Linear behind the work. Every
   operation is `linear api --variables-json <variables> <operation>` through the crate's one process boundary
   with a 30-second deadline; the CLI holds the credential, so Estigia never reads or passes the key. What it
   does **not** do: it writes Linear only to move a mapped state, and does not prove a credential can be

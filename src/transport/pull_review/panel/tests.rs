@@ -450,3 +450,42 @@ fn a_key_is_read_from_the_branch_only_where_it_stands_alone() {
     assert_eq!(linear_key_in("xabc-102", "ABC"), None);
     assert_eq!(linear_key_in("abc-thing", "ABC"), None);
 }
+
+#[test]
+fn a_relayed_panel_waits_for_its_answers_and_admits_them_against_the_claim() {
+    let rig = rig("change.txt", 20);
+    claimed(&rig);
+    let launched = gh(&rig, || {
+        launch_with(&rig.context, RUN, &crate::reviewer::job::Relayed, clock())
+    })
+    .expect("a relayed launch");
+    let names: Vec<String> = launched["launched"]
+        .as_array()
+        .expect("slots")
+        .iter()
+        .map(|slot| slot["name"].as_str().expect("a name").to_owned())
+        .collect();
+    assert!(!names.is_empty(), "{launched}");
+
+    let waiting = gh(&rig, || collect_with(&rig.context, RUN, 0, &|_| {})).expect("a collection");
+    assert_eq!(waiting["verdict"], "incomplete", "{waiting}");
+    assert!(
+        waiting["slots"]
+            .as_array()
+            .is_some_and(|slots| slots.iter().all(|slot| slot["state"] == "running")),
+        "a relayed slot was not left waiting: {waiting}"
+    );
+    for name in &names {
+        let dir = super::relayed_slot(RUN, name)
+            .expect("the slot reads")
+            .expect("the relayed slot is found by the relay");
+        let answered = gh(&rig, || {
+            super::admit_relayed(&rig.context, RUN, &dir, br#"{"findings":[]}"#)
+        })
+        .expect("the relayed answer is admitted");
+        assert!(answered["collected"].is_array(), "{answered}");
+        assert!(super::relayed_slot(RUN, name).expect("reads").is_none());
+    }
+    let settled = collect(&rig);
+    assert_eq!(settled["verdict"], "approved", "{settled}");
+}
