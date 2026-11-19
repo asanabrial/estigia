@@ -397,12 +397,19 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `estigia::transport::target::review_payload` (`pub`; `pinned_diff_args` and
   `review_payload_bounded` are `pub(crate)`). Nothing crosses this sentence against the code.
 
-  Two substitutions run over that text before any digest: a run of removed lines byte-identical to a
-  run of added lines in another path becomes one `# estigia-moved` line on each side (source and
+  Two substitutions run over that text before any digest: a block of removed lines byte-identical to a
+  block of added lines in another path becomes one `# estigia-moved` line on each side (source and
   destination line ranges and the SHA-256 of the elided bytes), and a whole-file deletion becomes one
-  `# estigia-deleted` line (path, range, SHA-256); a hunk that lost lines is recounted. Each is used
-  only where the line is smaller than the bytes it replaces, so an ordinary small deletion or move
-  stays a hunk, and an edited move matches nothing and stays hunks on both sides. **The payload is
+  `# estigia-deleted` line (path, range, SHA-256); a hunk that lost lines is recounted. A block is a
+  whole run of `-` or `+` lines, or at least `BLOCK_LINES` (8) consecutive lines inside one, so a file
+  split into several and a moved block beside new lines of its own are both found; the search is
+  greedy in payload order, longest block first and the earliest destination on a tie, and it looks at
+  no more than 64 destinations for a block's first line, so a block that starts on a very common line
+  is found from a later line or not at all. Each substitution is used only where the line is smaller
+  than the bytes it replaces, so an ordinary small deletion or move stays a hunk, and in an edited
+  move the edited lines and any remainder under 8 lines stay hunks on both sides. Measured on
+  `7f8bb440..0b594879`, four merged slices that split one document into twelve, the payload went from
+  836 KB to 44 KB; whole-run matching alone had saved nothing there. **The payload is
   complete in description, not in content**: a judge never reads the moved bytes, and never reads a
   deleted file at all; a person who holds the repository can recover either from the base or head blob
   by the line ranges and digest the manifest names, and nothing in the review transaction makes the

@@ -1090,8 +1090,179 @@ fn a_whole_file_deletion_of_a_large_file_publishes_under_the_ceiling_as_a_manife
     );
 }
 
+struct SplitMove {
+    root: tempfile::TempDir,
+    base: String,
+    head: String,
+    base_files: Vec<(&'static str, String)>,
+    head_files: Vec<(&'static str, String)>,
+}
+
+fn split_move() -> SplitMove {
+    let root = generated_repo();
+    let at = root.path();
+    let whole = bulk(BULK_ROWS);
+    let lines: Vec<&str> = whole.split_inclusive('\n').collect();
+    let third = lines.len() / 3;
+    let part = |index: usize| -> String {
+        let end = if index == 2 {
+            lines.len()
+        } else {
+            (index + 1) * third
+        };
+        lines[index * third..end].concat()
+    };
+    let base_files = vec![("a.txt", format!("x\n{whole}"))];
+    let head_files = vec![
+        ("a.txt", "x\n".to_owned()),
+        ("b.txt", format!("own b\n{}", part(0))),
+        ("c.txt", format!("own c\n{}", part(1))),
+        ("d.txt", format!("own d\n{}", part(2))),
+    ];
+    let as_commit = |files: &[(&'static str, String)]| -> Vec<(&'static str, Option<String>)> {
+        files
+            .iter()
+            .map(|(name, text)| (*name, Some(text.clone())))
+            .collect()
+    };
+    let commit = |files: Vec<(&'static str, Option<String>)>, message: &str| {
+        let borrowed: Vec<(&str, Option<&str>)> = files
+            .iter()
+            .map(|(name, text)| (*name, text.as_deref()))
+            .collect();
+        commit_all(at, &borrowed, message)
+    };
+    let base = commit(as_commit(&base_files), "base");
+    let head = commit(as_commit(&head_files), "head");
+    SplitMove {
+        root,
+        base,
+        head,
+        base_files,
+        head_files,
+    }
+}
+
 #[test]
-fn an_edited_move_stays_as_hunks_and_counts_against_the_ceiling() {
+fn a_block_split_across_three_files_publishes_as_three_moves() {
+    let fixture = split_move();
+    let at = fixture.root.path();
+
+    let payload =
+        review_payload(at, &fixture.base, &fixture.head).expect("a payload under the ceiling");
+
+    let carried = carried(&payload.text, summary::MOVED_PREFIX);
+    assert_eq!(carried.len(), 6, "{}", payload.text);
+    let destinations: Vec<&str> = carried
+        .iter()
+        .filter_map(|line| line["to"].as_str())
+        .collect();
+    for path in ["b.txt", "c.txt", "d.txt"] {
+        assert_eq!(
+            destinations.iter().filter(|to| **to == path).count(),
+            2,
+            "{path} is not the destination of one move: {}",
+            payload.text
+        );
+    }
+    assert!(
+        carried.iter().all(|line| line["from"] == "a.txt"),
+        "{}",
+        payload.text
+    );
+    for own in ["+own b\n", "+own c\n", "+own d\n"] {
+        assert!(payload.text.contains(own), "{own:?} was elided");
+    }
+    assert!(
+        !payload.text.contains("-line 0") && !payload.text.contains("+line 0"),
+        "a moved line is still a hunk line"
+    );
+    let again = review_payload(at, &fixture.base, &fixture.head).expect("the same ends");
+    assert_eq!(again.digest, payload.digest);
+}
+
+fn file_lines<'a>(files: &'a [(&'static str, String)], path: &str, range: &str) -> Vec<&'a str> {
+    let text = &files
+        .iter()
+        .find(|(name, _)| *name == path)
+        .unwrap_or_else(|| panic!("{path} is not in the fixture"))
+        .1;
+    let (start, end) = range.split_once('-').expect("a line range");
+    let start: usize = start.parse().expect("a start");
+    let end: usize = end.parse().expect("an end");
+    text.split_inclusive('\n')
+        .skip(start - 1)
+        .take(end + 1 - start)
+        .collect()
+}
+
+#[test]
+fn a_split_move_payload_expands_back_to_the_plain_diff() {
+    let fixture = split_move();
+    let at = fixture.root.path();
+    let plain = crate::transport::run(
+        &[
+            "git",
+            "diff",
+            "--no-renames",
+            "--unified=3",
+            &fixture.base,
+            &fixture.head,
+        ],
+        Some(at),
+        crate::transport::How::read(),
+    )
+    .expect("the plain diff")
+    .stdout;
+    let summarised = summary::summarise(&plain).text;
+    assert!(summarised.len() < plain.len() / 10, "{}", summarised.len());
+
+    let mut expanded = String::new();
+    let mut destination = String::new();
+    for line in summarised.split_inclusive('\n') {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            destination = rest
+                .split_once(" b/")
+                .map(|(_, path)| path.trim_end().to_owned())
+                .expect("a destination path");
+        }
+        let Some(json) = line.strip_prefix(summary::MOVED_PREFIX) else {
+            expanded.push_str(line);
+            continue;
+        };
+        let manifest: serde_json::Value = serde_json::from_str(json).expect("JSON");
+        let (sign, files, path, range) = if manifest["to"] == destination.as_str() {
+            ('+', &fixture.head_files, "to", "to-lines")
+        } else {
+            ('-', &fixture.base_files, "from", "from-lines")
+        };
+        let lines = file_lines(
+            files,
+            manifest[path].as_str().expect("a path"),
+            manifest[range].as_str().expect("a range"),
+        );
+        let bytes: String = lines.concat();
+        assert_eq!(
+            crate::transport::ownership::sha256_hex(bytes.as_bytes()),
+            manifest["sha256"],
+            "the digest is not of the bytes the range names"
+        );
+        for elided in lines {
+            expanded.push(sign);
+            expanded.push_str(elided);
+        }
+    }
+
+    let without_headers = |text: &str| -> String {
+        text.split_inclusive('\n')
+            .filter(|line| !line.starts_with("@@ "))
+            .collect()
+    };
+    assert_eq!(without_headers(&expanded), without_headers(&plain));
+}
+
+#[test]
+fn an_edited_move_shows_the_edit_and_manifests_only_the_unedited_lines() {
     let root = generated_repo();
     let at = root.path();
     let moved = bulk(BULK_ROWS);
@@ -1113,19 +1284,44 @@ fn an_edited_move_stays_as_hunks_and_counts_against_the_ceiling() {
     let payload =
         review_payload_bounded(at, &base, &head, usize::MAX).expect("an unbounded payload");
 
+    assert!(payload.text.contains("+line 00001 edited padding"));
+    assert!(payload.text.contains("-line 00001 padding"));
+    assert!(payload.text.contains("+line 00000"));
+    assert!(payload.text.contains("-line 00000"));
+    let carried = carried(&payload.text, summary::MOVED_PREFIX);
+    assert_eq!(carried.len(), 2, "{}", payload.text);
+    assert_eq!(carried[0]["from-lines"], format!("3-{BULK_ROWS}"));
+    assert_eq!(carried[0]["to-lines"], format!("4-{}", BULK_ROWS + 1));
+}
+
+#[test]
+fn a_moved_block_shorter_than_the_floor_stays_as_hunks() {
+    let root = generated_repo();
+    let at = root.path();
+    let short = bulk(summary::BLOCK_LINES - 1);
+    let base = commit_all(
+        at,
+        &[
+            ("a.txt", Some(&format!("{short}tail a\n"))),
+            ("b.txt", Some("x\n")),
+        ],
+        "base",
+    );
+    let head = commit_all(
+        at,
+        &[
+            ("a.txt", Some("tail a\n")),
+            ("b.txt", Some(&format!("x\nown b\n{short}"))),
+        ],
+        "head",
+    );
+
+    let payload =
+        review_payload_bounded(at, &base, &head, usize::MAX).expect("an unbounded payload");
+
     assert!(
         carried(&payload.text, summary::MOVED_PREFIX).is_empty(),
-        "an edited move was summarised as verbatim"
-    );
-    assert!(
-        payload.text.contains("+line 00000"),
         "{}",
-        payload.text.len()
+        payload.text
     );
-    assert!(
-        payload.text.contains("-line 00000"),
-        "{}",
-        payload.text.len()
-    );
-    assert!(payload.text.contains("+line 00001 edited padding"));
 }
