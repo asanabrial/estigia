@@ -88,7 +88,7 @@ The repeat uses `-c` options, not configuration: `insteadOf` rewrites `git@githu
 and `gh auth git-credential` answers for `https://github.com`. `origin`, its refs and the pre-push hook stay as they
 are, and nothing is written to the repository. When both attempts fail the answer carries both messages and keeps
 its kind; a repeat that outlives its deadline is an ambiguous write, as any other is. What this does not reach is in
-[`honesty.md`](honesty.md#the-https-repeat).
+[`honesty.md`](honesty-delivery.md#the-https-repeat).
 
 ## Why the transport is in this process, and why the server is hand-written
 

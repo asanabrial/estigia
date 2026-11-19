@@ -4,7 +4,7 @@
 //! the same on every runtime. Best effort and never a guarantee: a notifier
 //! that exits 0 has been *handed* the text, which says nothing about anybody
 //! seeing it, and the text is never an approval. See
-//! `docs/honesty.md#the-needs-person-record`.
+//! `docs/honesty-sessions.md#the-needs-person-record`.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
