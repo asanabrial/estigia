@@ -348,7 +348,21 @@ pub fn move_issue(identity: &Identity, target: &str) -> Result<serde_json::Value
                        can only read cannot move it",
         })));
     }
-    let now = read_states(identity)?.current;
+    let now = match read_states(identity) {
+        Ok(states) => states.current,
+        Err(failure) => {
+            return Err(Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "linear-move-not-read-back",
+                "world": "unknown",
+                "detail": format!(
+                    "{identity} was moved to {target:?} and its state could not be read back: {}",
+                    failure.detail()
+                ),
+                "action": "read the issue in Linear; do not report it moved or unmoved",
+            })));
+        }
+    };
     if !now.eq_ignore_ascii_case(target) {
         return Err(Failure::Stop(serde_json::json!({
             "ok": false,

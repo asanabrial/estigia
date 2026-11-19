@@ -8681,3 +8681,55 @@ fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
         );
     }
 }
+
+#[test]
+fn the_option_scan_leaves_branch_switches_and_listings_alone() {
+    for line in [
+        "git checkout main",
+        "git switch main",
+        "git branch -vv",
+        "git branch --list",
+        "git branch -a",
+    ] {
+        let (action, _) = classify("Bash", &json!({ "command": line }));
+        assert!(
+            !matches!(action, Action::Write { .. }),
+            "`{line}` was read as a write: {action:?}"
+        );
+    }
+}
+
+#[test]
+fn the_option_scan_reads_each_of_its_paths() {
+    for line in [
+        "git checkout -q .",
+        "git checkout --orphan x",
+        "git switch --create=x",
+        "cargo build && git reset --soft HEAD~1",
+    ] {
+        let (action, _) = classify("Bash", &json!({ "command": line }));
+        assert!(
+            matches!(action, Action::Write { .. }),
+            "`{line}` was read as {action:?}"
+        );
+    }
+}
+
+#[test]
+fn a_quote_scan_reads_an_ansi_c_span_and_an_escaped_double_quote_as_bash_does() {
+    let chained = r"git commit -m $'it\'s'; git push;echo";
+    let (action, how) = classify("Bash", &json!({ "command": chained }));
+    assert_eq!(how, Sensitivity::Boundary, "{chained}: {action:?}");
+    assert!(
+        matches!(&action, Action::Boundary { command, .. } if command == "git push"),
+        "{chained} did not read the push its ANSI-C span ends before: {action:?}"
+    );
+
+    let quoted = r#"git commit -m "a\"; git push;b""#;
+    let (action, how) = classify("Bash", &json!({ "command": quoted }));
+    assert_eq!(
+        how,
+        Sensitivity::Routine,
+        "{quoted} is one double-quoted argument and was read as {action:?}"
+    );
+}
