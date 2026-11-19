@@ -403,7 +403,6 @@ const REFUSED: &[&str] = &[
     "pull-review-escalated",
     "pull-review-held",
     "pull-review-incomplete",
-    "pull-review-needs-a-detached-reviewer",
     "pull-review-not-held",
     "pull-review-not-open",
     "pull-review-own-pull-request",

@@ -14,7 +14,6 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `review-thread-fix-unpublished` | The fix is not strictly after the thread's original commit and already on the published head, or ancestry is unknown. | Publish the correction first and supply its confirmed head and fix SHA. |
 | `review-thread-write-unconfirmed` | A reply or resolution may have landed without a confirming readback. | Read the thread before retrying. Preserve `reply_confirmed`; do not claim resolution completed. |
 | `pull-review-not-held` | This run holds no review-only claim, or another run displaced it at its horizon. | `pr_review` `claim` first. |
-| `pull-review-needs-a-detached-reviewer` | The only reviewer here is a host relay. | Install the `claude` or `codex` CLI, or leave this review to a person. |
 | `pull-review-escalated` | The panel's answers cannot settle a severe finding. | `pr_review` `release`, and report the findings to a person. |
 | `pull-review-incomplete` | A licensed lens has not answered. | Follow `pr_review` `status`, then submit. |
 | `pull-review-submission-unconfirmed` | A review may have landed without a confirming read-back. | Call `pr_review` `submit` again: it finds the first by its marker. Do not report it as submitted. |

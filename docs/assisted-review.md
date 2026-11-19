@@ -119,8 +119,11 @@ because the author is somebody else:
 - **A tier of zero lenses is raised to one,** since a verdict sent to someone else rests on a reader.
 
 A change over `REVIEW_PAYLOAD_CEILING` answers `reviewed: false` with no verdict and offers only the
-release: no review ran, and that is not a clean result. A host relay is refused
-(`pull-review-needs-a-detached-reviewer`), because its jobs are recorded against an issue.
+release: no review ran, and that is not a clean result. Where the only reviewer is the host's relay,
+the launch answers `relay: true` and records each slot against the review's own claim, marked as
+relayed and spawning nothing: `estigia review prompt` and `estigia review admit` find it there when
+no issue's job matches, the admitted answer is collected as a detached reviewer's is, and a slot whose
+answer never comes is abandoned at its deadline with nothing killed.
 
 `pr_review` `submit` is the one road to GitHub. It sends `approved` as an approval and
 `changes-requested` as a request whose body carries the findings, which otherwise stay local; an
