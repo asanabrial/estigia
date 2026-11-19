@@ -90,6 +90,7 @@ pub trait Spawner {
 pub struct Detached {
     executable: Option<std::path::PathBuf>,
     environment: Vec<(std::ffi::OsString, std::ffi::OsString)>,
+    removed: Vec<std::ffi::OsString>,
 }
 
 impl Detached {
@@ -98,6 +99,7 @@ impl Detached {
         Self {
             executable: None,
             environment: Vec::new(),
+            removed: Vec::new(),
         }
     }
 
@@ -106,6 +108,7 @@ impl Detached {
         Self {
             executable: Some(executable.into()),
             environment: Vec::new(),
+            removed: Vec::new(),
         }
     }
 
@@ -116,6 +119,12 @@ impl Detached {
         value: impl Into<std::ffi::OsString>,
     ) -> Self {
         self.environment.push((name.into(), value.into()));
+        self
+    }
+
+    /// Removes one inherited variable from the runner's environment.
+    pub fn without_env(mut self, name: impl Into<std::ffi::OsString>) -> Self {
+        self.removed.push(name.into());
         self
     }
 }
@@ -544,6 +553,9 @@ impl Detached {
             .stdout(open(RUNNER_OUT)?)
             .stderr(open(RUNNER_ERR)?)
             .envs(self.environment.iter().map(|(k, v)| (k, v)));
+        for name in &self.removed {
+            command.env_remove(name);
+        }
         detach(&mut command);
         let mut child = command.spawn().map_err(|e| {
             if refused_to_detach(&e) {

@@ -820,7 +820,7 @@ fn no_variable_the_crate_decides_on_escapes_the_fixture() {
 /// real relocated configuration while the suite reported green.
 #[test]
 fn every_spawn_of_the_binary_clears_claude_config_dir() {
-    let text = estigia::source_text::code_of(crate::sources::SUITE_SOURCES);
+    let text = estigia::source_text::code_of(&crate::sources::suite_sources());
     // The needles are concatenated so this guard's own source does not contain
     // them: a search for a literal written here counts itself, which is how a
     // guard comes to assert about its own text.
@@ -873,8 +873,18 @@ fn every_spawn_of_the_binary_clears_claude_config_dir() {
         .find(concat!("fn ", "estigia", "()"))
         .expect("the binary path helper is defined");
     let definition_end = text[definition..].find("\n}\n").expect("it ends") + definition;
+    let runner = text
+        .find(concat!("fn estigia_runner", "()"))
+        .expect("the runner helper is defined");
+    let runner_end = text[runner..].find("\n}\n").expect("it ends") + runner;
+    let runner_body = &text[runner..runner_end];
+    assert!(
+        runner_body.contains("without_env(\"CLAUDE_CONFIG_DIR\")"),
+        "the runner helper no longer clears the variable:\n{runner_body}"
+    );
     let outside = text
         .replace(&text[helper..end], "")
+        .replace(runner_body, "")
         .replace(&text[definition..definition_end], "");
     assert!(
         !outside.contains(call),

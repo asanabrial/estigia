@@ -5254,7 +5254,7 @@ fn every_flag_the_binding_documents_is_one_a_tool_can_send() {
 /// or the guard is retrying a key that was minted fresh for this very
 /// call.
 ///
-/// `tests/pipe/part_09.rs`'s own two-process test cannot pin this: a key freshly
+/// `tests/pipe/claims_and_delivery.rs`'s own two-process test cannot pin this: a key freshly
 /// minted *this call* cannot already name a dead event on the timeline, so
 /// no fixture built from real `gh` answers can drive `answered` to
 /// `claim-operation-expired` with `claim_key_reused` false. Only a direct
