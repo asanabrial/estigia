@@ -60,4 +60,4 @@ transition carries `needs_person_unrecorded`, and a gate `ask` leaves a decision
 
 It is not evidence that anyone saw it: the strongest delivery is `handed to the OS`. It is not an approval, and
 consent stays in the client's own form while recovery stays person-only. Recording is best effort and never
-fails the write it describes. The gaps are in [`honesty.md`](honesty.md#the-needs-person-record).
+fails the write it describes. The gaps are in [`honesty.md`](honesty-sessions.md#the-needs-person-record).

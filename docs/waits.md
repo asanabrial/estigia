@@ -4,7 +4,7 @@ A run that waits for CI, a reviewer or a background job can wait in two ways. Th
 wait: one call blocks, or a background job notifies the session when it ends. Or the model can hold it:
 it calls again because a clock passed, and every call re-sends the whole conversation. This page counts
 the second kind in this repository's own deliveries and says which of them an existing path could have
-carried. It changes nothing. Moving a wait is a later unit of the token-efficiency programme, and [`honesty.md`](honesty.md#the-waits-audit)
+carried. It changes nothing. Moving a wait is a later unit of the token-efficiency programme, and [`honesty.md`](honesty-sessions.md#the-waits-audit)
 says what this count cannot show.
 
 ## Population and method

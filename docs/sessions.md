@@ -57,7 +57,7 @@ a file named exactly that command; then `resume` prints that path instead (`/opt
   that the resumed session must call `claim` to get its claim back, and, when the git operation window is closed,
   that the pushes and commits after resuming are refused until it opens.
 
-[`honesty.md`](honesty.md#the-session-registry) says which of these commands were measured.
+[`honesty.md`](honesty-sessions.md#the-session-registry) says which of these commands were measured.
 
 ## What is recorded
 
