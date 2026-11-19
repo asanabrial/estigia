@@ -7069,7 +7069,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 47_027;
+const TOOLS_LIST_CEILING: usize = 44_770;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -9880,7 +9880,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 12_650;
+const ALWAYS_LOADED_CEILING: usize = 10_865;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
@@ -10381,4 +10381,79 @@ fn a_comment_kind_is_refused_without_the_mode_that_accepts_it() {
         };
         assert!(said.contains(kind), "{said}");
     }
+}
+
+#[test]
+fn a_compact_publication_drops_the_receipt_its_embedded_status_repeats() {
+    let receipt = json!({
+        "epoch": "e".repeat(32),
+        "pr": 7,
+        "head": "a".repeat(40),
+        "base": "b".repeat(40),
+        "digest": "d".repeat(64),
+    });
+    let mut arguments = receipt.clone();
+    arguments["issue"] = json!(42);
+    let mut body = json!({
+        "ok": true,
+        "pr": 7,
+        "review_status": {
+            "ok": true,
+            "receipt": receipt,
+            "next": {"kind": "collect", "arguments": arguments},
+        },
+    });
+    super::compact_review_status("publish_review", &mut body);
+    let kept = &body["review_status"]["next"]["arguments"];
+    for repeated in ["head", "base", "digest", "pr"] {
+        assert!(
+            kept.get(repeated).is_none(),
+            "{repeated} is repeated: {kept}"
+        );
+    }
+    assert_eq!(kept["epoch"], "e".repeat(32), "{kept}");
+    assert_eq!(kept["issue"], 42, "{kept}");
+    assert_eq!(
+        body["pr"], 7,
+        "the publication's own fields were touched: {body}"
+    );
+}
+
+#[test]
+fn a_checks_rerun_reaches_run_checks_and_needs_checks() {
+    let (row, rest) = super::collect_step(&json!({
+        "issue": 7,
+        "run_id": "claude-abcd1234",
+        "checks": true,
+        "rerun": true,
+    }))
+    .expect("a checks rerun is well formed")
+    .expect("it is carried out by a row");
+    assert_eq!(row, "run_checks");
+    assert_eq!(rest["rerun"], true, "{rest}");
+    assert!(rest.get("checks").is_none(), "{rest}");
+
+    let tool = tools::find(row).expect("the row is a declared tool");
+    let sent = super::flags_for(tool, &rest).expect("the row takes what collect_step carries");
+    assert!(
+        sent.contains(&"--rerun".to_owned()),
+        "the row dropped the rerun: {sent:?}"
+    );
+    let mut plain = rest;
+    plain.as_object_mut().expect("an object").remove("rerun");
+    let unsent = super::flags_for(tool, &plain).expect("well formed");
+    assert!(
+        !unsent.contains(&"--rerun".to_owned()),
+        "a call that asked for no rerun sent one: {unsent:?}"
+    );
+
+    let refused = super::collect_step(&json!({
+        "issue": 7,
+        "run_id": "claude-abcd1234",
+        "rerun": true,
+    }));
+    assert!(
+        matches!(&refused, Err(ToolFailure::Malformed(message)) if message.contains("`checks: true`")),
+        "{refused:?}"
+    );
 }

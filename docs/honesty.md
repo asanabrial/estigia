@@ -2798,7 +2798,9 @@ pointer that leaves it names the document it points at.
   read. In the refusal it is text, not a field. Claude Code's loop only tells the turn to schedule its
   own wake and lets the second stop for one opening through, so a turn that schedules nothing is not
   woken. Codex's `Stop` keeps no loop record, so it is told on every stop. Pi's and OpenCode's loops hold
-  the timer themselves (`windowWait`), and lose it when the host process ends. The tests are
+  the timer themselves (`windowWait`), and lose it when the host process ends; they wait at the first
+  closed-window stop even while another issue is claimable, where Claude Code's and Codex's `Stop` keep
+  the turn going and name `park: true`. The tests are
   `next_opening` in `src/harness/operation_window/tests.rs`, the closed-window cases in
   `src/cli/tests.rs`, and the `window` scenarios of both loop drivers in `src/setup/tests.rs`.
 - **A parked claim is the pointer's note, and nothing renews it.** `claim` with `park: true` keeps
@@ -3973,7 +3975,9 @@ pointer that leaves it names the document it points at.
   `MOVE_MUTATION` are sent only through `move_issue`, which `follow_state` calls only for a state the
   repository's `State names` row maps and only for a Linear key
   (`follow_state_moves_only_a_mapped_state_of_a_linear_issue`). A move is read back, reported under
-  `linear_state` and never retried, so a run that ignores a failed one leaves Linear behind the work. Every
+  `linear_state` and never retried; a read-back that cannot be completed after Linear accepted the move
+  answers `linear-move-not-read-back` with `world: unknown`, never the not-done `linear-unreachable`
+  (`an_accepted_move_whose_read_back_fails_is_an_unknown_world`), so a run that ignores a failed one leaves Linear behind the work. Every
   operation is `linear api --variables-json <variables> <operation>` through the crate's one process boundary
   with a 30-second deadline; the CLI holds the credential, so Estigia never reads or passes the key. What it
   does **not** do: it writes Linear only to move a mapped state, and does not prove a credential can be
