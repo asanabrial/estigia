@@ -1616,21 +1616,56 @@ impl RemoteRetired {
 /// already gone, so the exit code is neither necessary nor sufficient: what
 /// makes the head gone is `ls-remote` naming nothing for it. A failed read is
 /// not an absence, and is reported as a kept head with its reason.
-pub fn retire_remote_branches(context: &Context, branches: &[String]) -> Vec<RemoteRetired> {
+///
+/// With `contained_in`, a head that commit does not contain is kept: a release
+/// deletes only what its delivery carried. Every deletion is leased on the head
+/// read, so a push landing between the read and the delete keeps the branch.
+pub fn retire_remote_branches(
+    context: &Context,
+    branches: &[String],
+    contained_in: Option<&str>,
+) -> Vec<RemoteRetired> {
     branches
         .iter()
-        .map(|branch| retire_remote_branch(context, branch))
+        .map(|branch| retire_remote_branch(context, branch, contained_in))
         .collect()
 }
 
-fn retire_remote_branch(context: &Context, branch: &str) -> RemoteRetired {
+/// Whether `delivering` contains `head`, fetching `reference` first when this
+/// object store does not have the head.
+fn delivered(
+    context: &Context,
+    reference: &str,
+    head: &str,
+    delivering: &str,
+) -> Result<bool, Failure> {
+    let present = run(
+        &["git", "cat-file", "-e", &format!("{head}^{{commit}}")],
+        Some(&context.repo_dir),
+        How::tolerated(),
+    )?;
+    if present.status != 0 {
+        run(
+            &["git", "fetch", "--quiet", "origin", reference],
+            Some(&context.repo_dir),
+            How::read(),
+        )?;
+    }
+    super::target::is_ancestor(&context.repo_dir, head, delivering)
+}
+
+fn retire_remote_branch(
+    context: &Context,
+    branch: &str,
+    contained_in: Option<&str>,
+) -> RemoteRetired {
     let reference = format!("refs/heads/{branch}");
     let kept = |reason: String| RemoteRetired {
         branch: branch.to_owned(),
         deleted: false,
         reason: Some(reason),
     };
-    match remote_head(context, &reference) {
+    let head = match remote_head(context, &reference) {
         // Already gone: the deletion the caller wanted holds, whoever did it.
         Ok(None) => {
             return RemoteRetired {
@@ -1639,18 +1674,47 @@ fn retire_remote_branch(context: &Context, branch: &str) -> RemoteRetired {
                 reason: None,
             };
         }
-        Ok(Some(_)) => {}
+        Ok(Some(head)) => head,
         Err(failure) => return kept(format!("the head could not be read: {}", failure.detail())),
+    };
+    if let Some(delivering) = contained_in {
+        match delivered(context, &reference, &head, delivering) {
+            Ok(true) => {}
+            Ok(false) => {
+                return kept(format!(
+                    "its head {head} is not contained in the delivering commit {delivering}"
+                ));
+            }
+            Err(failure) => {
+                return kept(format!(
+                    "whether the delivery contains its head could not be read: {}",
+                    failure.detail()
+                ));
+            }
+        }
     }
+    delete_leased(context, branch, &reference, &head)
+}
+
+/// Deletes `branch` on the remote only while it still points at `head`, then
+/// reads the deletion back.
+fn delete_leased(context: &Context, branch: &str, reference: &str, head: &str) -> RemoteRetired {
+    let kept = |reason: String| RemoteRetired {
+        branch: branch.to_owned(),
+        deleted: false,
+        reason: Some(reason),
+    };
     // `--no-verify`: the push guard refuses a push no live claim authorises, and
     // the sweep deletes from a checkout that holds none. A deletion is not work
     // entering the flow — the guard's own script calls `--no-verify` a guard rail
     // working as one — and the operator's `--confirm` is the authorisation here.
+    let lease = format!("--force-with-lease={reference}:{head}");
     let push = run(
         &[
             "git",
             "push",
             "--no-verify",
+            &lease,
             "origin",
             "--delete",
             "--",
@@ -1662,7 +1726,7 @@ fn retire_remote_branch(context: &Context, branch: &str) -> RemoteRetired {
     // Read back regardless: a push that failed after the server applied it is
     // not a head that stayed, and a push that succeeded before a stale read is
     // not a head that went.
-    match remote_head(context, &reference) {
+    match remote_head(context, reference) {
         Ok(None) => RemoteRetired {
             branch: branch.to_owned(),
             deleted: true,

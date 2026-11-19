@@ -278,6 +278,16 @@ pub(super) fn decide(
         let Some(at) = &reading.opens_at else {
             return Decision::Continue(stop_block(issue, run_id));
         };
+        if reading.claimable.unwrap_or(0) + reading.dischargeable.unwrap_or(0) > 0 {
+            let mut value = stop_block(issue, run_id);
+            let told = format!(
+                "{}{}",
+                value["reason"].as_str().unwrap_or_default(),
+                crate::harness::loop_text::window_closed_with_work(at)
+            );
+            value["reason"] = json!(told);
+            return Decision::Continue(value);
+        }
         let waiting = crate::harness::loop_text::window_wait(at);
         if last == Some(waiting.as_str()) {
             return Decision::Stop {
