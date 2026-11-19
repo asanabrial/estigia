@@ -33,7 +33,8 @@ draft. This loop never overrides a configured refusal or grants merge authority.
 5. Call `review_thread` with `thread_id`, the new `expected_head` and a `body_file`. To resolve,
    also supply `resolve: true` and the full `fix_commit` SHA. The fix must follow the thread's
    original commit and be an ancestor of the published head. A local-only fix is refused before
-   either reply or resolution. The reply cites the supplied fix and must read back before resolving.
+   either reply or resolution. The reply is posted as written, with only a hidden marker after it
+   whose key binds the supplied fix, and it must read back before resolving.
 6. Repeat from step 2 on every new head. An approval for an older commit does not complete a
    review stage. Keep human merge authority as configured.
 7. The pull request is not reported finished until a reading of its exact head has CI `passed`,

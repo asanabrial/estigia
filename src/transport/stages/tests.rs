@@ -419,10 +419,7 @@ impl ThreadRig {
                 "thread-reply",
                 &["thread-1", &self.fix, &self.fix, "Fixed the concern."],
             );
-            let body = format!(
-                "Fixed the concern.\n\nFix commit: `{}`.\n\n<!-- estigia-thread-reply:{key} -->",
-                self.fix
-            );
+            let body = format!("Fixed the concern.\n\n<!-- estigia-thread-reply:{key} -->");
             t["comments"]["nodes"]
                 .as_array_mut()
                 .unwrap()
