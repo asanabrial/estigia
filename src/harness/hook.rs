@@ -14,7 +14,6 @@
 //!    indistinguishable from a lost claim race. Only the gate denies.
 
 use std::io::{BufRead, BufReader, Read};
-use std::path::PathBuf;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -28,7 +27,7 @@ use crate::transport::store;
 pub enum Event {
     /// Before a tool runs. The one that can say no.
     PreToolUse,
-    /// After a shell tool ran. Reports a watched checkout that changed; decides nothing.
+    /// After a shell tool ran. Says nothing and decides nothing.
     PostToolUse,
     /// A session begins or resumes. Mints the run identity.
     SessionStart,
@@ -628,54 +627,6 @@ fn state_clause(state: Option<&str>) -> String {
     }
 }
 
-/// The dirty paths of a checkout an unclaimed run under `ask` may have written, whichever answer
-/// let the write through. Empty for a claimed run, another requirement, or a clean tree.
-fn unclaimed_dirt_note(context: &GateContext, run: &session::Run) -> String {
-    if run.issue.is_some()
-        || !matches!(
-            super::issue_requirement::in_force_here(context),
-            Some(crate::config::IssueRequirement::Watch)
-        )
-    {
-        return String::new();
-    }
-    let Some(answer) = super::proof_git_command(
-        &context.repo_dir,
-        &["status", "--porcelain=v1", "--untracked-files=normal"],
-    )
-    .output()
-    .ok()
-    .filter(|answer| answer.status.success()) else {
-        return String::new();
-    };
-    let listing = String::from_utf8_lossy(&answer.stdout);
-    let paths: Vec<&str> = listing
-        .lines()
-        .filter_map(|line| line.get(3..))
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .collect();
-    if paths.is_empty() {
-        return String::new();
-    }
-    let shown = paths.len().min(8);
-    let named = paths[..shown]
-        .iter()
-        .map(|path| format!("`{path}`"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let more = if paths.len() > shown {
-        format!(", and {} more", paths.len() - shown)
-    } else {
-        String::new()
-    };
-    format!(
-        "\n\nThis checkout has uncommitted changes: {named}{more}. A run holding no issue under \
-         `ask` writes here only when the person approves the prompt, or when the write is one the \
-         gate cannot see, so one of these may be its residue; inspect them before claiming."
-    )
-}
-
 fn with_queue_note(context: &GateContext, mut answer: Value) -> Value {
     let stops_nothing = answer.get("decision").is_none();
     if stops_nothing
@@ -784,29 +735,17 @@ pub fn session_start_response(context: &GateContext, run: &session::Run) -> Valu
 }
 
 /// What a run holding no claim is told about the issue requirement in force here.
-struct UnclaimedHold {
-    text: String,
-    /// The repository whose writes the text says are held, when it says any are.
-    held_in: Option<PathBuf>,
-}
-
-fn unclaimed_hold(
-    context: &GateContext,
-    requirement: crate::config::IssueRequirement,
-) -> UnclaimedHold {
+fn unclaimed_hold(context: &GateContext, requirement: crate::config::IssueRequirement) -> String {
     use super::issue_requirement::Scope;
     let scope = super::issue_requirement::scope_of(&context.repo_dir);
     if let Scope::Repository(root) = &scope
         && !super::issue_requirement::names_an_issue(context, root)
     {
-        return UnclaimedHold {
-            text: "This run holds no issue. The tracker names no repository and this checkout \
-                   has no git remote, so there is nothing here to file or claim one in: Estigia \
-                   gates no write here, and no commit or push is refused for want of a claim. \
-                   Reads are not gated."
-                .to_owned(),
-            held_in: None,
-        };
+        return "This run holds no issue. The tracker names no repository and this checkout \
+                has no git remote, so there is nothing here to file or claim one in: Estigia \
+                gates no write here, and no commit or push is refused for want of a claim. \
+                Reads are not gated."
+            .to_owned();
     }
     let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
         "Take a local claim with `assist` in a worktree first, which gives the isolated checkout \
@@ -815,73 +754,27 @@ fn unclaimed_hold(
         "Claim an issue first, filing one with `create` when none covers the change, then work \
          through `claim` with `branch` and `base`."
     };
-    let held = match requirement {
-        crate::config::IssueRequirement::Required => {
-            "Estigia refuses every repository write until one is claimed"
-        }
-        _ => {
-            "each repository write is put to the person until one is claimed, \
-              and refused on a host that cannot ask"
-        }
-    };
+    let held = "Estigia refuses every repository write until one is claimed";
     match scope {
-        Scope::Repository(root) => UnclaimedHold {
-            text: format!(
-                "This run holds no issue, and `Unclaimed write policy` is `{}` in this \
-                 repository: {held}. {way_in} Reads are not gated.",
-                requirement.as_value()
-            ),
-            held_in: Some(root),
-        },
-        Scope::Outside => UnclaimedHold {
-            text: format!(
-                "This run holds no issue. This directory is not inside a repository Estigia \
-                 can place, so no issue requirement applies to a write that lands here: \
-                 `Unclaimed write policy` is `{}` for a write that lands in a repository Estigia \
-                 can place, and there {held}. Reads are not gated.",
-                requirement.as_value()
-            ),
-            held_in: None,
-        },
-        Scope::Unknown => UnclaimedHold {
-            text: format!(
-                "This run holds no issue. `Unclaimed write policy` is `{}` here, but whether \
-                 this directory is inside a repository could not be established, so every \
-                 write from it is held rather than exempted: {held}. Reads are not gated.",
-                requirement.as_value()
-            ),
-            held_in: None,
-        },
+        Scope::Repository(_) => format!(
+            "This run holds no issue, and `Unclaimed write policy` is `{}` in this \
+             repository: {held}. {way_in} Reads are not gated.",
+            requirement.as_value()
+        ),
+        Scope::Outside => format!(
+            "This run holds no issue. This directory is not inside a repository Estigia \
+             can place, so no issue requirement applies to a write that lands here: \
+             `Unclaimed write policy` is `{}` for a write that lands in a repository Estigia \
+             can place, and there {held}. Reads are not gated.",
+            requirement.as_value()
+        ),
+        Scope::Unknown => format!(
+            "This run holds no issue. `Unclaimed write policy` is `{}` here, but whether \
+             this directory is inside a repository could not be established, so every \
+             write from it is held rather than exempted: {held}. Reads are not gated.",
+            requirement.as_value()
+        ),
     }
-}
-
-/// The repository whose hold an unclaimed run's `SessionStart` announces, when it announces one.
-fn announced_at_start(context: &GateContext, run: &session::Run) -> Option<PathBuf> {
-    if run.unreadable || run.issue.is_some() {
-        return None;
-    }
-    let requirement = super::issue_requirement::in_force(context)?;
-    unclaimed_hold(context, requirement).held_in
-}
-
-/// The hold paragraph for an agent `SessionStart` did not tell it, beside an `ask` for an
-/// unclaimed write; repeated on every such `ask`, because a person's No drops it unread.
-fn hold_news(context: &GateContext, run: &session::Run, decision: &Decision) -> Option<String> {
-    let Decision::Ask(refusal) = decision else {
-        return None;
-    };
-    if refusal.code != super::issue_requirement::CODE || run.unreadable || run.issue.is_some() {
-        return None;
-    }
-    let requirement = super::issue_requirement::in_force(context)?;
-    let hold = unclaimed_hold(context, requirement);
-    let root = hold.held_in?;
-    (!run.announced_holds.contains(&root)).then(|| {
-        format!(
-            "Estigia: what this session was told when it started no longer holds here. {}",
-            hold.text
-        )
-    })
 }
 
 fn session_start_body(context: &GateContext, run: &session::Run, with_count: bool) -> Value {
@@ -903,7 +796,7 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                 state_clause(run.state.as_deref())
             ),
             None if let Some(requirement) = super::issue_requirement::in_force(context) => {
-                unclaimed_hold(context, requirement).text
+                unclaimed_hold(context, requirement)
             }
             None if super::unclaimed::applies(context, &context.repo_dir) => {
                 let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
@@ -947,7 +840,6 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
     };
     let children = several_claims_paragraph(context, run);
     let parked = parked_paragraph(run);
-    let dirt = unclaimed_dirt_note(context, run);
     // Which roles this run's delegated contexts actually ran as, from the
     // pointer. Absent when the set is empty, and that absence is deliberately
     // **not** spelled as "no contexts were delegated": a host that never sent
@@ -1015,7 +907,7 @@ This session carries no identity Estigia can derive a run id from, so nothing ca
             "additionalContext": format!(
                 "## Estigia
 
-Run id `{}`. {held}{handoff}{isolation}{children}{parked}{dirt}{delegated}{inline}{}{}{}{}",
+Run id `{}`. {held}{handoff}{isolation}{children}{parked}{delegated}{inline}{}{}{}{}",
                 run.run_id,
                 drift_note(context),
                 build_note(context),
@@ -1371,28 +1263,7 @@ pub fn run_as(
         // Git's, not an agent's: the caller runs the gate itself and turns the
         // decision into an exit code. Reaching here would mean it did not.
         Event::PrePush => json!({}),
-        Event::PostToolUse => {
-            if input.unreadable || input.absent {
-                return json!({});
-            }
-            let run = session::load(&context.state_root, &run_id);
-            if run.issue.is_some()
-                || run.assisted
-                || !session::children(&context.state_root, &run_id).is_empty()
-            {
-                return json!({});
-            }
-            match super::issue_requirement::watched_note(context) {
-                Some(note) => json!({
-                    "systemMessage": note,
-                    "hookSpecificOutput": {
-                        "hookEventName": "PostToolUse",
-                        "additionalContext": note,
-                    },
-                }),
-                None => json!({}),
-            }
-        }
+        Event::PostToolUse => json!({}),
         Event::SessionStart => {
             session::maintain(&context.state_root);
             if !input.session_id.trim().is_empty() {
@@ -1404,13 +1275,7 @@ pub fn run_as(
                     None,
                 );
             }
-            let mut run = session::load(&context.state_root, &run_id);
-            if !input.session_id.trim().is_empty()
-                && let Some(root) = announced_at_start(context, &run)
-                && run.announced_holds.insert(root)
-            {
-                let _ = session::store(&context.state_root, &run);
-            }
+            let run = session::load(&context.state_root, &run_id);
             session_start_response(context, &run)
         }
         Event::SessionEnd => {
@@ -1592,8 +1457,6 @@ pub fn run_as(
                 push_refs: Vec::new(),
             };
             let mut run = session::load(&context.state_root, &run_id);
-            let session_run = run.clone();
-            let session_context = context;
             let mut run_id = run_id;
             let landed = (dialect == Dialect::ClaudeCode
                 && run.issue.is_none()
@@ -1724,20 +1587,6 @@ pub fn run_as(
                     run_id,
                 )
             };
-            let decision = if session_run.issue.is_none() && session_run.run_id == run.run_id {
-                let literal = match observed.command.as_ref().map(|command| &command.literal) {
-                    Some(crate::outcome::Established::Known(text)) => Some(text.as_str()),
-                    _ => None,
-                };
-                super::assisted::naming_the_child(
-                    decision,
-                    &context.state_root,
-                    &session_run.run_id,
-                    literal,
-                )
-            } else {
-                decision
-            };
             let decision = if can_ask(dialect, host) {
                 decision
             } else {
@@ -1772,11 +1621,7 @@ pub fn run_as(
                 &decision,
                 &[],
             );
-            let mut answer = response_in(dialect, &decision);
-            if let Some(news) = hold_news(session_context, &session_run, &decision) {
-                answer["hookSpecificOutput"]["additionalContext"] = json!(news);
-                return answer;
-            }
+            let answer = response_in(dialect, &decision);
             let Some(recipient) = mail_recipient(dialect, host, input) else {
                 return answer;
             };

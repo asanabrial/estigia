@@ -173,10 +173,10 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   and the Pi loop test's `no_exit_code` case is not run on Windows: a Pi loop that retried a signalled
   `estigia goal` on Windows would pass.
 
-- **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate asks
+- **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate refuses
   where it would not on Unix.** `Path::new("/tmp/y").is_absolute()` is false there, and under Git Bash
   `/tmp` and `/c/…` are mounts the gate cannot place, so such a redirect or heredoc target is read as
-  inside the checkout and asked under `watch`: the safe direction, at the cost of extra prompts. Tests
+  inside the checkout and refused under `required`: the safe direction, at the cost of extra refusals. Tests
   naming an outside target use `test_env::outside_the_checkout`. A POSIX `Worktree location` is refused.
 
 - **The interpreter inventory is prose, and nothing derives it from the suite.** `AGENTS.md` states

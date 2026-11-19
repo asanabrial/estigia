@@ -354,13 +354,9 @@ impl DecisionMode {
 /// Repository-only: it is read from the repository's own file and nowhere else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IssueRequirement {
-    /// An unclaimed write the gate can place is put to the host, except inside an isolated
-    /// checkout that a run pointer's `worktree` covers; one it cannot place runs, and the host is
-    /// asked on the next call only if the checkout changed. A stored `ask` reads as this.
-    Watch,
     /// The default: unclaimed writes are allowed.
     Off,
-    /// Unclaimed writes are refused.
+    /// Unclaimed writes are refused. A stored `watch` or `ask` reads as this.
     Required,
 }
 
@@ -368,7 +364,6 @@ impl IssueRequirement {
     /// The value as written in the table.
     pub fn as_value(self) -> &'static str {
         match self {
-            Self::Watch => "watch",
             Self::Off => "off",
             Self::Required => "required",
         }
@@ -376,10 +371,10 @@ impl IssueRequirement {
 
     /// Every answer, under an exhaustive match.
     pub fn all() -> Vec<Self> {
-        let every = vec![Self::Watch, Self::Off, Self::Required];
+        let every = vec![Self::Off, Self::Required];
         for requirement in &every {
             match requirement {
-                Self::Watch | Self::Off | Self::Required => {}
+                Self::Off | Self::Required => {}
             }
         }
         every
@@ -394,7 +389,7 @@ pub enum UnclaimedGithubWrites {
     /// The default: an unclaimed merge, release, tag, `gh api` mutation or other GitHub write is
     /// held as `Unclaimed write policy` holds a commit.
     Held,
-    /// Those boundaries pass with no question, under `watch` and `required` alike.
+    /// Those boundaries pass with no question under `required`.
     Allowed,
 }
 
@@ -1333,14 +1328,14 @@ impl Config {
                 continue;
             }
             let mut probe = base.clone();
-            if let Err(refusal) = setting.apply(&mut probe, &value) {
+            if let Err(refusal) = setting.apply_stored(&mut probe, &value) {
                 if !tolerant {
                     refused.get_or_insert(refusal);
                 }
                 continue;
             }
             if setting.tightens(base, &probe) {
-                let _ = setting.apply(config, &value);
+                let _ = setting.apply_stored(config, &value);
                 if !owned.contains(&setting) {
                     owned.push(setting);
                 }
@@ -1457,7 +1452,7 @@ impl Config {
             config.models = routing;
             return (!dropped.is_empty()).then(|| dropped_routes_report(&dropped));
         }
-        setting.apply(config, value).err()
+        setting.apply_stored(config, value).err()
     }
 
     fn is_legacy_workers_label(label: &str) -> bool {

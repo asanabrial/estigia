@@ -3314,12 +3314,6 @@ fn decide_observing(
     if run.is_review_only() {
         return review_claim::decision(context, run, action, how, observed);
     }
-    if run.issue.is_none()
-        && !run.assisted
-        && let Some(changed) = issue_requirement::watched_change(context)
-    {
-        return changed;
-    }
     let literal = match observed.command.as_ref().map(|seen| &seen.literal) {
         Some(Established::Known(text)) => Some(text.as_str()),
         _ => None,

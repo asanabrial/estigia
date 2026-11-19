@@ -181,11 +181,8 @@ measure:
 - **No runtime was run live for mail delivery.** One neighbouring fact was measured instead, on Claude Code
   2.1.319 (2026-11-07) against a probe hook answering `ask` with both a reason and `additionalContext`: when the
   person answered Yes, the model quoted the `additionalContext` and never the reason; when the person answered No,
-  the model received only the rejection and no `additionalContext`. That is what the unclaimed-hold paragraph
-  rides on ([configuration](configuration.md), `Unclaimed write policy`), and why it is repeated on every such
-  `ask` rather than marked delivered. The same paragraph's sub-agent case was not measured: the hook answer
-  carries `additionalContext` for a call with `agent_type` (a unit test), but no live Claude Code session with
-  a sub-agent was driven to see whether the field reaches the sub-agent, its parent, or neither. Whether the same field beside an allow carries mail to the model, and whether the Codex build in use reads that field from
+  the model received only the rejection and no `additionalContext`. No `ask` Estigia answers carries mail on
+  the strength of that now: `Unclaimed write policy` no longer asks. Whether the same field beside an allow carries mail to the model, and whether the Codex build in use reads that field from
   `PreToolUse` at all, are taken from documentation; a Codex session that ignores the field receives nothing
   and the row is nonetheless stamped delivered, because the binary cannot tell. The Codex terminal UI and
   daemon were not driven. Pi's section lasts one turn (whether this Pi keeps it out of the stored
