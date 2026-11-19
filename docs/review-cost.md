@@ -471,6 +471,32 @@ met on both scenarios; the time target of −30 % is not.** The time is the agen
 reruns, which ranged from 222 to 533 s per run and swamp a 12 % to 16 % difference in either
 direction; nothing `deliver` sends changes how often the model runs the suite.
 
+## Which skill references a run reads
+
+`scripts/measure-transcripts.py` reports `skill_reference_reads`: every `Read` of a file under a skill
+root (a path holding `/skills/flow/`, or a `--skill-root`), with the bytes it returned and the turns
+that followed it in that context, per file and per subagent kind
+(`a_skill_file_read_is_counted_with_its_bytes_and_the_turns_it_was_carried`).
+
+Measured on 2026-11-18 over this operator's 311 Claude Code sessions, orchestrator reads only:
+
+| File | Sessions reading it | Mean bytes | Mean turns carried |
+|---|---:|---:|---:|
+| `assets/analyst-issue-template.md` | 26 | 4 251 | 126 |
+| `references/analyst.md` | 12 | 3 246 | 149 |
+| `references/domain-composition.md` | 6 | 10 334 | 210 |
+| `protocols/rdd.md` | 4 | 8 203 | 136 |
+| `references/repository-delivery.md` | 2 | 13 264 | 204 |
+| `bindings/github/operations.md` | 2 | 2 203 | 221 |
+| `bindings/github/delivery.md` | 1 | 3 296 | 252 |
+
+Subagents read seven skill files in all. The large references the load conditions point at
+(`delivery.md`, `repository-delivery.md`, `bindings/github.md`) are read in at most two sessions of
+311, and `delivery.md` returned 3 KB of its 42 KB, so a ranged read is the common shape. What this
+does not count: a skill file read through `Bash` (`cat`, `sed`, `grep`), which runs do, and the
+`SKILL.md` the host loads itself; both are carried without a `Read` call. Narrowing a load condition
+is a separate change.
+
 ## What these measurements do not establish
 
 A later arm inherits every limit of the ones before it.

@@ -1,0 +1,4 @@
+{"type":"assistant","timestamp":"2026-11-18T10:00:00Z","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/home/dev/.claude/skills/flow/references/analyst.md"}},{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/home/dev/repo/sample/src/lib.rs"}}]}}
+{"type":"user","timestamp":"2026-11-18T10:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"abcd"},{"type":"tool_result","tool_use_id":"t2","content":"not a skill file"}]}}
+{"type":"assistant","timestamp":"2026-11-18T10:00:02Z","message":{"id":"m2","content":[{"type":"text","text":"one"}]}}
+{"type":"assistant","timestamp":"2026-11-18T10:00:03Z","message":{"id":"m3","content":[{"type":"text","text":"two"}]}}

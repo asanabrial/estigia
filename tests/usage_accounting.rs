@@ -277,3 +277,38 @@ fn a_malformed_transcript_is_measured_rather_than_crashing_the_run() {
         "the stray element is skipped and the tool call beside it is still counted"
     );
 }
+
+#[test]
+fn a_skill_file_read_is_counted_with_its_bytes_and_the_turns_it_was_carried() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let output = Command::new("python3")
+        .arg(root.join("scripts/measure-transcripts.py"))
+        .arg("--projects")
+        .arg(root.join("tests/fixtures/usage/skill-reads"))
+        .arg("--json")
+        .output()
+        .expect("python3 runs the measurement script");
+    assert!(output.status.success(), "{:?}", output.status);
+    let report: Value = serde_json::from_slice(&output.stdout).expect("one JSON object");
+    let reads = report
+        .pointer("/overall/skill_reference_reads")
+        .expect("the skill reads are reported");
+    assert_eq!(
+        reads["orchestrator"],
+        serde_json::json!({
+            "references/analyst.md": {
+                "sessions_reading": 1,
+                "share_of_sessions": 1.0,
+                "reads": 1,
+                "mean_turns_carried": 2,
+                "mean_bytes": 4,
+            }
+        }),
+        "only the skill file is counted, with the bytes it returned and the two turns after it"
+    );
+    assert_eq!(
+        reads["subagents"],
+        serde_json::json!({"analyst": {"protocols/rdd.md": 1}}),
+        "a subagent's read is reported under its own kind, not added to the orchestrator's"
+    );
+}

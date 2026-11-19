@@ -1,0 +1,2 @@
+{"type":"assistant","timestamp":"2026-11-18T10:00:04Z","message":{"id":"a1","content":[{"type":"tool_use","id":"u1","name":"Read","input":{"file_path":"/home/dev/.claude/skills/flow/protocols/rdd.md"}}]}}
+{"type":"user","timestamp":"2026-11-18T10:00:05Z","message":{"content":[{"type":"tool_result","tool_use_id":"u1","content":[{"type":"text","text":"xyz"}]}]}}
