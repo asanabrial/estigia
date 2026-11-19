@@ -7069,7 +7069,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 47_027;
+const TOOLS_LIST_CEILING: usize = 44_770;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -9880,7 +9880,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 12_650;
+const ALWAYS_LOADED_CEILING: usize = 10_865;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
@@ -10381,6 +10381,42 @@ fn a_comment_kind_is_refused_without_the_mode_that_accepts_it() {
         };
         assert!(said.contains(kind), "{said}");
     }
+}
+
+#[test]
+fn a_compact_publication_drops_the_receipt_its_embedded_status_repeats() {
+    let receipt = json!({
+        "epoch": "e".repeat(32),
+        "pr": 7,
+        "head": "a".repeat(40),
+        "base": "b".repeat(40),
+        "digest": "d".repeat(64),
+    });
+    let mut arguments = receipt.clone();
+    arguments["issue"] = json!(42);
+    let mut body = json!({
+        "ok": true,
+        "pr": 7,
+        "review_status": {
+            "ok": true,
+            "receipt": receipt,
+            "next": {"kind": "collect", "arguments": arguments},
+        },
+    });
+    super::compact_review_status("publish_review", &mut body);
+    let kept = &body["review_status"]["next"]["arguments"];
+    for repeated in ["head", "base", "digest", "pr"] {
+        assert!(
+            kept.get(repeated).is_none(),
+            "{repeated} is repeated: {kept}"
+        );
+    }
+    assert_eq!(kept["epoch"], "e".repeat(32), "{kept}");
+    assert_eq!(kept["issue"], 42, "{kept}");
+    assert_eq!(
+        body["pr"], 7,
+        "the publication's own fields were touched: {body}"
+    );
 }
 
 #[test]
