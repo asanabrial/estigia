@@ -555,7 +555,7 @@ agent's difference is declared; Codex shares the envelope and gets no such field
 schema was not shown to have one. A Claude Code older than v2.1.295 does not honour the field, and a
 Claude Code rewriting `settings.json` was reported to drop keys it does not know from a hook handler,
 so the entry can come back without it: `estigia setup` rewrites the entry on every run and `estigia
-doctor` reports one that lost it. [`honesty.md`](honesty.md#the-gates-reach-across-the-agents) records
+doctor` reports one that lost it. [`honesty.md`](honesty-gate-reach.md#the-gates-reach-across-the-agents) records
 what is unmeasured there.
 
 ## The Claude Code `PostToolUse` entry

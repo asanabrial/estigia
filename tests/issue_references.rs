@@ -8,9 +8,9 @@ const PUBLIC_ISSUES_THROUGH: u64 = 135;
 
 const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ("docs/parity.md", 4967, "removed SDD and OpenSpec in #4967"),
-    ("docs/honesty.md", 464, "`close #464`"),
-    ("docs/honesty.md", 464, "closed #464 on merge"),
-    ("docs/honesty.md", 318, "another repository's #318"),
+    ("docs/honesty-gate-surface.md", 464, "`close #464`"),
+    ("docs/honesty-gate-surface.md", 464, "closed #464 on merge"),
+    ("docs/honesty-gate-surface.md", 318, "another repository's #318"),
     ("skill/bindings/github/delivery.md", 464, "`close #464`"),
     (
         "skill/bindings/github/delivery.md",
