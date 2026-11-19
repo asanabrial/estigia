@@ -11364,3 +11364,30 @@ fn the_goal_answer_carries_the_opening_only_when_there_is_one() {
         "2026-11-17T16:00:00Z"
     );
 }
+
+#[test]
+fn a_live_claim_in_a_closed_window_with_work_claimable_is_told_to_park_and_take_the_next() {
+    let mut held = reading("passed", true, [Some(3), Some(0), None, None, None]);
+    held.opens_at = Some("2026-11-17T16:00:00Z".to_owned());
+    for last in [
+        None,
+        Some(harness::loop_text::window_wait("2026-11-17T16:00:00Z")),
+    ] {
+        let decision = super::loop_stop::decide(
+            "claude-abc",
+            harness::loop_text::Invocation::Slash,
+            None,
+            last.as_deref(),
+            || {},
+            || held.clone(),
+        );
+        assert!(
+            matches!(decision, super::loop_stop::Decision::Continue(_)),
+            "a closed window with work claimable let the turn end"
+        );
+        let value = decision.into_value();
+        let told = value["reason"].as_str().unwrap_or_default();
+        assert!(told.contains("`park: true`"), "{told}");
+        assert!(!told.contains("end the turn"), "{told}");
+    }
+}

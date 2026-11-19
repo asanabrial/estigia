@@ -112,7 +112,8 @@ pub(crate) enum Reach {
 ///
 /// A routine write is one, and so is `git push`: it publishes this repository's refs, so it is held
 /// as a commit is. So is every other boundary and every GitHub write that is no boundary
-/// ([`Action::Remote`]), unless `Unclaimed GitHub writes` is `allowed`, and it is always asked
+/// ([`Action::Remote`]), unless `Unclaimed GitHub writes` is `allowed` in a repository file this
+/// process could read, and it is always asked
 /// under `watch`, never watched: it reaches other people and leaves no trace here to compare. A
 /// write its line also carries is held under both values, and a write that lands outside every
 /// repository the gate can place is not a write to this repository. `declared` are the paths a write tool named in a patch body, empty for every other
@@ -140,7 +141,9 @@ pub fn decision(
         return held(context, requirement, &scope, Reach::Placed);
     }
     if beside.is_none() && matches!(action, Action::Boundary { .. } | Action::Remote { .. }) {
-        if context.unclaimed_github_writes == UnclaimedGithubWrites::Allowed {
+        if context.unclaimed_github_writes == UnclaimedGithubWrites::Allowed
+            && context.repository_config_unreadable.is_none()
+        {
             return None;
         }
         let requirement = in_force(context)?;

@@ -122,6 +122,12 @@ worktree. Then schedule this session's next attempt for {at} with the host's own
 the turn: the loop lets that stop through and does not wake the session itself. The next attempt \
 runs `estigia flush` first, then renews the claim.";
 
+const WINDOW_CLOSED_WORK: &str = " The git operation window is closed until {at} (`opens_at`): \
+commits, pushes and GitHub writes wait for it, local work does not. Finish the local work in the \
+worktree and leave it uncommitted, then take the next issue with `claim` and `park: true` and work \
+it locally the same way: while an issue is claimable the turn goes on, and the parked work is \
+committed and published once the window opens, starting with `estigia flush`.";
+
 const WINDOW_TIMED: &str = " The git operation window is closed until {at} (`opens_at`): \
 commits, pushes and GitHub writes wait for it, local work does not. Finish the local work in the \
 worktree, then end the turn: this loop waits until {at} and resumes the session then, starting with \
@@ -135,6 +141,12 @@ then renew the claim on issue #{issue} under {run_id}, then commit and publish t
 /// What a turn holding a live claim is told while the window is closed.
 pub fn window_closed(at: &str) -> String {
     filled(WINDOW_CLOSED, &[("at", at)])
+}
+
+/// What a turn holding a live claim is told while the window is closed and
+/// another issue can still be claimed and worked locally.
+pub fn window_closed_with_work(at: &str) -> String {
+    filled(WINDOW_CLOSED_WORK, &[("at", at)])
 }
 
 /// The loop's record of a stop that waits on the window, the same text each
