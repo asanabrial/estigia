@@ -89,7 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
 
@@ -153,6 +153,96 @@ jobs:
       - name: doc tests
         if: needs.reuse.outputs.run == ''
         run: cargo test --doc --all-features --locked
+
+  # Windows runs the suite in three partitions, because a `git` process costs
+  # about 100 ms there and the one-job step set the wall time of every run.
+  # `check (windows-latest)` below is the required context; it passes only when
+  # every partition did.
+  windows-tests:
+    name: check (windows-latest, ${{ matrix.partition }}/3)
+    needs: reuse
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3]
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+        if: needs.reuse.outputs.run == ''
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      # No toolchain action. `rust-toolchain.toml` at the repository root pins the
+      # channel and its `rustfmt`/`clippy` components, and rustup resolves it for
+      # every `cargo` below — so CI and a fresh clone run the same toolchain by
+      # construction, which is what `CLAUDE.md`'s gate list now says.
+
+      # One test executes the OpenCode plugin this crate generates, which is
+      # JavaScript. Every hosted runner ships Node today, so leaving this out
+      # would pass — until the day an image drops it, or the job moves to a
+      # container that never had it. A step that needs a tool the job never sets
+      # up is the failure `no_workflow_needs_only_interpreters_it_sets_up`
+      # exists to refuse, and this is the second tool it has had to name.
+      - uses: actions/setup-node@v5
+        if: needs.reuse.outputs.run == ''
+        with:
+          node-version: '22'
+
+      # A failing run saves its cache too. Without this the action's default
+      # discards everything a red run compiled, so the fix pushed after it starts
+      # from cold on all three platforms, exactly when somebody is iterating on a
+      # red build. Read from this repository's run history: closing one set of
+      # platform-shaped test failures took at least nine consecutive red runs of
+      # this workflow on main, 31753883982 through 31760121174, each recompiling
+      # the dependency tree from scratch. At least, because the run the issue
+      # names as the first of them no longer exists to be counted. What a cold
+      # build costs here in minutes has not been measured.
+      - uses: Swatinem/rust-cache@v2
+        if: needs.reuse.outputs.run == ''
+        with:
+          cache-on-failure: true
+
+      # nextest, so a test that hangs is killed after `slow-timeout` in
+      # `.config/nextest.toml` and named in the log, instead of the job being
+      # cancelled at its limit with nothing to read.
+      - uses: taiki-e/install-action@v2
+        if: needs.reuse.outputs.run == ''
+        with:
+          tool: nextest
+
+      # nextest runs no doc tests and the stand-in `gh` is an example, so the
+      # fixtures are built first and the doc tests get a step of their own.
+      - name: fixtures
+        if: needs.reuse.outputs.run == ''
+        run: cargo build --bins --examples --all-features --locked
+
+      # `--no-fail-fast` for the reason `cargo test` needed it: the first red
+      # target must not hide every later one, `tests/pipe.rs` most of all.
+      - name: tests
+        if: needs.reuse.outputs.run == ''
+        run: cargo nextest run --profile ci --all-features --no-fail-fast --locked --partition count:${{ matrix.partition }}/3
+
+      - name: doc tests
+        if: needs.reuse.outputs.run == '' && matrix.partition == 1
+        run: cargo test --doc --all-features --locked
+
+  # `always()`, not `!cancelled()`: a required context that reports `skipped`
+  # passes branch protection, so a cancelled run must reach the check below.
+  check-windows:
+    name: check (windows-latest)
+    needs: [reuse, windows-tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: every partition passed
+        env:
+          PARTITIONS: ${{ needs.windows-tests.result }}
+        run: test "$PARTITIONS" = success
 
   # Per platform, because `cfg(windows)` and `cfg(unix)` code is only linted and
   # documented on the platform that compiles it.

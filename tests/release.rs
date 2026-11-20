@@ -131,9 +131,21 @@ fn ci_check_runners() -> Vec<String> {
         .find_map(|line| line.trim().strip_prefix("os: ["))
         .and_then(|rest| rest.strip_suffix(']'))
         .unwrap_or_else(|| panic!("the `check` job names no `os: [...]` matrix"));
-    line.split(',')
+    let mut runners: Vec<String> = line
+        .split(',')
         .map(|label| label.trim().to_owned())
-        .collect()
+        .collect();
+    let shards = workflow
+        .split_once("\n  windows-tests:\n")
+        .map(|(_, rest)| rest)
+        .unwrap_or_else(|| panic!("ci.yml has no `windows-tests` job"));
+    runners.extend(
+        shards
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("runs-on:"))
+            .map(|label| label.trim().to_owned()),
+    );
+    runners
 }
 
 #[test]
@@ -1806,7 +1818,7 @@ fn ci_reuses_a_green_run_over_the_same_bytes_and_nothing_else() {
         "a merge-queue or dispatched run must never reuse:\n{reuse}"
     );
 
-    for name in ["check", "lint", "release"] {
+    for name in ["check", "windows-tests", "lint", "release"] {
         let body = job(name);
         assert!(
             body.contains("needs: reuse") && body.contains("if: ${{ !cancelled() }}"),
@@ -1819,7 +1831,11 @@ fn ci_reuses_a_green_run_over_the_same_bytes_and_nothing_else() {
             .collect();
         let guarded = body
             .lines()
-            .filter(|line| line.trim() == "if: needs.reuse.outputs.run == ''")
+            .filter(|line| {
+                let guard = line.trim();
+                guard == "if: needs.reuse.outputs.run == ''"
+                    || guard.starts_with("if: needs.reuse.outputs.run == '' && ")
+            })
             .count();
         assert!(!steps.is_empty(), "`{name}` has no steps:\n{body}");
         assert_eq!(
@@ -1829,4 +1845,64 @@ fn ci_reuses_a_green_run_over_the_same_bytes_and_nothing_else() {
              is skipped without that guard:\n{body}"
         );
     }
+}
+
+#[test]
+fn windows_runs_the_suite_in_partitions_behind_one_required_context() {
+    let workflow = code_of(&read(".github/workflows/ci.yml"));
+    let job = |name: &str| -> String {
+        let header = format!("  {name}:");
+        workflow
+            .lines()
+            .skip_while(|line| *line != header)
+            .skip(1)
+            .take_while(|line| {
+                !line
+                    .strip_prefix("  ")
+                    .and_then(|rest| rest.strip_suffix(':'))
+                    .is_some_and(|key| !key.is_empty() && !key.starts_with(' '))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    let shards = job("windows-tests");
+    assert!(
+        shards.contains("partition: [1, 2, 3]") && shards.contains("runs-on: windows-latest"),
+        "{shards}"
+    );
+    assert!(
+        shards.contains("--partition count:${{ matrix.partition }}/3"),
+        "a partition runs the whole suite, or a different share than the matrix names:\n{shards}"
+    );
+    assert!(
+        shards.contains("matrix.partition == 1"),
+        "the doc tests run in every partition, or in none:\n{shards}"
+    );
+    assert!(
+        !shards.contains("name: check (windows-latest)\n"),
+        "a partition carries the required context's name, so one green partition would satisfy it"
+    );
+
+    let fan_in = job("check-windows");
+    assert!(
+        fan_in.contains("name: check (windows-latest)")
+            && fan_in.contains("needs: [reuse, windows-tests]"),
+        "nothing reports the required `check (windows-latest)` context after the partitions:\n{fan_in}"
+    );
+    assert!(
+        fan_in.contains("if: ${{ always() }}"),
+        "the fan-in can be skipped, and a skipped required context passes branch protection:\n{fan_in}"
+    );
+    assert!(
+        fan_in.contains("${{ needs.windows-tests.result }}")
+            && fan_in.contains("test \"$PARTITIONS\" = success"),
+        "the fan-in does not fail when a partition did:\n{fan_in}"
+    );
+
+    let check = job("check");
+    assert!(
+        !check.contains("windows-latest"),
+        "Windows still runs the whole suite in one `check` job beside the partitions:\n{check}"
+    );
 }

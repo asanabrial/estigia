@@ -204,7 +204,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   wide change saves. Disabling Defender real-time scanning was tried and does nothing: it is already
   off on the runner (`RealTimeProtectionEnabled` printed `False`, run 40435200479). Not measured: the
   `tests/pipe.rs` share (about 230 s there against 90–160 s elsewhere), which spawns the binary rather
-  than `git`.
+  than `git`. A per-operation memo for content-addressed reads then took `transport::claim` from
+  12 543 `git` processes to 10 841 on macOS, and the Windows `tests` step on that change still took
+  1 106 s: what remains is separate process starts spread over many tests, not repeats inside one
+  operation. So Windows now runs the suite in three nextest partitions behind one required context
+  ([how the CI lane runs the suite](testing.md#how-the-ci-lane-runs-the-suite-and-the-deadline-on-every-test)),
+  which divides the step's wall time and multiplies its runner minutes: each partition pays its own
+  checkout, cache restore and fixture build.
 
 - **One operation no longer asks `git` the same fixed question twice, and the removal is partial by
   construction.** The slowest Windows test,
