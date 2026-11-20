@@ -146,15 +146,14 @@ cardinalities:
 | Value | Storage contract | Lifecycle |
 |---|---|---|
 | bounded runtime, such as `codex` | label `analyst:<runtime>` or `dev:<runtime>` | analyst history persists; dev holding is live-state data |
-| unbounded run-id, such as `codex-b91c4d2e` | body and comment text | persists as the audit trail |
+| unbounded run-id, such as `codex-b91c4d2e` | the local store only, never GitHub text | persists as the audit trail |
 
-Do not create one label per run; that produces unbounded dead labels. Analyst output ends
-with `Analysed by <run-id> on <date>`. Dev claim and close evidence carry the same run-id, and branch
-or review names reuse it where repository conventions permit.
+Do not create one label per run; that produces unbounded dead labels. No issue body, comment,
+review or close note carries the run-id or names a tool; the store records who wrote what.
 
 Remove `dev:<runtime>` whenever the run releases work, loses a race, is reclaimed, or hands work
 back — and that includes the release that now ends an ordinary delivery, step 6's own last write, so
-the label does not survive a delivery either. The run-id in the close evidence carries that
+the label does not survive a delivery either. The run-id in the local store carries that
 attribution instead, the unbounded half of this table's two-cardinality scheme. Analyst markers are
 historical and never removed. If attribution labels become noisy, group by the state field rather
 than dropping attribution.

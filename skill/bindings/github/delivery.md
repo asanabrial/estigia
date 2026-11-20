@@ -328,7 +328,7 @@ when `wait_seconds` runs out. It reads the pull request's whole rollup as the re
 `not-consulted` lane is no evidence CI does not run), though on that lane an empty rollup passes at once
 rather than waiting; only where the lane reads `disabled` or
 `never-ran`, when no CI can run, does it skip the rollup and need `appendix_file` with the local suite command and
-result, which is appended to the generated evidence.
+result, posted after the plain, one-line merge note.
 
 **Before `ci_status`, release CI with the latest reviewed receipt:** `deliver` with `until: ci`, which
 records the verdict if it is owed, runs the `release_ci` operation and stops, whoever merges. It records the release for

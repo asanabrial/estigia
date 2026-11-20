@@ -19,6 +19,10 @@ fn state_of(kind: OutboxKind) -> Vec<OutboxState> {
 }
 
 fn comments_answer(issue: u64, operations: &[String]) -> serde_json::Value {
+    comments_by(issue, operations, "fixture")
+}
+
+fn comments_by(issue: u64, operations: &[String], login: &str) -> serde_json::Value {
     let bodies: Vec<serde_json::Value> = operations
         .iter()
         .map(|op| {
@@ -26,8 +30,8 @@ fn comments_answer(issue: u64, operations: &[String]) -> serde_json::Value {
                 "node_id": format!("IC_{op}"),
                 "id": 1,
                 "created_at": "2026-01-01T20:00:01Z",
-                "user": { "login": "fixture" },
-                "body": format!("A note.\n<!-- estigia-outbox:{op} -->\n"),
+                "user": { "login": login },
+                "body": "A note.\n",
             })
         })
         .collect();
@@ -36,6 +40,16 @@ fn comments_answer(issue: u64, operations: &[String]) -> serde_json::Value {
         "stdout": serde_json::Value::Array(bodies).to_string(),
         "status": 0,
     })
+}
+
+fn with_viewer(answers: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    let mut all = answers.to_vec();
+    all.push(serde_json::json!({
+        "matches": "api user",
+        "stdout": "{\"login\":\"fixture\"}",
+        "status": 0,
+    }));
+    all
 }
 
 fn ops_of(kind: OutboxKind) -> Vec<String> {
@@ -48,10 +62,25 @@ fn ops_of(kind: OutboxKind) -> Vec<String> {
 
 impl Rig {
     fn flushed(&self, answers: &[serde_json::Value]) -> Result<serde_json::Value, Failure> {
-        let script = crate::test_env::answers(answers);
+        let script = crate::test_env::answers(&with_viewer(answers));
         let bin = crate::test_env::scripted_gh();
         let runs = self.directory.path().join("runs");
         crate::test_env::with_logging_gh(bin.path(), &script, &self.log, || {
+            crate::harness::operation_window::with_now_override(Some(noon), || {
+                outbox::flush::run(&self.context, &runs, NOW)
+            })
+        })
+    }
+
+    fn flushed_keeping_bodies(
+        &self,
+        answers: &[serde_json::Value],
+        bodies: &std::path::Path,
+    ) -> Result<serde_json::Value, Failure> {
+        let script = crate::test_env::answers(&with_viewer(answers));
+        let bin = crate::test_env::scripted_gh();
+        let runs = self.directory.path().join("runs");
+        crate::test_env::with_body_log(bin.path(), &script, bodies, || {
             crate::harness::operation_window::with_now_override(Some(noon), || {
                 outbox::flush::run(&self.context, &runs, NOW)
             })
@@ -434,6 +463,54 @@ fn a_comment_left_sending_that_already_landed_is_not_posted_again() {
 }
 
 #[test]
+fn a_flushed_comment_carries_only_the_text_that_was_queued() {
+    let rig = rig();
+    queue_a_note(&rig, "12");
+    let bodies = rig.directory.path().join("bodies");
+
+    let report = rig
+        .flushed_keeping_bodies(
+            &[comments_answer(12, &ops_of(OutboxKind::Comment))],
+            &bodies,
+        )
+        .expect("a flush");
+
+    assert_eq!(report["sent"], 1, "{report}");
+    let sent = std::fs::read_to_string(&bodies).expect("the posted body was logged");
+    assert!(sent.contains("A note.\n"), "{sent:?}");
+    assert!(
+        !sent.contains("<!--"),
+        "a hidden marker reached GitHub: {sent:?}"
+    );
+}
+
+#[test]
+fn a_comment_left_sending_is_posted_when_only_someone_else_wrote_the_same_text() {
+    let rig = rig();
+    queue_a_note(&rig, "12");
+    let mut held = Store::open(&store_path().expect("a path")).expect("opens");
+    let row = held.next_outbox(&repo()).expect("reads").expect("a row");
+    held.mark_outbox(row.seq, OutboxState::Sending, None, NOW)
+        .expect("marked");
+    drop(held);
+
+    let report = rig
+        .flushed(&[
+            comments_by(12, std::slice::from_ref(&row.op_id), "someone-else"),
+            serde_json::json!({"matches": "issue comment", "stdout": "", "status": 0}),
+        ])
+        .expect_err("posted, and the fixture never shows it landing");
+
+    assert_eq!(
+        report.envelope()["reason"],
+        "outbox-pending",
+        "{}",
+        report.envelope()
+    );
+    assert_eq!(rig.comment_writes().len(), 1, "{:?}", rig.comment_writes());
+}
+
+#[test]
 fn a_comment_left_sending_that_cannot_be_read_back_stops_before_posting() {
     let rig = rig();
     queue_a_note(&rig, "12");
@@ -772,10 +849,10 @@ fn publish_flags(body: &str) -> Vec<&str> {
 fn a_write_while_open_sends_what_the_closed_window_queued_first() {
     let mut rig = rig();
     queue_a_note(&rig, "12");
-    rig.script = crate::test_env::answers(&[
+    rig.script = crate::test_env::answers(&with_viewer(&[
         comments_answer(12, &ops_of(OutboxKind::Comment)),
         view(12, "review"),
-    ]);
+    ]));
 
     rig.open("transition", &["--issue", "12", "--to", "review"])
         .expect("a transition behind a queue that drains");

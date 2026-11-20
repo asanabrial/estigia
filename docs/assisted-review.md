@@ -33,8 +33,8 @@ draft. This loop never overrides a configured refusal or grants merge authority.
 5. Call `review_thread` with `thread_id`, the new `expected_head` and a `body_file`. To resolve,
    also supply `resolve: true` and the full `fix_commit` SHA. The fix must follow the thread's
    original commit and be an ancestor of the published head. A local-only fix is refused before
-   either reply or resolution. The reply is posted as written, with only a hidden marker after it
-   whose key binds the supplied fix, and it must read back before resolving.
+   either reply or resolution. The reply is posted exactly as written, nothing appended, and it must
+   read back before resolving.
 6. Repeat from step 2 on every new head. An approval for an older commit does not complete a
    review stage. Keep human merge authority as configured.
 7. The pull request is not reported finished until a reading of its exact head has CI `passed`,
@@ -59,7 +59,8 @@ exist. A repository's own hook may still refuse publication.
 `review_thread` derives branch/worktree from the assisted pointer, re-verifies its ownership marker
 and checked-out branch, requires one open PR, verifies
 the thread belongs to it, and checks the expected head before writes and during readback. Replies
-carry a stable marker and retries reuse an already confirmed identical reply by the current account.
+carry nothing but their text, and retries reuse an already confirmed identical reply by the current
+account, so the same text posted twice in one thread by one account is one reply.
 A failed write/readback reports an unknown outcome, distinguishing a confirmed reply from an
 unconfirmed resolution. Do not report that the whole operation completed or retry blindly.
 
@@ -127,13 +128,15 @@ no issue's job matches, the admitted answer is collected as a detached reviewer'
 answer never comes is abandoned at its deadline with nothing killed.
 
 `pr_review` `submit` is the one road to GitHub. It sends `approved` as an approval and
-`changes-requested` as a request whose body carries the findings, which otherwise stay local; an
+`changes-requested` as a request whose body carries the findings (location, evidence and impact, with
+no finding id, class or tool sentence), which otherwise stay local; an
 `escalated` verdict sends nothing. It reads the head again, posts the review with the reviewed
 `commit_id` and reports `submitted: true` only once the review reads back at that commit in the state
 sent. A moved head answers `head-moved`, a changed base branch `pull-review-retargeted` and a closed
 pull request `pull-review-not-open`, each with `submitted: false`, the worktree removed and the claim
 put down. A lost answer is `pull-review-submission-unconfirmed` and keeps the claim. A retry looks for
-the first review by the marker in its body before it judges the pull request again, so a review that
+this account's review of the reviewed commit before it judges the pull request again — the body carries
+no marker — so a review that
 landed is reported as submitted even if the head has moved or the pull request has closed since.
 
 GitHub has no conditional write here, so a push between the last read and the post cannot be

@@ -1,6 +1,6 @@
 # Analyst issue body template
 
-Fill this contract without changing its heading order, fixed first heading, GitHub NOTE syntax, or attribution.
+Fill this contract without changing its heading order, fixed first heading or GitHub NOTE syntax. Sign nothing: no run-id, agent or tool name.
 The implementer has this issue and the repository, and nothing else. Cite only what you opened at the commit under `## Evidence`, and say plainly what you did not check.
 
 ## Which language each part is written in
@@ -86,5 +86,4 @@ reliably than any amount of prose in the sections above.
 ## Evidence
 Commands run, files read, numbers measured, and the commit they were read at. State what you did not verify, and warn when that commit is not the base branch. Enough that a reviewer can re-check the analysis without repeating it.
 
-— Analysed by <run-id> on <date>
 ```

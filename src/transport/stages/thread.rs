@@ -60,7 +60,7 @@ pub(crate) fn respond(
             &body,
         ],
     );
-    let reply = format!("{body}\n\n<!-- estigia-thread-reply:{key} -->");
+    let reply = body;
     let mut reply_id = confirmed_reply(thread, &reply).map(str::to_owned);
     if reply_id.is_none() {
         let nonce = std::time::SystemTime::now()

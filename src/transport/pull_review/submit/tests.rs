@@ -300,7 +300,47 @@ fn a_severe_finding_requests_changes_and_the_body_carries_it() {
     let written = log(&rig);
     assert!(written.contains("event=REQUEST_CHANGES"), "{written}");
     assert!(written.contains("does the wrong thing"), "{written}");
+    let body = written
+        .lines()
+        .find(|line| line.contains("--method POST"))
+        .and_then(|line| line.split_once("-f body=").map(|(_, body)| body))
+        .expect("the review was posted with a body");
+    for trace in ["<!--", "blind review", "`wrong`", "**severe**", &rig.head] {
+        assert!(
+            !body.contains(trace),
+            "the review carries {trace:?}: {body}"
+        );
+    }
     gone(&rig, &worktree);
+}
+
+#[test]
+fn another_accounts_review_of_the_same_commit_is_not_taken_for_this_one() {
+    let rig = rig();
+    reviewed(&rig, CLEAN);
+    let theirs = serde_json::json!([[{
+        "id": 40,
+        "commit_id": rig.head,
+        "user": { "login": "a-teammate" },
+        "body": "",
+    }]]);
+    let answer = gh(
+        &rig,
+        &[
+            view(&rig, &rig.head, "OPEN", "main"),
+            serde_json::json!({
+                "matches": "--paginate --slurp",
+                "stdout": theirs.to_string(),
+                "status": 0,
+            }),
+            posted(41),
+            read_back(41, &rig.head, "APPROVED"),
+        ],
+        || submit(&rig.context, RUN),
+    )
+    .expect("the submission");
+    assert_eq!(answer["review_id"], 41, "{answer}");
+    assert!(log(&rig).contains("--method POST"), "nothing was sent");
 }
 
 #[test]
@@ -407,15 +447,11 @@ fn a_read_back_that_disagrees_is_unconfirmed_and_keeps_the_claim_for_the_retry()
 fn a_retry_finds_the_review_a_lost_answer_left_and_sends_no_second_one() {
     let rig = rig();
     reviewed(&rig, CLEAN);
-    let store = Store::open(&store_path().expect("a path")).expect("the store");
-    let epoch = store
-        .pull_review_of(RUN)
-        .expect("a read")
-        .expect("a row")
-        .epoch;
     let existing = serde_json::json!([[{
         "id": 41,
-        "body": format!("approved\n<!-- estigia:pull-review {epoch} -->"),
+        "commit_id": rig.head,
+        "user": { "login": "the-reviewer" },
+        "body": "",
     }]]);
     let answer = gh(
         &rig,
@@ -447,12 +483,6 @@ fn a_retry_after_the_head_moved_answers_for_the_review_that_landed_rather_than_n
     ] {
         let rig = rig();
         let worktree = reviewed(&rig, CLEAN);
-        let store = Store::open(&store_path().expect("a path")).expect("the store");
-        let epoch = store
-            .pull_review_of(RUN)
-            .expect("a read")
-            .expect("a row")
-            .epoch;
         let live = if moved {
             "d".repeat(40)
         } else {
@@ -460,7 +490,9 @@ fn a_retry_after_the_head_moved_answers_for_the_review_that_landed_rather_than_n
         };
         let existing = serde_json::json!([[{
             "id": 41,
-            "body": format!("approved\n<!-- estigia:pull-review {epoch} -->"),
+            "commit_id": rig.head,
+            "user": { "login": "the-reviewer" },
+            "body": "",
         }]]);
         let answer = gh(
             &rig,
