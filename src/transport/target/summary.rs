@@ -12,6 +12,8 @@ use crate::transport::ownership::sha256_hex;
 
 pub(crate) const MOVED_PREFIX: &str = "# estigia-moved ";
 pub(crate) const DELETED_PREFIX: &str = "# estigia-deleted ";
+pub(crate) const BLOCK_LINES: usize = 8;
+const CANDIDATES_PER_LINE: usize = 64;
 
 pub(crate) struct Summary {
     pub(crate) text: String,
@@ -63,7 +65,7 @@ impl Run {
 }
 
 pub(crate) fn summarise(raw: &str) -> Summary {
-    let Some(parsed) = parse(raw) else {
+    let Some(mut parsed) = parse(raw) else {
         return Summary {
             text: raw.to_owned(),
             moves: 0,
@@ -71,6 +73,7 @@ pub(crate) fn summarise(raw: &str) -> Summary {
             saved: 0,
         };
     };
+    split_at_blocks(&mut parsed);
     let matches = matched_runs(&parsed);
     let text = render(&parsed, &matches).concat();
     let saved = raw.len().saturating_sub(text.len());
@@ -79,6 +82,122 @@ pub(crate) fn summarise(raw: &str) -> Summary {
         moves: matches.moves,
         deletions: matches.deletions,
         saved,
+    }
+}
+
+fn split_at_blocks(parsed: &mut Parsed<'_>) {
+    let content = |line: usize| &parsed.lines[line][1..];
+    let mut destinations: HashMap<&str, Vec<(usize, usize)>> = HashMap::new();
+    for (index, run) in parsed
+        .runs
+        .iter()
+        .enumerate()
+        .filter(|(_, run)| run.addition)
+    {
+        for offset in 0..run.count() {
+            destinations
+                .entry(content(run.first + offset))
+                .or_default()
+                .push((index, offset));
+        }
+    }
+    let mut claimed = vec![false; parsed.lines.len()];
+    let mut cuts: Vec<Vec<usize>> = vec![Vec::new(); parsed.runs.len()];
+    for (index, run) in parsed
+        .runs
+        .iter()
+        .enumerate()
+        .filter(|(_, run)| !run.addition)
+    {
+        let mut at = 0;
+        while at < run.count() {
+            let mut best = (0, 0, 0);
+            let candidates = destinations
+                .get(content(run.first + at))
+                .map_or(&[][..], Vec::as_slice);
+            for &(other, offset) in candidates.iter().take(CANDIDATES_PER_LINE) {
+                let to = &parsed.runs[other];
+                if to.path == run.path {
+                    continue;
+                }
+                let mut length = 0;
+                while at + length < run.count()
+                    && offset + length < to.count()
+                    && !claimed[to.first + offset + length]
+                    && content(run.first + at + length) == content(to.first + offset + length)
+                {
+                    length += 1;
+                }
+                if length > best.0 {
+                    best = (length, other, offset);
+                }
+            }
+            let (length, other, offset) = best;
+            if length < BLOCK_LINES {
+                at += 1;
+                continue;
+            }
+            let to_first = parsed.runs[other].first;
+            for line in &mut claimed[to_first + offset..to_first + offset + length] {
+                *line = true;
+            }
+            cuts[index].extend([at, at + length]);
+            cuts[other].extend([offset, offset + length]);
+            at += length;
+        }
+    }
+    if cuts.iter().all(Vec::is_empty) {
+        return;
+    }
+    let mut pieces: Vec<Run> = Vec::with_capacity(parsed.runs.len());
+    let mut replaced: Vec<Vec<usize>> = Vec::with_capacity(parsed.runs.len());
+    for (run, mut cut) in parsed.runs.drain(..).zip(cuts) {
+        cut.push(0);
+        cut.push(run.count());
+        cut.sort_unstable();
+        cut.dedup();
+        let mut indices = Vec::with_capacity(cut.len() - 1);
+        for bounds in cut.windows(2) {
+            indices.push(pieces.len());
+            pieces.push(piece(&parsed.lines, &run, bounds[0], bounds[1]));
+        }
+        replaced.push(indices);
+    }
+    parsed.runs = pieces;
+    for hunk in parsed
+        .sections
+        .iter_mut()
+        .flat_map(|section| section.hunks.iter_mut())
+    {
+        hunk.runs = hunk
+            .runs
+            .iter()
+            .flat_map(|index| replaced[*index].iter().copied())
+            .collect();
+    }
+}
+
+fn piece(lines: &[&str], run: &Run, from: usize, to: usize) -> Run {
+    let mut bytes: Vec<u8> = lines[run.first + from..run.first + to]
+        .iter()
+        .flat_map(|line| line.as_bytes()[1..].iter().copied())
+        .collect();
+    let last = if to == run.count() {
+        run.last
+    } else {
+        run.first + to
+    };
+    if to == run.count() && run.last > run.first + run.count() && bytes.last() == Some(&b'\n') {
+        bytes.pop();
+    }
+    Run {
+        first: run.first + from,
+        last,
+        bytes,
+        path: run.path.clone(),
+        start: run.start + from,
+        end: run.start + to - 1,
+        addition: run.addition,
     }
 }
 
@@ -194,7 +313,7 @@ fn render(parsed: &Parsed<'_>, matches: &Matches) -> Vec<String> {
             .first()
             .map_or(section.end, |hunk| hunk.header);
         copy(parsed, &mut out, section.start, first_hunk);
-        if section.whole_deletion || section.whole_addition {
+        if (section.whole_deletion || section.whole_addition) && section.hunks[0].runs.len() == 1 {
             let run = section.hunks[0].runs[0];
             match matches.pair[run] {
                 Some(other) => out.push(moved_line(&parsed.runs[run], &parsed.runs[other])),

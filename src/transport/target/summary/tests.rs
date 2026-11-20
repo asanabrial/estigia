@@ -151,7 +151,7 @@ fn a_whole_file_move_is_a_manifest_line_on_the_deleting_and_adding_sides() {
 }
 
 #[test]
-fn an_edited_move_stays_as_hunks() {
+fn an_edited_move_keeps_the_edited_line_as_a_hunk() {
     let moved = block("moved", 12);
     let edited = moved.replacen("padding", "PADDING", 1);
     let raw = diff(&[
@@ -173,10 +173,87 @@ fn an_edited_move_stays_as_hunks() {
         " y\n".to_owned(),
     ]);
     let summary = summarise(&raw);
-    assert_eq!(summary.moves, 0);
+    assert_eq!(summary.moves, 1);
     assert_eq!(summary.deletions, 0);
-    assert_eq!(summary.text, raw, "an edited move is authored text");
-    assert!(!summary.text.contains(MOVED_PREFIX));
+    assert!(
+        summary
+            .text
+            .contains("-moved 0000 padding padding padding padding\n"),
+        "{}",
+        summary.text
+    );
+    assert!(
+        summary
+            .text
+            .contains("+moved 0000 PADDING padding padding padding\n"),
+        "{}",
+        summary.text
+    );
+    let carried = manifests(&summary.text);
+    assert_eq!(carried.len(), 2);
+    assert_eq!(carried[0]["from-lines"], "4-14");
+    assert_eq!(carried[0]["to-lines"], "3-13");
+    assert!(
+        summary.text.contains("@@ -1,3 +1,2 @@\n"),
+        "{}",
+        summary.text
+    );
+    assert!(
+        summary.text.contains("@@ -1,2 +1,3 @@\n"),
+        "{}",
+        summary.text
+    );
+}
+
+#[test]
+fn one_removed_block_moved_to_two_files_beside_their_own_lines_is_two_moves() {
+    let first = block("first", 10);
+    let second = block("second", 10);
+    let raw = diff(&[
+        "diff --git a/a.txt b/a.txt\n".to_owned(),
+        "index 1111111..2222222 100644\n".to_owned(),
+        "--- a/a.txt\n".to_owned(),
+        "+++ b/a.txt\n".to_owned(),
+        "@@ -1,21 +1,1 @@\n".to_owned(),
+        " one\n".to_owned(),
+        removed(&first),
+        removed(&second),
+        "diff --git a/b.txt b/b.txt\n".to_owned(),
+        "new file mode 100644\n".to_owned(),
+        "index 0000000..3333333\n".to_owned(),
+        "--- /dev/null\n".to_owned(),
+        "+++ b/b.txt\n".to_owned(),
+        "@@ -0,0 +1,11 @@\n".to_owned(),
+        "+own b\n".to_owned(),
+        added(&first),
+        "diff --git a/c.txt b/c.txt\n".to_owned(),
+        "new file mode 100644\n".to_owned(),
+        "index 0000000..4444444\n".to_owned(),
+        "--- /dev/null\n".to_owned(),
+        "+++ b/c.txt\n".to_owned(),
+        "@@ -0,0 +1,11 @@\n".to_owned(),
+        added(&second),
+        "+own c\n".to_owned(),
+    ]);
+    let summary = summarise(&raw);
+    assert_eq!(summary.moves, 2, "{}", summary.text);
+    assert!(summary.text.contains("+own b\n"));
+    assert!(summary.text.contains("+own c\n"));
+    assert!(
+        !summary
+            .text
+            .lines()
+            .any(|line| line.starts_with("-first") || line.starts_with("+second")),
+        "{}",
+        summary.text
+    );
+    let carried = manifests(&summary.text);
+    assert_eq!(carried[0]["from-lines"], "2-11");
+    assert_eq!(carried[0]["to"], "b.txt");
+    assert_eq!(carried[0]["to-lines"], "2-11");
+    assert_eq!(carried[0]["sha256"], sha256_hex(first.as_bytes()));
+    assert!(summary.text.contains("@@ -1 +1 @@\n"), "{}", summary.text);
+    assert!(summary.text.contains("@@ -0,0 +1 @@\n"), "{}", summary.text);
 }
 
 #[test]
