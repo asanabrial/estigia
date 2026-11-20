@@ -36,13 +36,23 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `required`, a run holding no claim is refused (`issue-required`) before a routine write
   the gate can place inside a checkout whose tracker can name an issue there and that has an installed
   contract (a file edit or write, or a shell line carrying a `REPOSITORY_SHELL` fragment such as
-  `git commit`), and before one it **cannot place** when the call was launched in a repository, from
-  a directory whose repository could not be established, or from outside every repository. The row has
-  no value that lets an unplaceable write run and compares the checkout afterwards: nothing records or
-  compares a checkout's `git status`, and a stored `watch` or `ask` reads as `required`. Held by
+  `git commit`). A shell write it **cannot place** runs, wherever the call was launched, unless the
+  write is a git write or any word of the line is a `git` or `gh` command (`issue_requirement::names_git_or_gh`),
+  which is refused as a placed write is. Nothing records or compares a checkout's `git status`
+  afterwards, and a stored `watch` or `ask` reads as `required`. Held by
   `a_write_placed_inside_the_checkout_is_still_refused_under_required`,
-  `an_unplaceable_shell_write_launched_in_a_repository_is_refused_under_required` and
-  `a_stored_watch_reads_as_required_and_refuses_an_unclaimed_edit`. What it does not hold:
+  `a_shell_write_placed_inside_or_naming_git_or_gh_is_still_held`,
+  `a_shell_write_the_gate_cannot_place_runs_under_required` and
+  `a_stored_watch_reads_as_required_and_refuses_an_unclaimed_edit`.
+  **What letting unplaceable writes run costs:** an unclaimed run can change the checkout through a line
+  the gate cannot read — `cargo fmt > /tmp/l`, `sed -ibak s/a/b/ src/x.rs > /tmp/l`, `bash -c 'echo x >
+  src/lib.rs'`, a here-document in any shape but the one below — and nothing reports it until a commit or
+  a push, which stay held, is refused. The row's guarantee is that no unclaimed work reaches a branch, not
+  that the checkout stays clean. It was narrowed to this after one operator's store (2026-10-20 to
+  2026-11-19) showed 130 of 192 `required` refusals were unplaceable writes, by subject redirects, inline
+  `python3`, `mkdir`, `curl -o`, `sed -i`, `rm` and `cp`, and the operator turned the row off rather than
+  keep it; the decision log keeps no command text, so whether any of those landed in the checkout is
+  unknown. What it does not hold:
   - **A boundary is held as a commit is, unless the repository says `Unclaimed GitHub writes: allowed`, and
     `Merge by` is not read on this path.** An unclaimed `gh pr merge`, `git merge`, `git pull`, `git tag`,
     release, `gh api` mutation or declared irreversible command is refused under `required`, and so is
@@ -74,7 +84,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     target lands in, not the launch directory, so a no-remote checkout writing into a nested checkout that
     has one is still held. A failed read or a `.git` entry git will not use is not zero remotes. A
     non-GitHub remote still counts, because the URL is not read. Open: a refusal that survives there (an
-    unplaceable write under `required`, a nested target the tracker can name) still names `claim`/`create`,
+    unplaceable git write under `required`, a nested target the tracker can name) still names `claim`/`create`,
     which cannot run from the no-remote checkout. Held by `a_checkout_with_no_remote_is_not_held_for_an_issue`,
     `adding_a_remote_holds_the_same_write_again`,
     `a_named_repository_holds_the_write_where_the_checkout_has_no_remote`,
@@ -102,7 +112,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     one plain printing command (`echo`, `printf`, `cat`, `ls`, `grep`, `rg`, `head`, `tail`, `wc`, `date`,
     `pwd`) with no quote, `$`, backtick, backslash, `<`, `|`, `;`, `&`, parenthesis, line break or `..`.
     **Everything else a shell line can write is unplaceable** (a `cd` before a redirect, a variable, `&&`, a
-    second writer, inline interpreter code): refused under `required`, wherever the call was launched; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
+    second writer, inline interpreter code): it runs under `required`, wherever the call was launched,
+    unless the line names `git` or `gh`; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
     (`shell::quoted_heredoc_target`): `cat > TARGET <<'DELIM'`, `cat >> TARGET <<'DELIM'` or `cat <<'DELIM' >
     TARGET`, a literal absolute `TARGET` without `..`, any body (**not read**; how an issue body is drafted in
     the scratchpad) and a closing `DELIM` line. An "any shape" relaxation was abandoned after five review
@@ -111,7 +122,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     when every git command on the line runs in a literal absolute directory — a leading `cd DIR &&` for the
     whole line, or `git -C DIR` on the command — and each lands outside the launch repository, the write is
     treated as one the gate cannot place, because the rest of the line (an interpreter heredoc beside a
-    `git stash`) is not read. A second `cd`, `pushd`, `sh`/`bash`/`zsh`/`eval`, `GIT_DIR`, `--git-dir`,
+    `git stash`) is not read; being a git write, it is still refused under `required`. A second `cd`, `pushd`, `sh`/`bash`/`zsh`/`eval`, `GIT_DIR`, `--git-dir`,
     `--work-tree`, a git word inside a subshell or quotes, or a directory with a `$`, quote, glob or `~` keeps
     it inside. Not placed by this: a git command inside `"$(…)"`, which the classifier does not read as a
     write at all.
