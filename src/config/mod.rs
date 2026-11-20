@@ -386,8 +386,8 @@ impl IssueRequirement {
 /// Repository-only: it is read from the repository's own file and nowhere else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnclaimedGithubWrites {
-    /// The default: an unclaimed merge, release, tag, `gh api` mutation or other GitHub write is
-    /// held as `Issue required` holds a commit.
+    /// The default: an unclaimed pull request merge, release, tag, `gh api` mutation or merge on
+    /// the default branch is held as `Issue required` holds a commit there.
     Held,
     /// Those boundaries pass with no question under `on`.
     Allowed,

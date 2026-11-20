@@ -974,15 +974,16 @@ impl Setting {
             }
             (Self::IssueRequirement, "off") => "a run holding no claim may write here freely",
             (Self::IssueRequirement, "on") => {
-                "a write by a run holding no claim is refused until an issue is claimed"
+                "a commit or merge on the default branch, a push to it or a pull request merge by a \
+                 run holding no claim is refused until an issue is claimed"
             }
             (Self::UnclaimedGithubWrites, "held") => {
-                "a merge, release, tag, `git merge` or GitHub write by a run holding no claim is \
-                 put to the person, or refused, as `Issue required` says"
+                "a pull request merge, release, tag, `git merge` on the default branch or `gh api` \
+                 mutation by a run holding no claim is refused, as `Issue required` says"
             }
             (Self::UnclaimedGithubWrites, "allowed") => {
-                "those boundaries pass with no question; commits, pushes, branches and file writes \
-                 stay under `Issue required`"
+                "those boundaries pass with no question; a commit or a push to the default branch \
+                 stays under `Issue required`"
             }
             (Self::Workflow, "autonomous") => {
                 "Estigia holds the claim and writes the tracker, as it always has"

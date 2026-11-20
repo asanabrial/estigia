@@ -662,7 +662,7 @@ fn adjudicate_pushing(
     let Readings {
         literal,
         same_tier_fragments,
-        write_targets,
+        ..
     } = readings;
     // Before asking who holds the checkout, because the answer cannot matter:
     // an action the harness does not watch is outside whoever swore what. The
@@ -715,23 +715,8 @@ fn adjudicate_pushing(
         };
     }
     if matches!(action, Action::Remote { .. }) {
-        let unclaimed = holders_of(&context.state_root, repo_dir).is_empty()
-            && session::unreadable_holdings(&context.state_root).is_empty();
-        let held = unclaimed
-            .then(|| {
-                super::issue_requirement::decision(context, action, how, literal, write_targets)
-            })
-            .flatten()
-            .filter(|decision| matches!(decision, Decision::Ask(_) | Decision::Deny(_)));
         return Adjudication {
-            decision: match held {
-                Some(held) => super::standdown::over(
-                    held,
-                    context.stand_down.as_ref(),
-                    session::now_seconds(),
-                ),
-                None => Decision::Outside(super::Aside::NotWatched),
-            },
+            decision: Decision::Outside(super::Aside::NotWatched),
             holder: None,
         };
     }
@@ -811,10 +796,8 @@ fn adjudicate_pushing(
             }
             [] => match super::unclaimed::refusal(context, repo_dir, action, literal) {
                 Some(refusal) => Decision::Deny(Box::new(refusal)),
-                None => {
-                    super::issue_requirement::decision(context, action, how, literal, write_targets)
-                        .unwrap_or(Decision::Outside(super::Aside::NothingSworn))
-                }
+                None => super::issue_requirement::decision(context, action, literal, remotes)
+                    .unwrap_or(Decision::Outside(super::Aside::NothingSworn)),
             },
             unreadable => Decision::Deny(Box::new(Refusal::not_started(
                 "run-pointers-unreadable",

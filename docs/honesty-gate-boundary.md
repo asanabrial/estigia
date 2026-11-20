@@ -32,47 +32,53 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `a_push_without_a_claim_is_refused_on_any_branch_where_the_guard_is_installed` and
   `the_pre_push_hook_refuses_an_unclaimed_push_where_the_guard_is_installed`; nothing drives the two shell
   entry points (`estigia gate` with no session, the dialect hook with an empty session id) end to end.
-- **`Issue required` holds the writes the hook sees, and cannot hold the rest.** With the row
-  `on`, a run holding no claim is refused (`issue-required`) before a routine write
-  the gate can place inside a checkout whose tracker can name an issue there and that has an installed
-  contract (a file edit or write, or a shell line carrying a `REPOSITORY_SHELL` fragment such as
-  `git commit`). A shell write it **cannot place** runs, wherever the call was launched, unless the
-  write is a git write or any word of the line is a `git` or `gh` command (`issue_requirement::names_git_or_gh`),
-  which is refused as a placed write is. Nothing records or compares a checkout's `git status`
-  afterwards, and a stored `required`, `watch` or `ask` reads as `on`. Held by
-  `a_write_placed_inside_the_checkout_is_still_refused_under_required`,
-  `a_shell_write_placed_inside_or_naming_git_or_gh_is_still_held`,
-  `a_shell_write_the_gate_cannot_place_runs_under_required` and
-  `a_stored_watch_reads_as_on_and_refuses_an_unclaimed_edit`.
-  **What letting unplaceable writes run costs:** an unclaimed run can change the checkout through a line
-  the gate cannot read — `cargo fmt > /tmp/l`, `sed -ibak s/a/b/ src/x.rs > /tmp/l`, `bash -c 'echo x >
-  src/lib.rs'`, a here-document in any shape but the one below — and nothing reports it until a commit or
-  a push the gate can see is refused. **The `git`/`gh` check is lexical, so it does not hold every commit
-  either:** a line that hides the word (`g''it commit`, `python3 -c "…['g'+'it','commit']…"`, a script or
-  `make` target that runs git) is unplaceable, names no `git` word, and runs. What the row holds is a
-  commit, push or GitHub write whose command the line spells out; a push git itself runs is refused only
-  where `estigia guard` installed the `pre-push` hook. It was narrowed to this after one operator's store (2026-10-20 to
-  2026-11-19) showed 130 of 192 refusals were unplaceable writes, by subject redirects, inline
-  `python3`, `mkdir`, `curl -o`, `sed -i`, `rm` and `cp`, and the operator turned the row off rather than
-  keep it; the decision log keeps no command text, so whether any of those landed in the checkout is
-  unknown. What it does not hold:
-  - **A boundary is held as a commit is, unless the repository says `Unclaimed GitHub writes: allowed`, and
-    `Merge by` is not read on this path.** An unclaimed `gh pr merge`, `git merge`, `git pull`, `git tag`,
-    release, `gh api` mutation or declared irreversible command is refused under `on`, and so is
-    `Action::Remote` (`gh pr review`, `gh pr comment`), through
-    `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`. `allowed` is the operator's own
-    declaration that a skill writing through `gh api`, `gh pr review` and `gh pr merge` unclaimed is not to
-    be stopped on each call; it drops no refusal on a commit, a push, a branch or a worktree command, and a
-    write carried beside a boundary stays held under both values (`harness::write_beside_a_boundary`, the
-    classifier answering with a line's strongest command, which once let `gh pr merge 3; git worktree remove
-    /x` run unasked). **What this costs:** a person's own `git merge`, `git pull` or `git tag` in a session
-    that holds no claim is refused too; under `held` a skill that reviews and then merges meets one refusal
-    per merge; and a pull request approved at the exact head does not clear it, because the skills that
-    need this road do not take it. A command the fragment lists do not name is not found, and a GraphQL
-    mutation behind a shell variable still passes. A call launched outside every repository is left alone,
-    as a push is, and the git operation window's own refusals are unchanged. Held by
+- **`Issue required` holds only what the gate can read as work reaching the default branch.** With the row
+  `on`, a run holding no claim is refused (`issue-required`), in a checkout whose tracker can name an issue
+  there and that has an installed contract, a `git commit`, `git cherry-pick`, `git revert` or `git am`
+  while the checkout's current branch is the default branch, a `git merge` there, a push whose destination
+  is the default branch, and a `gh pr merge`. The default branch is what `refs/remotes/origin/HEAD` names,
+  else a branch called `main` or `master`; a detached `HEAD` is not it. Every other modification passes, placed
+  or not: a file edit, a redirect, `sed -i`, inline interpreter code, `git stash`, `git rm`, branch and worktree
+  commands, a commit on another branch, `git pull`, `gh pr create`, a push to another branch and a GitHub
+  write that is no boundary. Nothing records or compares a checkout's `git status` afterwards, and a stored
+  `required`, `watch` or `ask` reads as `on`. What is unknown is held, for that set only: a current branch
+  that cannot be read, a `cd` or `git -C` directory the line does not spell as a literal absolute path, a push
+  destination the line does not establish (`--all`, `--mirror`, a variable, a glob). Held by
+  `what_puts_work_on_the_default_branch_is_held_without_a_claim`,
+  `everything_else_passes_without_a_claim_on_either_branch`,
+  `a_push_destination_the_line_does_not_establish_is_held`,
+  `a_failed_current_branch_read_is_held_under_a_commit_or_a_merge`,
+  `a_modification_is_never_held_for_being_unplaceable` and
+  `a_stored_watch_reads_as_on_and_refuses_an_unclaimed_commit_on_the_default_branch`. It was narrowed to
+  this from holding almost every local write after one operator's store (2026-10-20 to 2026-11-19) showed
+  most refusals were modifications that integrated nothing and the operator turned the row off rather than
+  keep it. What it does not hold:
+  - **The branch is read when the gate looks, not when the line runs.** `git checkout main && git commit`
+    from a side branch runs unasked, and `git checkout -b topic && git commit` from the default branch is
+    refused though it commits on `topic`. A commit made by a script, an alias, a `make` target, an editor
+    or `python3 -c` that runs git passes, as does a push git itself runs where `estigia guard` installed no
+    `pre-push` hook. A push destination spelled as a variable, a quote or a glob in the refspec is held as an
+    unestablished one; a destination that comes from git's configuration is not read, so `push.default =
+    matching` (every branch the remote shares, with no refspec on the line) passes.
+    `git pull` and `git rebase` can put commits on the default branch from the checkout and pass, and `git
+    merge --abort` read through the boundary list is held like a merge.
+  - **`gh pr merge`, `git merge` on the default branch and the boundaries below stay under `Unclaimed GitHub
+    writes`, and `Merge by` is not read on this path.** An unclaimed `git tag`, release, `gh api` mutation
+    or declared irreversible command is refused under `on` unless the repository says `Unclaimed GitHub
+    writes: allowed`, and so are `gh pr merge` and a `git merge` on the default branch, through
+    `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`. `allowed` is the
+    operator's own declaration that a skill writing through `gh api` and `gh pr merge` unclaimed is not to
+    be stopped on each call; it drops no refusal on a commit or a push to the default branch. **What this
+    costs:** a person's own `git tag` in a session that holds no claim is refused; under `held` a skill that
+    reviews and then merges meets one refusal per merge; and a pull request approved at the exact head does
+    not clear it, because the skills that need this road do not take it. A command the fragment lists do not
+    name is not found, and a GraphQL mutation behind a shell variable still passes. A GitHub write that is
+    no boundary (`gh pr review`, `gh pr comment`) is never held. A call launched outside every repository is
+    left alone, and the git operation window's own refusals are unchanged. Held by
     `an_unclaimed_github_write_is_refused_under_required`, `an_unclaimed_github_write_passes_when_the_policy_is_off`,
+    `a_github_write_that_is_no_integration_passes_under_every_value`,
     `a_github_read_passes_under_every_value`, `an_unclaimed_github_write_is_held_through_the_gate_command_too`,
+    `a_tag_and_a_release_keep_their_answer_under_both_values_of_the_github_writes_row`,
     `allowed_lets_the_github_writes_pass_under_required` and `allowed_still_holds_what_the_policy_holds`.
   - **An assisted run cannot carry a GitHub write past the claim beside an admitted boundary.** `git pull;
     gh pr review 3 --approve` and a declared boundary followed by a GitHub write are refused
@@ -175,9 +181,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     inside the window is seen at the next boundary
     (`no_effect_but_the_assisted_decision_leaves_a_stamp_on_an_assisted_pointer`).
   - **The marker and the branch are bytes the agent can write**, an unsworn session in the worktree is not
-    stopped for a routine write (`issue_requirement` reads the worktree as claimed, whichever session writes
-    there; a `git push` from it is held by `Issue required` wherever it runs), and an unclaimed shell
-    write to the repository's own `estigia.local.md` can set `assisted`.
+    stopped for a routine write (`Issue required` holds no routine write at all; a push there to the default
+    branch is held wherever it runs), and an unclaimed shell write to the repository's own `estigia.local.md`
+    can set `assisted`.
   - **One session can hold several assisted claims, one child run per worktree**
     ([`several-assisted-claims.md`](several-assisted-claims.md)). Measured on Claude Code 2.1.318 from the raw
     `PreToolUse` payload of real subagents, in a throwaway repository with a logging hook: a subagent's
@@ -196,7 +202,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     - **`git -C A <subcommand>` is judged under A and not read further**, so a subcommand that writes outside A
       by its own arguments is attributed to A.
     - **A child's pointer that cannot be read is nobody's child**, so a call landing there falls to the session's
-      `Issue required`. Under `off` that admits it.
+      `Issue required`, which holds only what reaches the default branch. Under `off` that admits it.
     - **`git pull` is admitted inside a worktree whatever it names**, while `git merge` is admitted only for the
       run's base. The narrower reading is the second; nothing here proves what a pull brought in.
     - **The pointer lock is bounded**: a writer that cannot have it within two seconds falls back to the revision

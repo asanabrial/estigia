@@ -1,26 +1,28 @@
-//! What a run holding no claim may write in a checkout whose tracker can name an issue.
+//! What a run holding no claim may not put on a repository's default branch.
 
 use std::path::{Path, PathBuf};
 
-use super::{Action, Decision, GateContext, Sensitivity, session};
+use super::{Action, Decision, GateContext};
 use crate::config::{IssueRequirement, UnclaimedGithubWrites};
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 /// The stable code of this refusal.
 pub const CODE: &str = "issue-required";
 
+const COMMITS: &[&str] = &["git commit", "git cherry-pick", "git revert", "git am"];
+
 /// The requirement the configuration puts in force, or `None` where nothing can be required.
 ///
 /// A claim cannot be made without a tracker a run can hold one against (a transport to swear it
 /// through, or a read-only tracker under an assisted workflow) and a contract that says how, so
-/// requiring one without them would be a lock nobody can open. Whether the checkout a write lands
-/// in can name an issue is a separate question, asked where the write is placed and again for the
+/// requiring one without them would be a lock nobody can open. Whether the checkout a call runs
+/// in can name an issue is a separate question, asked where the session is told and again for the
 /// checkout a call runs in.
 ///
 /// A repository file that is there and cannot be read answers [`IssueRequirement::On`]
 /// whatever the layers underneath it say: the rows it carries are unknown, and an unknown result
 /// is not clearance. The same preconditions still hold, so a checkout with no tracker to claim
-/// against is not turned into a lock. The refusal that stops the write carries the read failure
+/// against is not turned into a lock. The refusal that stops the call carries the read failure
 /// rather than the policy, so the operator is shown the file to repair.
 pub fn in_force(context: &GateContext) -> Option<IssueRequirement> {
     let available = context
@@ -66,7 +68,7 @@ fn remotes(root: &Path) -> Option<Vec<String>> {
 
 /// Where the directory a call was launched from sits with respect to Git.
 ///
-/// Three answers, not two: *no repository* exempts a write the requirement does
+/// Three answers, not two: *no repository* exempts a call the requirement does
 /// not reach, while *a repository nothing here could read* holds it, and a
 /// refusal or a session may name neither of them "this repository".
 pub(crate) enum Scope {
@@ -79,203 +81,94 @@ pub(crate) enum Scope {
     Unknown,
 }
 
-/// Where a routine write lands, as far as the gate can place it.
-enum Placement {
-    Inside,
-    Outside,
-    Unplaceable,
-}
-
-/// How a hold was reached: by placing the write, by a GitHub write `Unclaimed GitHub writes` could
-/// have let pass, or by failing to place the write.
+/// How a hold was reached: by work that reaches the default branch, or by a merge or another
+/// boundary `Unclaimed GitHub writes` could have let pass.
 #[derive(Clone, Copy)]
 pub(crate) enum Reach {
     Placed,
     GithubWrite,
-    Unplaceable,
 }
 
-/// The decision for a write made by a run holding no claim, or `None` when this is not one.
+#[derive(Default)]
+struct Reading {
+    commits: bool,
+    merges: bool,
+    pushes: bool,
+    pr_merges: bool,
+    other_boundary: bool,
+}
+
+impl Reading {
+    fn of(action: &Action, literal: Option<&str>) -> Self {
+        let mut reading = Self::default();
+        match action {
+            Action::Boundary { command, .. } => match command.as_str() {
+                "git push" => reading.pushes = true,
+                "git merge" => reading.merges = true,
+                "gh pr merge" => reading.pr_merges = true,
+                "git pull" | "gh pr create" => {}
+                _ => reading.other_boundary = true,
+            },
+            Action::Write { target } => reading.commits = COMMITS.contains(&target.as_str()),
+            Action::Remote { .. } | Action::Untouched => {}
+        }
+        if let Some(line) = literal {
+            reading.commits |= super::unclaimed::names_any(line, COMMITS);
+            reading.merges |= super::unclaimed::names_any(line, &["git merge"]);
+            reading.pushes |= super::unclaimed::names_any(line, &["git push"]);
+            reading.pr_merges |= super::unclaimed::names_any(line, &["gh pr merge"]);
+        }
+        reading
+    }
+
+    fn is_empty(&self) -> bool {
+        !(self.commits || self.merges || self.pushes || self.pr_merges || self.other_boundary)
+    }
+}
+
+/// The decision for a call made by a run holding no claim, or `None` when this is not one.
 ///
-/// A routine write is one, and so is `git push`: it publishes this repository's refs, so it is held
-/// as a commit is. So is every other boundary and every GitHub write that is no boundary
-/// ([`Action::Remote`]), unless `Unclaimed GitHub writes` is `allowed` in a repository file this
-/// process could read. A write its line also carries is held as well, and a write that lands
-/// outside every repository the gate can place is not a write to this repository. `declared` are
-/// the paths a write tool named in a patch body, empty for every other call; they are placed one by
-/// one, and a write to any repository is held. A write the gate cannot place is held.
+/// Only what puts work on the repository's default branch is held: a commit-creating git write or
+/// a `git merge` while the checkout's current branch is the default branch, a push whose
+/// destination is the default branch, and `gh pr merge`. Every other modification passes, and so
+/// does `git pull`, `gh pr create` and a GitHub write that is no boundary. A boundary that is none
+/// of those (`git tag`, `gh release`, a `gh api` mutation, a command this repository declared
+/// irreversible) is held as before unless `Unclaimed GitHub writes` is `allowed` in a repository
+/// file this process could read; so are `gh pr merge` and `git merge`.
+///
+/// What cannot be established is held, for this set only: a current branch that cannot be read, a
+/// directory a `cd` or `-C` does not name literally, a push destination the line does not spell.
+/// `pushed` are the remote refs a push names when git reported them, empty for every other call.
 pub fn decision(
     context: &GateContext,
     action: &Action,
-    how: Sensitivity,
     literal: Option<&str>,
-    declared: &[String],
+    pushed: &[String],
 ) -> Option<Decision> {
-    let beside = super::write_beside_a_boundary(action, literal);
-    if super::unclaimed::is_a_push(action) || beside.as_deref() == Some("git push") {
-        let requirement = in_force(context)?;
-        let scope = scope_of(&context.repo_dir);
-        if matches!(scope, Scope::Outside) {
-            return None;
-        }
-        return held(context, requirement, &scope, Reach::Placed);
-    }
-    if beside.is_none() && matches!(action, Action::Boundary { .. } | Action::Remote { .. }) {
-        if context.unclaimed_github_writes == UnclaimedGithubWrites::Allowed
-            && context.repository_config_unreadable.is_none()
-        {
-            return None;
-        }
-        let requirement = in_force(context)?;
-        let scope = scope_of(&context.repo_dir);
-        if matches!(scope, Scope::Outside) {
-            return None;
-        }
-        return held(context, requirement, &scope, Reach::GithubWrite);
-    }
-    let carried;
-    let (action, how) = match beside {
-        Some(target) => {
-            carried = Action::Write { target };
-            (&carried, Sensitivity::Routine)
-        }
-        None => (action, how),
-    };
-    let Action::Write { target } = action else {
-        return None;
-    };
-    if how != Sensitivity::Routine {
+    let reading = Reading::of(action, literal);
+    if reading.is_empty() {
         return None;
     }
     let requirement = in_force(context)?;
-    if in_a_claimed_checkout(context, target) {
+    let scope = scope_of(&context.repo_dir);
+    let directories = directories(context, literal);
+    let on_default = (reading.commits || reading.merges)
+        .then(|| may_be_on_the_default_branch(directories.as_deref()));
+    let pushes_to_default = reading.pushes
+        && push_may_reach_the_default_branch(directories.as_deref(), literal, pushed);
+    if (reading.commits && on_default == Some(true)) || pushes_to_default {
+        return held(context, requirement, &scope, Reach::Placed);
+    }
+    if context.unclaimed_github_writes == UnclaimedGithubWrites::Allowed
+        && context.repository_config_unreadable.is_none()
+    {
         return None;
     }
-    let scope = scope_of(&context.repo_dir);
-    match placement(context, action, literal, declared, &scope) {
-        Placement::Outside => None,
-        Placement::Inside
-            if matches!(
-                &context.tracker,
-                crate::config::Tracker::Github { repo: None }
-            ) && no_landing_can_name_an_issue(context, action, literal, declared, &scope) =>
-        {
-            None
-        }
-        Placement::Inside => held(context, requirement, &scope, Reach::Placed),
-        Placement::Unplaceable if target.starts_with("git ") || names_git_or_gh(literal) => {
-            held(context, requirement, &scope, Reach::Unplaceable)
-        }
-        Placement::Unplaceable => None,
-    }
-}
-
-/// Whether any word of the shell line is a `git` or `gh` command, however it is quoted or
-/// chained, so an unplaceable line that may commit, push or write to GitHub is still held.
-fn names_git_or_gh(literal: Option<&str>) -> bool {
-    literal.is_some_and(|line| {
-        line.split(|c: char| c.is_whitespace() || ";&|()`$'\"\\<>=".contains(c))
-            .any(|word| {
-                let program = word.rsplit('/').next().unwrap_or(word);
-                matches!(program, "git" | "gh")
-            })
-    })
-}
-
-/// Whether every repository this write lands in is one the configured tracker cannot name an
-/// issue for.
-///
-/// A target outside every repository grants nothing on its own: the answer is `true` only when at
-/// least one target lands inside a repository and none of those repositories can name an issue.
-/// A target this process cannot place, or one whose repository it cannot establish, answers
-/// `false`, because an unknown is not clearance.
-fn no_landing_can_name_an_issue(
-    context: &GateContext,
-    action: &Action,
-    literal: Option<&str>,
-    declared: &[String],
-    scope: &Scope,
-) -> bool {
-    let Action::Write { target } = action else {
-        return false;
-    };
-    match literal {
-        Some(line) => no_shell_landing_can_name_an_issue(context, target, line, scope),
-        None => no_file_landing_can_name_an_issue(context, target, declared),
-    }
-}
-
-fn no_file_landing_can_name_an_issue(
-    context: &GateContext,
-    target: &str,
-    declared: &[String],
-) -> bool {
-    let Some(targets) = file_targets(target, declared) else {
-        return false;
-    };
-    let mut inside_a_repository = false;
-    for target in targets {
-        let Some(landing) = landing(context, target) else {
-            return false;
-        };
-        let Some(root) = repository_of(&landing) else {
-            continue;
-        };
-        inside_a_repository = true;
-        if names_an_issue(context, &root) {
-            return false;
-        }
-    }
-    inside_a_repository
-}
-
-fn no_shell_landing_can_name_an_issue(
-    context: &GateContext,
-    target: &str,
-    line: &str,
-    scope: &Scope,
-) -> bool {
-    if super::shell::runs_a_program_after_pre(line) {
-        return false;
-    }
-    let spelling = super::shell::writes_a_file(&line.to_ascii_lowercase());
-    if spelling.as_deref() != Some(target) && spelling.as_deref() != Some(super::shell::REDIRECT) {
-        return match scope {
-            Scope::Repository(root) => !names_an_issue(context, root),
-            _ => false,
-        };
-    }
-    let Some(targets) = super::shell::redirect_targets(line) else {
-        return false;
-    };
-    let mut inside_a_repository = false;
-    for target in targets {
-        let Some(landing) = landing(context, &target) else {
-            return false;
-        };
-        let Some(root) = repository_of(&landing) else {
-            continue;
-        };
-        inside_a_repository = true;
-        if names_an_issue(context, &root) {
-            return false;
-        }
-    }
-    inside_a_repository
-}
-
-/// The repository `landing` belongs to, or `None` where git names none.
-///
-/// The first ancestor that exists is the one git is asked: a file that has not been written yet
-/// sits under a directory that has, and a directory that will be created sits under one that
-/// already exists.
-fn repository_of(landing: &Path) -> Option<PathBuf> {
-    let mut probe = Some(landing);
-    while let Some(directory) = probe {
-        if directory.is_dir() {
-            return git_root(directory);
-        }
-        probe = directory.parent();
+    let outside = matches!(scope, Scope::Outside);
+    let github = (reading.merges && on_default == Some(true))
+        || ((reading.pr_merges || reading.other_boundary) && !outside);
+    if github {
+        return held(context, requirement, &scope, Reach::GithubWrite);
     }
     None
 }
@@ -301,82 +194,221 @@ fn held(
     }
 }
 
-fn placement(
-    context: &GateContext,
-    action: &Action,
-    literal: Option<&str>,
-    declared: &[String],
-    scope: &Scope,
-) -> Placement {
-    let Action::Write { target } = action else {
-        return Placement::Inside;
-    };
-    match literal {
-        Some(line) => shell_write(context, target, line, scope),
-        None => file_tool(context, target, declared, scope),
-    }
+enum Branch {
+    Default,
+    Other,
+    Unread,
+    NoRepository,
 }
 
-fn file_tool(context: &GateContext, target: &str, declared: &[String], scope: &Scope) -> Placement {
-    let Some(targets) = file_targets(target, declared) else {
-        // No field and no body named a path, so `target` is the tool's own name
-        // and the destination was never read. Held rather than placed by name,
-        // which is what a relative target would otherwise answer for.
-        return Placement::Inside;
+/// The checkouts a call's git commands run in that the tracker can name an issue for, or `None`
+/// when the line sends git somewhere it does not name literally.
+fn directories(context: &GateContext, literal: Option<&str>) -> Option<Vec<PathBuf>> {
+    let named = match literal {
+        None => vec![context.repo_dir.clone()],
+        Some(line) => match git_directories(line) {
+            Some(named) => named.into_iter().map(PathBuf::from).collect(),
+            None if moves_git(line) => return None,
+            None => vec![context.repo_dir.clone()],
+        },
     };
-    // Only *all targets outside* exempts the write: one placed inside, or one
-    // that could not be placed, holds it — the asymmetry `paths::placed` states.
-    for target in targets {
-        if !matches!(against(context, scope, target), Placement::Outside) {
-            return Placement::Inside;
-        }
-    }
-    Placement::Outside
+    Some(
+        named
+            .into_iter()
+            .filter(|directory| match scope_of(directory) {
+                Scope::Repository(root) => names_an_issue(context, &root),
+                Scope::Outside | Scope::Unknown => true,
+            })
+            .collect(),
+    )
 }
 
-fn file_targets<'a>(target: &'a str, declared: &'a [String]) -> Option<Vec<&'a str>> {
-    if declared.is_empty() && super::names_no_write_path(target) {
-        return None;
-    }
-    Some(if declared.is_empty() {
-        vec![target]
-    } else {
-        declared.iter().map(String::as_str).collect()
+fn moves_git(line: &str) -> bool {
+    line.split_whitespace().any(|word| {
+        let bare = word.trim_matches(|c: char| !c.is_alphanumeric() && !"/_-.".contains(c));
+        matches!(bare, "cd" | "pushd" | "popd" | "-C")
+            || word.contains("GIT_DIR")
+            || word.contains("GIT_WORK_TREE")
+            || word.starts_with("--git-dir")
+            || word.starts_with("--work-tree")
     })
 }
 
-/// A shell write is placed only by literal redirect targets; a named repository operation arrives
-/// first in the classifier and writes this checkout itself, and everything else needs running.
-fn shell_write(context: &GateContext, target: &str, line: &str, scope: &Scope) -> Placement {
-    if target.starts_with("git ")
-        && git_directories(line).is_some_and(|directories| {
-            directories
+fn may_be_on_the_default_branch(directories: Option<&[PathBuf]>) -> bool {
+    let Some(directories) = directories else {
+        return true;
+    };
+    directories
+        .iter()
+        .any(|directory| matches!(branch_of(directory), Branch::Default | Branch::Unread))
+}
+
+fn branch_of(directory: &Path) -> Branch {
+    let root = match scope_of(directory) {
+        Scope::Repository(root) => root,
+        Scope::Outside => return Branch::NoRepository,
+        Scope::Unknown => return Branch::Unread,
+    };
+    match current_branch(&root) {
+        Some(Some(name)) if is_the_default_branch(&root, &name) => Branch::Default,
+        Some(_) => Branch::Other,
+        None => Branch::Unread,
+    }
+}
+
+/// The branch `HEAD` names: `Some(None)` for a detached `HEAD`, `None` when it cannot be read.
+fn current_branch(root: &Path) -> Option<Option<String>> {
+    let answer = super::proof_git_command(root, &["symbolic-ref", "-q", "--short", "HEAD"])
+        .output()
+        .ok()?;
+    if answer.status.success() {
+        let name = String::from_utf8(answer.stdout).ok()?.trim().to_owned();
+        return (!name.is_empty()).then_some(Some(name));
+    }
+    (answer.status.code() == Some(1)).then_some(None)
+}
+
+fn is_the_default_branch(root: &Path, name: &str) -> bool {
+    match default_branch(root) {
+        Some(default) => default == name,
+        None => matches!(name, "main" | "master"),
+    }
+}
+
+fn default_branch(root: &Path) -> Option<String> {
+    let answer = super::proof_git_command(
+        root,
+        &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    )
+    .output()
+    .ok()?;
+    if !answer.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(answer.stdout).ok()?;
+    text.trim().strip_prefix("origin/").map(str::to_owned)
+}
+
+fn names_the_default_branch(directory: &Path, name: &str) -> bool {
+    match scope_of(directory) {
+        Scope::Repository(root) => is_the_default_branch(&root, name),
+        Scope::Outside => false,
+        Scope::Unknown => true,
+    }
+}
+
+fn push_may_reach_the_default_branch(
+    directories: Option<&[PathBuf]>,
+    literal: Option<&str>,
+    pushed: &[String],
+) -> bool {
+    let Some(directories) = directories else {
+        return true;
+    };
+    if directories.is_empty() {
+        return false;
+    }
+    if !pushed.is_empty() {
+        return directories.iter().any(|directory| {
+            pushed
                 .iter()
-                .all(|directory| matches!(against(context, scope, directory), Placement::Outside))
+                .any(|remote| destination_may_be_the_default_branch(remote, directory))
+        });
+    }
+    let Some(line) = literal else {
+        return true;
+    };
+    let pushes = pushes_in(line);
+    pushes.is_empty()
+        || directories.iter().any(|directory| {
+            pushes
+                .iter()
+                .any(|arguments| arguments_may_reach_the_default_branch(arguments, directory))
         })
-    {
-        return Placement::Unplaceable;
+}
+
+fn destination_may_be_the_default_branch(destination: &str, directory: &Path) -> bool {
+    if destination.is_empty() {
+        return true;
     }
-    let spelling = super::shell::writes_a_file(&line.to_ascii_lowercase());
-    if spelling.as_deref() != Some(target) && spelling.as_deref() != Some(super::shell::REDIRECT) {
-        return Placement::Inside;
-    }
-    // `rg --pre` runs a program the redirect targets cannot bound, so it is held
-    // however the line redirects.
-    if super::shell::runs_a_program_after_pre(line) {
-        return Placement::Inside;
-    }
-    match super::shell::redirect_targets(line) {
-        Some(targets)
-            if targets.iter().all(|target| {
-                Path::new(target).is_absolute()
-                    && matches!(against(context, scope, target), Placement::Outside)
-            }) =>
-        {
-            Placement::Outside
+    let name = destination
+        .strip_prefix("refs/heads/")
+        .unwrap_or(destination);
+    !name.starts_with("refs/") && names_the_default_branch(directory, name)
+}
+
+/// The words after `push` in every `git push` the line spells out.
+fn pushes_in(line: &str) -> Vec<Vec<String>> {
+    let text = super::shell::unquote_plain_words(line);
+    let mut found = Vec::new();
+    for segment in text.split(|c: char| ";&|()`\n".contains(c)) {
+        let words: Vec<&str> = segment.split_whitespace().collect();
+        let Some(at) = words
+            .iter()
+            .position(|word| word.rsplit('/').next() == Some("git"))
+        else {
+            continue;
+        };
+        let mut rest = words[at + 1..].iter();
+        let mut subcommand = None;
+        while let Some(word) = rest.next() {
+            match *word {
+                "-C" | "-c" => {
+                    rest.next();
+                }
+                option if option.starts_with('-') => {}
+                named => {
+                    subcommand = Some(named);
+                    break;
+                }
+            }
         }
-        Some(_) => Placement::Inside,
-        None => Placement::Unplaceable,
+        if subcommand == Some("push") {
+            found.push(rest.map(|word| (*word).to_owned()).collect());
+        }
+    }
+    found
+}
+
+fn arguments_may_reach_the_default_branch(arguments: &[String], directory: &Path) -> bool {
+    let mut positional: Vec<&str> = Vec::new();
+    let mut words = arguments.iter();
+    while let Some(word) = words.next() {
+        if word.contains(['<', '>']) {
+            break;
+        }
+        match word.as_str() {
+            "--all" | "--mirror" => return true,
+            "-o" | "--push-option" | "--receive-pack" | "--exec" | "--repo" => {
+                words.next();
+            }
+            option if option.starts_with('-') => {}
+            named => positional.push(named),
+        }
+    }
+    let refspecs = positional.get(1..).unwrap_or_default();
+    if refspecs.is_empty() {
+        return current_may_be_the_default_branch(directory);
+    }
+    refspecs
+        .iter()
+        .any(|refspec| refspec_may_reach_the_default_branch(refspec, directory))
+}
+
+fn current_may_be_the_default_branch(directory: &Path) -> bool {
+    matches!(branch_of(directory), Branch::Default | Branch::Unread)
+}
+
+fn refspec_may_reach_the_default_branch(refspec: &str, directory: &Path) -> bool {
+    if refspec.contains(|c: char| "$`'\"\\*?~[{^".contains(c)) {
+        return true;
+    }
+    let refspec = refspec.trim_start_matches('+');
+    let destination = refspec.rsplit_once(':').map_or(refspec, |(_, to)| to);
+    match destination {
+        "" => true,
+        "HEAD" => current_may_be_the_default_branch(directory),
+        named => destination_may_be_the_default_branch(named, directory),
     }
 }
 
@@ -442,68 +474,6 @@ fn git_directories(line: &str) -> Option<Vec<String>> {
     (!directories.is_empty()).then_some(directories)
 }
 
-/// Where an absolute target lands, or a relative one from the directory the call runs in.
-fn landing(context: &GateContext, target: &str) -> Option<PathBuf> {
-    let target = Path::new(target);
-    let target = if target.is_absolute() {
-        target.to_path_buf()
-    } else {
-        context.repo_dir.join(target)
-    };
-    crate::paths::placed(&target)
-}
-
-/// Where one named target lands, given the scope the call was launched in.
-fn against(context: &GateContext, scope: &Scope, target: &str) -> Placement {
-    let Some(landing) = landing(context, target) else {
-        return Placement::Unplaceable;
-    };
-    match scope {
-        // The checkout the call was launched in: a sibling checkout it does not
-        // cover stays outside, as it always did.
-        Scope::Repository(root) => {
-            if crate::paths::covers(root, &landing) {
-                Placement::Inside
-            } else {
-                Placement::Outside
-            }
-        }
-        // Nothing here was a repository, so the target is one only where a
-        // `.git` entry says so — a repository, or a claimed worktree, from
-        // outside both.
-        Scope::Outside => match holds_a_git_entry(&landing) {
-            Some(true) => Placement::Inside,
-            Some(false) => Placement::Outside,
-            None => Placement::Unplaceable,
-        },
-        // Nothing was established. An unknown is not clearance.
-        Scope::Unknown => Placement::Inside,
-    }
-}
-
-fn in_a_claimed_checkout(context: &GateContext, target: &str) -> bool {
-    let path = Path::new(target);
-    let landing = if path.is_absolute() {
-        match crate::paths::placed(path) {
-            Some(landing) => landing,
-            None => return false,
-        }
-    } else {
-        context.repo_dir.clone()
-    };
-    session::holdings(&context.state_root)
-        .iter()
-        .filter(|run| match (&run.worktree, &run.repo_dir) {
-            (Some(worktree), Some(repo_dir)) => worktree != repo_dir,
-            _ => false,
-        })
-        .filter_map(|run| run.worktree.as_ref())
-        .any(|worktree| {
-            crate::paths::covers(worktree, &context.repo_dir)
-                && crate::paths::covers(worktree, &landing)
-        })
-}
-
 /// Which repository, if any, contains `directory`.
 ///
 /// Git answers first, being the authority on where a working tree begins; only
@@ -555,11 +525,9 @@ fn holds_a_git_entry(directory: &Path) -> Option<bool> {
     Some(false)
 }
 
-/// The refusal for an unclaimed write under the requirement in force.
+/// The refusal for an unclaimed call that would put work on the default branch.
 ///
-/// The clause bound to `scope` and `reach` keeps it honest: only a scope Git named may name
-/// a directory, and a hold reached by *failing* to place the write says so
-/// rather than implying the write landed in a repository.
+/// The clause bound to `scope` keeps it honest: only a scope Git named may name a directory.
 pub(crate) fn refusal(
     assisted: bool,
     requirement: IssueRequirement,
@@ -568,40 +536,37 @@ pub(crate) fn refusal(
 ) -> Refusal {
     let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
-         write in; or `Issue required` set to `off` for this repository, when its writes \
-         need no claim"
+         work in; or `Issue required` set to `off` for this repository, when its default branch \
+         needs no claim"
     } else {
         "an issue claimed with `claim`, filed first with `create` when none covers this \
          change, then a branch started with `claim`'s `branch` and `base`, which gives the isolated \
-         checkout to write in; or `Issue required` set to `off` for this repository, \
-         when its writes need no claim"
+         checkout to work in; or `Issue required` set to `off` for this repository, \
+         when its default branch needs no claim"
     };
     let way_in = match reach {
         Reach::GithubWrite => format!(
             "{way_in}; or `Unclaimed GitHub writes` set to `allowed` for this repository, when \
              only its GitHub writes need no claim"
         ),
-        Reach::Placed | Reach::Unplaceable => way_in.to_string(),
+        Reach::Placed => way_in.to_string(),
     };
-    let here = match (scope, reach) {
-        (Scope::Repository(_), Reach::Placed | Reach::GithubWrite) => " in this repository",
-        (Scope::Repository(_), Reach::Unplaceable) => {
-            ", and this write could not be placed inside or outside this repository without \
-             running it, so it is held"
+    let here = match scope {
+        Scope::Repository(_) => " in this repository",
+        Scope::Outside => {
+            ", and this call reaches a repository from a directory that is not inside one"
         }
-        (Scope::Outside, _) => {
-            ", and this write could not be placed outside every repository, so it is held"
-        }
-        (Scope::Unknown, _) => {
-            ", and whether this directory or this write's landing is a repository could not \
-             be established"
+        Scope::Unknown => {
+            ", and whether this directory or the repository this call reaches is a repository \
+             could not be established, so the call is held"
         }
     };
     Refusal::not_started(
         CODE,
         format!(
-            "this run holds no issue, and `Issue required` is `{}`{here}: a write \
-             without a claim skips the claim, the review receipt and the delivery gate",
+            "this run holds no issue, and `Issue required` is `{}`{here}: work reaching the \
+             default branch without an issue and a pull request skips the claim, the review \
+             receipt and the delivery gate",
             requirement.as_value()
         ),
         Resolution::no_command(NoCommandReason::OperatorKnowledge, way_in),

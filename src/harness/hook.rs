@@ -754,7 +754,9 @@ fn unclaimed_hold(context: &GateContext, requirement: crate::config::IssueRequir
         "Claim an issue first, filing one with `create` when none covers the change, then work \
          through `claim` with `branch` and `base`."
     };
-    let held = "Estigia refuses every repository write until one is claimed";
+    let held = "Estigia refuses a commit or a merge on the default branch, a push to it and the \
+                merge of a pull request until one is claimed; edits, commits on other branches \
+                and every other write are not held";
     match scope {
         Scope::Repository(_) => format!(
             "This run holds no issue, and `Issue required` is `{}` in this \
@@ -763,15 +765,16 @@ fn unclaimed_hold(context: &GateContext, requirement: crate::config::IssueRequir
         ),
         Scope::Outside => format!(
             "This run holds no issue. This directory is not inside a repository Estigia \
-             can place, so no issue requirement applies to a write that lands here: \
-             `Issue required` is `{}` for a write that lands in a repository Estigia \
+             can place, so no issue requirement applies to a call that stays here: \
+             `Issue required` is `{}` for a call that reaches a repository Estigia \
              can place, and there {held}. Reads are not gated.",
             requirement.as_value()
         ),
         Scope::Unknown => format!(
             "This run holds no issue. `Issue required` is `{}` here, but whether \
-             this directory is inside a repository could not be established, so every \
-             write from it is held rather than exempted: {held}. Reads are not gated.",
+             this directory is inside a repository could not be established, so a commit, \
+             a merge or a push from it is held rather than exempted: {held}. Reads are \
+             not gated.",
             requirement.as_value()
         ),
     }
@@ -891,7 +894,7 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                 "additionalContext": format!(
                     "## Estigia
 
-This session carries no identity Estigia can derive a run id from, so nothing can be sworn here: a claim needs one run to bind to, and every session in this state would share the same name. Reads go through untouched, and a write is held to `Issue required` where the repository sets one.{}{}{}{}",
+This session carries no identity Estigia can derive a run id from, so nothing can be sworn here: a claim needs one run to bind to, and every session in this state would share the same name. Reads go through untouched, and what would put work on the default branch is held to `Issue required` where the repository sets one.{}{}{}{}",
                     drift_note(context),
                     build_note(context),
                     queue_paragraph(context, with_count),
