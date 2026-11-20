@@ -47,8 +47,11 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   **What letting unplaceable writes run costs:** an unclaimed run can change the checkout through a line
   the gate cannot read — `cargo fmt > /tmp/l`, `sed -ibak s/a/b/ src/x.rs > /tmp/l`, `bash -c 'echo x >
   src/lib.rs'`, a here-document in any shape but the one below — and nothing reports it until a commit or
-  a push, which stay held, is refused. The row's guarantee is that no unclaimed work reaches a branch, not
-  that the checkout stays clean. It was narrowed to this after one operator's store (2026-10-20 to
+  a push the gate can see is refused. **The `git`/`gh` check is lexical, so it does not hold every commit
+  either:** a line that hides the word (`g''it commit`, `python3 -c "…['g'+'it','commit']…"`, a script or
+  `make` target that runs git) is unplaceable, names no `git` word, and runs. What the row holds is a
+  commit, push or GitHub write whose command the line spells out; a push git itself runs is refused only
+  where `estigia guard` installed the `pre-push` hook. It was narrowed to this after one operator's store (2026-10-20 to
   2026-11-19) showed 130 of 192 `required` refusals were unplaceable writes, by subject redirects, inline
   `python3`, `mkdir`, `curl -o`, `sed -i`, `rm` and `cp`, and the operator turned the row off rather than
   keep it; the decision log keeps no command text, so whether any of those landed in the checkout is
