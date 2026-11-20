@@ -356,8 +356,8 @@ impl DecisionMode {
 pub enum IssueRequirement {
     /// The default: unclaimed writes are allowed.
     Off,
-    /// Unclaimed writes are refused. A stored `watch` or `ask` reads as this.
-    Required,
+    /// Unclaimed writes are refused. A stored `required`, `watch` or `ask` reads as this.
+    On,
 }
 
 impl IssueRequirement {
@@ -365,16 +365,16 @@ impl IssueRequirement {
     pub fn as_value(self) -> &'static str {
         match self {
             Self::Off => "off",
-            Self::Required => "required",
+            Self::On => "on",
         }
     }
 
     /// Every answer, under an exhaustive match.
     pub fn all() -> Vec<Self> {
-        let every = vec![Self::Off, Self::Required];
+        let every = vec![Self::Off, Self::On];
         for requirement in &every {
             match requirement {
-                Self::Off | Self::Required => {}
+                Self::Off | Self::On => {}
             }
         }
         every
@@ -387,9 +387,9 @@ impl IssueRequirement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnclaimedGithubWrites {
     /// The default: an unclaimed merge, release, tag, `gh api` mutation or other GitHub write is
-    /// held as `Unclaimed write policy` holds a commit.
+    /// held as `Issue required` holds a commit.
     Held,
-    /// Those boundaries pass with no question under `required`.
+    /// Those boundaries pass with no question under `on`.
     Allowed,
 }
 

@@ -659,7 +659,7 @@ fn a_call_carrying_a_session_id_is_not_refused_for_the_checkouts_holders() {
     std::fs::write(
         repository_file.join("estigia.local.md"),
         "| Setting | Value here | Skill default |\n|---|---|---|\n\
-         | Issue requirement | off | ask |\n",
+         | Issue required | off | off |\n",
     )
     .expect("the repository answers off");
 

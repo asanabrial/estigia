@@ -54,7 +54,7 @@ fn fan() -> Fan {
     let trees = tempfile::tempdir().expect("a directory for worktrees");
     let mut context = rig.context.clone();
     context.repo_dir = rig.repo.path().to_path_buf();
-    context.issue_requirement = crate::config::IssueRequirement::Required;
+    context.issue_requirement = crate::config::IssueRequirement::On;
     let a = child(
         &context.state_root,
         rig.repo.path(),

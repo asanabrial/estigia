@@ -1466,6 +1466,38 @@ fn config_set_agent_preserves_an_override_that_is_not_utf8() {
 }
 
 #[test]
+fn config_set_issue_required_writes_on_and_off_and_refuses_the_old_values() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let repository = tempfile::tempdir().expect("a repository");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    std::fs::create_dir(repository.path().join(".git")).expect("the checkout marker exists");
+    let repository_file = estigia::skill::repository_config_path(repository.path());
+
+    let (_, stderr, ok) = run_in(
+        home.path(),
+        repository.path(),
+        &["config", "set", "Issue required", "on", "--repo"],
+        "",
+    );
+    assert!(ok, "the row was refused: {stderr}");
+    let written = std::fs::read_to_string(&repository_file).expect("the repository file");
+    assert!(written.contains("| Issue required | on |"), "{written}");
+
+    for value in ["required", "watch", "ask"] {
+        let (_, stderr, ok) = run_in(
+            home.path(),
+            repository.path(),
+            &["config", "set", "Issue required", value, "--repo"],
+            "",
+        );
+        assert!(!ok, "{value} was accepted");
+        assert!(stderr.contains("config-value-unrecognised"), "{stderr}");
+    }
+    let after = std::fs::read_to_string(&repository_file).expect("the repository file");
+    assert_eq!(after, written, "a refused value changed the file");
+}
+
+#[test]
 fn config_set_repo_preserves_a_repository_document_that_is_not_utf8() {
     let home = tempfile::tempdir().expect("a temporary home");
     let repository = tempfile::tempdir().expect("a repository");
@@ -1484,7 +1516,7 @@ fn config_set_repo_preserves_a_repository_document_that_is_not_utf8() {
     let (_, stderr, ok) = run_in(
         home.path(),
         repository.path(),
-        &["config", "set", "Issue requirement", "required", "--repo"],
+        &["config", "set", "Issue required", "on", "--repo"],
         "",
     );
 

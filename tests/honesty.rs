@@ -3853,7 +3853,7 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
                     reads.push("integration mode".to_owned());
                 }
                 if shipped.contains("context.issue_requirement") {
-                    reads.push("unclaimed write policy".to_owned());
+                    reads.push("issue required".to_owned());
                 }
                 if shipped.contains("context.unclaimed_github_writes") {
                     reads.push("unclaimed github writes".to_owned());

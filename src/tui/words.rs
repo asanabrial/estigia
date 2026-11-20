@@ -418,12 +418,11 @@ pub const SPANISH: &[(&str, &str)] = &[
         "si un veredicto aceptado consulta el carril de publicación de esta cabeza",
     ),
     ("`on`, or `off`", "`on`, o `off`"),
-    ("Unclaimed write policy", "Política de escritura sin reclamo"),
+    ("Issue required", "Exigir issue"),
     (
         "whether a run holding no claim may write in this repository: allowed or refused",
         "si una ejecución sin reclamo puede escribir en este repositorio: se permite o se rechaza",
     ),
-    ("`off` or `required`", "`off` o `required`"),
     ("Unclaimed GitHub writes", "Escrituras en GitHub sin reclamo"),
     (
         "whether a run holding no claim may merge, tag, release or write to GitHub: held like a commit, or allowed",

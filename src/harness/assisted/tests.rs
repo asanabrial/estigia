@@ -157,7 +157,7 @@ fn a_keyed_assisted_run_under_a_read_only_tracker_is_still_admitted_in_its_workt
     rig.context.tracker = crate::config::Tracker::Linear {
         team: "ENG".to_owned(),
     };
-    rig.context.issue_requirement = crate::config::IssueRequirement::Required;
+    rig.context.issue_requirement = crate::config::IssueRequirement::On;
     guard::install(rig.repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     let marker = crate::transport::branch::ownership_path(&rig.worktree).expect("a directory");

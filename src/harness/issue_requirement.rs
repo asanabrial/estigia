@@ -17,7 +17,7 @@ pub const CODE: &str = "issue-required";
 /// in can name an issue is a separate question, asked where the write is placed and again for the
 /// checkout a call runs in.
 ///
-/// A repository file that is there and cannot be read answers [`IssueRequirement::Required`]
+/// A repository file that is there and cannot be read answers [`IssueRequirement::On`]
 /// whatever the layers underneath it say: the rows it carries are unknown, and an unknown result
 /// is not clearance. The same preconditions still hold, so a checkout with no tracker to claim
 /// against is not turned into a lock. The refusal that stops the write carries the read failure
@@ -28,7 +28,7 @@ pub fn in_force(context: &GateContext) -> Option<IssueRequirement> {
         .adjudicates_unclaimed_writes(context.workflow)
         && context.skill_root.join(crate::skill::CONTRACT).is_file();
     if context.repository_config_unreadable.is_some() {
-        return available.then_some(IssueRequirement::Required);
+        return available.then_some(IssueRequirement::On);
     }
     (context.issue_requirement != IssueRequirement::Off && available)
         .then_some(context.issue_requirement)
@@ -291,7 +291,7 @@ fn held(
     }
     let assisted = context.workflow == Some(crate::config::Workflow::Assisted);
     match requirement {
-        IssueRequirement::Required => Some(Decision::Deny(Box::new(refusal(
+        IssueRequirement::On => Some(Decision::Deny(Box::new(refusal(
             assisted,
             requirement,
             scope,
@@ -568,12 +568,12 @@ pub(crate) fn refusal(
 ) -> Refusal {
     let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
-         write in; or `Unclaimed write policy` set to `off` for this repository, when its writes \
+         write in; or `Issue required` set to `off` for this repository, when its writes \
          need no claim"
     } else {
         "an issue claimed with `claim`, filed first with `create` when none covers this \
          change, then a branch started with `claim`'s `branch` and `base`, which gives the isolated \
-         checkout to write in; or `Unclaimed write policy` set to `off` for this repository, \
+         checkout to write in; or `Issue required` set to `off` for this repository, \
          when its writes need no claim"
     };
     let way_in = match reach {
@@ -600,7 +600,7 @@ pub(crate) fn refusal(
     Refusal::not_started(
         CODE,
         format!(
-            "this run holds no issue, and `Unclaimed write policy` is `{}`{here}: a write \
+            "this run holds no issue, and `Issue required` is `{}`{here}: a write \
              without a claim skips the claim, the review receipt and the delivery gate",
             requirement.as_value()
         ),
