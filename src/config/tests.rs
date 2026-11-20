@@ -104,6 +104,8 @@ fn every_variant() -> Vec<Setting> {
             | Setting::DecisionMode
             | Setting::Evidence
             | Setting::PublicationLane
+            | Setting::PublicationLanes
+            | Setting::PublicationLanesExclude
             | Setting::ReviewBudget
             | Setting::ChangeSize
             | Setting::CorrectionsPerLineage
@@ -182,6 +184,8 @@ fn every_setting_is_in_the_table() {
         Setting::DecisionMode,
         Setting::Evidence,
         Setting::PublicationLane,
+        Setting::PublicationLanes,
+        Setting::PublicationLanesExclude,
         Setting::ReviewBudget,
         Setting::ChangeSize,
         Setting::CorrectionsPerLineage,
@@ -374,6 +378,8 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
             | Setting::Window
             | Setting::GitOperationWindow
             | Setting::Boundaries
+            | Setting::PublicationLanes
+            | Setting::PublicationLanesExclude
             | Setting::Summary
             | Setting::Body
             | Setting::Notifications
@@ -654,6 +660,8 @@ fn a_rendered_table_reads_back_identically() {
         git_operation_window: GitOperationWindow::Disabled,
         evidence: Evidence::Measuring,
         publication_lane: crate::config::PublicationLane::Off,
+        publication_lanes: Some(vec!["ci.yml".to_owned()]),
+        publication_lanes_exclude: vec!["release.yml".to_owned()],
         issue_requirement: crate::config::IssueRequirement::Off,
         unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
@@ -1123,6 +1131,69 @@ fn an_operator_may_add_a_boundary_and_may_not_take_one_away() {
     // A list of nothing but separators is a boundary the operator believes they
     // declared, so it is refused rather than silently dropped.
     assert!(Config::read(&table(&[("Irreversible commands", ", ,")]), None).is_err());
+}
+
+#[test]
+fn the_publication_lane_rows_are_settings_of_their_own() {
+    let excluded = "release.yml, publish-registries.yml";
+    let config = Config::read(&table(&[("Publication lanes exclude", excluded)]), None)
+        .expect("the exclude row is its own setting and not the `Publication lane` row");
+    assert_eq!(
+        Setting::PublicationLanesExclude.value_of(&config),
+        excluded,
+        "the exclude row was not written and read back"
+    );
+    assert_eq!(Setting::PublicationLane.value_of(&config), "on");
+    assert_eq!(Setting::PublicationLanes.value_of(&config), "auto");
+
+    let rendered = config.render_rows();
+    assert!(rendered.contains(&format!("| Publication lanes exclude | {excluded} |")));
+    assert_eq!(
+        Config::read(&rendered, None).expect("it writes back"),
+        config
+    );
+
+    for (value, expected) in [
+        ("ci.yml, ci-api.yml", "ci.yml, ci-api.yml"),
+        ("none", "none"),
+        ("OFF", "none"),
+        ("auto", "auto"),
+    ] {
+        let config = Config::read(&table(&[("Publication lanes", value)]), None)
+            .unwrap_or_else(|refusal| panic!("`Publication lanes` refused {value:?}: {refusal}"));
+        assert_eq!(Setting::PublicationLanes.value_of(&config), expected);
+        assert_eq!(Setting::PublicationLane.value_of(&config), "on");
+        assert_eq!(
+            Config::read(&config.render_rows(), None).expect("it writes back"),
+            config
+        );
+    }
+    assert!(Config::read(&table(&[("Publication lanes", ", ,")]), None).is_err());
+    assert!(Config::read(&table(&[("Publication lanes exclude", ", ,")]), None).is_err());
+}
+
+#[test]
+fn a_prefix_match_names_the_longest_publication_lane_label() {
+    for (written, expected) in [
+        ("Publication lane", Setting::PublicationLane),
+        ("Publication lane (gating)", Setting::PublicationLane),
+        ("Publication lanes", Setting::PublicationLanes),
+        ("Publication lanes (basenames)", Setting::PublicationLanes),
+        (
+            "Publication lanes exclude",
+            Setting::PublicationLanesExclude,
+        ),
+        (
+            "Publication lanes exclude (basenames)",
+            Setting::PublicationLanesExclude,
+        ),
+    ] {
+        assert_eq!(
+            Setting::from_label(written),
+            Some(expected),
+            "{written:?} resolved to the wrong publication lane row"
+        );
+    }
 }
 
 #[test]

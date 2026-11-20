@@ -46,6 +46,10 @@ pub enum Setting {
     Evidence,
     /// Whether accepted verdicts consult the publication lane.
     PublicationLane,
+    /// Which workflows a publication starts, when not every active one.
+    PublicationLanes,
+    /// Workflows a publication never starts.
+    PublicationLanesExclude,
     /// The per-context token figure a review is reported against. Advisory:
     /// nothing here refuses a panel that runs over it.
     ReviewBudget,
@@ -134,6 +138,8 @@ pub const SETTINGS: &[Setting] = &[
     // Review & change.
     Setting::Evidence,
     Setting::PublicationLane,
+    Setting::PublicationLanes,
+    Setting::PublicationLanesExclude,
     Setting::ReviewBudget,
     Setting::ChangeSize,
     Setting::CorrectionsPerLineage,
@@ -330,6 +336,8 @@ pub const EVERYWHERE_SETTINGS: &[Setting] = &[
     Setting::DecisionMode,
     Setting::Evidence,
     Setting::PublicationLane,
+    Setting::PublicationLanes,
+    Setting::PublicationLanesExclude,
     Setting::ReviewBudget,
     Setting::ChangeSize,
     Setting::CorrectionsPerLineage,
@@ -384,6 +392,8 @@ pub const OPTIONS_SETTINGS: &[Setting] = &[
     Setting::DecisionMode,
     Setting::Evidence,
     Setting::PublicationLane,
+    Setting::PublicationLanes,
+    Setting::PublicationLanesExclude,
     Setting::ReviewBudget,
     Setting::ChangeSize,
     Setting::CorrectionsPerLineage,
@@ -471,6 +481,8 @@ impl Setting {
             // on which agent asked — there is one gate.
             | Self::Evidence
             | Self::PublicationLane
+            | Self::PublicationLanes
+            | Self::PublicationLanesExclude
             | Self::ReviewBudget
             | Self::Boundaries => Scope::Everywhere,
             // Written across every checkout somebody has, so they belong to
@@ -519,6 +531,8 @@ impl Setting {
             }
             Self::Evidence
             | Self::PublicationLane
+            | Self::PublicationLanes
+            | Self::PublicationLanesExclude
             | Self::ReviewBudget
             | Self::ChangeSize
             | Self::CorrectionsPerLineage => Group::ReviewAndChange,
@@ -577,6 +591,8 @@ impl Setting {
             | Self::Worktree
             | Self::Models
             | Self::PublicationLane
+            | Self::PublicationLanes
+            | Self::PublicationLanesExclude
             | Self::ReviewBudget
             | Self::ChangeSize
             | Self::CorrectionsPerLineage
@@ -629,6 +645,12 @@ impl Setting {
             }
             Self::PublicationLane => {
                 "whether an accepted verdict consults the publication lane for this head"
+            }
+            Self::PublicationLanes => {
+                "which workflow files a publication starts: every active one, none, or a list"
+            }
+            Self::PublicationLanesExclude => {
+                "workflow files a publication never starts, whichever ones discovery finds"
             }
             Self::ReviewBudget => {
                 "the per-context token figure a review is reported against, and nothing more"
@@ -725,6 +747,10 @@ impl Setting {
             Self::DecisionMode => Answers::all(&["ask", "auto"]),
             Self::Evidence => Answers::all(&["reading", "measuring"]),
             Self::PublicationLane => Answers::all(&["on", "off"]),
+            Self::PublicationLanes => Answers::some(&["auto", "none", "ci.yml"]),
+            Self::PublicationLanesExclude => {
+                Answers::some(&["none", "release.yml, publish-registries.yml"])
+            }
             Self::ReviewBudget => Answers::some(&["none", "150000"]),
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::CorrectionsPerLineage => Answers::some(&["3", "1"]),
@@ -772,6 +798,8 @@ impl Setting {
             Self::DecisionMode => "Decision mode",
             Self::Evidence => "Evidence standard",
             Self::PublicationLane => "Publication lane",
+            Self::PublicationLanes => "Publication lanes",
+            Self::PublicationLanesExclude => "Publication lanes exclude",
             Self::ReviewBudget => "Review budget",
             Self::ChangeSize => "Change size",
             Self::CorrectionsPerLineage => "Corrections per lineage",
@@ -839,16 +867,26 @@ impl Setting {
             // transport acts on and this compared whole words.
             //
             // After the exact match, never before it: a prefix is the looser
-            // reading and an exact spelling must never lose to it. No label
-            // here is a prefix of another, so nothing else changes hands.
+            // reading and an exact spelling must never lose to it. And the
+            // longest prefix, because `Publication lane` is a prefix of the two
+            // labels that follow it.
             .or_else(|| {
-                SETTINGS.iter().copied().find(|setting| {
-                    named(setting).any(|name| {
-                        normalized
-                            .strip_prefix(&name)
-                            .is_some_and(|rest| !rest.is_empty())
+                SETTINGS
+                    .iter()
+                    .copied()
+                    .filter_map(|setting| {
+                        named(&setting)
+                            .filter(|name| {
+                                normalized
+                                    .strip_prefix(name)
+                                    .is_some_and(|rest| !rest.is_empty())
+                            })
+                            .map(|name| name.len())
+                            .max()
+                            .map(|length| (length, setting))
                     })
-                })
+                    .max_by_key(|(length, _)| *length)
+                    .map(|(_, setting)| setting)
             })
     }
 
@@ -920,6 +958,19 @@ impl Setting {
             }
             (Self::PublicationLane, "off") => {
                 "accepted verdicts do not read check runs; the answer says the lane was not consulted"
+            }
+            (Self::PublicationLanes, "auto") => {
+                "every active workflow file is started, less the excluded ones"
+            }
+            (Self::PublicationLanes, "none") => {
+                "no workflow is started, so a verdict stays ungated on purpose"
+            }
+            (Self::PublicationLanes, _) => {
+                "only these workflow files are started, less the excluded ones"
+            }
+            (Self::PublicationLanesExclude, "none") => "no workflow file is held back",
+            (Self::PublicationLanesExclude, _) => {
+                "these workflow files are never started by a publication"
             }
             (Self::IssueRequirement, "off") => "a run holding no claim may write here freely",
             (Self::IssueRequirement, "on") => {
@@ -1077,6 +1128,12 @@ impl Setting {
             Self::DecisionMode => "`ask`, or `auto`",
             Self::Evidence => "`reading`, or `measuring`",
             Self::PublicationLane => "`on`, or `off`",
+            Self::PublicationLanes => {
+                "`auto`, `none` (or `off`), or workflow files separated by commas such as `ci.yml`"
+            }
+            Self::PublicationLanesExclude => {
+                "`none`, or workflow files separated by commas such as `release.yml`"
+            }
             Self::IssueRequirement => "`on`, or `off`",
             Self::UnclaimedGithubWrites => "`held`, or `allowed`",
             Self::Workflow => "`autonomous`, or `assisted`",
@@ -1332,6 +1389,19 @@ impl Setting {
                     _ => return Err(self.reject(value)),
                 }
             }
+            Self::PublicationLanes => {
+                config.publication_lanes = match lower(value).trim() {
+                    "auto" | "" => None,
+                    "none" | "off" => Some(Vec::new()),
+                    _ => Some(workflow_names(value).ok_or_else(|| self.reject(value))?),
+                }
+            }
+            Self::PublicationLanesExclude => {
+                config.publication_lanes_exclude = match lower(value).trim() {
+                    "none" | "" => Vec::new(),
+                    _ => workflow_names(value).ok_or_else(|| self.reject(value))?,
+                }
+            }
             Self::IssueRequirement => {
                 config.issue_requirement = match lower(value).trim() {
                     "off" => IssueRequirement::Off,
@@ -1458,6 +1528,18 @@ impl Setting {
             Self::Evidence => config.evidence.as_value().to_owned(),
             Self::DecisionMode => config.decision_mode.as_value().to_owned(),
             Self::PublicationLane => config.publication_lane.as_value().to_owned(),
+            Self::PublicationLanes => match &config.publication_lanes {
+                None => "auto".to_owned(),
+                Some(lanes) if lanes.is_empty() => "none".to_owned(),
+                Some(lanes) => lanes.join(", "),
+            },
+            Self::PublicationLanesExclude => {
+                if config.publication_lanes_exclude.is_empty() {
+                    "none".to_owned()
+                } else {
+                    config.publication_lanes_exclude.join(", ")
+                }
+            }
             Self::IssueRequirement => config.issue_requirement.as_value().to_owned(),
             Self::UnclaimedGithubWrites => config.unclaimed_github_writes.as_value().to_owned(),
             Self::Workflow => config.workflow.as_value().to_owned(),
@@ -1526,6 +1608,16 @@ impl Setting {
 /// What [`Setting::fixed_by`] answers for a delivery row under `autonomous`.
 pub const FIXED_UNDER_AUTONOMOUS: &str = "fixed while `Claim workflow` is `autonomous`: choose \
      `team` or `assisted` in `Delivery preset` to change it";
+
+fn workflow_names(value: &str) -> Option<Vec<String>> {
+    let names: Vec<String> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect();
+    (!names.is_empty()).then_some(names)
+}
 
 fn lower(value: &str) -> String {
     value.trim().to_ascii_lowercase()

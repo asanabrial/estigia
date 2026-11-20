@@ -598,11 +598,11 @@ fn config_exact<'a>(context: &'a Context, label: &str) -> Option<&'a str> {
 
 /// Operator exclude list for publication-lane discovery.
 ///
-/// Read from the `Publication lanes exclude` row when present. Unmodelled by
-/// the settings table on purpose: a free-form list of workflow basenames, the
-/// same shape as irreversible commands, and a missing row means exclude nothing.
+/// Read from the `Publication lanes exclude` row when present. A missing row,
+/// or the `none` the settings table renders for an empty list, excludes nothing.
 fn publication_lane_excludes(context: &Context) -> Vec<String> {
     config_exact(context, "Publication lanes exclude")
+        .filter(|raw| !raw.trim().eq_ignore_ascii_case("none"))
         .map(lane_name_list)
         .unwrap_or_default()
 }

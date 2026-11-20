@@ -1049,6 +1049,11 @@ pub struct Config {
     pub evidence: Evidence,
     /// Whether accepted verdicts consult the publication lane.
     pub publication_lane: PublicationLane,
+    /// The workflow basenames a publication starts: `None` discovers every
+    /// active workflow, an empty list starts none.
+    pub publication_lanes: Option<Vec<String>>,
+    /// Workflow basenames a publication never starts.
+    pub publication_lanes_exclude: Vec<String>,
     /// Whether a run asks the person or decides and reports.
     pub decision_mode: DecisionMode,
     /// What a run holding no claim may write in a checkout whose tracker can name an issue.
@@ -1176,6 +1181,8 @@ impl Default for Config {
             // so installing this release changes nobody's guidance — the row
             // exists to let an operator move it, not to move it for them.
             publication_lane: PublicationLane::On,
+            publication_lanes: None,
+            publication_lanes_exclude: Vec::new(),
             decision_mode: DecisionMode::Ask,
             issue_requirement: IssueRequirement::Off,
             unclaimed_github_writes: UnclaimedGithubWrites::Held,

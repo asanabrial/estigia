@@ -97,7 +97,8 @@ verdicts, `release_ci` with this receipt — and offers no second place to fetch
 mints a new epoch and invalidates every verdict recorded against the first, so `--inline-payload` is
 asked for at publication time or not at all. **It then starts the publication lane set**: every
 active workflow under `.github/workflows/` is a candidate (minus the optional
-`Publication lanes exclude` row, or an explicit `Publication lanes` list that replaces discovery),
+`Publication lanes exclude` row, or an explicit `Publication lanes` list that replaces discovery;
+both are settings, `estigia config set` writes them and a repository's own file may answer them),
 and each is started once with `gh workflow run <file> --ref <branch>` against the head just pushed,
 once per publication epoch and never per push, after the push and before the receipt is recorded so
 a token that may not dispatch refuses while no epoch exists. A candidate without `workflow_dispatch`
