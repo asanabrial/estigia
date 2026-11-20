@@ -128,7 +128,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `outbox::flush::run` refuses while the window is closed, takes a per-repository lease in `store_meta`
   (a pid and an expiry; a dead or expired holder is taken over), rekeys pointers and ownership files, and
   sends unsent writes oldest first, marking each `sending` before and `sent` only after its own readback (a
-  comment by its `<!-- estigia-outbox:{op_id} -->` marker, a create by `gh issue view` on the number printed,
+  comment by its exact text written by this account — nothing is appended to the body, so an identical
+  comment the same account already posted on that issue also reads as landed —, a create by `gh issue view` on the number printed,
   a link by the Development sidebar, a reconverge by `transition`'s readbacks). A write whose outcome cannot
   be read stays `sending` and stops the flush with `outbox-pending`; a failure that learned nothing on a first
   attempt goes back to `queued`, a write that has been `sending` never does. The line is global: one ambiguous

@@ -159,14 +159,23 @@ fn main() {
     // `staged_receipt` in `tests/pipe.rs` exists only because one write path
     // happens to leave its temporary behind; every other write deletes it, and
     // a defect in what that body actually says had no way to be measured.
-    if let Some(at) = arguments
+    let bodies: Vec<String> = arguments
         .iter()
-        .position(|argument| argument == "--body-file")
-        && let Some(staged) = arguments.get(at + 1)
-        && let Ok(body) = std::fs::read_to_string(staged)
-        && body.contains("<!-- issue-flow:")
-    {
-        eprintln!("stand-in gh: a body bound for GitHub carries an issue-flow marker: {line}");
+        .enumerate()
+        .filter_map(|(at, argument)| {
+            if argument == "--body-file" {
+                return arguments
+                    .get(at + 1)
+                    .and_then(|staged| std::fs::read_to_string(staged).ok());
+            }
+            if let Some(staged) = argument.strip_prefix("body=@") {
+                return std::fs::read_to_string(staged).ok();
+            }
+            argument.strip_prefix("body=").map(ToOwned::to_owned)
+        })
+        .collect();
+    if bodies.iter().any(|body| body.contains("<!--")) {
+        eprintln!("stand-in gh: a body bound for GitHub carries a hidden HTML comment: {line}");
         std::process::exit(97);
     }
     if let Ok(path) = std::env::var("ESTIGIA_FAKE_BODY_LOG")

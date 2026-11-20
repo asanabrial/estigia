@@ -6719,13 +6719,8 @@ fn draft_pr_publishes_the_branch_and_checkout_the_assisted_pointer_names() {
         "commits":{"nodes":[{"commit":{"oid":head}}]},
     });
     let before = snapshot.clone();
-    let key = crate::transport::claim::review_operation_id(
-        "thread-reply",
-        &["thread-1", &head, "", "Words."],
-    );
     snapshot["reviewThreads"]["nodes"][0]["comments"]["nodes"] = json!([{
-        "id":"reply-1", "viewerDidAuthor":true,
-        "body":format!("Words.\n\n<!-- estigia-thread-reply:{key} -->"),
+        "id":"reply-1", "viewerDidAuthor":true, "body":"Words.",
     }]);
     let response = crate::test_env::answers(&[
         json!({"matches":"pr list","stdout":"[{\"number\":7}]"}),

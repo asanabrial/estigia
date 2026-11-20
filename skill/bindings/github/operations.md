@@ -623,7 +623,7 @@ decision the `gh pr merge` boundary makes. It answers `delivered`; `pending` wit
 `wait_seconds` (1-900, default 20) of waiting inside the call; or `stopped` with the `step`, a
 `reason` and `review_status`'s `next` when there is one. A stop writes nothing past its step, and a
 second call resumes from the store without repeating a landed write. `spend` is `release`'s;
-`appendix_file` is the agent's text appended to the generated evidence, required where no CI can
+`appendix_file` is the agent's text posted after the merge note, required where no CI can
 run. The steps and what each hands back are in *CI, merge and delivery* in delivery.md; a stop after
 the merge landed carries `merged` and, from the release, `close_incomplete`, which is repeated as
 *Releasing an issue* says. A release answer that does not read as a success — its `ok` is not

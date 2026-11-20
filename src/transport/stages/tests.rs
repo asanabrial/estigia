@@ -415,16 +415,11 @@ impl ThreadRig {
         t["id"] = serde_json::json!("thread-1");
         t["comments"]["nodes"][0]["originalCommit"] = serde_json::json!({"oid":self.base});
         if reply {
-            let key = super::super::claim::review_operation_id(
-                "thread-reply",
-                &["thread-1", &self.fix, &self.fix, "Fixed the concern."],
-            );
-            let body = format!("Fixed the concern.\n\n<!-- estigia-thread-reply:{key} -->");
             t["comments"]["nodes"]
                 .as_array_mut()
                 .unwrap()
                 .push(serde_json::json!({
-                    "id":"reply-1", "viewerDidAuthor":true, "body":body,
+                    "id":"reply-1", "viewerDidAuthor":true, "body":"Fixed the concern.",
                 }));
         }
         pr

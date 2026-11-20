@@ -132,8 +132,13 @@ fn process_alive(_pid: u32) -> bool {
     true
 }
 
-fn marker_of(op_id: &str) -> String {
-    format!("<!-- estigia-outbox:{op_id} -->")
+fn comment_text(row: &OutboxRow) -> String {
+    let body = row
+        .payload
+        .get("body")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    format!("{}\n", body.trim_end())
 }
 
 fn pending(
@@ -509,17 +514,9 @@ impl<'a> Engine<'a> {
             }
         }
         self.begin(held, row)?;
-        let body = row
-            .payload
-            .get("body")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default();
         let staged = crate::paths::scratch_file(&format!("outbox-{}.md", row.op_id));
-        crate::paths::replace_atomically(
-            &staged,
-            &format!("{}\n{}\n", body.trim_end(), marker_of(&row.op_id)),
-        )
-        .map_err(|error| Failure::Write(format!("the comment could not be staged: {error}")))?;
+        crate::paths::replace_atomically(&staged, &comment_text(row))
+            .map_err(|error| Failure::Write(format!("the comment could not be staged: {error}")))?;
         let path = staged.display().to_string();
         let posted = crate::transport::run(
             &[
@@ -565,7 +562,9 @@ impl<'a> Engine<'a> {
     }
 
     fn comment_landed(&self, row: &OutboxRow) -> Result<bool, Failure> {
-        let marker = marker_of(&row.op_id);
+        let text = comment_text(row);
+        let wanted = text.trim_end();
+        let viewer = crate::transport::store::viewer_login(self.context)?;
         for page in 1..=COMMENT_PAGES {
             let endpoint = format!(
                 "repos/{{owner}}/{{repo}}/issues/{}/comments?per_page={COMMENT_PAGE}&page={page}",
@@ -583,7 +582,12 @@ impl<'a> Engine<'a> {
                 comment
                     .get("body")
                     .and_then(serde_json::Value::as_str)
-                    .is_some_and(|body| body.contains(&marker))
+                    .is_some_and(|body| body.trim_end() == wanted)
+                    && comment
+                        .get("user")
+                        .and_then(|user| user.get("login"))
+                        .and_then(serde_json::Value::as_str)
+                        == Some(viewer.as_str())
             }) {
                 return Ok(true);
             }
@@ -592,7 +596,7 @@ impl<'a> Engine<'a> {
             }
         }
         Err(Failure::Read(format!(
-            "issue {} has {} or more comments, and the marker is in none of them",
+            "issue {} has {} or more comments, and none of them is this one",
             row.issue,
             COMMENT_PAGES * COMMENT_PAGE
         )))

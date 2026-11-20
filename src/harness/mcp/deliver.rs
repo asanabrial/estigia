@@ -839,10 +839,11 @@ impl<H: Hands> Deliver<'_, H> {
             self.record_spends("continue", receipt)
                 .map_err(|halt| with_merged(halt, merged))?;
             let facts = self.facts(receipt, merged, ci);
-            return self.continue_chain(receipt, merged, &evidence(&facts));
+            return self.continue_chain(receipt, merged, &evidence(&facts), record(&facts));
         }
         let facts = self.facts(receipt, merged, ci);
         let evidence = evidence(&facts);
+        let kept = record(&facts);
         let scratch = self.hands.scratch();
         let file = scratch.join(format!("{}-{}.md", self.request.run_id, receipt.pr));
         let written = std::fs::create_dir_all(&scratch)
@@ -890,6 +891,7 @@ impl<H: Hands> Deliver<'_, H> {
             "pr": receipt.pr,
             "merged": {"sha": merged.sha, "parents": merged.parents},
             "release": released,
+            "record": kept,
         });
         match issue_state {
             Ok(state) => answer["github_issue"] = json!({"state": state}),
@@ -920,6 +922,7 @@ impl<H: Hands> Deliver<'_, H> {
         receipt: &ReviewTransaction,
         merged: &Merged,
         evidence: &str,
+        kept: String,
     ) -> Step<Value> {
         let scratch = self.hands.scratch();
         let file = scratch.join(format!("{}-{}-slice.md", self.request.run_id, receipt.pr));
@@ -971,6 +974,7 @@ impl<H: Hands> Deliver<'_, H> {
             "pr": receipt.pr,
             "merged": {"sha": merged.sha, "parents": merged.parents},
             "evidence": posted,
+            "record": kept,
             "transition": moved,
             "detail": "the pull request does not close the issue, so this slice leaves it open and in-progress under the same claim; the closing slice's delivery releases it",
         }))
@@ -1160,21 +1164,25 @@ fn join_strings(values: &[Value]) -> String {
 }
 
 fn summary(facts: &Facts) -> String {
-    let verdict = facts.verdict["outcome"].as_str().unwrap_or("approved");
     let sha: String = facts.merge_sha.chars().take(SHA_CHARS).collect();
     match facts.language.as_str() {
-        "Español" => format!(
-            "Entregado #{} mediante el PR #{} en el commit de fusión {sha}, con veredicto calculado {verdict}.",
-            facts.issue, facts.receipt.pr
-        ),
-        _ => format!(
-            "Delivered #{} through PR #{} at merge commit {sha}, computed verdict {verdict}.",
-            facts.issue, facts.receipt.pr
-        ),
+        "Español" => format!("Fusionado en #{} (`{sha}`).", facts.receipt.pr),
+        _ => format!("Merged in #{} (`{sha}`).", facts.receipt.pr),
     }
 }
 
 pub(super) fn evidence(facts: &Facts) -> String {
+    let mut note = summary(facts);
+    note.push('\n');
+    if let Some(appendix) = &facts.appendix {
+        note.push('\n');
+        note.push_str(appendix.trim_end());
+        note.push('\n');
+    }
+    note
+}
+
+pub(super) fn record(facts: &Facts) -> String {
     let receipt = &facts.receipt;
     let verdict = unavailable(&facts.verdict).unwrap_or_else(|| {
         format!(
@@ -1229,8 +1237,7 @@ pub(super) fn evidence(facts: &Facts) -> String {
         None => "none recorded by this delivery".to_owned(),
     };
     let mut note = format!(
-        "{summary}\n\n\
-         ## Delivery\n\n\
+        "## Delivery\n\n\
          - Issue #{issue}, pull request #{pr}, run `{run}`, {date} UTC\n\
          - Delivering commit: `{sha}` ({parents})\n\
          - Receipt: epoch `{epoch}`, head `{head}`, base `{base}`, digest `{digest}`\n\
@@ -1241,7 +1248,6 @@ pub(super) fn evidence(facts: &Facts) -> String {
          - CI: {ci}\n\
          - Spend: {spend}\n\
          - Version tags or releases published by this close: none\n",
-        summary = summary(facts),
         issue = facts.issue,
         pr = receipt.pr,
         run = facts.run_id,

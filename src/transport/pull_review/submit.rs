@@ -70,26 +70,15 @@ fn refuse(
     }))
 }
 
-fn marker(held: &PullReview) -> String {
-    format!("<!-- estigia:pull-review {} -->", held.epoch)
-}
-
 fn line_of(finding: &Finding) -> String {
-    format!(
-        "- **{}** `{}` {}: {} Impact: {}\n",
-        finding.class,
-        finding.id,
-        finding.location.as_deref().unwrap_or("(no location)"),
-        finding.evidence,
-        finding.impact
-    )
+    match finding.location.as_deref() {
+        Some(location) => format!("- `{location}`: {} {}\n", finding.evidence, finding.impact),
+        None => format!("- {} {}\n", finding.evidence, finding.impact),
+    }
 }
 
-fn body_of(held: &PullReview, event: &str, findings: &[Finding], open: &[String]) -> String {
-    let mut body = format!(
-        "{event} by a blind review of `{}` from its merge base `{}`.\n\n",
-        held.head, held.merge_base
-    );
+fn body_of(findings: &[Finding], open: &[String]) -> String {
+    let mut body = String::new();
     let mut left = 0;
     let shown = findings
         .iter()
@@ -103,10 +92,8 @@ fn body_of(held: &PullReview, event: &str, findings: &[Finding], open: &[String]
         }
     }
     if left > 0 {
-        body.push_str(&format!("\n{left} further findings did not fit here.\n"));
+        body.push_str(&format!("\n{left} more did not fit here.\n"));
     }
-    body.push('\n');
-    body.push_str(&marker(held));
     body
 }
 
@@ -115,7 +102,7 @@ fn reviews_path(pr: u64) -> String {
 }
 
 // A write whose answer was lost leaves its review on GitHub, and a second one
-// would be a second verdict, so a retry looks for the first by its marker.
+// would be a second verdict, so a retry takes this account's review of this commit.
 fn already_sent(
     context: &Context,
     held: &PullReview,
@@ -125,16 +112,15 @@ fn already_sent(
         Some(&context.repo_dir),
     )?
     .unwrap_or_default();
-    let wanted = marker(held);
+    let viewer = crate::transport::store::viewer_login(context)?;
     Ok(reviews
         .as_array()
         .into_iter()
         .flatten()
         .flat_map(|page| page.as_array().into_iter().flatten())
         .find(|review| {
-            review["body"]
-                .as_str()
-                .is_some_and(|body| body.contains(&wanted))
+            review["commit_id"].as_str() == Some(held.head.as_str())
+                && review["user"]["login"].as_str() == Some(viewer.as_str())
         })
         .cloned())
 }
@@ -177,8 +163,8 @@ fn unconfirmed(held: &PullReview, detail: String) -> Failure {
             "the review of pull request #{} may have landed and was not confirmed: {detail}",
             held.pr
         ),
-        "call `pr_review` `submit` again: it looks for this review by its marker before sending \
-         another. Do not report it as submitted until one reads back",
+        "call `pr_review` `submit` again: it looks for this account's review of this commit \
+         before sending another. Do not report it as submitted until one reads back",
     )
 }
 
@@ -296,7 +282,7 @@ pub fn submit(context: &Context, run_id: &str) -> Result<serde_json::Value, Fail
                 Verdict::ChangesRequested { open } => open.as_slice(),
                 _ => &[],
             };
-            let body = body_of(&held, event, &reading.findings, open);
+            let body = body_of(&reading.findings, open);
             send(context, &held, event, &body)
                 .map_err(|failure| unconfirmed(&held, failure.detail()))?
         }
