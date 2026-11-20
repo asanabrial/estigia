@@ -461,20 +461,19 @@ fn a_clean_review_runs_to_done_and_reads_the_merge_back() {
         &format!("pr merge 7 --merge --match-head-commit {}", world.head)
     );
     let evidence = fake.evidence.borrow();
+    let short: String = world.merge.chars().take(12).collect();
+    assert_eq!(*evidence, format!("Merged in #7 (`{short}`).\n"));
+    let record = ran.answer["record"].as_str().expect("the detailed record");
     for needed in [
-        "Delivered #218 through PR #7",
-        &world.merge,
-        &world.head,
+        world.merge.as_str(),
+        world.head.as_str(),
         "Computed verdict: approved",
         "warning: line-replaced",
         "review-risk",
         "passed (suite exit 0)",
         "claude-abcd1234",
     ] {
-        assert!(
-            evidence.contains(needed),
-            "{needed} missing from:\n{evidence}"
-        );
+        assert!(record.contains(needed), "{needed} missing from:\n{record}");
     }
 }
 
@@ -1161,11 +1160,16 @@ fn a_lane_with_no_ci_needs_the_appendix_and_carries_it_into_the_evidence() {
     assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
     let evidence = with.evidence.borrow();
     assert!(
-        evidence.contains("## Appendix\n\ncargo test: 4112 passed"),
+        evidence.ends_with("\ncargo test: 4112 passed\n"),
         "{evidence}"
     );
-    assert!(evidence.contains("no CI ran"), "{evidence}");
-    assert!(evidence.contains("no minutes left"), "{evidence}");
+    let record = ran.answer["record"].as_str().unwrap_or_default();
+    assert!(
+        record.contains("## Appendix\n\ncargo test: 4112 passed"),
+        "{record}"
+    );
+    assert!(record.contains("no CI ran"), "{record}");
+    assert!(record.contains("no minutes left"), "{record}");
 }
 
 #[test]
@@ -1194,14 +1198,9 @@ fn the_summary_follows_the_operator_s_language_and_the_body_stays_english() {
     let ran = drive(&fake, &green_script(&world), &request());
     assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
     let evidence = fake.evidence.borrow();
-    assert!(
-        evidence.starts_with("Entregado #218 mediante el PR #7"),
-        "{evidence}"
-    );
-    assert!(
-        evidence.contains("- Computed verdict: approved"),
-        "{evidence}"
-    );
+    assert!(evidence.starts_with("Fusionado en #7 (`"), "{evidence}");
+    let record = ran.answer["record"].as_str().unwrap_or_default();
+    assert!(record.contains("- Computed verdict: approved"), "{record}");
 }
 
 #[test]
@@ -1390,11 +1389,11 @@ fn a_checks_receipt_that_cannot_be_read_is_said_so_in_the_evidence() {
     let world = world("b.txt", "two\n");
     let mut held = fake(&world);
     held.checks = Err(json!({"code": "read-failed"}));
-    drive(&held, &green_script(&world), &request());
-    let evidence = held.evidence.borrow();
+    let ran = drive(&held, &green_script(&world), &request());
+    let record = ran.answer["record"].as_str().unwrap_or_default();
     assert!(
-        evidence.contains("Declared checks receipt: could not be read"),
-        "{evidence}"
+        record.contains("Declared checks receipt: could not be read"),
+        "{record}"
     );
 }
 

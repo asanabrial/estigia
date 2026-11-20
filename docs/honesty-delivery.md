@@ -253,7 +253,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `BTreeSet::difference`. This is not measured: `src/transport/claim/tests.rs` exercises
   `converge_projection`, a helper with zero production callers, and disabling the production emission leaves
   the whole suite green. A query grouped by `dev:<runtime>` no longer shows which runtime delivered a closed
-  issue; only the run-id in the close evidence survives.
+  issue, and the run-id is no longer in the close note either: it survives only in the local store and in
+  `deliver`'s `record`, which never leaves the machine.
 
 ## Ownership
 

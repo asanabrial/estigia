@@ -16,7 +16,7 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `pull-review-not-held` | This run holds no review-only claim, or another run displaced it at its horizon. | `pr_review` `claim` first. |
 | `pull-review-escalated` | The panel's answers cannot settle a severe finding. | `pr_review` `release`, and report the findings to a person. |
 | `pull-review-incomplete` | A licensed lens has not answered. | Follow `pr_review` `status`, then submit. |
-| `pull-review-submission-unconfirmed` | A review may have landed without a confirming read-back. | Call `pr_review` `submit` again: it finds the first by its marker. Do not report it as submitted. |
+| `pull-review-submission-unconfirmed` | A review may have landed without a confirming read-back. | Call `pr_review` `submit` again: it finds this account's review of the reviewed commit. Do not report it as submitted. |
 | `pull-review-held` | Another run's unexpired claim holds this pull request. | Leave it to that run; its claim ends at its horizon. |
 | `pull-review-fork-refused` | The pull request is not read as coming from this repository. | A person reviews a fork's pull request. |
 | `pull-review-not-open` | The pull request is closed or merged. | Stop; nothing was created. |
