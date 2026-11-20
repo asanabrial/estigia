@@ -285,8 +285,8 @@ const WITH_REVIEW: Argument = Argument::optional(
 const START_REVIEW: Argument = Argument::optional(
     "start_review",
     "boolean",
-    "Also move to review and launch every slot offered, unless the lane or the declared \
-     checks are red, unreadable or running. Implies `with_review`.",
+    "Also move to review and launch every slot offered, unless the lane is red or unreadable \
+     or the checks have not passed. Implies `with_review`.",
 );
 
 const NO_LINK: Argument = Argument::optional(

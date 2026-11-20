@@ -1435,6 +1435,51 @@ fn a_declared_check_holds_the_lenses_back_unless_it_passed() {
     assert_eq!(unread.0, "checks-unavailable");
 }
 
+#[test]
+fn only_a_red_or_unreadable_lane_holds_the_lenses_back() {
+    use super::lane_hold;
+    use serde_json::json;
+    for state in [
+        "running",
+        "green",
+        "absent",
+        "never-ran",
+        "disabled",
+        "not-consulted",
+    ] {
+        assert!(
+            lane_hold(Ok(json!({"ok": true, "state": state}))).is_none(),
+            "a {state} lane held the launch"
+        );
+    }
+    let red = lane_hold(Ok(json!({"ok": true, "state": "red"}))).expect("held");
+    assert_eq!(red.0, "publication-lane-red");
+    let unread = lane_hold(Err(crate::transport::Failure::Read("no".to_owned()))).expect("held");
+    assert_eq!(unread.0, "publication-lane-unreadable");
+}
+
+#[test]
+fn the_start_review_argument_says_a_running_lane_does_not_hold_the_launch() {
+    for tool in ["publish_review", "republish_review"] {
+        let schema = crate::harness::mcp::tools::find(tool)
+            .and_then(|tool| {
+                tool.arguments
+                    .iter()
+                    .find(|argument| argument.name == "start_review")
+            })
+            .map(|argument| argument.description)
+            .unwrap_or_else(|| panic!("{tool} has no start_review argument"));
+        assert!(
+            schema.contains("unless the lane is red or unreadable"),
+            "{tool}: {schema}"
+        );
+        assert!(
+            !schema.contains("lane or the declared checks are red, unreadable or running"),
+            "{tool}: {schema}"
+        );
+    }
+}
+
 /// A merged `comment` that carries `expect_state` renews before it posts, and a
 /// renewal that says stop leaves nothing on the issue.
 #[test]
