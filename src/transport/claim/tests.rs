@@ -8724,6 +8724,23 @@ fn the_publication_lane_rows_reach_the_transport_from_every_layer() {
     );
     assert!(!publication_lane_is_off(&live));
 
+    for (value, expected) in [
+        ("none", Vec::<String>::new()),
+        ("auto", vec![PUBLICATION_LANE_FALLBACK.to_owned()]),
+    ] {
+        let repo = tempfile::tempdir().expect("a repository");
+        write(
+            &crate::skill::repository_config_path(repo.path()),
+            &format!("| Publication lanes | {value} |\n"),
+        );
+        let live = super::super::Context::live(skill.clone(), repo.path().to_path_buf(), None);
+        assert_eq!(
+            publication_lane_candidates(&live),
+            expected,
+            "a repository file's `Publication lanes: {value}` was not read as that keyword"
+        );
+    }
+
     write(
         &skill.join(crate::config::LOCAL_FILE),
         "| Publication lanes exclude | nightly.yml |\n",
