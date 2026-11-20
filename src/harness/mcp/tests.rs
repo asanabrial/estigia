@@ -3357,6 +3357,62 @@ fn a_claim_after_a_release_records_the_new_issues_checkout_not_the_old_one() {
 }
 
 #[test]
+fn a_second_slice_claim_records_the_checkout_its_start_branch_built() {
+    let repo = repository_with_commit();
+    let elsewhere = tempfile::tempdir().expect("somewhere for the checkouts");
+    let first = elsewhere.path().join("issue-30-s1");
+    let second = elsewhere.path().join("issue-30-s2");
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, repo.path());
+    let claim = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "claim")
+        .expect("the tool is listed");
+
+    let mut run = crate::harness::session::Run::new("claude-twoslices00".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(30));
+    run.repo_dir = Some(repo.path().to_path_buf());
+    run.worktree = Some(first);
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+
+    super::apply_effect(
+        claim,
+        &serde_json::json!({
+            "issue": 30, "run_id": "claude-twoslices00", "horizon": "2026-01-01T01:00Z",
+            "branch": "issue-30-s2", "base": "main",
+        }),
+        Some(&serde_json::json!({
+            "ok": true, "issue": 30, "reused_existing_claim": true,
+            "start_branch": {"ok": true, "worktree": second.display().to_string()},
+        })),
+        &mut run,
+        &context,
+    );
+    let after = crate::harness::session::load(&context.state_root, "claude-twoslices00");
+    assert_eq!(
+        after.worktree.as_deref(),
+        Some(second.as_path()),
+        "the second slice's claim left the pointer on the first slice's checkout"
+    );
+
+    super::apply_effect(
+        claim,
+        &serde_json::json!({
+            "issue": 30, "run_id": "claude-twoslices00", "horizon": "2026-01-01T02:00Z",
+        }),
+        Some(&serde_json::json!({"ok": true, "issue": 30, "reused_existing_claim": true})),
+        &mut run,
+        &context,
+    );
+    let renewed = crate::harness::session::load(&context.state_root, "claude-twoslices00");
+    assert_eq!(
+        renewed.worktree.as_deref(),
+        Some(second.as_path()),
+        "a claim that built no checkout replaced the one the pointer named"
+    );
+}
+
+#[test]
 fn a_renewal_records_the_checkout_a_resumed_run_adopted() {
     let repo = repository_with_commit();
     let elsewhere = tempfile::tempdir().expect("somewhere for the adopted checkout");
