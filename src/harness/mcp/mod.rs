@@ -2378,11 +2378,12 @@ pub(crate) fn apply_effect(
                 run.repo_dir = Some(repo_dir.clone());
                 run.assisted = false;
                 run.branch = None;
-                // `get_or_insert_with`, never assignment: a pointer that
-                // already names a checkout is describing something this call
-                // has no business replacing.
-                if let Some(recorded) = claim_worktree.as_ref().or(discovered_worktree.as_ref()) {
-                    run.worktree.get_or_insert_with(|| recorded.clone());
+                // The checkout this claim's `start_branch` built is the one the
+                // run now works in; one merely discovered never replaces a named one.
+                if let Some(started) = &claim_worktree {
+                    run.worktree = Some(started.clone());
+                } else if let Some(discovered) = &discovered_worktree {
+                    run.worktree.get_or_insert_with(|| discovered.clone());
                 }
                 if let Some(receipt) = &claimed_receipt {
                     run.review_transaction = Some(receipt.clone());
