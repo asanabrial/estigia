@@ -8837,6 +8837,7 @@ fn publish_with_sleep(
     push: Push<'_>,
     sleep: &mut dyn FnMut(std::time::Duration),
 ) -> Result<serde_json::Value, Failure> {
+    let _memo = super::git_memo::scope();
     let Publication {
         issue,
         run_id,

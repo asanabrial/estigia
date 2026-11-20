@@ -451,6 +451,7 @@ pub fn review_tier_declared(
     focus: Option<&str>,
     declaration: &Declaration<'_>,
 ) -> Result<serde_json::Value, Failure> {
+    let _memo = super::git_memo::scope();
     let resolved = declaration.resolve(focus)?;
     let at = worktree.unwrap_or(&context.repo_dir);
     let base_oid = resolve_commit(at, base)?;
@@ -767,6 +768,7 @@ pub fn review_tier_for_repair_declared(
     focus: Option<&str>,
     declaration: &Declaration<'_>,
 ) -> Result<serde_json::Value, Failure> {
+    let _memo = super::git_memo::scope();
     let resolved = declaration.resolve(focus)?;
     if let Some(class) = clearing_finding
         && !super::claim::FINDING_CLASSES.contains(&class)

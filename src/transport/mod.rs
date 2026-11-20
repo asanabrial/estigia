@@ -52,6 +52,7 @@ pub mod commands;
 pub mod dispatch;
 pub mod draft;
 pub mod generated;
+pub(crate) mod git_memo;
 pub(crate) mod handoff;
 pub mod judges;
 pub mod linear;
@@ -415,7 +416,7 @@ pub(crate) fn run_with_isolated_env(
 /// Whether [`run_with_env_and_mode`] layers `envs` onto the child's inherited
 /// environment or replaces the inherited environment first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EnvMode {
+pub(crate) enum EnvMode {
     Layer,
     Replace,
 }
@@ -504,6 +505,24 @@ fn run_with_env_and_mode(
     envs: &[(&str, &str)],
     mode: EnvMode,
 ) -> Result<Output, Failure> {
+    let Some(key) = git_memo::key_for(args, cwd, how, envs, mode) else {
+        return run_unmemoised(args, cwd, how, envs, mode);
+    };
+    if let Some(answer) = git_memo::recall(&key) {
+        return Ok(answer);
+    }
+    let answer = run_unmemoised(args, cwd, how, envs, mode)?;
+    git_memo::remember(key, &answer);
+    Ok(answer)
+}
+
+fn run_unmemoised(
+    args: &[&str],
+    cwd: Option<&Path>,
+    how: How,
+    envs: &[(&str, &str)],
+    mode: EnvMode,
+) -> Result<Output, Failure> {
     if !ssh_fallback::is_network_call(args) {
         return attempt(args, cwd, how, envs, mode);
     }
@@ -555,6 +574,8 @@ fn prepared_command(
         return Err(refusal);
     }
     store::note(args);
+    #[cfg(test)]
+    git_memo::note_spawn(args);
 
     let mut command = command_for(program);
     command.args(rest);
@@ -696,7 +717,8 @@ pub(crate) fn isolated_diff_env(
     }
 
     let unique = format!(
-        ".estigia-isolated-diff-{}-{}",
+        "{}{}-{}",
+        git_memo::ISOLATED_DIR_PREFIX,
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

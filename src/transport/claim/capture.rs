@@ -648,6 +648,7 @@ pub(super) struct Prepared {
 }
 
 fn prepare(context: &Context, input: &CaptureInput<'_>) -> Result<Prepared, Failure> {
+    let _memo = crate::transport::git_memo::scope();
     let status = review_status(context, input.issue)?;
     prepare_with(context, input, &status)
 }
@@ -657,6 +658,7 @@ pub(super) fn prepare_with(
     input: &CaptureInput<'_>,
     status: &serde_json::Value,
 ) -> Result<Prepared, Failure> {
+    let _memo = crate::transport::git_memo::scope();
     let role = offered_role(status, input.name)?;
     let receipt = receipt_of(status)?;
 
@@ -1244,6 +1246,7 @@ pub(super) fn collect_with(
     clock: u64,
     kill: &dyn Fn(u32),
 ) -> Result<serde_json::Value, Failure> {
+    let _memo = crate::transport::git_memo::scope();
     let status = review_status(context, input.issue)?;
     let ledger = Ledger::open(context, input.issue, input.now)?;
     let epoch = text(&status["receipt"], "epoch");

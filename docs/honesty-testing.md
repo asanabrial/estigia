@@ -204,6 +204,38 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `tests/pipe.rs` share (about 230 s there against 90–160 s elsewhere), which spawns the binary rather
   than `git`.
 
+- **One operation no longer asks `git` the same fixed question twice, and the removal is partial by
+  construction.** The slowest Windows test,
+  `an_answer_that_names_what_was_not_offered_or_omits_what_was_is_malformed_and_writes_nothing`
+  (27.2 s there, 1.5 s on Linux), started 220 `git` processes on macOS, 12 of them fixture setup; at
+  roughly 100 ms a process that is most of its Windows time. About 21 a capture came from the code
+  under test asking the same question again: the repository lookup `isolated_diff_env` runs three
+  times, `ls-tree` of the declaration file three times, `rev-parse --verify <oid>^{commit}` four times
+  over two oids, and the same two-oid `diff` renderings twice. `transport::git_memo` now answers a
+  repeated question from memory while a scope is open on the calling thread, and the scope is opened
+  inside `review_status`, the capture's `prepare` and `collect_with`, `review_tier_declared`,
+  `review_tier_for_repair_declared`, `payload_with` and `publish_with_sleep` — inside them, not only
+  in the MCP dispatcher, because the suite calls them directly. Outside a scope nothing is
+  remembered, which is why `estigia mcp`, a long-lived process whose worktree path can be recreated
+  as a different repository, never carries an answer from one call to the next. Only a successful
+  read is remembered, and only these: the repository lookup, and `ls-tree`, `rev-parse --verify
+  <oid>^{commit}`, a two-revision `diff` and `cat-file blob <oid>:<path>` whose every revision is a
+  full object id. `HEAD`, a ref name, `status`, a stdin-fed `cat-file --batch` and anything that
+  writes are never remembered; `target.rs` reads `HEAD^{commit}` either side of a commit and that read
+  stays live. The key drops the per-call `GIT_DIR` of an isolated diff directory, because
+  `isolated_diff_env` mints a new one every call over the same shared object directory.
+  Measured on macOS with the logging `git`: the test above 220 → 175 processes, `cargo test --lib
+  transport::claim` 12 543 → 10 841 (the `diff` renderings 2 246 → 1 896, `rev-parse --verify`
+  1 857 → 1 622, the repository lookup 1 381 → 740, `ls-tree --name-only` 1 158 → 727). What is left
+  is the question asked by *different* operations: a capture is a launch, a collect and the status
+  read after it, three scopes, so each fixed question is still asked once per operation, and the
+  `cat-file --batch` pair is asked twice inside the collect because it takes stdin. The Windows time
+  after the change is not measured here; the continuous-integration run of the pull request that
+  made it is the measurement. The test
+  `one_capture_asks_git_each_fixed_question_once` counts the spawns through a debug-only per-thread
+  log in the transport's one process boundary and fails when a launch or a collect asks a fixed
+  question twice.
+
 ## The suite, its fixtures and the retired port
 
 - **Three debug-only overrides keep the suite off production waits and double work, and a `--release`
