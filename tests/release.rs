@@ -1762,3 +1762,71 @@ fn a_published_release_hands_its_tag_to_the_registries() {
     assert!(registries.contains("-f ref=\"$REF\""));
     assert!(registries.contains("REF: ${{ github.ref_name }}"));
 }
+
+#[test]
+fn ci_reuses_a_green_run_over_the_same_bytes_and_nothing_else() {
+    let workflow = code_of(&read(".github/workflows/ci.yml"));
+    let is_job = |line: &str| {
+        line.strip_prefix("  ")
+            .and_then(|rest| rest.strip_suffix(':'))
+            .is_some_and(|key| !key.is_empty() && !key.starts_with(' '))
+    };
+    let job = |name: &str| -> String {
+        let header = format!("  {name}:");
+        let body: Vec<&str> = workflow
+            .lines()
+            .skip_while(|line| *line != header)
+            .skip(1)
+            .take_while(|line| !is_job(line))
+            .collect();
+        assert!(!body.is_empty(), "ci.yml has no `{name}` job");
+        body.join("\n")
+    };
+
+    let reuse = job("reuse");
+    let compact: String = reuse.chars().filter(|c| !c.is_whitespace()).collect();
+    assert!(
+        compact.contains("head_sha=$tested&status=success"),
+        "`reuse` does not ask for a successful run on the tested head:\n{reuse}"
+    );
+    assert!(
+        compact.contains("pull_request)") && compact.contains("tested=\"$PR_HEAD\""),
+        "the ready event does not look for a run on the pull request head:\n{reuse}"
+    );
+    assert!(
+        compact.contains("\"$merged\"=\"$head\""),
+        "a push to main reuses a run without comparing trees:\n{reuse}"
+    );
+    assert!(
+        compact.contains("select(.id!=$RUN_ID)"),
+        "`reuse` can name the run it is part of:\n{reuse}"
+    );
+    assert!(
+        !compact.contains("merge_group") && !compact.contains("workflow_dispatch)"),
+        "a merge-queue or dispatched run must never reuse:\n{reuse}"
+    );
+
+    for name in ["check", "lint", "release"] {
+        let body = job(name);
+        assert!(
+            body.contains("needs: reuse") && body.contains("if: ${{ !cancelled() }}"),
+            "`{name}` does not wait for `reuse`, or is skipped when `reuse` fails — a skipped job \
+             satisfies a required context:\n{body}"
+        );
+        let steps: Vec<&str> = body
+            .lines()
+            .filter(|line| line.starts_with("      - "))
+            .collect();
+        let guarded = body
+            .lines()
+            .filter(|line| line.trim() == "if: needs.reuse.outputs.run == ''")
+            .count();
+        assert!(!steps.is_empty(), "`{name}` has no steps:\n{body}");
+        assert_eq!(
+            guarded,
+            steps.len(),
+            "a step of `{name}` runs even when a green run over the same bytes was found, or one \
+             is skipped without that guard:\n{body}"
+        );
+    }
+}
