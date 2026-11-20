@@ -274,6 +274,7 @@ fn payload_with(
             "review payload ends are not object ids".to_owned(),
         ));
     }
+    let _memo = super::git_memo::scope();
     // Isolated unconditionally, not only when a review found an attribute
     // source that collapsed it: a committed `.gitattributes`, an untracked
     // `.git/info/attributes`, `core.attributesFile` and the caller's own

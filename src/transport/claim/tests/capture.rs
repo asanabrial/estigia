@@ -3988,3 +3988,35 @@ fn a_job_recorded_against_other_bytes_than_the_offered_receipt_is_stale_even_in_
     assert_eq!(refused_as(&outcome), "capture-result-stale");
     nothing_was_written(&world);
 }
+
+#[test]
+fn one_capture_asks_git_each_fixed_question_once() {
+    fn asked_once(operation: &str) {
+        let mut asked = std::collections::BTreeMap::<Vec<String>, usize>::new();
+        for args in crate::transport::git_memo::spawned() {
+            let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+            if crate::transport::git_memo::memoisable(&borrowed) {
+                *asked.entry(args).or_default() += 1;
+            }
+        }
+        assert!(!asked.is_empty(), "{operation} asked git nothing fixed");
+        let repeated: Vec<_> = asked.iter().filter(|(_, count)| **count > 1).collect();
+        assert!(
+            repeated.is_empty(),
+            "{operation} asked more than once: {repeated:#?}"
+        );
+    }
+
+    let world = refutable();
+    let answer = outcomes_of(&[("f-1", "corroborated"), ("f-2", "refuted")]);
+    crate::transport::git_memo::forget_spawns();
+
+    let (launched, _) = launch(&world, BATCH, answer);
+    let launched = launched.unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    asked_once("the launch");
+
+    wait_until_done(&launched);
+    crate::transport::git_memo::forget_spawns();
+    collect(&world, BATCH).unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    asked_once("the collect");
+}

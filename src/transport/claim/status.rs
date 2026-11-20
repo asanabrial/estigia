@@ -58,6 +58,7 @@ const DEFAULT_MOVED: &str = "the pull request's head or base is not the one the 
 /// binding (`epoch`/`pr`/`head`/`base`/`digest`, or `expected_epoch` for a publication), so a
 /// publication landing afterwards is refused as stale by the command, never executed.
 pub fn review_status(context: &Context, issue: u64) -> Result<Value, Failure> {
+    let _memo = crate::transport::git_memo::scope();
     let comments = Ledger::read_timeline_at(&store_path()?, &repo_of(context)?, issue)?;
     let publications = all_publications(&comments)?;
     let Some(latest) = publications.last() else {
