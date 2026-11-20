@@ -30,14 +30,62 @@ env:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  # A green run of this workflow over the same bytes is not repeated. The ready
+  # event finds the dispatched run on the pull request head; a push to main finds
+  # the run on the merged head when the merge commit carries that head's tree.
+  # Any read that fails leaves `run` empty, and an empty `run` runs everything.
+  reuse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.find.outputs.run }}
+    steps:
+      - id: find
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -u
+          tested=""
+          case "$EVENT" in
+            pull_request)
+              tested="$PR_HEAD"
+              ;;
+            push)
+              parent=$(gh api "repos/$REPO/commits/$SHA" --jq 'if (.parents | length) == 2 then .parents[1].sha else empty end') || parent=""
+              if [ -n "$parent" ]; then
+                merged=$(gh api "repos/$REPO/git/commits/$SHA" --jq .tree.sha) || merged=""
+                head=$(gh api "repos/$REPO/git/commits/$parent" --jq .tree.sha) || head=""
+                if [ -n "$merged" ] && [ "$merged" = "$head" ]; then
+                  tested="$parent"
+                fi
+              fi
+              ;;
+          esac
+          run=""
+          if [ -n "$tested" ]; then
+            run=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$tested&status=success&per_page=100" \
+              --jq "[.workflow_runs[] | select(.id != $RUN_ID) | select(.event == \"workflow_dispatch\" or .event == \"pull_request\")][0].id // empty") || run=""
+          fi
+          echo "reused run: ${run:-none} (tested head: ${tested:-none})"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   # The job id and the matrix are the required status contexts on main
   # (`check (ubuntu-latest)` and its siblings): renaming either, or folding
   # the matrix into another job, leaves a required context that never reports.
   # `lint` and `release` run beside it rather than after it, so the slowest
   # suite sets the wall time instead of the sum of every stage.
   check:
+    needs: reuse
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +95,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        if: needs.reuse.outputs.run == ''
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -63,6 +112,7 @@ jobs:
       # up is the failure `no_workflow_needs_only_interpreters_it_sets_up`
       # exists to refuse, and this is the second tool it has had to name.
       - uses: actions/setup-node@v5
+        if: needs.reuse.outputs.run == ''
         with:
           node-version: '22'
 
@@ -76,6 +126,7 @@ jobs:
       # names as the first of them no longer exists to be counted. What a cold
       # build costs here in minutes has not been measured.
       - uses: Swatinem/rust-cache@v2
+        if: needs.reuse.outputs.run == ''
         with:
           cache-on-failure: true
 
@@ -83,25 +134,31 @@ jobs:
       # `.config/nextest.toml` and named in the log, instead of the job being
       # cancelled at its limit with nothing to read.
       - uses: taiki-e/install-action@v2
+        if: needs.reuse.outputs.run == ''
         with:
           tool: nextest
 
       # nextest runs no doc tests and the stand-in `gh` is an example, so the
       # fixtures are built first and the doc tests get a step of their own.
       - name: fixtures
+        if: needs.reuse.outputs.run == ''
         run: cargo build --bins --examples --all-features --locked
 
       # `--no-fail-fast` for the reason `cargo test` needed it: the first red
       # target must not hide every later one, `tests/pipe.rs` most of all.
       - name: tests
+        if: needs.reuse.outputs.run == ''
         run: cargo nextest run --profile ci --all-features --no-fail-fast --locked
 
       - name: doc tests
+        if: needs.reuse.outputs.run == ''
         run: cargo test --doc --all-features --locked
 
   # Per platform, because `cfg(windows)` and `cfg(unix)` code is only linted and
   # documented on the platform that compiles it.
   lint:
+    needs: reuse
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -111,26 +168,33 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        if: needs.reuse.outputs.run == ''
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       # `cache-on-failure` for the reason given on the `check` job's cache step.
       - uses: Swatinem/rust-cache@v2
+        if: needs.reuse.outputs.run == ''
         with:
           cache-on-failure: true
 
       # No `--locked`: rustfmt resolves no dependencies and takes no such flag.
       - name: formatting
+        if: needs.reuse.outputs.run == ''
         run: cargo fmt --all --check
 
       - name: lints
+        if: needs.reuse.outputs.run == ''
         run: cargo clippy --all-targets --all-features --locked
 
       - name: documentation
+        if: needs.reuse.outputs.run == ''
         run: cargo doc --no-deps --all-features --locked
 
   release:
+    needs: reuse
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -140,19 +204,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        if: needs.reuse.outputs.run == ''
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       # `cache-on-failure` for the reason given on the `check` job's cache step.
       - uses: Swatinem/rust-cache@v2
+        if: needs.reuse.outputs.run == ''
         with:
           cache-on-failure: true
 
       - name: release build
+        if: needs.reuse.outputs.run == ''
         run: cargo build --release --locked
 
       - name: the binary answers and refuses
+        if: needs.reuse.outputs.run == ''
         shell: bash
         run: |
           set -eu
