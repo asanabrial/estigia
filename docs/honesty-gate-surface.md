@@ -219,7 +219,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     and nothing is under-gated. The fixture holds representatives, not the family.
   - `<repo>/.opencode/plugins` is `Routine`; Estigia reads nothing from a project-local plugin
     directory, which is the stated reason and not a measurement. The over-gating direction is not
-    derived from the adapter table (the measurement is in the previous section).
+    derived from the adapter table (the measurement is in *The control surface and what it records*, the first section of this file).
   - A host that reads a directory whole and is declared not to is invisible here. The declaration
     moved from a distant list onto the adapter; it did not become checkable.
   - **Flipping the Evidence standard row does not re-render the installed definition, and nothing reports the
@@ -289,7 +289,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   Registering there to deny would make Estigia responsible for creating every worktree. So the shell
   spelling is gated and the native path is not — and a write inside that worktree is still measured,
   because the claim covers the directory rather than the way it was made.
-- **Claude Code subagents are covered; that is why the line below is OpenCode's and not the
+- **Claude Code subagents are covered; that is why the entry on OpenCode subagents below is OpenCode's and not the
   design's.** A subagent's tool calls fire the same `PreToolUse` hooks as the main thread, carrying
   `agent_id` and `agent_type`, checked in the runtime's own hook reference.
 - **An extension point is not automatically a place to deny.** Three were checked and refused for the

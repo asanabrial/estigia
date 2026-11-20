@@ -66,7 +66,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   activation pays, and it does not prove a sentence agrees with `src/harness/`.
 
 - **The shipped skill does not carry its own provenance; the why of a rule is here.** Open
-  measurements appear below under scratch isolation, review payloads and the publication lane.
+  measurements appear in [`honesty-review-rules.md`](honesty-review-rules.md) and
+  [`honesty-review-panels.md`](honesty-review-panels.md) under scratch isolation, review payloads and
+  the publication lane.
   Whether `merge_group` satisfies required contexts remains unmeasured. No mechanical check detects a
   launch brief overriding the reviewer's classification rule, or measures compliance. The tier omits
   the external source's six-path review-authority self-reference: this repository's authority is not

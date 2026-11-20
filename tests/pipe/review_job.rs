@@ -112,6 +112,45 @@ fn a_runner_with_no_reviewer_on_the_path_leaves_a_refusal_not_silence() {
 }
 
 #[test]
+fn a_runner_does_not_see_a_variable_the_launch_removed() {
+    const NAME: &str = "CARGO_PKG_NAME";
+    assert!(
+        std::env::var_os(NAME).is_some(),
+        "{NAME} must be set in this process for the launch to have something to remove"
+    );
+    let root = tempfile::tempdir().expect("a directory");
+    let dir = root.path().join("job");
+    std::fs::create_dir_all(&dir).expect("dir");
+    let probe = root.path().join("probe");
+    std::fs::write(
+        &probe,
+        format!(
+            "#!/bin/sh\nprintf '%s' \"${{{NAME}-absent}}\" > \"$2/seen\"\n: > \"$2/started\"\n"
+        ),
+    )
+    .expect("script");
+    std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o755)).expect("exec");
+
+    Detached::of(&probe)
+        .without_env(NAME)
+        .start(&dir)
+        .expect("the probe starts");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("seen")).expect("the probe reported"),
+        "absent"
+    );
+
+    let kept = root.path().join("kept");
+    std::fs::create_dir_all(&kept).expect("dir");
+    Detached::of(&probe).start(&kept).expect("the probe starts");
+    assert_ne!(
+        std::fs::read_to_string(kept.join("seen")).expect("the probe reported"),
+        "absent",
+        "the probe cannot see the variable even when nothing removes it"
+    );
+}
+
+#[test]
 fn a_runner_that_cannot_start_is_reported_by_the_launch() {
     let root = tempfile::tempdir().expect("a directory");
     let dir = root.path().join("job");

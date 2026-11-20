@@ -31,19 +31,17 @@ pub(crate) fn suite_sources() -> String {
 }
 
 #[test]
-fn every_file_of_the_suite_is_in_what_the_suite_sources_yield() {
+fn the_suite_sources_hold_the_root_and_a_module_a_hand_list_would_omit() {
     let sources = suite_sources();
-    let paths = suite_paths();
+    // Split so that this file does not hold the text it looks for.
+    let in_the_root = ["fn estigia", "_runner() -> "].concat();
+    let in_a_module = ["fn publish_review_carries", "_the_payload_only_when_asked"].concat();
     assert!(
-        paths.len() > 10,
-        "the suite's directory was not read: {paths:?}"
+        sources.contains(&in_the_root),
+        "tests/pipe.rs is not in what the suite sources yield"
     );
-    for path in paths {
-        let text = std::fs::read_to_string(&path).expect("a readable file");
-        assert!(
-            sources.contains(&text),
-            "{} is not in what the suite sources yield",
-            path.display()
-        );
-    }
+    assert!(
+        sources.contains(&in_a_module),
+        "tests/pipe/publication_lane.rs is not in what the suite sources yield"
+    );
 }

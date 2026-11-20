@@ -135,7 +135,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `gh pr merge` and the two `gh release` steps need the issue in `review` or `done`; `git push` and `gh pr create` are exempt
   (publishing is how a run reaches review). Operator-declared boundaries are never read as deliveries,
   since Estigia cannot know whether a `make deploy` delivers or rehearses. Two `git merge` shapes are
-  preparation, not delivery; the integration merge has its own entry below. The narrower: an exact literal
+  preparation, not delivery; the integration merge has its own entry in [`honesty-gate.md`](honesty-gate.md) (*The integration exemption proves a branch is checked out…*). The narrower: an exact literal
   `git merge --ff-only <target>` (also `--` before the target) may run from `in-progress` after the tracker
   agrees when local Git proves all of it: on a branch, upstream a canonical `refs/remotes/*` ref, clean
   worktree, target that upstream's exact name or a full commit object ID, and ancestry from `HEAD` through
@@ -161,7 +161,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   taken from that agent's published reference or its source: Claude Code and Codex (`PreToolUse` →
   `permissionDecision`), Cursor (`preToolUse` → `{"permission":"deny",…}`), OpenCode (a plugin that blocks
   by throwing) and Pi (an extension that blocks by returning `{ block: true, reason }`). The two it does not
-  reach are ZCode and DeepSeek Harness, and the bullets on them say why. The eighth entry is the
+  reach are ZCode and DeepSeek Harness, and the ZCode and DeepSeek Harness entries in [`honesty-gate.md`](honesty-gate.md) say why. The eighth entry is the
   agent-neutral skills root, which is not an agent and has no tool loop to gate. The gate also still
   answers for six retired hosts — Gemini CLI, Continue, Cline, Crush, Windsurf and Qwen — because a machine
   that installed one before it was retired still carries its hook and dialect; `setup` installs into none

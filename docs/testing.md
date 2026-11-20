@@ -198,7 +198,9 @@ absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer` spawns 
 plugin parses, and several fixtures spawn `sh` — so the honest line is that one hundred and eleven
 tests require `node`, four of them `tar` too, and one requires `bash`, and nothing else does except `sh`: the checks tests in
 `src/transport/claim/tests/checks.rs` declare their commands as `sh -c`, so they need `sh` on the path
-and a declared check that cannot start does not pass them. `doctor` asks for none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not
+and a declared check that cannot start does not pass them; so does
+`a_hook_script_is_still_a_script_when_the_path_holds_an_apostrophe`, which parses the Cline hook with
+`sh -n` and used to print `SKIPPED` and pass without it. `doctor` asks for none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not
 skips, without it.
 
 Four in [`tests/npm.rs`](../tests/npm.rs) drive the npm installer, `npm/bin/estigia.js`, on Unix only

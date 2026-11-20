@@ -61,7 +61,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   that gate. Nothing here records how many such judges ran,
   whether two of them shared a working directory, or what they wrote into it. The isolation rule in
   `skill/policies/judgment-day.md` is prose an orchestrator follows or does not, on the same footing as
-  panel size and blindness above.
+  panel size and blindness, which [`honesty-review-panels.md`](honesty-review-panels.md) records as not observed.
 
 - **A non-severe finding is informational, and nothing about delivery waits on it.** The
   `disposition-missing` gate is retired, following `gentle-ai` v3.7.0
