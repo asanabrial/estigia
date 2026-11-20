@@ -4376,7 +4376,7 @@ fn a_local_override_reads_without_promotion() {
         rows: std::collections::BTreeMap::from([(adapter.slug, {
             let mut row = effective;
             Setting::IssueRequirement
-                .apply(&mut row, "required")
+                .apply(&mut row, "on")
                 .expect("IssueRequirement is accepted");
             row
         })]),
@@ -4436,7 +4436,7 @@ fn a_per_agent_override_reads_without_rewriting_its_contract() {
         rows: std::collections::BTreeMap::from([(adapter.slug, {
             let mut row = effective;
             Setting::IssueRequirement
-                .apply(&mut row, "required")
+                .apply(&mut row, "on")
                 .expect("IssueRequirement is accepted");
             row
         })]),

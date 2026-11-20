@@ -545,7 +545,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   (`linear-team-mismatch`). Nothing crosses the Linear client against a second implementation: the stand-in
   `linear` is the `fake_process` example.
 
-  **The unclaimed-write refusal and `Unclaimed write policy` hold under `Tracker linear` with
+  **The unclaimed-write refusal and `Issue required` hold under `Tracker linear` with
   `Workflow: assisted`, as they do under GitHub.** Both ask `Tracker::adjudicates_unclaimed_writes`
   (true for a tracker a run can hold a claim against, which an assisted run does against Linear
   locally); Linear with workflow unset or autonomous stands down

@@ -176,7 +176,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 - **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate refuses
   where it would not on Unix.** `Path::new("/tmp/y").is_absolute()` is false there, and under Git Bash
   `/tmp` and `/c/…` are mounts the gate cannot place, so such a redirect or heredoc target is read as
-  inside the checkout and refused under `required`: the safe direction, at the cost of extra refusals. Tests
+  inside the checkout and refused under `on`: the safe direction, at the cost of extra refusals. Tests
   naming an outside target use `test_env::outside_the_checkout`. A POSIX `Worktree location` is refused.
 
 - **The interpreter inventory is prose, and nothing derives it from the suite.** `AGENTS.md` states

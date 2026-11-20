@@ -151,7 +151,7 @@ pub const SETTINGS: &[Setting] = &[
 /// reference show the same groups in the same order.
 ///
 /// A group is a *theme*, not a scope: `Repository & tracker` holds both the
-/// facts every checkout shares and `Unclaimed write policy`, which only a
+/// facts every checkout shares and `Issue required`, which only a
 /// repository's own file answers, because they are one question — where the
 /// work lives — and the scope column already says which is which.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -728,7 +728,7 @@ impl Setting {
             Self::ReviewBudget => Answers::some(&["none", "150000"]),
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::CorrectionsPerLineage => Answers::some(&["3", "1"]),
-            Self::IssueRequirement => Answers::all(&["off", "required"]),
+            Self::IssueRequirement => Answers::all(&["on", "off"]),
             Self::UnclaimedGithubWrites => Answers::all(&["held", "allowed"]),
             Self::Workflow => Answers::all(&["autonomous", "assisted"]),
             // `custom` is accepted and not offered, for the reason `Profile`'s is.
@@ -779,7 +779,7 @@ impl Setting {
             Self::Summary => "Summary language",
             Self::Body => "Issue body language",
             Self::Notifications => "Notifications",
-            Self::IssueRequirement => "Unclaimed write policy",
+            Self::IssueRequirement => "Issue required",
             Self::UnclaimedGithubWrites => "Unclaimed GitHub writes",
             Self::Workflow => "Claim workflow",
             Self::DeliveryPreset => "Delivery preset",
@@ -817,7 +817,7 @@ impl Setting {
             Self::Profile => &["Profile"],
             Self::Integration => &["Integration"],
             Self::Workflow => &["Workflow"],
-            Self::IssueRequirement => &["Issue requirement"],
+            Self::IssueRequirement => &["Unclaimed write policy", "Issue requirement"],
             _ => &[],
         }
     }
@@ -922,16 +922,16 @@ impl Setting {
                 "accepted verdicts do not read check runs; the answer says the lane was not consulted"
             }
             (Self::IssueRequirement, "off") => "a run holding no claim may write here freely",
-            (Self::IssueRequirement, "required") => {
+            (Self::IssueRequirement, "on") => {
                 "a write by a run holding no claim is refused until an issue is claimed"
             }
             (Self::UnclaimedGithubWrites, "held") => {
                 "a merge, release, tag, `git merge` or GitHub write by a run holding no claim is \
-                 put to the person, or refused, as `Unclaimed write policy` says"
+                 put to the person, or refused, as `Issue required` says"
             }
             (Self::UnclaimedGithubWrites, "allowed") => {
                 "those boundaries pass with no question; commits, pushes, branches and file writes \
-                 stay under `Unclaimed write policy`"
+                 stay under `Issue required`"
             }
             (Self::Workflow, "autonomous") => {
                 "Estigia holds the claim and writes the tracker, as it always has"
@@ -1077,7 +1077,7 @@ impl Setting {
             Self::DecisionMode => "`ask`, or `auto`",
             Self::Evidence => "`reading`, or `measuring`",
             Self::PublicationLane => "`on`, or `off`",
-            Self::IssueRequirement => "`off` or `required`",
+            Self::IssueRequirement => "`on`, or `off`",
             Self::UnclaimedGithubWrites => "`held`, or `allowed`",
             Self::Workflow => "`autonomous`, or `assisted`",
             Self::DeliveryPreset => "`autonomous`, `assisted`, `team`, or `custom`",
@@ -1335,7 +1335,7 @@ impl Setting {
             Self::IssueRequirement => {
                 config.issue_requirement = match lower(value).trim() {
                     "off" => IssueRequirement::Off,
-                    "required" => IssueRequirement::Required,
+                    "on" => IssueRequirement::On,
                     _ => return Err(self.reject(value)),
                 }
             }
@@ -1417,11 +1417,13 @@ impl Setting {
         self.parse_into(config, value)
     }
 
-    /// Reads one value already stored in a file: a retired `Unclaimed write policy` answer reads
-    /// as `required`, never as `off`.
+    /// Reads one value already stored in a file: a stored `required`, `watch` or `ask` for
+    /// `Issue required` reads as `on`, never as `off`.
     pub(crate) fn apply_stored(self, config: &mut Config, value: &str) -> Result<(), Refusal> {
-        if self == Self::IssueRequirement && matches!(lower(value).trim(), "watch" | "ask") {
-            return self.parse_into(config, "required");
+        if self == Self::IssueRequirement
+            && matches!(lower(value).trim(), "required" | "watch" | "ask")
+        {
+            return self.parse_into(config, "on");
         }
         self.parse_into(config, value)
     }

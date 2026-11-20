@@ -56,7 +56,7 @@ fn inventory() -> Vec<Refusal> {
         .expect("a person-only target is refused"),
         crate::harness::issue_requirement::refusal(
             false,
-            crate::config::IssueRequirement::Required,
+            crate::config::IssueRequirement::On,
             &crate::harness::issue_requirement::Scope::Repository(std::path::PathBuf::from(
                 "/a/checkout",
             )),
@@ -5666,7 +5666,7 @@ fn an_unconfirmed_setup_write_without_an_earlier_change_is_unknown() {
     crate::setup::setup(adapter, &Config::default(), &options).expect("the initial setup");
     let mut edited = Config::default();
     Setting::IssueRequirement
-        .apply(&mut edited, "required")
+        .apply(&mut edited, "on")
         .expect("IssueRequirement is accepted");
     let plan = crate::tui::Plan {
         agents: vec![adapter],
@@ -8910,26 +8910,23 @@ fn the_issue_requirement_is_written_to_the_repository_file_and_nowhere_else() {
     let rig = authorisation_rig(&Config::default());
     super::repository_set(
         Setting::IssueRequirement,
-        "required",
+        "on",
         rig.repo.path(),
         &rig.options,
     )
     .expect("the repository may answer its own row");
     let written = std::fs::read_to_string(crate::skill::repository_config_path(rig.repo.path()))
         .expect("the file was created");
-    assert!(
-        written.contains("| Unclaimed write policy | required |"),
-        "{written}"
-    );
+    assert!(written.contains("| Issue required | on |"), "{written}");
     let layered = crate::skill::layer_repository(&Config::default(), rig.repo.path())
         .expect("the file reads back");
     assert_eq!(
         layered.issue_requirement,
-        crate::config::IssueRequirement::Required
+        crate::config::IssueRequirement::On
     );
 
     let refusal = super::config_set(
-        "Issue requirement",
+        "Issue required",
         "off",
         None,
         false,
@@ -8940,7 +8937,7 @@ fn the_issue_requirement_is_written_to_the_repository_file_and_nowhere_else() {
     .expect_err("a machine-wide value was accepted");
     assert_eq!(refusal.code, "setting-only-the-repositorys");
     let refusal = super::config_set(
-        "Issue requirement",
+        "Issue required",
         "off",
         Some("claude-code"),
         false,
@@ -8953,11 +8950,11 @@ fn the_issue_requirement_is_written_to_the_repository_file_and_nowhere_else() {
 }
 
 #[test]
-fn the_unclaimed_write_policy_refuses_watch_and_ask_like_any_unknown_value() {
+fn issue_required_refuses_its_retired_values_like_any_unknown_value() {
     let rig = authorisation_rig(&Config::default());
-    for value in ["watch", "ask", "sometimes"] {
+    for value in ["required", "watch", "ask", "sometimes"] {
         let refusal = super::config_set(
-            "Unclaimed write policy",
+            "Issue required",
             value,
             None,
             true,
@@ -8968,10 +8965,7 @@ fn the_unclaimed_write_policy_refuses_watch_and_ask_like_any_unknown_value() {
         .expect_err("a retired value was accepted");
         assert_eq!(refusal.code, "config-value-unrecognised", "{value}");
         assert!(
-            refusal
-                .resolution
-                .to_string()
-                .contains("`off` or `required`"),
+            refusal.resolution.to_string().contains("`on`, or `off`"),
             "{value}: {:?}",
             refusal.resolution
         );

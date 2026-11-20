@@ -881,8 +881,8 @@ fn setting_a_row_this_checkout_overrides_says_so() {
     // printed for every row by default.
     let requirement = after
         .lines()
-        .find(|line| line.starts_with("Unclaimed write policy "))
-        .unwrap_or_else(|| panic!("no Unclaimed write policy row in:\n{after}"));
+        .find(|line| line.starts_with("Issue required "))
+        .unwrap_or_else(|| panic!("no Issue required row in:\n{after}"));
     assert!(
         requirement.ends_with("(skill default)"),
         "a row only the skill default answers does not say so: {requirement}"
@@ -3389,8 +3389,7 @@ fn an_unreadable_repository_configuration_denies_the_commit_it_could_have_denied
         .join("estigia")
         .join("estigia.local.md");
     std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
-    let mut rows =
-        b"| Setting | Value here |\n|---|---|\n| Unclaimed write policy | required |\n".to_vec();
+    let mut rows = b"| Setting | Value here |\n|---|---|\n| Issue required | on |\n".to_vec();
     rows.extend_from_slice(&[0xff, 0xfe]);
     std::fs::write(&file, rows).expect("an unreadable repository file");
 

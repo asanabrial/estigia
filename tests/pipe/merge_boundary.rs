@@ -975,7 +975,7 @@ fn a_gate_question_by_run_id_writes_nothing() {
     run_in(
         home,
         repo,
-        &["config", "set", "Unclaimed write policy", "off", "--repo"],
+        &["config", "set", "Issue required", "off", "--repo"],
         "",
     );
     let (out, err, ok) = run_with_tracker(

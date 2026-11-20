@@ -5242,7 +5242,7 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     Ok(harness::GateContext {
         integration: installed.integration,
         issue_requirement: if repository_unknown {
-            crate::config::IssueRequirement::Required
+            crate::config::IssueRequirement::On
         } else {
             installed.issue_requirement
         },

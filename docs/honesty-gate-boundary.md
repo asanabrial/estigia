@@ -32,18 +32,18 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `a_push_without_a_claim_is_refused_on_any_branch_where_the_guard_is_installed` and
   `the_pre_push_hook_refuses_an_unclaimed_push_where_the_guard_is_installed`; nothing drives the two shell
   entry points (`estigia gate` with no session, the dialect hook with an empty session id) end to end.
-- **`Unclaimed write policy` holds the writes the hook sees, and cannot hold the rest.** With the row
-  `required`, a run holding no claim is refused (`issue-required`) before a routine write
+- **`Issue required` holds the writes the hook sees, and cannot hold the rest.** With the row
+  `on`, a run holding no claim is refused (`issue-required`) before a routine write
   the gate can place inside a checkout whose tracker can name an issue there and that has an installed
   contract (a file edit or write, or a shell line carrying a `REPOSITORY_SHELL` fragment such as
   `git commit`). A shell write it **cannot place** runs, wherever the call was launched, unless the
   write is a git write or any word of the line is a `git` or `gh` command (`issue_requirement::names_git_or_gh`),
   which is refused as a placed write is. Nothing records or compares a checkout's `git status`
-  afterwards, and a stored `watch` or `ask` reads as `required`. Held by
+  afterwards, and a stored `required`, `watch` or `ask` reads as `on`. Held by
   `a_write_placed_inside_the_checkout_is_still_refused_under_required`,
   `a_shell_write_placed_inside_or_naming_git_or_gh_is_still_held`,
   `a_shell_write_the_gate_cannot_place_runs_under_required` and
-  `a_stored_watch_reads_as_required_and_refuses_an_unclaimed_edit`.
+  `a_stored_watch_reads_as_on_and_refuses_an_unclaimed_edit`.
   **What letting unplaceable writes run costs:** an unclaimed run can change the checkout through a line
   the gate cannot read — `cargo fmt > /tmp/l`, `sed -ibak s/a/b/ src/x.rs > /tmp/l`, `bash -c 'echo x >
   src/lib.rs'`, a here-document in any shape but the one below — and nothing reports it until a commit or
@@ -52,13 +52,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `make` target that runs git) is unplaceable, names no `git` word, and runs. What the row holds is a
   commit, push or GitHub write whose command the line spells out; a push git itself runs is refused only
   where `estigia guard` installed the `pre-push` hook. It was narrowed to this after one operator's store (2026-10-20 to
-  2026-11-19) showed 130 of 192 `required` refusals were unplaceable writes, by subject redirects, inline
+  2026-11-19) showed 130 of 192 refusals were unplaceable writes, by subject redirects, inline
   `python3`, `mkdir`, `curl -o`, `sed -i`, `rm` and `cp`, and the operator turned the row off rather than
   keep it; the decision log keeps no command text, so whether any of those landed in the checkout is
   unknown. What it does not hold:
   - **A boundary is held as a commit is, unless the repository says `Unclaimed GitHub writes: allowed`, and
     `Merge by` is not read on this path.** An unclaimed `gh pr merge`, `git merge`, `git pull`, `git tag`,
-    release, `gh api` mutation or declared irreversible command is refused under `required`, and so is
+    release, `gh api` mutation or declared irreversible command is refused under `on`, and so is
     `Action::Remote` (`gh pr review`, `gh pr comment`), through
     `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`. `allowed` is the operator's own
     declaration that a skill writing through `gh api`, `gh pr review` and `gh pr merge` unclaimed is not to
@@ -87,7 +87,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     target lands in, not the launch directory, so a no-remote checkout writing into a nested checkout that
     has one is still held. A failed read or a `.git` entry git will not use is not zero remotes. A
     non-GitHub remote still counts, because the URL is not read. Open: a refusal that survives there (an
-    unplaceable git write under `required`, a nested target the tracker can name) still names `claim`/`create`,
+    unplaceable git write under `on`, a nested target the tracker can name) still names `claim`/`create`,
     which cannot run from the no-remote checkout. Held by `a_checkout_with_no_remote_is_not_held_for_an_issue`,
     `adding_a_remote_holds_the_same_write_again`,
     `a_named_repository_holds_the_write_where_the_checkout_has_no_remote`,
@@ -115,7 +115,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     one plain printing command (`echo`, `printf`, `cat`, `ls`, `grep`, `rg`, `head`, `tail`, `wc`, `date`,
     `pwd`) with no quote, `$`, backtick, backslash, `<`, `|`, `;`, `&`, parenthesis, line break or `..`.
     **Everything else a shell line can write is unplaceable** (a `cd` before a redirect, a variable, `&&`, a
-    second writer, inline interpreter code): it runs under `required`, wherever the call was launched,
+    second writer, inline interpreter code): it runs under `on`, wherever the call was launched,
     unless the line names `git` or `gh`; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
     (`shell::quoted_heredoc_target`): `cat > TARGET <<'DELIM'`, `cat >> TARGET <<'DELIM'` or `cat <<'DELIM' >
     TARGET`, a literal absolute `TARGET` without `..`, any body (**not read**; how an issue body is drafted in
@@ -125,7 +125,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     when every git command on the line runs in a literal absolute directory — a leading `cd DIR &&` for the
     whole line, or `git -C DIR` on the command — and each lands outside the launch repository, the write is
     treated as one the gate cannot place, because the rest of the line (an interpreter heredoc beside a
-    `git stash`) is not read; being a git write, it is still refused under `required`. A second `cd`, `pushd`, `sh`/`bash`/`zsh`/`eval`, `GIT_DIR`, `--git-dir`,
+    `git stash`) is not read; being a git write, it is still refused under `on`. A second `cd`, `pushd`, `sh`/`bash`/`zsh`/`eval`, `GIT_DIR`, `--git-dir`,
     `--work-tree`, a git word inside a subshell or quotes, or a directory with a `$`, quote, glob or `~` keeps
     it inside. Not placed by this: a git command inside `"$(…)"`, which the classifier does not read as a
     write at all.
@@ -176,7 +176,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     (`no_effect_but_the_assisted_decision_leaves_a_stamp_on_an_assisted_pointer`).
   - **The marker and the branch are bytes the agent can write**, an unsworn session in the worktree is not
     stopped for a routine write (`issue_requirement` reads the worktree as claimed, whichever session writes
-    there; a `git push` from it is held by `Unclaimed write policy` wherever it runs), and an unclaimed shell
+    there; a `git push` from it is held by `Issue required` wherever it runs), and an unclaimed shell
     write to the repository's own `estigia.local.md` can set `assisted`.
   - **One session can hold several assisted claims, one child run per worktree**
     ([`several-assisted-claims.md`](several-assisted-claims.md)). Measured on Claude Code 2.1.318 from the raw
@@ -196,7 +196,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     - **`git -C A <subcommand>` is judged under A and not read further**, so a subcommand that writes outside A
       by its own arguments is attributed to A.
     - **A child's pointer that cannot be read is nobody's child**, so a call landing there falls to the session's
-      `Unclaimed write policy`. Under `off` that admits it.
+      `Issue required`. Under `off` that admits it.
     - **`git pull` is admitted inside a worktree whatever it names**, while `git merge` is admitted only for the
       run's base. The narrower reading is the second; nothing here proves what a pull brought in.
     - **The pointer lock is bounded**: a writer that cannot have it within two seconds falls back to the revision
@@ -269,8 +269,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     (`an_unreadable_contract_names_no_workflow_at_all`,
     `an_assisted_only_tool_is_refused_unless_the_row_says_assisted`). This is the contract chain — the
     versioned block, the operator's `estigia.local.md` and an agent's own file — and not the repository's own
-    file: one that is there and cannot be read reads as the denying answers (`required` for `Unclaimed write
-    policy`, `unreadable` for `Git operation window`), so the gate refuses what those rows could have refused,
+    file: one that is there and cannot be read reads as the denying answers (`on` for `Issue required`,
+    `unreadable` for `Git operation window`), so the gate refuses what those rows could have refused,
     and the refusal that stops an unclaimed write names the file and the read error.
   - A test classifies every tool in the server's table as tracker writer, assisted-only, local writer or
     read, so a new tool fails until placed; a writer a person runs by hand through `gh` is not a tool call.

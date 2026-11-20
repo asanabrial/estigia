@@ -813,7 +813,7 @@ bound) and sets `systemPromptOptions.sections.estigia` to the
 binary's text, which Pi renders as an `<estigia>` section appended to the prompt; it returns nothing,
 so it never replaces the prompt. The text is
 `harness::hook::session_start_text`, which wraps `session_start_response`, the function the Claude
-Code hook uses, so the run id, what the run holds, the `Unclaimed write policy` note, the build note (absent in a repository that does not hold the
+Code hook uses, so the run id, what the run holds, the `Issue required` note, the build note (absent in a repository that does not hold the
 build's commit, `docs/honesty.md`) and the
 queue note are one text for both apart from the queue count. The queue note says GitHub writes are queued without
 counting them: a growing count would rewrite the leading prompt on every turn. It asks on every run rather than caching, since the answer depends on a
@@ -1567,8 +1567,8 @@ continuation word beside its harness line.
 ### The oath binds once sworn
 
 A run that has claimed nothing is not under Estigia's authority, except where the repository's
-`Unclaimed write policy` says otherwise: by default (`off`) every repository write such a run makes
-goes through untouched, while the boundary rows below still hold what they hold; under `required`
+`Issue required` says otherwise: by default (`off`) every repository write such a run makes
+goes through untouched, while the boundary rows below still hold what they hold; under `on`
 a repository write the gate can place inside the checkout is refused, and a shell write it cannot
 place runs unless its line names `git` or `gh`.
 Gating every session would be a lock, not workflow authority.
@@ -1578,13 +1578,13 @@ Gating every session would be a lock, not workflow authority.
 `revert`, `merge`, `rebase`, `am`) and every `git push`, on every branch, with the refusal
 `unclaimed-commit`; the `pre-push` hook refuses the same push when git runs it. The way out is to
 claim an issue and work through `claim` with `branch` and `base`, whose isolated checkout the claim covers. Reads stay
-ungated, edits and tests are held only by `Unclaimed write policy`, and a checkout without the guard
+ungated, edits and tests are held only by `Issue required`, and a checkout without the guard
 has no commit refusal, as does one with no tracker transport or no installed contract.
 
-**The other exception is a repository setting, and it is off by default.** `Unclaimed write policy`
-(`off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`; a `watch` or `ask`
-an earlier build stored reads as `required`) governs a run
-holding no claim in a checkout with a tracker. `required` refuses every repository write the gate
+**The other exception is a repository setting, and it is off by default.** `Issue required`
+(`on` or `off`, answered only by `<repo>/.git/estigia/estigia.local.md`; a `required`, `watch` or `ask`
+an earlier build stored reads as `on`) governs a run
+holding no claim in a checkout with a tracker. `on` refuses every repository write the gate
 can place inside the checkout, and every git write, with `issue-required`; a shell write it cannot
 place runs unless its line names `git` or `gh`; a `git push` is held as a commit is, and a write
 carried on a line beside any other boundary (`gh pr merge …; git worktree remove …`) is held as it
@@ -1592,9 +1592,9 @@ would be alone, the refusal naming the write. The boundary itself is held too, b
 `Unclaimed GitHub writes` row (`held`, the
 default, or `allowed`, answered only by the same file): an unclaimed `gh pr merge`, `git merge`,
 `git tag`, release, `gh api` mutation or `gh pr review` is refused under
-`required`, and `Merge by` is not read on this path; `allowed` lets those
+`on`, and `Merge by` is not read on this path; `allowed` lets those
 boundaries pass while commits, pushes and file writes stay held, and [`honesty.md`](honesty.md) says what
-that costs; `off` holds none of these boundaries, and `Unclaimed write policy` is the only row that can
+that costs; `off` holds none of these boundaries, and `Issue required` is the only row that can
 hold a commit, a push or a file write.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.

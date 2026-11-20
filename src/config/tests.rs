@@ -2708,3 +2708,37 @@ fn the_loop_rows_describe_themselves_without_naming_a_subset_of_adapters() {
     assert!(Setting::GoalLoopPlugin.about().contains("`/goal`"));
     assert!(Setting::LoopPlugin.about().contains("claimable"));
 }
+
+fn requirement_in_a_repository_file(row: &str) -> IssueRequirement {
+    let repo = crate::test_env::repository_with_commit();
+    let path = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("the directory");
+    std::fs::write(
+        &path,
+        format!("| Setting | Value here |\n|---|---|\n{row}\n"),
+    )
+    .expect("the repository file");
+    crate::skill::layer_repository(&Config::default(), repo.path())
+        .expect("the repository layers")
+        .issue_requirement
+}
+
+#[test]
+fn a_repository_file_with_the_old_label_and_value_reads_as_on() {
+    assert_eq!(
+        requirement_in_a_repository_file("| Unclaimed write policy | required |"),
+        IssueRequirement::On
+    );
+}
+
+#[test]
+fn a_repository_file_with_the_current_label_and_value_reads_as_on() {
+    assert_eq!(
+        requirement_in_a_repository_file("| Issue required | on |"),
+        IssueRequirement::On
+    );
+    assert_eq!(
+        requirement_in_a_repository_file("| Issue required | off |"),
+        IssueRequirement::Off
+    );
+}
