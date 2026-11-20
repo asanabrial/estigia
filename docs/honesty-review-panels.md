@@ -409,7 +409,20 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   than the bytes it replaces, so an ordinary small deletion or move stays a hunk, and in an edited
   move the edited lines and any remainder under 8 lines stay hunks on both sides. Measured on
   `7f8bb440..0b594879`, four merged slices that split one document into twelve, the payload went from
-  836 KB to 44 KB; whole-run matching alone had saved nothing there. **The payload is
+  836 KB to 44 KB; whole-run matching alone had saved nothing there.
+
+  A second pass, over the lines the first left, also pairs a block of at least 8 lines **moved with one
+  indentation shift**: every non-blank source line equals one whitespace prefix (spaces or tabs, never
+  one for the other) followed by its destination line, or the reverse, and every blank line is
+  byte-identical. Its manifest line adds `indent-removed` or `indent-added` carrying that exact prefix,
+  and its `sha256` and `bytes` are of the **source** bytes, so the destination is the source with the
+  prefix taken off (or put on) each non-blank line. This is the one place a manifest line stands for
+  bytes the judge would read differently: a multi-line string literal whose continuation lines moved
+  with the block changed value, and the manifest says only that the block moved with this indentation,
+  never that nothing changed. A continuation line that did not move with the block breaks it, and what
+  remains is shown. Measured on `bb84ef73..622dbb29`, which moved one test module into its own file, the
+  payload went from 243 KB to 23 KB; on `99eaa441..622dbb29`, three such slices, from 2,071 KB to 46 KB.
+  **The payload is
   complete in description, not in content**: a judge never reads the moved bytes, and never reads a
   deleted file at all; a person who holds the repository can recover either from the base or head blob
   by the line ranges and digest the manifest names, and nothing in the review transaction makes the
