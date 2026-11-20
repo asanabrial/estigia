@@ -458,6 +458,19 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   it, not a claim about mergeability. The draft barrier still closes the merge hole: `release_ci` verifies a
   draft before marking ready, and GitHub refuses to merge a draft.
 
+  **This repository's own `ci.yml` does not run the suite twice over one head.** Its `reuse` job asks the
+  Actions API for a successful run of `ci.yml` on the same head SHA (on `pull_request`), or on the merged
+  pull request head when a push to `main` is a merge commit whose tree equals that head's tree; when it
+  finds one, every step of `check`, `lint` and `release` is skipped and the jobs report their required
+  contexts as success in seconds. So on this repository a green required context means *green in this run
+  or in a run of the same workflow over the same bytes*, and the run it reused is named in the `reuse`
+  job's log. Any read that fails leaves the answer empty and runs everything; `merge_group` and
+  `workflow_dispatch` runs never reuse. Nothing here reads the reused run's jobs, only its run-level
+  `conclusion: success`. Measured before the change on 2026-11-19: the ready run repeated the dispatched
+  run for 16–17 minutes per pull request, and the 12 merges before `dbd33280` all carried the tree of the
+  head they merged. This is a property of this repository's workflow, not something Estigia asks of a
+  consumer.
+
 - **A marker field that is present but unreadable is refused by name rather than read as an absent one.**
   `ReviewTransaction::from_marker` and `CorrectionState::from_marker` answer absent, present-and-valid or
   present-but-unreadable (`published-transaction-unparseable`, `correction-state-unparseable`, naming the
