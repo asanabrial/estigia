@@ -763,7 +763,6 @@ fn inventory() -> Vec<Refusal> {
                 "a session Estigia can derive a run id from",
             ),
         ),
-        crate::harness::mcp::runtime_names_no_runtime("Not A Runtime"),
         Refusal::not_started(
             "executable-path-not-quotable",
             "the path this binary is at holds a character a shell reads out of it",

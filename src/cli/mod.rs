@@ -5375,12 +5375,12 @@ fn handoff(
         .unwrap_or_default()
     {
         "deferred" => say!(
-            "handed #{number} to {to}; the `dev:{to}` label is queued and lands when the git \
+            "handed #{number} to {to}; the tracker clean-up is queued and lands when the git \
              operation window opens and the queue is flushed"
         ),
         _ => say!(
-            "handed #{number} to {to}; the `dev:{to}` label was read back, and a session of that \
-             runtime in this repository sees the handoff at SessionStart"
+            "handed #{number} to {to}; a session of that runtime in this repository sees the \
+             handoff at SessionStart"
         ),
     }
     Ok(())

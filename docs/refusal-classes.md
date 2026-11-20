@@ -174,8 +174,8 @@ Judgement calls that could have gone the other way:
   anything was attempted, and repeating the command repeats the answer until it is fixed.
   `store-unwritable` is this class: the store's directory sits on a network filesystem whose
   locking and WAL cannot be trusted, so the connection is never opened.
-- `foreign-projection` is `refused`: the issue's `dev:` label or assignee was read and names an
-  owner the store cannot explain, so a rule — not a moved receipt — says no. The explicit `reclaim`
+- `foreign-projection` is `refused`: the issue's leftover `dev:` label or its assignee was read and
+  names an owner the store cannot explain, so a rule — not a moved receipt — says no. The explicit `reclaim`
   is the override and does not run the check.
 - `setting-not-read-back` is `unavailable` (the write landed and the read-back could not confirm it).
   The `*-not-read-back` and `repository-readback-missing` refusals whose outcome is already unknown

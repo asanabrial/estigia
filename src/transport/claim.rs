@@ -317,7 +317,7 @@ pub(crate) fn verify_held(
         return Err(stop(
             "control-message",
             format!("a control message after your claim names {run_id}"),
-            "stop; acknowledge once, drop your dev:<runtime> label, write nothing else",
+            "stop; acknowledge once, write nothing else",
         ));
     }
 
@@ -11020,22 +11020,17 @@ pub fn wait_for(
 
 /// What an issue should show while a run holds it.
 ///
-/// The `dev:<runtime>` label and the assignee, which are what a person reads at
-/// a glance. A stale `dev:` label names the previous holder to everyone reading
-/// the tracker, and the same labels are what [`plan_release`] consults to decide
-/// whether a successor can be named — so a projection nobody writes is an
-/// authorisation nobody can check.
+/// The assignee, and no runtime label: no label naming a runtime is written to
+/// the tracker, and one found there is removed.
 ///
 /// **Unresolved is not empty.** A holder whose runtime cannot be established
-/// leaves `unresolved_runtime` set and every expected set empty: unknown legacy
+/// leaves `unresolved_runtime` set and the assignee empty: unknown legacy
 /// provenance must not leave the *previous* holder projected as authoritative,
 /// and it must not quietly project the new one either.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Projection {
     /// Who the issue should be assigned to.
     pub assignees: std::collections::BTreeSet<String>,
-    /// The `dev:<runtime>` labels it should carry — one, or none.
-    pub runtimes: std::collections::BTreeSet<String>,
     /// A holder whose runtime nothing could establish.
     pub unresolved_runtime: bool,
 }
@@ -11071,15 +11066,14 @@ pub fn projection_for(
             }
         }
     };
-    let Some(runtime) = runtime else {
+    if runtime.is_none() {
         return Projection {
             unresolved_runtime: true,
             ..Projection::default()
         };
-    };
+    }
     Projection {
         assignees: login.map(ToOwned::to_owned).into_iter().collect(),
-        runtimes: [format!("dev:{runtime}")].into_iter().collect(),
         unresolved_runtime: false,
     }
 }
@@ -11109,35 +11103,17 @@ pub fn projection_state(
     (assignees, runtimes)
 }
 
-/// The label projection that has to agree with the holder.
+/// The `dev:<runtime>` labels an issue carries that have to go.
 ///
-/// Exactly one `dev:<runtime>` label, belonging to the run that actually holds
-/// the issue. Returns the labels to add and to remove, so the caller owns the
-/// writes and this stays checkable.
-///
-/// A projection that disagrees with the timeline is worse than none: the labels
-/// are what a person reads at a glance, so a stale `dev:` label tells everyone
-/// the issue belongs to a run that put it down.
-pub fn converge_projection(
-    present: &[String],
-    holder_runtime: Option<&str>,
-) -> (Vec<String>, Vec<String>) {
-    let projected: Vec<&String> = present
+/// No label naming a runtime is written to the tracker, so every one found is a
+/// leftover — of an earlier version, or of another machine's — and the caller
+/// removes it.
+pub fn stale_runtime_labels(present: &[String]) -> Vec<String> {
+    present
         .iter()
         .filter(|name| name.starts_with("dev:"))
-        .collect();
-    let wanted = holder_runtime.map(|runtime| format!("dev:{runtime}"));
-
-    let remove: Vec<String> = projected
-        .iter()
-        .filter(|name| wanted.as_ref() != Some(**name))
-        .map(|name| (*name).clone())
-        .collect();
-    let add: Vec<String> = wanted
-        .filter(|name| !present.contains(name))
-        .into_iter()
-        .collect();
-    (add, remove)
+        .cloned()
+        .collect()
 }
 
 /// The login `gh` is authenticated as.
@@ -11259,7 +11235,7 @@ fn read_until_agreed(
 /// landed.
 ///
 /// After the claim marker is posted and read back, the projection — the
-/// assignee and the `dev:<runtime>` label — is written and read back too,
+/// assignee, with any `dev:<runtime>` label removed — is written and read back too,
 /// refusing when it does not agree.
 ///
 /// Bounded, and every arm of the bound says something different:
@@ -11324,13 +11300,11 @@ pub(crate) fn converge_ownership_projection_from(
     converge_with(context, issue, event, login, now, judge, Known::default())
 }
 
-/// What the caller already read or made in this call, so the projection does
-/// not read or make it again: the `assignees,labels` payload to count as its
-/// first read, and the one label already created.
+/// What the caller already read in this call, so the projection does not read
+/// it again: the `assignees,labels` payload to count as its first read.
 #[derive(Default)]
 struct Known {
     projection: Option<serde_json::Value>,
-    label: Option<String>,
 }
 
 fn converge_with(
@@ -11437,11 +11411,7 @@ fn converge_with(
                 (Some(_), Some(_)) => [login.clone()].into_iter().collect(),
                 _ => Default::default(),
             };
-        let wanted_runtimes: std::collections::BTreeSet<String> = runtime
-            .as_ref()
-            .map(|runtime| format!("dev:{runtime}"))
-            .into_iter()
-            .collect();
+        let wanted_runtimes = std::collections::BTreeSet::new();
         let (assignees, runtimes) = projection_state(data);
 
         let mut edit: Vec<String> = ["gh", "issue", "edit", &issue.to_string()]
@@ -11459,13 +11429,6 @@ fn converge_with(
         for gone in runtimes.difference(&wanted_runtimes) {
             edit.push("--remove-label".to_owned());
             edit.push(gone.clone());
-        }
-        for wanted in wanted_runtimes.difference(&runtimes) {
-            if known.label.as_deref() != Some(wanted.as_str()) {
-                super::commands::ensure_label(context, wanted, "bfd4f2")?;
-            }
-            edit.push("--add-label".to_owned());
-            edit.push(wanted.clone());
         }
         let edits = edit.len() > 4;
         if edits {
@@ -11684,7 +11647,7 @@ pub struct Acquisition<'a> {
     pub issue: u64,
     /// The run claiming it.
     pub run_id: &'a str,
-    /// The runtime it will project as `dev:<runtime>`.
+    /// The runtime the marker records in the local store.
     pub runtime: &'a str,
     /// The deadline it declares.
     pub horizon: &'a str,
@@ -11868,24 +11831,12 @@ pub(crate) fn claim_on(
             return Err(rolled_back(failure));
         }
         Ok(Decided {
-            wrote,
             event: after.event,
             adjudication,
         })
     })?;
 
     let closed = super::outbox::is_closed(context);
-    if !closed && (decided.wrote || decided.adjudication.is_ok()) {
-        let label = format!("dev:{}", what.runtime);
-        super::commands::ensure_label(context, &label, "bfd4f2").map_err(|failure| {
-            Failure::Write(format!(
-                "the claim is recorded in the local store but its label could not be \
-                 made: {}",
-                failure.detail()
-            ))
-        })?;
-        known.label = Some(label);
-    }
     let (adjudication, event) = (decided.adjudication, decided.event);
     let mut answer = adjudication?;
 
@@ -11895,7 +11846,7 @@ pub(crate) fn claim_on(
     //
     // This call is the half the port did not have. Without it the marker landed
     // and the issue page showed nothing — no assignee, and whatever `dev:` label
-    // the previous holder left behind — so this side answered `ok` at the point
+    // an earlier version left behind — so this side answered `ok` at the point
     // the transport was still working.
     let deferred = project_ownership(context, what.issue, event, what.now, ledger, known)?;
 
@@ -11913,7 +11864,7 @@ pub(crate) fn claim_on(
     Ok(answer)
 }
 
-/// Moves the issue's assignee and `dev:` label to the holder the store names,
+/// Moves the issue's assignee to the holder the store names and strips any `dev:` label,
 /// or, while the git operation window is closed, queues that move and answers
 /// the place it took in the queue.
 fn project_ownership(
@@ -11955,7 +11906,6 @@ fn mark_deferred(answer: &mut serde_json::Value, queued: Option<u64>) {
 }
 
 struct Decided {
-    wrote: bool,
     event: Option<ownership::Event>,
     adjudication: Result<serde_json::Value, Failure>,
 }

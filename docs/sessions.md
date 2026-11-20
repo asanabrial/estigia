@@ -253,33 +253,33 @@ gate treats differently.
 ## Handing an issue to another runtime
 
 `estigia handoff <issue> --to <runtime> --run-id <run>` records `{issue, runtime,
-from_run, at}` in `~/.estigia/state.db` and projects `dev:<runtime>` on the issue. It is the one call
+from_run, at}` in `~/.estigia/state.db` and writes no label naming the runtime on the issue. It is the one call
 the 2026-10-21 operator request needed: the issue, who handed it over, and where it went. It does not
 message a session and does not claim anything — the recipient still claims through `claim`.
 What the recipient then owes the sender is [the completion contract](#the-completion-contract-for-a-handoff).
 
 - **The row** is keyed by `(repo_dir, issue, runtime)`, so a retry of the same handoff refreshes who
-  made it and when rather than reading as two handoffs. `projection` records `landed` (the label was
-  read back) or `deferred` (it was queued).
-- **The label** is the protocol: exactly one `dev:<runtime>` on the issue, the same label a claim
-  projects. It is written and read back twice; a read-back that never agrees is a write failure, not
-  an answer. While the git operation window is closed the projection is queued as a `reconverge` in
-  the outbox and the answer says `projection: deferred` with the queue position; a later `flush`
-  projects it, reads it back, and marks the row `landed`. Re-running `estigia handoff` is how a caller
-  reconciles its answer.
+  made it and when rather than reading as two handoffs. `projection` records `landed` (the clean-up
+  was read back) or `deferred` (it was queued).
+- **No label is written.** The destination lives in the row, not on the tracker. The only thing the
+  projection does is remove a leftover `dev:<runtime>` label, which it reads back twice; a read-back
+  that never agrees is a write failure, not an answer. While the git operation window is closed the
+  projection is queued as a `reconverge` in the outbox and the answer says `projection: deferred`
+  with the queue position; a later `flush` projects it, reads it back, and marks the row `landed`.
+  Re-running `estigia handoff` is how a caller reconciles its answer.
 - **A held issue is refused** with `handoff-issue-held` and nothing is written, whichever runtime
   holds it — the local ledger is what is read, since that is where a claim lives. A handoff is a
-  destination, not a claim: overwriting the holder's `dev:` label would tell every reader the wrong
-  runtime. Release the issue first. A queued projection is checked again when the outbox flushes it,
-  and there the one holder that does not refuse it is a run of the runtime it was handed to: the
-  recipient took it before the label landed.
-- **The label is explainable.** `claim` refuses a `dev:` label the store cannot explain, and a
-  handoff row is that explanation — so the recipient's `claim` is not blocked by the handoff that
-  sent it there.
+  destination, not a claim, and one over a holder would contradict it. Release the issue first. A
+  queued projection is checked again when the outbox flushes it, and there the one holder that does
+  not refuse it is a run of the runtime it was handed to: the recipient took it before the clean-up
+  landed.
+- **A leftover label is explainable.** `claim` refuses a `dev:` label the store cannot explain, and a
+  handoff row is that explanation — so the recipient's `claim` is not blocked by a label an earlier
+  version left for the handoff that sent it there.
 - **A later session sees it.** `SessionStart` of a session of that runtime whose repository is that
   directory names each waiting issue, who handed it over and when, and says a handoff is a request,
-  never a claim. A row whose projection is still `deferred` says its `dev:` label is queued and not
-  yet read back, so a label that may never land is not presented as one that did. `estigia sessions --json` carries the same list as `handoffs` on
+  never a claim. A row whose projection is still `deferred` says its tracker clean-up is queued and
+  not yet read back, so a write that may never land is not presented as one that did. `estigia sessions --json` carries the same list as `handoffs` on
   every row of that runtime in that repository.
 
 The directory recorded is the one the handoff ran in. A session started in a *worktree* of that

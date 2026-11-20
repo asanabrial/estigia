@@ -1,10 +1,9 @@
 //! Handing an issue to another runtime's session.
 //!
 //! The record itself is local: it is what a later session of that runtime reads
-//! at `SessionStart`, and what lets its `dev:<runtime>` label be explained to a
-//! claim rather than refused as foreign. The tracker sees only the label, and
-//! that projection is queued through the outbox with the same read-back a claim
-//! uses. Delivery to a particular pane or terminal is deliberately not here:
+//! at `SessionStart`. The tracker is told nothing about the runtime; the only
+//! projection is the removal of a leftover `dev:` label, queued through the
+//! outbox with the same read-back a claim uses. Delivery to a particular pane or terminal is deliberately not here:
 //! that is a host convenience which would bypass consent and stamping.
 //!
 //! `docs/sessions.md` owns the behaviour; `docs/honesty.md` owns what is not
@@ -33,12 +32,12 @@ fn runtime_unreadable(runtime: &str) -> Failure {
     }))
 }
 
-/// Records the handoff locally and projects its `dev:<runtime>` label.
+/// Records the handoff locally and strips any leftover `dev:` label.
 ///
 /// A handoff of an issue a live claim holds is refused before anything is
-/// written: the label states where an unheld issue is going, and overwriting the
-/// holder's projection would tell every reader the wrong thing. Releasing the
-/// issue is the caller's move, not this operation's.
+/// written: it states where an unheld issue is going, and a handoff over a
+/// holder would contradict the claim. Releasing the issue is the caller's move,
+/// not this operation's.
 pub fn record(context: &Context, what: &Handoff<'_>) -> Result<Value, Failure> {
     crate::harness::session::runtime_component(what.runtime)
         .map_err(|_| runtime_unreadable(what.runtime))?;
@@ -57,7 +56,7 @@ pub fn record(context: &Context, what: &Handoff<'_>) -> Result<Value, Failure> {
         )?;
         json!({ "projection": "deferred", "queued": seq })
     } else {
-        project_labels(context, what.issue, what.runtime)?;
+        project_labels(context, what.issue)?;
         json!({ "projection": "landed" })
     };
 
@@ -118,14 +117,13 @@ fn read_labels(context: &Context, issue: u64) -> Result<Value, Failure> {
     .ok_or_else(|| Failure::Read(format!("gh issue view {issue} returned nothing")))
 }
 
-/// Moves the issue's `dev:` labels to exactly the runtime this handoff names,
-/// and reads the result back until it agrees.
-pub(crate) fn project_labels(context: &Context, issue: u64, runtime: &str) -> Result<(), Failure> {
-    let wanted = format!("dev:{runtime}");
-    let projected = |data: &Value| labels_of(data) == [wanted.clone()].into_iter().collect();
+/// Strips every `dev:` label from the issue and reads the result back until it
+/// agrees. A handoff adds no label: where it is going lives in the local store.
+pub(crate) fn project_labels(context: &Context, issue: u64) -> Result<(), Failure> {
+    let projected = |data: &Value| labels_of(data).is_empty();
     let data = read_labels(context, issue)?;
     let present: Vec<String> = labels_of(&data).into_iter().collect();
-    let (add, remove) = claim::converge_projection(&present, Some(runtime));
+    let remove = claim::stale_runtime_labels(&present);
     let mut edit: Vec<String> = ["gh", "issue", "edit", &issue.to_string()]
         .iter()
         .map(|part| (*part).to_owned())
@@ -133,11 +131,6 @@ pub(crate) fn project_labels(context: &Context, issue: u64, runtime: &str) -> Re
     for gone in &remove {
         edit.push("--remove-label".to_owned());
         edit.push(gone.clone());
-    }
-    for landed in &add {
-        commands::ensure_label(context, landed, "bfd4f2")?;
-        edit.push("--add-label".to_owned());
-        edit.push(landed.clone());
     }
     let wrote = edit.len() > 4;
     if wrote {

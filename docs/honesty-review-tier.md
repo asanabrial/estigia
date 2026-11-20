@@ -320,8 +320,8 @@ review tier, the lens and the finding do not establish.
   is provenance recorded when supplied, not adjudicated: nothing checks that a finding was recorded
   against the epoch, that the epoch was a real publication, or that the issue was filed at all. The
   `--findings`-without-`--epoch` refusal is asked in `dispatch`'s `create` arm ahead of
-  `commands::create`, so it creates no label. The `analyst:<runtime>` label is applied identically to
-  both marker kinds. On 2026-09-06, 34 of 129 open issues named an epoch in free prose in thirteen
+  `commands::create`, so it creates no label. `create` writes no `analyst:<runtime>` label under
+  either marker kind. On 2026-09-06, 34 of 129 open issues named an epoch in free prose in thirteen
   spellings, which is what a grep could read before this existed, and no field on three issues
   recording one finding twice (filed 2026-08-19, 08-21 and 08-24) carries another's identity.
 

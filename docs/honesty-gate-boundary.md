@@ -318,8 +318,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     may differ across stores. Sync fails at 10,000 comments. REST trust requires authenticated-login
     equality and flags any differing created/updated timestamps, stricter than GraphQL.
   - **A lost claim race rolls back; a lost reclaim race still commits** (`reclaim` adjudicates after its
-    transaction). A `dev:` label that cannot be made after the store accepted the claim is `write-failed` and
-    the retry runs the projection again. The state compared is the store's, set at import from the single
+    transaction). The claim makes no label, so a tracker that refuses label creation
+    cannot fail it. The state compared is the store's, set at import from the single
     `status:` label (two or none import as no state: `unexpected-state` until a `transition`). The
     differential check compares the holder and the latest publication, and nothing else.
   - **An older binary on the same issue cannot see these markers**: it reads GitHub only, may claim an issue

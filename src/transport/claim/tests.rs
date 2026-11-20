@@ -26,41 +26,23 @@ fn a_read_that_did_not_answer_resets_the_run_of_agreements() {
 }
 
 #[test]
-fn the_projection_names_exactly_the_holder_and_nobody_else() {
-    // A stale `dev:` label tells everyone at a glance that the issue belongs to
-    // a run that put it down — worse than no projection at all.
+fn every_runtime_label_is_stale_and_nothing_else_is_touched() {
     let labels =
         |names: &[&str]| -> Vec<String> { names.iter().map(|name| (*name).to_owned()).collect() };
 
-    // Nothing projected yet.
     assert_eq!(
-        converge_projection(&labels(&["status:in-progress"]), Some("claude")),
-        (vec!["dev:claude".to_owned()], Vec::new())
+        stale_runtime_labels(&labels(&["status:in-progress"])),
+        Vec::<String>::new()
     );
-    // Already right: nothing to do.
     assert_eq!(
-        converge_projection(
-            &labels(&["status:in-progress", "dev:claude"]),
-            Some("claude")
-        ),
-        (Vec::new(), Vec::new())
+        stale_runtime_labels(&labels(&["status:in-progress", "dev:claude"])),
+        vec!["dev:claude".to_owned()]
     );
-    // Somebody else's projection goes, and this one arrives.
     assert_eq!(
-        converge_projection(&labels(&["dev:codex"]), Some("claude")),
-        (vec!["dev:claude".to_owned()], vec!["dev:codex".to_owned()])
+        stale_runtime_labels(&labels(&["dev:claude", "dev:codex"])),
+        vec!["dev:claude".to_owned(), "dev:codex".to_owned()]
     );
-    // No holder: every projection goes and none is added.
-    assert_eq!(
-        converge_projection(&labels(&["dev:claude", "dev:codex"]), None),
-        (
-            Vec::new(),
-            vec!["dev:claude".to_owned(), "dev:codex".to_owned()]
-        )
-    );
-    // Labels that are not projections are never touched.
-    let (add, remove) = converge_projection(&labels(&["status:review", "domain:api"]), None);
-    assert!(add.is_empty() && remove.is_empty());
+    assert!(stale_runtime_labels(&labels(&["status:review", "domain:api"])).is_empty());
 }
 
 fn event(run: &str, position: usize, operation: Option<&str>) -> ownership::Event {
@@ -340,9 +322,8 @@ fn foreign_claim() -> ownership::Comment {
 /// `ownership_events`, discarded by the fold, so it explains a `dev:claude`
 /// label without holding or blocking anything.
 ///
-/// The projection fixtures need one because the stand-in `gh` cannot read back a
-/// projection edit, so the label has to be present before the claim and
-/// explained by the store the claim is judged from.
+/// A fixture whose issue carries a stale `dev:claude` label needs one, because
+/// a claim refuses a label the store cannot explain before it ever strips it.
 fn explaining_projection() -> ownership::Comment {
     let marker = super::super::markers::render(
         "reclaim",
@@ -376,11 +357,7 @@ fn claim_script(issue: u64, comments: &[ownership::Comment]) -> String {
     crate::test_env::answers(&[
         crate::test_env::issue_view_answer(
             issue,
-            issue_payload(
-                &timeline,
-                &["fixture"],
-                &["dev:claude", "status:in-progress"],
-            ),
+            issue_payload(&timeline, &["fixture"], &["status:in-progress"]),
         ),
         serde_json::json!({
             "matches": "api user",
@@ -428,8 +405,8 @@ fn a_claim_is_recorded_in_the_store_in_the_transaction_that_decides_it() {
         "a claim posts no comment to GitHub: {calls}"
     );
     assert!(
-        calls.contains("label create dev:claude"),
-        "the label projection is still written: {calls}"
+        !calls.contains("label create"),
+        "a claim made a label: {calls}"
     );
     assert_eq!(
         calls.matches("--json body,labels,comments").count(),
@@ -448,7 +425,7 @@ fn a_claim_is_recorded_in_the_store_in_the_transaction_that_decides_it() {
 }
 
 #[test]
-fn a_fresh_claim_makes_its_label_once() {
+fn a_fresh_claim_makes_no_label() {
     let directory = tempfile::tempdir().expect("a directory for the counter");
     let log = directory.path().join("gh.log");
     let context = context_at(directory.path());
@@ -469,11 +446,7 @@ fn a_fresh_claim_makes_its_label_once() {
     });
 
     let calls = std::fs::read_to_string(&log).expect("the fake gh logged its calls");
-    assert_eq!(
-        calls.matches("label create dev:claude").count(),
-        1,
-        "{calls}"
-    );
+    assert_eq!(calls.matches("label create").count(), 0, "{calls}");
 }
 
 /// Two runs claiming one issue at once: the store serialises them and the
@@ -561,17 +534,16 @@ fn two_runs_claiming_one_issue_at_once_leave_exactly_one_winner_decided_by_the_s
     );
 }
 
-/// The store committed the claim and GitHub then refused its label: the world
-/// changed, so this is a write failure and never a refusal that changed
-/// nothing, and the claim is held.
+/// A claim never asks GitHub to make a label, so a tracker that refuses label
+/// creation cannot fail it, and the claim is held.
 #[test]
-fn a_claim_the_store_recorded_and_github_refused_its_label_is_a_write_failure_and_still_held() {
+fn a_claim_survives_a_tracker_that_refuses_every_label_creation() {
     let directory = tempfile::tempdir().expect("a directory for the counter");
     let context = context_at(directory.path());
     let bin = crate::test_env::scripted_gh();
     let script = crate::test_env::answers(&[
         serde_json::json!({
-            "matches": "label create dev:claude",
+            "matches": "label create",
             "stderr": "GraphQL: API rate limit already exceeded for user ID 1.",
             "status": 1,
         }),
@@ -583,42 +555,27 @@ fn a_claim_the_store_recorded_and_github_refused_its_label_is_a_write_failure_an
         serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}" }),
     ]);
 
-    let (failure, timeline) = crate::test_env::with_scripted_gh(bin.path(), &script, || {
-        let failure = claim(&context, &acquisition(12, "claude-a"))
-            .expect_err("GitHub refused the claim's label");
-        (failure, store_timeline(&context, 12))
+    let (answer, timeline) = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        let answer = claim(&context, &acquisition(12, "claude-a"));
+        (answer, store_timeline(&context, 12))
     });
 
-    assert!(matches!(failure, Failure::Write(_)), "{failure:?}");
-    assert_eq!(
-        outcome(&failure),
-        crate::outcome::MutationOutcome::Unknown,
-        "a claim recorded locally is not a call that changed nothing"
-    );
+    answer.expect("the claim needs no label");
     assert_eq!(
         holding(&timeline, RECLAIM_NOW).holder.as_deref(),
         Some("claude-a")
     );
 }
 
-/// A retry under the operation id of a claim whose label GitHub refused finds
-/// its own marker and writes nothing, and still makes the label: the failed
-/// first attempt left the projection unwritten.
-///
-/// Mutation: make the label conditional on `decided.wrote` again and this
-/// reddens on the retry's call log.
+/// A retry under the operation id of a claim finds its own marker, writes
+/// nothing and makes no label either.
 #[test]
-fn a_retry_after_a_failed_label_makes_the_label_again() {
+fn a_retry_of_a_claim_makes_no_label() {
     let directory = tempfile::tempdir().expect("a directory for the counter");
     let log = directory.path().join("gh.log");
     let context = context_at(directory.path());
     let bin = crate::test_env::scripted_gh();
-    let refused = crate::test_env::answers(&[
-        serde_json::json!({
-            "matches": "label create dev:claude",
-            "stderr": "GraphQL: API rate limit already exceeded for user ID 1.",
-            "status": 1,
-        }),
+    let script = crate::test_env::answers(&[
         serde_json::json!({
             "matches": "issue view 12",
             "stdout": issue_payload(&[], &["fixture"], &["status:in-progress"]).to_string(),
@@ -626,23 +583,20 @@ fn a_retry_after_a_failed_label_makes_the_label_again() {
         }),
         serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}" }),
     ]);
-    let first = crate::test_env::with_scripted_gh(bin.path(), &refused, || {
-        claim(&context, &acquisition(12, "claude-a"))
-    })
-    .expect_err("GitHub refused the claim's label");
-    assert!(matches!(first, Failure::Write(_)), "{first:?}");
+    let (first, retried) = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        (
+            claim(&context, &acquisition(12, "claude-a")),
+            claim(&context, &acquisition(12, "claude-a")),
+        )
+    });
 
-    let accepted = claim_script(12, &[]);
-    let retried = crate::test_env::with_logging_gh(bin.path(), &accepted, &log, || {
-        claim(&context, &acquisition(12, "claude-a"))
-    })
-    .expect("the retry under the same operation id succeeds");
-
+    first.expect("the first claim wins");
+    let retried = retried.expect("the retry under the same operation id succeeds");
     assert_eq!(retried["ok"], true, "{retried}");
     let calls = std::fs::read_to_string(&log).expect("the fake gh logged its calls");
     assert!(
-        calls.contains("label create dev:claude"),
-        "the retry skipped the label the first attempt failed to make: {calls}"
+        !calls.contains("label create"),
+        "a claim asked for a label: {calls}"
     );
 }
 
@@ -1020,6 +974,12 @@ fn an_unassign_releases_the_epoch_in_the_store_and_its_discovery_writes_nothing(
         !calls.contains("issue comment"),
         "a release posts no comment to GitHub: {calls}"
     );
+    assert!(
+        !calls.contains("--add-label dev:")
+            && !calls.contains("analyst:")
+            && !calls.contains("label create"),
+        "a release named a runtime to GitHub: {calls}"
+    );
 }
 
 /// A takeover is recorded in the store alone: the holder changes there and no
@@ -1068,6 +1028,90 @@ fn a_reclaim_is_recorded_in_the_store_and_posts_no_comment() {
     );
 }
 
+#[test]
+fn a_claim_names_no_runtime_on_github() {
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    let log = directory.path().join("gh.log");
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::issue_view_answer(
+            12,
+            issue_payload(&[], &["fixture"], &["status:in-progress"]),
+        ),
+        serde_json::json!({
+            "matches": "api user",
+            "stdout": "{\"login\":\"fixture\"}", "status": 0,
+        }),
+    ]);
+
+    let answer = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        claim(&context, &acquisition(12, "claude-a")).expect("the claim wins")
+    });
+
+    assert_eq!(answer["ok"], true, "{answer}");
+    let calls = std::fs::read_to_string(&log).expect("the fake gh logged its calls");
+    assert!(
+        !calls.contains("dev:") && !calls.contains("analyst:") && !calls.contains("label create"),
+        "a claim named its runtime to GitHub: {calls}"
+    );
+}
+
+#[test]
+fn a_claim_removes_a_stale_runtime_label_and_adds_none() {
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    let log = directory.path().join("gh.log");
+    let counts = directory.path().join("counts.json");
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+    let stale = crate::test_env::issue_view_answer(
+        12,
+        issue_payload(
+            &[explaining_projection()],
+            &["fixture"],
+            &["dev:claude", "status:in-progress"],
+        ),
+    );
+    let still_stale = |nth: u64| {
+        let mut read = stale.clone();
+        read["matches"] = serde_json::json!("view 12 --json assignees,labels");
+        read["nth"] = serde_json::json!(nth);
+        read
+    };
+    let script = crate::test_env::answers(&[
+        still_stale(1),
+        still_stale(2),
+        crate::test_env::issue_view_answer(
+            12,
+            issue_payload(
+                &[explaining_projection()],
+                &["fixture"],
+                &["status:in-progress"],
+            ),
+        ),
+        serde_json::json!({
+            "matches": "api user",
+            "stdout": "{\"login\":\"fixture\"}", "status": 0,
+        }),
+    ]);
+
+    let answer =
+        crate::test_env::with_counting_logging_gh(bin.path(), &script, &counts, &log, || {
+            claim(&context, &acquisition(12, "claude-a")).expect("the claim wins")
+        });
+
+    assert_eq!(answer["ok"], true, "{answer}");
+    let calls = std::fs::read_to_string(&log).expect("the fake gh logged its calls");
+    assert!(
+        calls.contains("--remove-label dev:claude"),
+        "the stale label stayed: {calls}"
+    );
+    assert!(
+        !calls.contains("--add-label") && !calls.contains("label create"),
+        "a claim wrote a label: {calls}"
+    );
+}
+
 /// The projection check left for later: a `dev:` label or
 /// assignee the store cannot explain is another store's, so a claim over it
 /// refuses and writes nothing. The override the design names is `reclaim`, which
@@ -1078,20 +1122,28 @@ fn a_claim_refuses_a_dev_label_the_store_cannot_explain_and_reclaim_takes_it_ove
     let context = context_at(directory.path());
     let bin = crate::test_env::scripted_gh();
     let now = "2026-07-28T20:00:00Z";
+    let counts = directory.path().join("counts.json");
+    let mut stale = crate::test_env::issue_view_answer(
+        12,
+        issue_payload(
+            &[foreign_claim()],
+            &["fixture"],
+            &["dev:codex", "status:in-progress"],
+        ),
+    );
+    stale["matches"] = serde_json::json!("view 12 --json assignees,labels");
+    stale["nth"] = serde_json::json!(1);
     let script = crate::test_env::answers(&[
+        stale,
         crate::test_env::issue_view_answer(
             12,
-            issue_payload(
-                &[foreign_claim()],
-                &["fixture"],
-                &["dev:codex", "status:in-progress"],
-            ),
+            issue_payload(&[foreign_claim()], &["fixture"], &["status:in-progress"]),
         ),
         serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
     ]);
 
     let (refused, stored, reclaimed) =
-        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        crate::test_env::with_counting_gh(bin.path(), &script, &counts, || {
             let refused = claim(&context, &acquisition(12, "claude-a"));
             let stored = store_timeline(&context, 12);
             let reclaim_of = |target: Option<&'static str>| Reclaim {
@@ -1200,13 +1252,13 @@ fn synced_script(
     crate::test_env::answers(&[
         serde_json::json!({
             "matches": format!("issue view {issue} --json body,labels,comments"),
-            "stdout": issue_payload(&timeline, &["fixture"], &["dev:claude", "status:in-progress"])
+            "stdout": issue_payload(&timeline, &["fixture"], &["status:in-progress"])
                 .to_string(),
             "status": 0,
         }),
         serde_json::json!({
             "matches": format!("issue view {issue}"),
-            "stdout": issue_payload(&[], &["fixture"], &["dev:claude", "status:in-progress"])
+            "stdout": issue_payload(&[], &["fixture"], &["status:in-progress"])
                 .to_string(),
             "status": 0,
         }),
@@ -1482,7 +1534,7 @@ fn an_ownership_projection_stops_reading_once_two_reads_agree() {
         "2026-07-28T01:00:00Z",
         claim_body("claude-a", HOLDER_OPERATION),
     )];
-    let settled = issue_payload(&comments, &["fixture"], &["dev:claude"]);
+    let settled = issue_payload(&comments, &["fixture"], &[]);
     let event = holding(&comments, RECLAIM_NOW)
         .event
         .expect("the claim is live");
@@ -1556,7 +1608,7 @@ fn a_projection_that_moved_under_the_readback_reports_the_marker_it_already_left
         "2026-07-28T01:00:00Z",
         claim_body("claude-a", HOLDER_OPERATION),
     )];
-    let settled = issue_payload(&comments, &["fixture"], &["dev:claude"]);
+    let settled = issue_payload(&comments, &["fixture"], &[]);
     let shifted = issue_payload(&comments, &["fixture"], &["dev:codex"]);
     let event = holding(&comments, RECLAIM_NOW)
         .event
@@ -2948,15 +3000,10 @@ fn set_of(values: &[&str]) -> std::collections::BTreeSet<String> {
 }
 
 #[test]
-fn the_projection_a_holder_calls_for_is_the_runtime_and_the_assignee_together() {
-    // The port had `converge_projection` — labels in, edits out — and nothing
-    // called it, while the transport converges after every claim, reclaim and
-    // unassign. The assignee half was not there at all, so the issue would have
-    // gone on showing whoever held it last.
+fn the_projection_a_holder_calls_for_is_the_assignee_and_no_runtime_label() {
     let mut modern = event("claude-a", 0, Some("op1"));
     modern.runtime = Some("claude".to_owned());
     let found = projection_for(Some(&modern), &names(&["dev:codex"]), Some("asanabrial"));
-    assert_eq!(found.runtimes, set_of(&["dev:claude"]));
     assert_eq!(
         found.assignees,
         set_of(&["asanabrial"]),
@@ -2986,7 +3033,6 @@ fn a_holder_nothing_can_name_projects_nothing_rather_than_a_guess() {
 
     // One label, and it is one this run could be using: resolved by prefix.
     let found = projection_for(Some(&legacy), &names(&["dev:codex"]), Some("asanabrial"));
-    assert_eq!(found.runtimes, set_of(&["dev:codex"]));
     assert_eq!(found.assignees, set_of(&["asanabrial"]));
     assert!(!found.unresolved_runtime);
 
@@ -3003,7 +3049,7 @@ fn a_holder_nothing_can_name_projects_nothing_rather_than_a_guess() {
             "a holder was named from {labels:?}, which does not name one"
         );
         assert!(
-            found.assignees.is_empty() && found.runtimes.is_empty(),
+            found.assignees.is_empty(),
             "an unresolved holder was projected anyway from {labels:?}"
         );
     }

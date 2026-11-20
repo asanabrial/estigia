@@ -90,7 +90,6 @@ fn create_with_an_epoch_files_no_review_marker_and_records_it_locally() {
             "body_file": body.to_string_lossy(),
             "priority": "priority:low",
             "domain": "general",
-            "runtime": "claude",
             "run_id": "claude-abcd1234",
             "epoch": "0123456789abcdef0123456789abcdef",
             "findings": "finding-one",
@@ -143,7 +142,6 @@ fn a_create_whose_store_admission_failed_is_adopted_by_the_retry_not_filed_twice
         "body_file": body.to_string_lossy(),
         "priority": "priority:low",
         "domain": "general",
-        "runtime": "claude",
         "run_id": "claude-abcd1234",
     });
 

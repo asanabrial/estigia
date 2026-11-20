@@ -1471,7 +1471,6 @@ pub fn create(
     state: &str,
     priority: Option<&str>,
     domain: Option<&str>,
-    runtime: Option<&str>,
     run_id: Option<&str>,
     epoch: Option<&str>,
     findings: Option<&str>,
@@ -1495,11 +1494,6 @@ pub fn create(
     if let Some(domain) = domain.filter(|value| !value.is_empty()) {
         let label = format!("domain:{domain}");
         ensure.push((label.clone(), "0e8a16"));
-        labels.push(label);
-    }
-    if let Some(runtime) = runtime.filter(|value| !value.is_empty()) {
-        let label = format!("analyst:{runtime}");
-        ensure.push((label.clone(), "c5def5"));
         labels.push(label);
     }
 

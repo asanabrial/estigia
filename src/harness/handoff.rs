@@ -237,13 +237,13 @@ fn row_unwritten(detail: &str, issue: u64, runtime: &str, projection: &str) -> R
     Refusal::not_started(
         "handoff-row-unwritten",
         format!(
-            "the `dev:{runtime}` projection for #{issue} is {projection}, and the handoff row \
-             could not be written to this machine's store: {detail}. The label is on the tracker; \
-             this session will not see the handoff at `SessionStart`"
+            "the handoff of #{issue} to {runtime} is {projection}, and the handoff row could not \
+             be written to this machine's store: {detail}. This session will not see the \
+             handoff at `SessionStart`"
         ),
         Resolution::no_command(
             NoCommandReason::WorldAction,
-            "read the issue's labels to establish what landed, then repeat the handoff",
+            "read the issue's labels to establish what was removed, then repeat the handoff",
         ),
     )
     .classed(RefusalClass::Unknown)

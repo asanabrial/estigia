@@ -803,7 +803,6 @@ fn run_operation(
                 f.get("state").unwrap_or("ready"),
                 f.get("priority"),
                 f.get("domain"),
-                f.get("runtime"),
                 f.get("run-id"),
                 f.get("epoch"),
                 f.get("findings"),

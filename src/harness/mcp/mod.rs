@@ -564,9 +564,7 @@ struct NamedRun<'a> {
 }
 
 /// Reads the run id a call carries, refusing every shape [`session::run_id`]
-/// could not have minted. `create`'s declared runtime is held to the same
-/// component check by [`declared_runtime`], which [`run_tool`] calls beside
-/// this one rather than inside it.
+/// could not have minted.
 ///
 /// The type is part of the shape: a `run_id` sent as a JSON number used to
 /// skip all four refusals at once, because every one of them read
@@ -617,7 +615,7 @@ fn named_run<'a>(
 fn unminted_run_id(id: &str, why: session::Unminted, tool: &Tool) -> String {
     match why {
         session::Unminted::NoRuntime => format!(
-            "{id} carries no `-`, so it names no runtime to attribute a `dev:` label to \u{2014} \
+            "{id} carries no `-`, so it names no runtime to attribute it to \u{2014} \
              `{}` under it is bound to no run",
             tool.name
         ),
@@ -665,41 +663,6 @@ fn run_id_names_no_run(id: &str, what: String, context: &GateContext) -> ToolFai
             )
         },
     )))
-}
-
-/// The refusal `create` gets for a runtime that is not a component its
-/// `analyst:` label can name.
-pub(crate) fn runtime_names_no_runtime(runtime: &str) -> Refusal {
-    Refusal::not_started(
-        "runtime-names-no-runtime",
-        format!(
-            "{runtime} is not a runtime a label can name \u{2014} `dev:` and `analyst:` \
-             labels are lowercase `a-z0-9` groups joined by single `-`, and this one would \
-             be a repository-level label nobody's query finds"
-        ),
-        Resolution::no_command(
-            crate::outcome::NoCommandReason::OperatorKnowledge,
-            "this run's own runtime word \u{2014} the one `SessionStart`'s run id begins \
-             with, before its last dash",
-        ),
-    )
-}
-
-/// Holds `create`'s declared runtime to [`session::runtime_component`] — the
-/// same predicate that validates the runtime derived from a run id — and
-/// refuses a value that is not one, rather than minting a repository-level
-/// `analyst:` label from caller text.
-fn declared_runtime(arguments: &Value) -> Result<(), ToolFailure> {
-    let Some(sent) = arguments.get("runtime") else {
-        return Ok(());
-    };
-    let Some(runtime) = sent.as_str() else {
-        return Err(ToolFailure::Malformed(format!(
-            "`runtime` is the runtime word filing this finding, a string \u{2014} not {sent}"
-        )));
-    };
-    session::runtime_component(runtime)
-        .map_err(|_| ToolFailure::Refused(Box::new(runtime_names_no_runtime(runtime))))
 }
 
 /// The repository `create` was told to file in, held to the `owner/name` shape
@@ -1213,9 +1176,6 @@ fn run_tool_answering(
     // tools, so a tool added later is covered the day it is added, and the
     // runtime below is derived from this answer rather than split again.
     let named = named_run(tool, arguments, context)?;
-    if tool.operation == "create" {
-        declared_runtime(arguments)?;
-    }
 
     let names_a_run = tool
         .arguments

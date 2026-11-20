@@ -651,7 +651,7 @@ impl<'a> Engine<'a> {
                 Some(runtime),
                 self.now,
             )?;
-            crate::transport::handoff::project_labels(self.context, row.issue, runtime)?;
+            crate::transport::handoff::project_labels(self.context, row.issue)?;
         }
         Ok(())
     }

@@ -2,10 +2,9 @@
 
 A label a write needs is created at that write: `gh` refuses to attach a label that does not exist, and the error arrives at issue creation — the analyst's last step, after all the analysis is done. That is why `create` creates every label first and attaches second, and why any label write creates a missing label and retries once. The domain names its own priority scale and rule book, so no setup script can have created them in advance. Label creation is idempotent, so it costs one call and removes the failure mode entirely.
 
-Attribution labels are created on demand by `claim` and `create`, so the set stays exactly as wide as
-the runtimes actually in use. Labels are what make attribution *queryable*:
-`gh issue list --label "dev:codex"` answers "what is that runtime holding right now" in one call,
-where parsing prose for the same answer breaks on any rewording.
+No label names a runtime: `claim`, `create` and `handoff` write none, and a `dev:<runtime>` label an
+earlier version left is removed when the issue is next touched. Who holds an issue is the local
+store's answer (`sessions`, `status`), not a label query.
 
 **Adding `done` to a repository that already ran without it** leaves closed issues still wearing the
 state they were in when someone closed them. They keep showing up in `review` queries. Repair once,

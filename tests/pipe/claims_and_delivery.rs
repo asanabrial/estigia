@@ -218,7 +218,7 @@ fn a_claim_adopts_a_live_marker_under_the_runs_own_runtime() {
     let held = serde_json::json!({
         "state": "OPEN",
         "assignees": [{"login": "fixture"}],
-        "labels": [{"name": "status:ready"}, {"name": "dev:claude"}],
+        "labels": [{"name": "status:ready"}],
         "comments": [{
             "id": "IC_1",
             "createdAt": "2026-08-17T16:00:00Z",
@@ -270,7 +270,7 @@ fn a_claim_to_a_person_prints_the_transport_answer_indented() {
     let held = serde_json::json!({
         "state": "OPEN",
         "assignees": [{"login": "fixture"}],
-        "labels": [{"name": "status:ready"}, {"name": "dev:claude"}],
+        "labels": [{"name": "status:ready"}],
         "comments": [{
             "id": "IC_1",
             "createdAt": "2026-08-17T16:00:00Z",
@@ -356,7 +356,7 @@ fn a_claim_renews_across_the_build_boundary() {
     let held = serde_json::json!({
         "state": "OPEN",
         "assignees": [{"login": "fixture"}],
-        "labels": [{"name": "status:ready"}, {"name": "dev:claude"}],
+        "labels": [{"name": "status:ready"}],
         "comments": [{
             "id": "IC_1",
             "createdAt": "2026-08-17T16:00:00Z",
@@ -489,7 +489,7 @@ fn a_claim_retry_after_a_landed_write_whose_readback_failed_adopts_the_epoch() {
     let held = serde_json::json!({
         "state": "OPEN",
         "assignees": [{"login": "fixture"}],
-        "labels": [{"name": "status:ready"}, {"name": "dev:claude"}],
+        "labels": [{"name": "status:ready"}],
         "comments": [{
             "id": "IC_1",
             "createdAt": "2026-08-17T16:00:00Z",
@@ -667,7 +667,7 @@ fn a_lapsed_self_claim_that_originated_as_a_reclaim_can_be_claimed_again() {
         serde_json::json!({
             "state": "OPEN",
             "assignees": [{"login": "fixture"}],
-            "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+            "labels": [{"name": "status:in-progress"}],
             "comments": comments,
         })
         .to_string()
@@ -968,7 +968,7 @@ fn a_lapsed_self_claim_behind_a_foreign_reclaim_can_be_claimed_again() {
         serde_json::json!({
             "state": "OPEN",
             "assignees": [{"login": "fixture"}],
-            "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+            "labels": [{"name": "status:in-progress"}],
             "comments": comments,
         })
         .to_string()
@@ -1189,7 +1189,6 @@ fn create_passes_the_callers_title_through_unmodified() {
                 "body_file": body.to_string_lossy(),
                 "priority": "priority:low",
                 "domain": "general",
-                "runtime": "claude",
                 "run_id": "claude-abcd1234",
             },
         },
@@ -1287,7 +1286,6 @@ fn create_files_a_body_with_no_marker_and_records_the_identity_and_clause_locall
                 "body_file": body.to_string_lossy(),
                 "priority": "priority:low",
                 "domain": "general",
-                "runtime": "claude",
                 "run_id": "claude-abcd1234",
                 "state": "blocked",
                 "blocked_until": "7=done",
@@ -1534,7 +1532,7 @@ fn a_delivery_that_follows_the_sequence_puts_its_own_claim_down() {
     let issue_open = serde_json::json!({
         "state": "OPEN",
         "assignees": [{ "login": login }],
-        "labels": [{ "name": "status:in-progress" }, { "name": "dev:claude" }],
+        "labels": [{ "name": "status:in-progress" }],
         "comments": [claim_comment()],
     });
     let answers_claim = serde_json::to_string(&serde_json::json!([
@@ -4305,7 +4303,7 @@ fn a_claim_moves_the_issue_to_the_state_it_names() {
     let issue_open = serde_json::json!({
         "state": "OPEN",
         "assignees": [{ "login": login }],
-        "labels": [{ "name": "status:in-progress" }, { "name": "dev:claude" }],
+        "labels": [{ "name": "status:in-progress" }],
         "comments": [claim_comment],
     });
 

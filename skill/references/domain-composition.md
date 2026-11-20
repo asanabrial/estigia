@@ -91,9 +91,8 @@ rules define what makes the change done. Loading the wrong side gives a role the
 
 A combined run (a bare `flow`) loads both books and keeps each to its own half: the left book governs
 what it reads and files, the right book governs what it writes and delivers. Attribution follows the
-operation, not the run: `create` writes `analyst:<runtime>` on an issue the run files, and the claim
-writes and removes `dev:<runtime>` on one it implements, so one run can leave both labels on
-different issues and never both on one.
+operation, not the run, and only in the local store: neither `create` nor a claim writes a label
+naming a runtime.
 
 When routing names only one rule book, it records the analysis book. The dev MUST NOT load it and
 proceeds as if implementation routing were absent. When routing is absent, state which rules apply,
@@ -140,20 +139,14 @@ when available
 so an issue can be joined to its transcript; otherwise use eight random hex digits. Per-runtime
 identity is insufficient because concurrent sessions of one runtime must remain distinguishable.
 
-Shared tracker accounts make native author and assignee fields ambiguous, so attribution has two
-cardinalities:
+Shared tracker accounts make native author and assignee fields ambiguous, so attribution is kept
+where the tracker cannot show it:
 
-| Value | Storage contract | Lifecycle |
-|---|---|---|
-| bounded runtime, such as `codex` | label `analyst:<runtime>` or `dev:<runtime>` | analyst history persists; dev holding is live-state data |
-| unbounded run-id, such as `codex-b91c4d2e` | the local store only, never GitHub text | persists as the audit trail |
+| Value | Storage contract |
+|---|---|
+| runtime, such as `codex` | the local store only, never a label |
+| run-id, such as `codex-b91c4d2e` | the local store only, never GitHub text |
 
-Do not create one label per run; that produces unbounded dead labels. No issue body, comment,
-review or close note carries the run-id or names a tool; the store records who wrote what.
-
-Remove `dev:<runtime>` whenever the run releases work, loses a race, is reclaimed, or hands work
-back — and that includes the release that now ends an ordinary delivery, step 6's own last write, so
-the label does not survive a delivery either. The run-id in the local store carries that
-attribution instead, the unbounded half of this table's two-cardinality scheme. Analyst markers are
-historical and never removed. If attribution labels become noisy, group by the state field rather
-than dropping attribution.
+No issue body, comment, review, close note or label carries a runtime, the run-id or a tool name;
+the store records who wrote what. A `dev:<runtime>` label an earlier version left is removed when
+Estigia next touches the issue; an old `analyst:<runtime>` label is left alone.

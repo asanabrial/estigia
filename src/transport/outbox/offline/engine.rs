@@ -721,7 +721,7 @@ fn a_reconverge_replaced_while_queued_keeps_the_ownership_it_carried() {
 }
 
 #[test]
-fn a_queued_claim_projects_the_assignee_and_runtime_label_from_the_store() {
+fn a_queued_claim_projects_the_assignee_and_no_runtime_label_from_the_store() {
     let rig = rig();
     rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
         .expect("a claim while closed");
@@ -752,11 +752,12 @@ fn a_queued_claim_projects_the_assignee_and_runtime_label_from_the_store() {
         .filter(|line| line.starts_with("issue edit 12"))
         .collect();
     assert!(
-        edits
-            .iter()
-            .any(|line| line.contains("--add-assignee @me")
-                && line.contains("--add-label dev:claude")),
+        edits.iter().any(|line| line.contains("--add-assignee @me")),
         "no edit projected the owner from the store: {edits:?}"
+    );
+    assert!(
+        edits.iter().all(|line| !line.contains("dev:")),
+        "an edit named the runtime: {edits:?}"
     );
 }
 
@@ -1167,8 +1168,13 @@ impl Rig {
 }
 
 #[test]
-fn a_queued_handoff_projects_its_label_and_marks_the_row_sent() {
+fn a_queued_handoff_projects_no_label_and_marks_the_row_sent() {
     let rig = labelled_rig();
+    crate::paths::replace_atomically(
+        rig.labels.as_ref().expect("a labelled rig"),
+        "[\"status:in-progress\",\"dev:codex\"]",
+    )
+    .expect("a stale label");
     rig.closed("handoff", &handoff_flags())
         .expect("a handoff while closed");
     assert_eq!(state_of(OutboxKind::Reconverge), vec![OutboxState::Queued]);
@@ -1185,16 +1191,12 @@ fn a_queued_handoff_projects_its_label_and_marks_the_row_sent() {
         .expect("a flush");
     assert_eq!(report["sent"], 1, "{report}");
     assert!(
-        rig.asked().contains("--add-label dev:opencode"),
-        "the flush did not project the label: {}",
+        rig.asked().contains("--remove-label dev:codex")
+            && !rig.asked().contains("--add-label dev:"),
+        "the flush projected a runtime label: {}",
         rig.asked()
     );
-    assert!(
-        landed_labels(&rig)
-            .iter()
-            .any(|label| label == "dev:opencode"),
-        "the label did not land"
-    );
+    assert_eq!(landed_labels(&rig), vec!["status:in-progress".to_owned()]);
     assert_eq!(state_of(OutboxKind::Reconverge), vec![OutboxState::Sent]);
 }
 

@@ -1226,8 +1226,13 @@ fn landed_labels(rig: &Rig) -> Vec<String> {
 }
 
 #[test]
-fn a_handoff_while_open_projects_the_runtime_label_and_reads_it_back() {
+fn a_handoff_while_open_names_no_runtime_and_strips_a_stale_label() {
     let rig = labelled_rig();
+    crate::paths::replace_atomically(
+        rig.labels.as_ref().expect("a labelled rig"),
+        "[\"status:in-progress\",\"dev:codex\"]",
+    )
+    .expect("a stale label");
     let answer = rig
         .open("handoff", &handoff_flags())
         .expect("a handoff while open");
@@ -1237,17 +1242,53 @@ fn a_handoff_while_open_projects_the_runtime_label_and_reads_it_back() {
     assert!(
         rig.writes()
             .iter()
-            .any(|line| line.contains("issue edit 12") && line.contains("--add-label dev:opencode")),
-        "the label was not projected: {:?}",
+            .any(|line| line.contains("issue edit 12") && line.contains("--remove-label dev:codex")),
+        "the stale label was not removed: {:?}",
         rig.writes()
     );
+    let calls = std::fs::read_to_string(&rig.log).expect("the logged calls");
     assert!(
-        landed_labels(&rig)
-            .iter()
-            .any(|label| label == "dev:opencode"),
-        "the label did not land"
+        !calls.contains("--add-label dev:") && !calls.contains("label create"),
+        "a handoff wrote a label: {calls}"
     );
+    assert_eq!(landed_labels(&rig), vec!["status:in-progress".to_owned()]);
     assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+}
+
+#[test]
+fn a_create_while_open_names_no_runtime_on_github() {
+    let mut rig = rig();
+    rig.script = crate::test_env::answers(&[serde_json::json!({
+        "matches": "issue create",
+        "stdout": "https://github.com/fixture/repo/issues/7\n",
+        "status": 0,
+    })]);
+    let answer = rig
+        .open(
+            "create",
+            &[
+                "--identity",
+                "a-probe",
+                "--title",
+                "A probe",
+                "--body-file",
+                &rig.path("body.md"),
+                "--domain",
+                "transport",
+                "--priority",
+                "p2",
+                "--runtime",
+                "claude",
+            ],
+        )
+        .expect("a create while open");
+
+    let calls = std::fs::read_to_string(&rig.log).expect("the logged calls");
+    assert!(calls.contains("issue create"), "{answer}: {calls}");
+    assert!(
+        !calls.contains("analyst:") && !calls.contains("dev:"),
+        "a create named its runtime to GitHub: {calls}"
+    );
 }
 
 #[test]

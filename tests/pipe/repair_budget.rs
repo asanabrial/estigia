@@ -2613,7 +2613,7 @@ fn a_successor_is_told_which_checkout_holds_the_branch() {
             "matches": "issue view",
             "stdout": serde_json::json!({
                 "state": "OPEN",
-                "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+                "labels": [{"name": "status:in-progress"}],
                 "assignees": [{"login": "fixture"}],
                 "comments": [{
                     "id": "IC_1",
@@ -2758,7 +2758,6 @@ fn a_filed_item_with_an_undeclared_scale_is_named_by_the_queue_read() {
                     "body_file": body.to_string_lossy(),
                     "priority": "scale:high",
                     "domain": "general",
-                    "runtime": "opencode",
                     "run_id": "opencode-test-1a2b3c4d",
                     "state": "ready",
                 },
@@ -2891,7 +2890,6 @@ fn an_empty_priority_value_is_answered_unchecked_and_named_by_the_queue_read() {
                     "body_file": body.to_string_lossy(),
                     "priority": "priority:",
                     "domain": "general",
-                    "runtime": "opencode",
                     "run_id": "opencode-test-1a2b3c4d",
                     "state": "ready",
                 },
