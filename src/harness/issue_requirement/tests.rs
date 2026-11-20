@@ -1129,35 +1129,28 @@ const UNPLACEABLE_SHELL_WRITES: &[&str] = &[
 ];
 
 #[test]
-fn an_unplaceable_shell_write_launched_in_a_repository_is_refused_under_required() {
+fn an_unplaceable_shell_write_launched_in_a_repository_runs_under_required() {
     let (_repo, _root, required) = rig(IssueRequirement::Required);
     for command in UNPLACEABLE_SHELL_WRITES {
+        let decision = shell_write(&required, command);
         assert!(
-            matches!(
-                shell_write(&required, command),
-                Decision::Deny(refusal) if refusal.code == CODE
-            ),
-            "{command} was not refused under `required`"
+            matches!(decision, Decision::Outside(_)),
+            "{command}: {decision:?}"
         );
     }
 }
 
 #[test]
-fn an_unplaceable_shell_write_launched_outside_every_repository_is_refused_under_required() {
+fn an_unplaceable_shell_write_launched_outside_every_repository_runs_under_required() {
     let (_launch, _root, required) = in_a_non_repository(IssueRequirement::Required);
     for command in UNPLACEABLE_SHELL_WRITES {
-        assert!(
-            matches!(
-                shell_write(&required, command),
-                Decision::Deny(refusal) if refusal.code == CODE
-            ),
-            "{command} was not refused under `required`"
-        );
+        let decision = shell_write(&required, command);
+        assert!(!held_for_an_issue(&decision), "{command}: {decision:?}");
     }
 }
 
 #[test]
-fn an_unplaceable_shell_write_at_an_unestablished_scope_is_refused_under_required() {
+fn an_unplaceable_shell_write_at_an_unestablished_scope_runs_under_required() {
     let (launch, _root, _) = in_a_non_repository(IssueRequirement::Required);
     std::fs::create_dir(launch.path().join(".git")).expect("a `.git` entry Git cannot use");
     let root = tempfile::tempdir().expect("a temporary root");
@@ -1168,16 +1161,19 @@ fn an_unplaceable_shell_write_at_an_unestablished_scope_is_refused_under_require
         launch.path().display()
     );
     for command in UNPLACEABLE_SHELL_WRITES {
-        let Decision::Deny(refusal) = shell_write(&context, command) else {
-            panic!("{command} was not refused");
-        };
-        assert_eq!(refusal.code, CODE);
-        assert!(
-            refusal.message.contains("could not be established"),
-            "{command}: {}",
-            refusal.message
-        );
+        let decision = shell_write(&context, command);
+        assert!(!held_for_an_issue(&decision), "{command}: {decision:?}");
     }
+    let command = "echo x > $f; git commit -am x";
+    let Decision::Deny(refusal) = shell_write(&context, command) else {
+        panic!("{command} was not refused");
+    };
+    assert_eq!(refusal.code, CODE);
+    assert!(
+        refusal.message.contains("could not be established"),
+        "{command}: {}",
+        refusal.message
+    );
 }
 
 #[test]
@@ -1292,15 +1288,16 @@ fn a_quoted_heredoc_written_outside_the_checkout_is_not_held() {
 }
 
 #[test]
-fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
+fn a_heredoc_that_is_not_the_one_exact_shape_runs_unless_it_is_placed_inside() {
     {
         let (repo, _root, context) = rig(IssueRequirement::Required);
         let inside = format!(
             "cat > {}/out.md <<'EOF'\nx\nEOF",
             crate::test_env::shell_path(repo.path())
         );
+        let decision = shell_write(&context, &inside);
+        assert!(held_for_an_issue(&decision), "{inside}: {decision:?}");
         for command in [
-            inside.as_str(),
             "cat > /tmp/a <<EOF\nx\nEOF",
             "cat > /tmp/a <<\\EOF\nx\nEOF",
             "cat > /tmp/a <<-'EOF'\n\tx\n\tEOF",
@@ -1340,7 +1337,10 @@ fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
             "echo x > /tmp/a; echo \"a\\\"\" > src/x",
         ] {
             let decision = shell_write(&context, command);
-            assert!(held_for_an_issue(&decision), "{command}: {decision:?}");
+            assert!(
+                matches!(decision, Decision::Outside(_)),
+                "{command}: {decision:?}"
+            );
         }
     }
 }
@@ -1371,40 +1371,55 @@ fn quoting_the_exemption_refuses_does_not_make_a_plain_read_a_write() {
 }
 
 #[test]
-fn any_other_shell_write_is_still_held() {
-    {
-        let (repo, _root, context) = rig(IssueRequirement::Required);
-        let inside = format!(
-            "echo x > {}/out.txt",
-            crate::test_env::shell_path(repo.path())
+fn a_shell_write_placed_inside_or_naming_git_or_gh_is_still_held() {
+    let (repo, _root, context) = rig(IssueRequirement::Required);
+    let inside = format!(
+        "echo x > {}/out.txt",
+        crate::test_env::shell_path(repo.path())
+    );
+    for command in [
+        "echo x > out.txt",
+        "echo x > ./a",
+        "echo x > /tmp/a > out.txt",
+        "git commit -m x > /tmp/log",
+        "git reset --hard > /tmp/log",
+        "git checkout -b x > /tmp/log",
+        "gh issue develop 3 > /tmp/log",
+        "echo x > $f && git commit -am x",
+        "sh -c 'git push' > /tmp/y",
+        "python3 -c \"import os; os.system('/usr/bin/git push')\"",
+        "echo x > $f; gh pr merge 1",
+        inside.as_str(),
+    ] {
+        let decision = shell_write(&context, command);
+        assert!(held_for_an_issue(&decision), "{command}: {decision:?}");
+    }
+}
+
+#[test]
+fn a_shell_write_the_gate_cannot_place_runs_under_required() {
+    let (_repo, _root, context) = rig(IssueRequirement::Required);
+    for command in [
+        "echo x > $f",
+        "cp a /tmp/b",
+        "cat <<EOF > /tmp/x\n$(rm -rf src)\nEOF",
+        "cp a out.txt > /tmp/b",
+        "echo x > /tmp/a\" b\" > src/evil \"z\"",
+        "echo 'echo x > src/f' | sh > /tmp/y",
+        "sh -c \"echo x > src/f\" > /tmp/y",
+        "echo x > /tmp/../tmp/y",
+        "echo x >> \"/tmp/y\"",
+        "echo x >&1x > /tmp/y",
+        "sed -ibak s/a/b/ src/x.rs > /tmp/l",
+        "cargo fmt > /tmp/l",
+        "echo x > /tmp/y 2>&1",
+        "echo x | tee /tmp/b > /tmp/c",
+    ] {
+        let decision = shell_write(&context, command);
+        assert!(
+            matches!(decision, Decision::Outside(_)),
+            "{command}: {decision:?}"
         );
-        for command in [
-            "echo x > out.txt",
-            "echo x > ./a",
-            "echo x > $f",
-            "echo x > /tmp/a > out.txt",
-            "cp a /tmp/b",
-            "git commit -m x > /tmp/log",
-            "git reset --hard > /tmp/log",
-            "git checkout -b x > /tmp/log",
-            "gh issue develop 3 > /tmp/log",
-            "cat <<EOF > /tmp/x\n$(rm -rf src)\nEOF",
-            "cp a out.txt > /tmp/b",
-            "echo x > /tmp/a\" b\" > src/evil \"z\"",
-            "echo 'echo x > src/f' | sh > /tmp/y",
-            "sh -c \"echo x > src/f\" > /tmp/y",
-            "echo x > /tmp/../tmp/y",
-            "echo x >> \"/tmp/y\"",
-            "echo x >&1x > /tmp/y",
-            "sed -ibak s/a/b/ src/x.rs > /tmp/l",
-            "cargo fmt > /tmp/l",
-            "echo x > /tmp/y 2>&1",
-            "echo x | tee /tmp/b > /tmp/c",
-            inside.as_str(),
-        ] {
-            let decision = shell_write(&context, command);
-            assert!(held_for_an_issue(&decision), "{command}: {decision:?}");
-        }
     }
 }
 
@@ -1436,7 +1451,7 @@ fn a_git_write_sent_into_another_checkout_is_refused_under_required() {
 }
 
 #[test]
-fn the_three_unplaceable_shapes_are_refused_under_required() {
+fn the_three_unplaceable_shapes_run_under_required() {
     let scratch = "/private/tmp/estigia-719-scratchpad";
     let shapes = [
         format!("cd {scratch} && cat > c64.md <<'EOF'\n## Problem\nan issue body\nEOF"),
@@ -1446,7 +1461,7 @@ fn the_three_unplaceable_shapes_are_refused_under_required() {
     let (_repo, _root, required) = rig(IssueRequirement::Required);
     for shape in &shapes {
         let decision = shell_write(&required, shape);
-        assert!(held_for_an_issue(&decision), "{shape}: {decision:?}");
+        assert!(!held_for_an_issue(&decision), "{shape}: {decision:?}");
     }
 }
 

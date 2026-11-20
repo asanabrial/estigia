@@ -1569,7 +1569,8 @@ continuation word beside its harness line.
 A run that has claimed nothing is not under Estigia's authority, except where the repository's
 `Unclaimed write policy` says otherwise: by default (`off`) every repository write such a run makes
 goes through untouched, while the boundary rows below still hold what they hold; under `required`
-a repository write the gate can place inside the checkout, and one it cannot place, is refused.
+a repository write the gate can place inside the checkout is refused, and a shell write it cannot
+place runs unless its line names `git` or `gh`.
 Gating every session would be a lock, not workflow authority.
 
 **One exception, and the operator opts into it.** In a checkout where `estigia guard` installed the
@@ -1583,8 +1584,9 @@ has no commit refusal, as does one with no tracker transport or no installed con
 **The other exception is a repository setting, and it is off by default.** `Unclaimed write policy`
 (`off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`; a `watch` or `ask`
 an earlier build stored reads as `required`) governs a run
-holding no claim in a checkout with a tracker. `required` refuses every repository write, one the
-gate cannot place included, with `issue-required`; a `git push` is held as a commit is, and a write
+holding no claim in a checkout with a tracker. `required` refuses every repository write the gate
+can place inside the checkout, and every git write, with `issue-required`; a shell write it cannot
+place runs unless its line names `git` or `gh`; a `git push` is held as a commit is, and a write
 carried on a line beside any other boundary (`gh pr merge …; git worktree remove …`) is held as it
 would be alone, the refusal naming the write. The boundary itself is held too, by the repository's
 `Unclaimed GitHub writes` row (`held`, the

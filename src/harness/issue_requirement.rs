@@ -163,8 +163,23 @@ pub fn decision(
             None
         }
         Placement::Inside => held(context, requirement, &scope, Reach::Placed),
-        Placement::Unplaceable => held(context, requirement, &scope, Reach::Unplaceable),
+        Placement::Unplaceable if target.starts_with("git ") || names_git_or_gh(literal) => {
+            held(context, requirement, &scope, Reach::Unplaceable)
+        }
+        Placement::Unplaceable => None,
     }
+}
+
+/// Whether any word of the shell line is a `git` or `gh` command, however it is quoted or
+/// chained, so an unplaceable line that may commit, push or write to GitHub is still held.
+fn names_git_or_gh(literal: Option<&str>) -> bool {
+    literal.is_some_and(|line| {
+        line.split(|c: char| c.is_whitespace() || ";&|()`$'\"\\<>=".contains(c))
+            .any(|word| {
+                let program = word.rsplit('/').next().unwrap_or(word);
+                matches!(program, "git" | "gh")
+            })
+    })
 }
 
 /// Whether every repository this write lands in is one the configured tracker cannot name an
