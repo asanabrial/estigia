@@ -409,6 +409,16 @@ fn checks_hold(
     }
 }
 
+fn lane_hold(
+    lane: Result<serde_json::Value, Failure>,
+) -> Option<(&'static str, serde_json::Value)> {
+    match lane {
+        Err(failure) => Some(("publication-lane-unreadable", failure.envelope())),
+        Ok(lane) if lane["state"] == "red" => Some(("publication-lane-red", lane)),
+        Ok(_) => None,
+    }
+}
+
 fn with_review_start(
     context: &Context,
     start: &ReviewStart<'_>,
@@ -447,14 +457,9 @@ fn with_review_start(
         } else {
             super::claim::publication_lane(context, head, answer["pr"].as_u64())
         };
-        match lane {
-            Err(failure) => skip(
-                &mut report,
-                "publication-lane-unreadable",
-                failure.envelope(),
-            ),
-            Ok(lane) if lane["state"] == "red" => skip(&mut report, "publication-lane-red", lane),
-            Ok(_) => {
+        match lane_hold(lane) {
+            Some((cause, detail)) => skip(&mut report, cause, detail),
+            None => {
                 match (!names.is_empty())
                     .then(|| {
                         checks_clear(context, start, answer["base"].as_str().unwrap_or_default())
