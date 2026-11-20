@@ -12,19 +12,16 @@ fn a_hook_script_is_still_a_script_when_the_path_holds_an_apostrophe() {
     let directory = tempfile::tempdir().expect("a temporary directory");
     let file = directory.path().join("PreToolUse.sh");
     std::fs::write(&file, &posix).expect("the script is written");
-    match std::process::Command::new("sh")
+    let checked = std::process::Command::new("sh")
         .arg("-n")
         .arg(&file)
         .output()
-    {
-        Ok(checked) => assert!(
-            checked.status.success(),
-            "the hook is not a shell script: {}\n{posix}",
-            String::from_utf8_lossy(&checked.stderr)
-        ),
-        // No POSIX shell here; the assertion above still holds the contract.
-        Err(_) => eprintln!("SKIPPED: no shell to parse it with."),
-    }
+        .expect("this test requires `sh` on the path to parse the hook script");
+    assert!(
+        checked.status.success(),
+        "the hook is not a shell script: {}\n{posix}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
 
     let windows = cline_hook(awkward, true);
     assert!(
