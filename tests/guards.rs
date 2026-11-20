@@ -1386,7 +1386,7 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
 /// has been about.
 ///
 /// Not a lint against `Option` in fixtures generally — the last two that
-/// answered one, `git_repo()` in `src/harness/doctor.rs` and `release_repo()`
+/// answered one, `git_repo()` in `src/harness/doctor/tests.rs` and `release_repo()`
 /// in `src/cli/tests.rs`, are held by
 /// `the_last_two_git_fixtures_cannot_answer_that_they_did_not_run` below, and
 /// `docs/honesty.md` records both closures. This holds the one measured lying.
@@ -1554,7 +1554,7 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
 
 /// The two git fixtures that answered an `Option` hold a panic.
 ///
-/// `git_repo()` in `src/harness/doctor.rs` and `release_repo()` in
+/// `git_repo()` in `src/harness/doctor/tests.rs` and `release_repo()` in
 /// `src/cli/tests.rs` returned `Option<tempfile::TempDir>` over a single
 /// `git init --quiet`, and a caller spelled a missing `git` as a skip. Both now return the directory and panic instead, but the panic was held by no
 /// test: reverting the fixtures and their call sites left the suite green, which
@@ -1568,7 +1568,7 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
 #[test]
 fn the_last_two_git_fixtures_cannot_answer_that_they_did_not_run() {
     for (file, fixture) in [
-        ("src/harness/doctor.rs", "git_repo"),
+        ("src/harness/doctor/tests.rs", "git_repo"),
         ("src/cli/tests.rs", "release_repo"),
     ] {
         let source = std::fs::read_to_string(root().join(file))
