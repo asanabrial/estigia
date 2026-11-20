@@ -8677,6 +8677,65 @@ fn publication_lane_candidates_honour_an_explicit_list_and_the_exclude_row() {
     );
 }
 
+#[test]
+fn the_publication_lane_rows_reach_the_transport_from_every_layer() {
+    let write = |path: &std::path::Path, rows: &str| {
+        std::fs::create_dir_all(path.parent().expect("a directory")).expect("the directory");
+        std::fs::write(
+            path,
+            format!(
+                "<!-- estigia:config:start -->\n| Setting | Value here |\n|---|---|\n{rows}\
+                 <!-- estigia:config:end -->\n"
+            ),
+        )
+        .expect("a file");
+    };
+    let home = tempfile::tempdir().expect("a home");
+    let skill = home.path().join("skill");
+    crate::skill::install(&skill, &crate::config::Config::default(), false)
+        .expect("the skill installs");
+
+    let bare = tempfile::tempdir().expect("a repository");
+    let live = super::super::Context::live(skill.clone(), bare.path().to_path_buf(), None);
+    assert!(
+        publication_lane_excludes(&live).is_empty(),
+        "the default excludes nothing"
+    );
+
+    let repo = tempfile::tempdir().expect("a repository");
+    write(
+        &crate::skill::repository_config_path(repo.path()),
+        "| Publication lanes exclude | release.yml, publish-registries.yml |\n\
+         | Publication lanes | ci.yml, release.yml |\n",
+    );
+    let live = super::super::Context::live(skill.clone(), repo.path().to_path_buf(), None);
+    assert_eq!(
+        publication_lane_excludes(&live),
+        vec![
+            "release.yml".to_owned(),
+            "publish-registries.yml".to_owned()
+        ],
+        "a repository file's exclude row did not reach the transport"
+    );
+    assert_eq!(
+        publication_lane_candidates(&live),
+        vec!["ci.yml".to_owned()],
+        "a repository file's lanes row did not reach the transport"
+    );
+    assert!(!publication_lane_is_off(&live));
+
+    write(
+        &skill.join(crate::config::LOCAL_FILE),
+        "| Publication lanes exclude | nightly.yml |\n",
+    );
+    let live = super::super::Context::live(skill, bare.path().to_path_buf(), None);
+    assert_eq!(
+        publication_lane_excludes(&live),
+        vec!["nightly.yml".to_owned()],
+        "a local override's exclude row did not reach the transport"
+    );
+}
+
 /// The receipt comment says what this publication did about CI, and says it per
 /// lane.
 ///

@@ -305,6 +305,8 @@ pub(super) const TUI_SETTINGS: &[Setting] = &[
     Setting::DecisionMode,
     Setting::Evidence,
     Setting::PublicationLane,
+    Setting::PublicationLanes,
+    Setting::PublicationLanesExclude,
     Setting::ReviewBudget,
     Setting::ChangeSize,
     Setting::CorrectionsPerLineage,

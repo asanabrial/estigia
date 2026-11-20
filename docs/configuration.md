@@ -1,6 +1,6 @@
 # Configuration
 
-Thirty-two typed settings, read from one table. Reading it produces a valid configuration or a refusal
+Thirty-four typed settings, read from one table. Reading it produces a valid configuration or a refusal
 that names what may be written instead — there is no third outcome where a misspelled value is
 quietly ignored.
 
@@ -11,7 +11,7 @@ cannot check, and [`review-cost.md`](review-cost.md) measures the one row that o
 the code has, and every value the picker offers is a value named here. A setting that grew a value
 and did not grow a row fails the suite.
 
-Thirty-two settings, all typed. Reading the table produces a valid configuration or a refusal that
+Thirty-four settings, all typed. Reading the table produces a valid configuration or a refusal that
 names what may be written instead — never a value guessed at and discovered halfway through a
 checkout.
 
@@ -45,6 +45,8 @@ estigia config set "Integration mode" trunk
 | Decision mode | `ask` or `auto`. Default `ask`: a run may put a question to the person. `auto`: a question tool is refused, the run applies the recommended answer, and the turn ends by listing every question and the decision taken — see *Decision mode* below. | Gate limits | everywhere |
 | Evidence standard | `reading`, or `measuring` | Review & change | everywhere |
 | Publication lane | `on` or `off`. Default `on`: accepted verdicts are gated on the head's check runs. `off` skips the check-run read and records `classification: not-consulted`. A `cancelled` conclusion still refuses when the gate is on. `deliver` reads the pull request's whole rollup whatever the lane says, since a `not-consulted` lane is no evidence that CI does not run: red and running checks still stop or wait it, but on that lane an empty rollup passes at once instead of waiting for a check to appear. Only a lane that reads `disabled` or `never-ran` skips the rollup. | Review & change | everywhere |
+| Publication lanes | `auto`, `none` (or `off`), or workflow files separated by commas such as `ci.yml`. Default `auto`: every active workflow under `.github/workflows/` is started by a publication, less `Publication lanes exclude`. A list replaces discovery, and is still filtered by the exclude row. `none` starts no workflow, so a verdict stays ungated on purpose. A path is reduced to its file name. Answerable by a repository's own file | Review & change | everywhere |
+| Publication lanes exclude | `none`, or workflow files separated by commas such as `release.yml, publish-registries.yml`. Default `none`. These files are never started by a publication, whether discovery finds them or `Publication lanes` names them; matching ignores case. Answerable by a repository's own file, so one repository can keep a release build off its pull requests without touching any other | Review & change | everywhere |
 | Review budget | `none`, or a token count such as `150000`. Default `150000`, per review context — an inherited comparison target, not a derived number. **Advisory, and reported rather than enforced**: nothing here refuses a panel that runs over it, and a `spend` record is verified nowhere, so an under-report is undetectable. `none` switches it off. `review_tier`'s `forecast` line multiplies it by the lenses the tier licenses and states the product; the forecast is a statement, not a limit. See [`docs/honesty.md`](honesty.md) for what the number cannot count | Review & change | everywhere |
 | Change size | a number of lines, such as `800` | Review & change | everywhere |
 | Corrections per lineage | a positive whole number. Default `3`: a review lineage — an original candidate and its repairs on one pull request — may publish that many corrections after a rejection. A publication past it is refused as `correction-already-spent` before anything is pushed, `review_status` and `repair_rounds` report it as `correction_limit`, and a rejected correction with corrections remaining, one the targeted validator failed included, is due another rather than escalated; once the limit is spent, `escalate_review` is the exit and a person's `recover` continues. `1` is the limit gentle-ai v4 enforces (see [`docs/parity.md`](parity.md)). An assisted run has no review lineage, so `draft_pr` counts the new heads it pushes to its branch and refuses the one past the row as `draft-pr-corrections-spent`; raising the row is how a person lets it continue. The size budget and the reviewed-path scope are unchanged, and the budget stays cumulative across corrections. `0`, a negative number and a non-integer are refused | Review & change | everywhere |

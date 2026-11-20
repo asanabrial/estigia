@@ -418,6 +418,24 @@ pub const SPANISH: &[(&str, &str)] = &[
         "si un veredicto aceptado consulta el carril de publicación de esta cabeza",
     ),
     ("`on`, or `off`", "`on`, o `off`"),
+    ("Publication lanes", "Carriles de publicación"),
+    (
+        "which workflow files a publication starts: every active one, none, or a list",
+        "qué archivos de workflow inicia una publicación: todos los activos, ninguno o una lista",
+    ),
+    (
+        "`auto`, `none` (or `off`), or workflow files separated by commas such as `ci.yml`",
+        "`auto`, `none` (o `off`), o archivos de workflow separados por comas como `ci.yml`",
+    ),
+    ("Publication lanes exclude", "Carriles de publicación excluidos"),
+    (
+        "workflow files a publication never starts, whichever ones discovery finds",
+        "archivos de workflow que una publicación nunca inicia, sean cuales sean los que encuentre el descubrimiento",
+    ),
+    (
+        "`none`, or workflow files separated by commas such as `release.yml`",
+        "`none`, o archivos de workflow separados por comas como `release.yml`",
+    ),
     ("Issue required", "Exigir issue"),
     (
         "whether a run holding no claim may write in this repository: allowed or refused",
