@@ -73,8 +73,8 @@ pub(crate) fn summarise(raw: &str) -> Summary {
             saved: 0,
         };
     };
-    split_at_blocks(&mut parsed);
-    let matches = matched_runs(&parsed);
+    let shifts = split_at_blocks(&mut parsed);
+    let matches = matched_runs(&parsed, &shifts);
     let text = render(&parsed, &matches).concat();
     let saved = raw.len().saturating_sub(text.len());
     Summary {
@@ -85,7 +85,55 @@ pub(crate) fn summarise(raw: &str) -> Summary {
     }
 }
 
-fn split_at_blocks(parsed: &mut Parsed<'_>) {
+#[derive(Clone, PartialEq, Eq)]
+enum Indent {
+    Removed(String),
+    Added(String),
+}
+
+impl Indent {
+    fn between(from: &str, to: &str) -> Option<Self> {
+        let prefix = |long: &str, short: &str| {
+            long.strip_suffix(short)
+                .filter(|prefix| {
+                    !prefix.is_empty() && prefix.bytes().all(|byte| byte == b' ' || byte == b'\t')
+                })
+                .map(str::to_owned)
+        };
+        if from.trim().is_empty() || to.trim().is_empty() {
+            return None;
+        }
+        prefix(from, to)
+            .map(Self::Removed)
+            .or_else(|| prefix(to, from).map(Self::Added))
+    }
+
+    fn carries(&self, from: &str, to: &str) -> bool {
+        if from.trim().is_empty() {
+            return from == to;
+        }
+        match self {
+            Self::Removed(prefix) => from.strip_prefix(prefix.as_str()) == Some(to),
+            Self::Added(prefix) => to.strip_prefix(prefix.as_str()) == Some(from),
+        }
+    }
+
+    fn field(&self) -> String {
+        let (key, prefix) = match self {
+            Self::Removed(prefix) => ("indent-removed", prefix),
+            Self::Added(prefix) => ("indent-added", prefix),
+        };
+        format!("\"{key}\":{},", serde_json::json!(prefix))
+    }
+}
+
+struct Shift {
+    from: usize,
+    to: usize,
+    indent: Indent,
+}
+
+fn split_at_blocks(parsed: &mut Parsed<'_>) -> Vec<Shift> {
     let content = |line: usize| &parsed.lines[line][1..];
     let mut destinations: HashMap<&str, Vec<(usize, usize)>> = HashMap::new();
     for (index, run) in parsed
@@ -141,28 +189,129 @@ fn split_at_blocks(parsed: &mut Parsed<'_>) {
             for line in &mut claimed[to_first + offset..to_first + offset + length] {
                 *line = true;
             }
+            for line in &mut claimed[run.first + at..run.first + at + length] {
+                *line = true;
+            }
             cuts[index].extend([at, at + length]);
             cuts[other].extend([offset, offset + length]);
             at += length;
         }
     }
+    let mut shifted: HashMap<&str, Vec<(usize, usize)>> = HashMap::new();
+    for (index, run) in parsed
+        .runs
+        .iter()
+        .enumerate()
+        .filter(|(_, run)| run.addition)
+    {
+        for offset in 0..run.count() {
+            let line = content(run.first + offset);
+            if !claimed[run.first + offset] && !line.trim().is_empty() {
+                shifted
+                    .entry(line.trim_start())
+                    .or_default()
+                    .push((index, offset));
+            }
+        }
+    }
+    let mut found: Vec<(usize, usize, usize, usize, Indent)> = Vec::new();
+    for (index, run) in parsed
+        .runs
+        .iter()
+        .enumerate()
+        .filter(|(_, run)| !run.addition)
+    {
+        let mut at = 0;
+        while at < run.count() {
+            let line = content(run.first + at);
+            if claimed[run.first + at] || line.trim().is_empty() {
+                at += 1;
+                continue;
+            }
+            let mut best: Option<(usize, usize, usize, Indent)> = None;
+            let candidates = shifted
+                .get(line.trim_start())
+                .map_or(&[][..], Vec::as_slice);
+            for &(other, offset) in candidates.iter().take(CANDIDATES_PER_LINE) {
+                let to = &parsed.runs[other];
+                if to.path == run.path || claimed[to.first + offset] {
+                    continue;
+                }
+                let Some(indent) = Indent::between(line, content(to.first + offset)) else {
+                    continue;
+                };
+                let mut length = 0;
+                while at + length < run.count()
+                    && offset + length < to.count()
+                    && !claimed[run.first + at + length]
+                    && !claimed[to.first + offset + length]
+                    && indent.carries(
+                        content(run.first + at + length),
+                        content(to.first + offset + length),
+                    )
+                {
+                    length += 1;
+                }
+                if best.as_ref().is_none_or(|(longest, ..)| length > *longest) {
+                    best = Some((length, other, offset, indent));
+                }
+            }
+            let Some((length, other, offset, indent)) =
+                best.filter(|(length, ..)| *length >= BLOCK_LINES)
+            else {
+                at += 1;
+                continue;
+            };
+            let to_first = parsed.runs[other].first;
+            for line in &mut claimed[to_first + offset..to_first + offset + length] {
+                *line = true;
+            }
+            for line in &mut claimed[run.first + at..run.first + at + length] {
+                *line = true;
+            }
+            cuts[index].extend([at, at + length]);
+            cuts[other].extend([offset, offset + length]);
+            found.push((index, at, other, offset, indent));
+            at += length;
+        }
+    }
     if cuts.iter().all(Vec::is_empty) {
-        return;
+        return Vec::new();
     }
     let mut pieces: Vec<Run> = Vec::with_capacity(parsed.runs.len());
     let mut replaced: Vec<Vec<usize>> = Vec::with_capacity(parsed.runs.len());
+    let mut starts: Vec<Vec<(usize, usize)>> = Vec::with_capacity(parsed.runs.len());
     for (run, mut cut) in parsed.runs.drain(..).zip(cuts) {
         cut.push(0);
         cut.push(run.count());
         cut.sort_unstable();
         cut.dedup();
         let mut indices = Vec::with_capacity(cut.len() - 1);
+        let mut offsets = Vec::with_capacity(cut.len() - 1);
         for bounds in cut.windows(2) {
+            offsets.push((bounds[0], pieces.len()));
             indices.push(pieces.len());
             pieces.push(piece(&parsed.lines, &run, bounds[0], bounds[1]));
         }
         replaced.push(indices);
+        starts.push(offsets);
     }
+    let piece_at = |run: usize, offset: usize| {
+        starts[run]
+            .iter()
+            .find(|(start, _)| *start == offset)
+            .map(|(_, piece)| *piece)
+    };
+    let shifts: Vec<Shift> = found
+        .into_iter()
+        .filter_map(|(index, at, other, offset, indent)| {
+            Some(Shift {
+                from: piece_at(index, at)?,
+                to: piece_at(other, offset)?,
+                indent,
+            })
+        })
+        .collect();
     parsed.runs = pieces;
     for hunk in parsed
         .sections
@@ -175,6 +324,7 @@ fn split_at_blocks(parsed: &mut Parsed<'_>) {
             .flat_map(|index| replaced[*index].iter().copied())
             .collect();
     }
+    shifts
 }
 
 fn piece(lines: &[&str], run: &Run, from: usize, to: usize) -> Run {
@@ -203,15 +353,37 @@ fn piece(lines: &[&str], run: &Run, from: usize, to: usize) -> Run {
 
 struct Matches {
     pair: Vec<Option<usize>>,
+    indent: Vec<Option<Indent>>,
     deletion: Vec<bool>,
     moves: usize,
     deletions: usize,
 }
 
-fn matched_runs(parsed: &Parsed<'_>) -> Matches {
+impl Matches {
+    fn indent(&self, one: usize, other: usize) -> Option<&Indent> {
+        self.indent[one].as_ref().or(self.indent[other].as_ref())
+    }
+}
+
+fn matched_runs(parsed: &Parsed<'_>, shifts: &[Shift]) -> Matches {
     let mut pair: Vec<Option<usize>> = vec![None; parsed.runs.len()];
+    let mut indent: Vec<Option<Indent>> = vec![None; parsed.runs.len()];
     let mut taken = vec![false; parsed.runs.len()];
     let mut deletion = vec![false; parsed.runs.len()];
+    for shift in shifts {
+        let line = moved_line(
+            &parsed.runs[shift.from],
+            &parsed.runs[shift.to],
+            Some(&shift.indent),
+        );
+        if line.len() < line_bytes(parsed, shift.from) + line_bytes(parsed, shift.to) {
+            pair[shift.from] = Some(shift.to);
+            pair[shift.to] = Some(shift.from);
+            taken[shift.from] = true;
+            taken[shift.to] = true;
+            indent[shift.from] = Some(shift.indent.clone());
+        }
+    }
     let mut additions: HashMap<String, Vec<usize>> = HashMap::new();
     for (index, run) in parsed
         .runs
@@ -230,6 +402,9 @@ fn matched_runs(parsed: &Parsed<'_>) -> Matches {
         .enumerate()
         .filter(|(_, run)| !run.addition)
     {
+        if taken[index] {
+            continue;
+        }
         let Some(candidates) = additions.get(&sha256_hex(&run.bytes)) else {
             continue;
         };
@@ -241,7 +416,7 @@ fn matched_runs(parsed: &Parsed<'_>) -> Matches {
             if to.path == run.path || to.bytes != run.bytes {
                 continue;
             }
-            let line = moved_line(run, to);
+            let line = moved_line(run, to, None);
             if line.len() < line_bytes(parsed, index) + line_bytes(parsed, other) {
                 pair[index] = Some(other);
                 pair[other] = Some(index);
@@ -272,6 +447,7 @@ fn matched_runs(parsed: &Parsed<'_>) -> Matches {
     let deletions = deletion.iter().filter(|one| **one).count();
     Matches {
         pair,
+        indent,
         deletion,
         moves,
         deletions,
@@ -316,7 +492,11 @@ fn render(parsed: &Parsed<'_>, matches: &Matches) -> Vec<String> {
         if (section.whole_deletion || section.whole_addition) && section.hunks[0].runs.len() == 1 {
             let run = section.hunks[0].runs[0];
             match matches.pair[run] {
-                Some(other) => out.push(moved_line(&parsed.runs[run], &parsed.runs[other])),
+                Some(other) => out.push(moved_line(
+                    &parsed.runs[run],
+                    &parsed.runs[other],
+                    matches.indent(run, other),
+                )),
                 None => out.push(deleted_line(&parsed.runs[run])),
             }
             continue;
@@ -344,7 +524,11 @@ fn render(parsed: &Parsed<'_>, matches: &Matches) -> Vec<String> {
                 };
                 let one = &parsed.runs[index];
                 if let Some(other) = matches.pair[index] {
-                    out.push(moved_line(one, &parsed.runs[other]));
+                    out.push(moved_line(
+                        one,
+                        &parsed.runs[other],
+                        matches.indent(index, other),
+                    ));
                 } else if matches.deletion[index] {
                     out.push(deleted_line(one));
                 } else {
@@ -405,18 +589,19 @@ fn side(start: usize, count: usize) -> String {
     }
 }
 
-fn moved_line(one: &Run, other: &Run) -> String {
+fn moved_line(one: &Run, other: &Run, indent: Option<&Indent>) -> String {
     let (from, to) = if one.addition {
         (other, one)
     } else {
         (one, other)
     };
     format!(
-        "{MOVED_PREFIX}{{\"from\":{from_path},\"from-lines\":{from_lines},\"to\":{to_path},\"to-lines\":{to_lines},\"bytes\":{bytes},\"sha256\":{digest}}}\n",
+        "{MOVED_PREFIX}{{\"from\":{from_path},\"from-lines\":{from_lines},\"to\":{to_path},\"to-lines\":{to_lines},{indent}\"bytes\":{bytes},\"sha256\":{digest}}}\n",
         from_path = serde_json::json!(from.path),
         from_lines = serde_json::json!(format!("{}-{}", from.start, from.end)),
         to_path = serde_json::json!(to.path),
         to_lines = serde_json::json!(format!("{}-{}", to.start, to.end)),
+        indent = indent.map(Indent::field).unwrap_or_default(),
         bytes = from.bytes.len(),
         digest = serde_json::json!(sha256_hex(&from.bytes)),
     )

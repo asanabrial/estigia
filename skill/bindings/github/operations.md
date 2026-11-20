@@ -85,7 +85,7 @@ inside the ordinary range rather than at the large end: answers carrying 73,272 
 bytes were refused, one carrying 36,288 was not. Exceeding `REVIEW_PAYLOAD_CEILING` (262144 bytes)
 refuses `review-payload-too-large` before any remote write; the payload is never truncated, whether
 it was asked for or not. Before the ceiling is measured, removed lines (a run, or 8+ of one)
-byte-identical to added lines in another path become one `# estigia-moved` line on each side, and a whole-file
+equal to added lines in another path, bytewise or but for one named indent, become one `# estigia-moved` line on each side, and a whole-file
 deletion becomes one `# estigia-deleted` line, each carrying the line ranges and the SHA-256 of the
 bytes it stands for; a hunk that lost lines is recounted, and a substitution is used only where the
 line is smaller than the bytes it replaces. A publication whose derived tier licenses zero lenses
