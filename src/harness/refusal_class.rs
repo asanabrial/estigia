@@ -474,7 +474,6 @@ const REFUSED: &[&str] = &[
     "run-id-names-another-checkout",
     "run-id-names-no-run",
     "run-pointer-not-writable",
-    "runtime-names-no-runtime",
     "screen-language-unwritable",
     "setting-needs-an-agent",
     "setting-not-for-this-agent",

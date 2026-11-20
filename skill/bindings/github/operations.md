@@ -56,15 +56,15 @@ publish it, before taking back the next.
 
 `handoff` states where an unheld issue is going, so a session of that runtime in that repository can
 find it at `SessionStart`. It writes a local row naming the issue, the runtime, the run that handed it
-over and the time, then projects exactly one `dev:<runtime>` label and reads it back twice. While the
-git operation window is closed the projection is queued as a `reconverge` and the answer is
-`projection: deferred` with the queue position.
+over and the time, and writes no runtime label: it removes a leftover `dev:` one and reads the result
+back twice. While the git operation window is closed that clean-up is queued as a
+`reconverge`, answering `projection: deferred` with the queue position.
 
-An issue a live claim holds is refused `handoff-issue-held` before anything is written: the label
+An issue a live claim holds is refused `handoff-issue-held` before anything is written: a handoff
 states a destination and must not overwrite the holder's. A `--to` that is not a single runtime word
-GitHub accepts in a label is refused `handoff-runtime-unreadable`, and nothing is written either. The
-record also explains that label to the
-recipient's later `claim`, which otherwise refuses a `dev:` label this store cannot account for. A
+is refused `handoff-runtime-unreadable`, and nothing is written either. The
+record also explains a leftover `dev:` label to the
+recipient's later `claim`, which otherwise refuses one this store cannot account for. A
 handoff is not a claim, not a release and not a message: the recipient claims the issue, and delivering
 the instruction is `send_message` addressed as `runtime:<name>` with `repo_dir`.
 
@@ -601,7 +601,7 @@ tier's own `lenses`; so does the whole-change fallback, whichever reason it name
 carries, and answers the epoch to name; `--target-operation` authorises only that epoch. A run
 holding the issue names none: the tool fills it from the claim's operation id, and after
 a takeover the old epoch is refused `target-operation-mismatch` before any write. The release
-converges the `dev:` label and, once the close is the registered delivery and nothing is
+converges the assignee, drops any `dev:` and, once the close is the registered delivery and nothing is
 unpublished, puts the isolated checkout down.
 
 `--evidence-file <f>` and `--spend <json>` (one object with `record_spend`'s fields, or an array)

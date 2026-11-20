@@ -247,14 +247,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   directory, registry and branch removal. Production cleanup remains best-effort/self-reported, and
   no guard test covers a single recognised-delivery holder (the single-stale test covers other closes).
 
-  **Naming the release in step 6 costs the `dev:<runtime>` label on every delivery that follows it.**
-  `release`'s `unassign` ends through `converge_ownership_projection` (`src/transport/claim.rs`): with no
-  holder left, every `dev:<runtime>` label is emitted as `--remove-label` from an inline
-  `BTreeSet::difference`. This is not measured: `src/transport/claim/tests.rs` exercises
-  `converge_projection`, a helper with zero production callers, and disabling the production emission leaves
-  the whole suite green. A query grouped by `dev:<runtime>` no longer shows which runtime delivered a closed
-  issue, and the run-id is no longer in the close note either: it survives only in the local store and in
-  `deliver`'s `record`, which never leaves the machine.
+  **No label shows which runtime delivered a closed issue.** No `dev:<runtime>` or `analyst:<runtime>`
+  label is written at all, and a leftover `dev:<runtime>` label is emitted as `--remove-label` by
+  `converge_ownership_projection` (`src/transport/claim.rs`) from an inline `BTreeSet::difference`.
+  `a_claim_removes_a_stale_runtime_label_and_adds_none` in `src/transport/claim/tests.rs` measures that
+  emission for a claim, and the handoff tests in `src/transport/outbox/offline.rs` measure it for a
+  handoff; `an_unassign_releases_the_epoch_in_the_store_and_its_discovery_writes_nothing` measures only that a release adds none. The run-id is not in the close note
+  either: it survives only in the local store and in `deliver`'s `record`, which never leaves the machine.
 
 ## Ownership
 

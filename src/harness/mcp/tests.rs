@@ -4799,58 +4799,19 @@ fn a_dashed_runtime_survives_the_validated_id_whole() {
     assert_eq!(named.runtime, "claude-code");
 }
 
-/// `create`'s `runtime` was a free-form string, and
-/// `analyst:<runtime>` is a repository-level label that outlives the issue —
-/// so caller text became a permanent label nobody's query finds. It is held
-/// to `session::runtime_component`, the same function the runtime derived from
-/// a run id goes through, and read from the argument so a number cannot skip
-/// it the way door 2 did.
+/// `create` once took a `runtime` and wrote it to GitHub as `analyst:<runtime>`.
+/// Nothing names the agent on GitHub any more, so the tool declares no such
+/// argument and a caller that still sends one has it dropped, not forwarded.
 #[test]
-fn create_holds_its_declared_runtime_to_the_same_component_as_a_derived_one() {
-    let root = tempfile::tempdir().expect("a temporary root");
-    let context = arg_context(&root);
+fn create_declares_no_runtime_argument_and_forwards_none() {
     let create = tools::find("create").expect("the tool exists");
-    let with_runtime = |runtime: Value| {
-        let mut arguments = required_arguments(create);
-        arguments.insert("runtime".to_owned(), runtime);
-        arguments.insert("run_id".to_owned(), json!("claude-aaaa1111"));
-        run_tool("create", &Value::Object(arguments), Ok(&context))
-    };
-
-    for runtime in ["My Runtime", "a/b", "codex 01", ""] {
-        let failure = with_runtime(json!(runtime))
-            .expect_err(&format!("{runtime:?} was taken for a runtime"));
-        let ToolFailure::Refused(refusal) = failure else {
-            panic!("{runtime:?}: refused as malformed rather than by the rule");
-        };
-        assert_eq!(
-            refusal.code, "runtime-names-no-runtime",
-            "{runtime:?} was refused for something else first: {refusal}"
-        );
-        assert!(
-            format!("{refusal}").contains("analyst"),
-            "the refusal does not say which label the text would have minted: {refusal}"
-        );
-    }
-
-    let failure = with_runtime(json!(7)).expect_err("a number went through for a runtime");
-    let ToolFailure::Malformed(said) = failure else {
-        panic!("a numeric runtime was answered by the world rather than refused");
-    };
     assert!(
-        said.contains("`runtime`") && said.contains("string"),
-        "the refusal does not say a runtime is a string: {said}"
+        create
+            .arguments
+            .iter()
+            .all(|argument| argument.name != "runtime"),
+        "create still declares a runtime"
     );
-
-    // The crossing that makes it *the same* predicate: the two doors agree,
-    // value for value, because both call `runtime_component`.
-    for runtime in ["codex", "claude-code", "My Runtime", "a/b", ""] {
-        assert_eq!(
-            super::declared_runtime(&json!({"runtime": runtime})).is_err(),
-            crate::harness::session::runtime_component(runtime).is_err(),
-            "{runtime}: the declared and the derived runtime are read by different rules"
-        );
-    }
 }
 
 #[test]
@@ -9696,9 +9657,8 @@ mod handoff {
         assert!(
             crate::test_env::logged_writes(&rig.log)
                 .iter()
-                .any(|line| line.contains("issue edit 723")
-                    && line.contains("--add-label dev:opencode")),
-            "the dev:opencode label was not projected: {:?}",
+                .all(|line| !line.contains("dev:") && !line.contains("analyst:")),
+            "a handoff named the runtime to GitHub: {:?}",
             crate::test_env::logged_writes(&rig.log)
         );
 

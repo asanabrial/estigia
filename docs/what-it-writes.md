@@ -59,8 +59,7 @@ claim family (`claim`, `reclaim`, `unassign`, renewal `heartbeat`, `progress`, `
 the review family (`published`, `review-handoff`, finding, lens report, refutation, disposition,
 validator result, spend, computed verdict, receipt) are recorded in `~/.estigia/state.db` alone, and
 no sentence is posted beside them. What reaches GitHub from a claim is the projection, written after
-the local commit and never read back to decide: the assignee, the `dev:<runtime>` label (created on
-the first claim for a runtime), and for `claim` with `branch` and `base` the develop link and the branch. The
+the local commit and never read back to decide: the assignee (no label names the runtime, and a leftover `dev:<runtime>` label is removed), and for `claim` with `branch` and `base` the develop link and the branch. The
 `comment` tool posts the escaped prose and nothing else, and `create` files the caller's body
 unchanged. [`honesty.md`](honesty.md) names what recording locally costs.
 

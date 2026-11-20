@@ -1041,12 +1041,6 @@ pub const TOOLS: &[Tool] = &[
             Argument::required("body_file", "string", "Path to the filled template."),
             Argument::required("priority", "string", "As scale:value."),
             Argument::required("domain", "string", "The routed domain."),
-            Argument::required(
-                "runtime",
-                "string",
-                "The runtime filing it \u{2014} a label-safe runtime word: lowercase `a-z0-9` \
-                 groups joined by single `-`.",
-            ),
             RUN_ID,
             Argument::optional(
                 "state",

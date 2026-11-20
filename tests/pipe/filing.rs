@@ -55,7 +55,6 @@ fn filing(body: &std::path::Path, repo: &str) -> serde_json::Value {
         "body_file": body.to_string_lossy(),
         "priority": "priority:low",
         "domain": "general",
-        "runtime": "claude",
         "run_id": "claude-abcd1234",
         "repo": repo,
     })
@@ -100,12 +99,7 @@ fn create_with_a_repo_files_in_that_repository_and_leaves_the_issue_unclaimed() 
     let answer: serde_json::Value =
         serde_json::from_str(&text).unwrap_or_else(|_| panic!("the answer is JSON: {text}"));
     assert_eq!(answer["issue"], 7, "{text}");
-    for label in [
-        "status:ready",
-        "priority:low",
-        "domain:general",
-        "analyst:claude",
-    ] {
+    for label in ["status:ready", "priority:low", "domain:general"] {
         assert!(
             answer["labels"]
                 .as_array()
@@ -113,6 +107,12 @@ fn create_with_a_repo_files_in_that_repository_and_leaves_the_issue_unclaimed() 
             "the filed issue lacks `{label}`: {text}"
         );
     }
+    assert!(
+        answer["labels"].as_array().is_some_and(|labels| labels
+            .iter()
+            .all(|found| !found.as_str().unwrap_or_default().starts_with("analyst:"))),
+        "the filed issue names its analyst: {text}"
+    );
 
     let calls = std::fs::read_to_string(&log).expect("the call log is readable");
     assert!(calls.contains("issue create"), "nothing was filed: {calls}");

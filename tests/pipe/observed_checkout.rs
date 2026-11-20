@@ -1440,7 +1440,7 @@ fn one_server_survives_the_isolation_it_created() {
             "matches": "issue view",
             "stdout": serde_json::json!({
                 "state": "OPEN",
-                "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+                "labels": [{"name": "status:in-progress"}],
                 "assignees": [{"login": "fixture"}],
                 "comments": [{
                     "id": "IC_1",
@@ -3840,7 +3840,7 @@ fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
     });
     let projected = serde_json::json!({
         "state": "OPEN",
-        "labels": [{"name": "status:in-progress"}, {"name": "dev:claude"}],
+        "labels": [{"name": "status:in-progress"}],
         "assignees": [{"login": "fixture"}],
         "comments": [],
     });

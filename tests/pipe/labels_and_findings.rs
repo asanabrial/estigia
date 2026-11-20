@@ -1819,8 +1819,9 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
     }
 }
 
-/// A claim over MCP hard-coded `--runtime`, so a non-Claude run
-/// id's own claim used to project `dev:claude` instead of its own name.
+/// A claim over MCP hard-coded `--runtime`, so a non-Claude run id's own claim
+/// used to be attributed to Claude. The runtime is the run id's own and stays in
+/// the local store; no label naming it reaches GitHub.
 ///
 /// Two calls, the same shape
 /// [`a_claim_retry_after_a_landed_write_whose_readback_failed_adopts_the_epoch`]
@@ -1864,12 +1865,8 @@ fn a_non_claude_run_id_projects_its_own_runtime_not_the_constant() {
 
     let calls = std::fs::read_to_string(&log).unwrap_or_default();
     assert!(
-        calls.contains("label create dev:codex"),
-        "a non-Claude run id's own claim did not project its own runtime: {calls}"
-    );
-    assert!(
-        !calls.contains("dev:claude"),
-        "a non-Claude run id's claim recorded the constant instead of its own runtime: {calls}"
+        !calls.contains("dev:") && !calls.contains("label create"),
+        "a claim named its runtime to GitHub: {calls}"
     );
 
     // The retry: now that the operation id is known, the second `issue view`
@@ -1900,7 +1897,7 @@ fn a_non_claude_run_id_projects_its_own_runtime_not_the_constant() {
     let held = serde_json::json!({
         "state": "OPEN",
         "assignees": [{"login": "fixture"}],
-        "labels": [{"name": "status:ready"}, {"name": "dev:codex"}],
+        "labels": [{"name": "status:ready"}],
         "comments": [{
             "id": "IC_1",
             "createdAt": "2026-08-17T16:00:00Z",

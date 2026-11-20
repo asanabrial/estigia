@@ -2027,11 +2027,7 @@ fn claim_over(context: &Context, comments: &[ownership::Comment], pr_answers: &[
     let mut answers = vec![
         crate::test_env::issue_view_answer(
             42,
-            issue_payload(
-                &timeline,
-                &["fixture"],
-                &["dev:claude", "status:in-progress"],
-            ),
+            issue_payload(&timeline, &["fixture"], &["status:in-progress"]),
         ),
         json!({"matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0}),
     ];

@@ -171,8 +171,8 @@ dash, then a dashless suffix of eight to sixteen ASCII alphanumerics ending in e
 digits. The `<runtime>-unknown` an identity-less session would mint is refused by every
 run-id-bearing tool before it reaches the tracker, so mint an identity instead. A suffix that carries
 a dash is refused unless the fragment after the last dash is itself that shape — the single residual — because the shape is split on the **last** dash: `codex-01k4-9f2a`
-projects the well-formed `codex-01k4` and would mint `dev:codex-01k4`, a permanent repository-level
-label the `gh issue list --label dev:codex` query never finds. Let the crate mint the id where a
+reads as the well-formed runtime `codex-01k4` and would attribute the run to a runtime nobody
+queries by. Let the crate mint the id where a
 hook reports the session; compose one yourself only from the runtime word and eight hex digits
 (`claude-3edc7a52`).
 
