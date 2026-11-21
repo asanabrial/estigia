@@ -6,13 +6,20 @@
 //! a last read of the head say what happened, and `docs/assisted-review.md` says
 //! what that does not prove.
 
+use std::collections::HashMap;
+use std::ops::RangeInclusive;
+
 use super::panel::{self, Verdict};
 use super::{held_by, remove_worktree, stop};
 use crate::reviewer::result::Finding;
+use crate::transport::claim::{
+    FindingLocation, changed_new_side_lines, parse_finding_location, stage,
+};
 use crate::transport::store::{PullReview, Store, store_path};
 use crate::transport::{Context, Failure, How, gh_json, run};
 
 const BODY_CEILING: usize = 60_000;
+const COMMENT_CEILING: usize = 60_000;
 
 struct Live {
     state: String,
@@ -77,13 +84,79 @@ fn line_of(finding: &Finding) -> String {
     }
 }
 
-fn body_of(findings: &[Finding], open: &[String]) -> String {
-    let mut body = String::new();
-    let mut left = 0;
+struct Comment {
+    site: FindingLocation,
+    text: String,
+}
+
+impl Comment {
+    fn json(&self) -> serde_json::Value {
+        let mut comment = serde_json::json!({
+            "path": self.site.path,
+            "line": self.site.end,
+            "side": "RIGHT",
+            "body": self.text,
+        });
+        if self.site.start != self.site.end {
+            comment["start_line"] = self.site.start.into();
+            comment["start_side"] = "RIGHT".into();
+        }
+        comment
+    }
+}
+
+fn site_in_change(
+    location: Option<&str>,
+    changed: &mut dyn FnMut(&str) -> Vec<RangeInclusive<u32>>,
+) -> Option<FindingLocation> {
+    let site = parse_finding_location(location?)?;
+    changed(&site.path)
+        .iter()
+        .any(|range| range.contains(&site.start) && range.contains(&site.end))
+        .then_some(site)
+}
+
+// A comment is what the diff can carry: a whole range inside one hunk of the right
+// side. Anything else, and anything the host would refuse for length, stays in the
+// body, because one refused comment refuses the whole review.
+fn place<'a>(
+    context: &Context,
+    held: &PullReview,
+    findings: &'a [Finding],
+    open: &[String],
+) -> (Vec<Comment>, Vec<&'a Finding>) {
+    let mut seen: HashMap<String, Vec<RangeInclusive<u32>>> = HashMap::new();
+    let mut changed = |path: &str| {
+        seen.entry(path.to_owned())
+            .or_insert_with(|| {
+                changed_new_side_lines(context, &held.merge_base, &held.head, path)
+                    .map(|(_, ranges)| ranges)
+                    .unwrap_or_default()
+            })
+            .clone()
+    };
+    let mut comments = Vec::new();
+    let mut body = Vec::new();
     let shown = findings
         .iter()
         .filter(|finding| open.contains(&finding.id) || finding.class != "severe");
     for finding in shown {
+        let text = format!("{} {}", finding.evidence, finding.impact);
+        match site_in_change(finding.location.as_deref(), &mut changed) {
+            Some(site) if text.len() <= COMMENT_CEILING => comments.push(Comment { site, text }),
+            _ => body.push(finding),
+        }
+    }
+    (comments, body)
+}
+
+fn body_of(findings: &[&Finding], inline: usize) -> String {
+    let mut body = String::new();
+    let mut left = 0;
+    if inline > 0 {
+        body.push_str(&format!("{inline} posted inline on the diff.\n\n"));
+    }
+    for finding in findings {
         let line = line_of(finding);
         if body.len() + line.len() > BODY_CEILING {
             left += 1;
@@ -130,25 +203,20 @@ fn send(
     held: &PullReview,
     event: &str,
     body: &str,
+    comments: &[Comment],
 ) -> Result<serde_json::Value, Failure> {
-    let commit = format!("commit_id={}", held.head);
-    let event_field = format!("event={event}");
-    let body_field = format!("body={body}");
+    let mut request = serde_json::json!({
+        "commit_id": held.head,
+        "event": event,
+        "body": body,
+    });
+    if !comments.is_empty() {
+        request["comments"] = comments.iter().map(Comment::json).collect();
+    }
+    let staged = stage(&request.to_string(), &format!("pull-review-{}", held.pr))?;
     let path = reviews_path(held.pr);
     let output = run(
-        &[
-            "gh",
-            "api",
-            "--method",
-            "POST",
-            &path,
-            "-f",
-            &commit,
-            "-f",
-            &event_field,
-            "-f",
-            &body_field,
-        ],
+        &["gh", "api", "--method", "POST", &path, "--input", &staged],
         Some(&context.repo_dir),
         How::write(),
     )?;
@@ -173,6 +241,7 @@ fn read_back(
     held: &PullReview,
     event: &str,
     sent: &serde_json::Value,
+    comments: &[Comment],
 ) -> Result<serde_json::Value, Failure> {
     let id = sent["id"]
         .as_u64()
@@ -196,7 +265,51 @@ fn read_back(
             ),
         ));
     }
+    confirm_comments(context, held, id, comments)?;
     Ok(read)
+}
+
+fn confirm_comments(
+    context: &Context,
+    held: &PullReview,
+    id: u64,
+    comments: &[Comment],
+) -> Result<(), Failure> {
+    if comments.is_empty() {
+        return Ok(());
+    }
+    let path = format!("{}/{id}/comments", reviews_path(held.pr));
+    let listed = gh_json(
+        &["api", "--paginate", "--slurp", &path],
+        Some(&context.repo_dir),
+    )
+    .map_err(|failure| unconfirmed(held, failure.detail()))?
+    .ok_or_else(|| unconfirmed(held, "the comments read back as nothing".to_owned()))?;
+    let mut found: Vec<&str> = listed
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|page| page.as_array().into_iter().flatten())
+        .map(|comment| comment["path"].as_str().unwrap_or_default())
+        .collect();
+    let mut wanted: Vec<&str> = comments
+        .iter()
+        .map(|comment| comment.site.path.as_str())
+        .collect();
+    found.sort_unstable();
+    wanted.sort_unstable();
+    if found != wanted {
+        return Err(unconfirmed(
+            held,
+            format!(
+                "the review reads back {} inline comments on {found:?}, and {} on {wanted:?} \
+                 were sent",
+                found.len(),
+                wanted.len()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// `pr-review-submit`: sends the computed verdict, bound to the reviewed head.
@@ -237,6 +350,11 @@ pub fn submit(context: &Context, run_id: &str) -> Result<serde_json::Value, Fail
         Verdict::Approved => "APPROVE",
         Verdict::ChangesRequested { .. } => "REQUEST_CHANGES",
     };
+    let open = match &reading.verdict {
+        Verdict::ChangesRequested { open } => open.as_slice(),
+        _ => &[],
+    };
+    let (comments, unanchored) = place(context, &held, &reading.findings, open);
     // Looked for before the pull request is judged: a review an earlier call may
     // have landed is answered for, whatever has happened to the pull request since.
     let found =
@@ -278,16 +396,12 @@ pub fn submit(context: &Context, run_id: &str) -> Result<serde_json::Value, Fail
                     ),
                 );
             }
-            let open = match &reading.verdict {
-                Verdict::ChangesRequested { open } => open.as_slice(),
-                _ => &[],
-            };
-            let body = body_of(&reading.findings, open);
-            send(context, &held, event, &body)
+            let body = body_of(&unanchored, comments.len());
+            send(context, &held, event, &body, &comments)
                 .map_err(|failure| unconfirmed(&held, failure.detail()))?
         }
     };
-    let confirmed = read_back(context, &held, event, &sent)?;
+    let confirmed = read_back(context, &held, event, &sent, &comments)?;
     let head_after = read_live(context, held.pr).map(|after| after.head).ok();
     let checkout = remove_worktree(context, &held.worktree);
     store.drop_pull_review(run_id)?;

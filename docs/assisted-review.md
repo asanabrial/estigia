@@ -128,11 +128,19 @@ no issue's job matches, the admitted answer is collected as a detached reviewer'
 answer never comes is abandoned at its deadline with nothing killed.
 
 `pr_review` `submit` is the one road to GitHub. It sends `approved` as an approval and
-`changes-requested` as a request whose body carries the findings (location, evidence and impact, with
-no finding id, class or tool sentence), which otherwise stay local; an
-`escalated` verdict sends nothing. It reads the head again, posts the review with the reviewed
-`commit_id` and reports `submitted: true` only once the review reads back at that commit in the state
-sent. A moved head answers `head-moved`, a changed base branch `pull-review-retargeted` and a closed
+`changes-requested` as a request carrying the findings (evidence and impact, with no finding id, class
+or tool sentence), which otherwise stay local; an `escalated` verdict sends nothing. A finding whose
+whole location lies inside one hunk of the right side of the diff from the merge base to the head
+goes as an inline comment on that line or range; every other finding (a path the diff does not carry,
+a range that leaves its hunk or spans two, a text over the comment ceiling) stays in the body as
+`` - `location`: evidence impact ``, under a count of those posted inline. Which findings are
+shown is unchanged: open severe ones and every other class. It reads the head again and posts the
+review with the reviewed `commit_id`, the body and the comments in **one** create-review call, sent as
+a JSON document through `gh api --input`, never one call per comment; an approval with
+nothing to say sends no `comments`. It reports `submitted: true` only once the review reads back at that
+commit in the state sent and, when comments were sent, `…/reviews/{id}/comments` holds as many comments
+on the same paths; any other reading is `pull-review-submission-unconfirmed`
+([what the readback does not compare](honesty-review-panels.md)). A moved head answers `head-moved`, a changed base branch `pull-review-retargeted` and a closed
 pull request `pull-review-not-open`, each with `submitted: false`, the worktree removed and the claim
 put down. A lost answer is `pull-review-submission-unconfirmed` and keeps the claim. A retry looks for
 this account's review of the reviewed commit before it judges the pull request again — the body carries

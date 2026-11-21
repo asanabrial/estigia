@@ -218,7 +218,60 @@ fn read_back(id: u64, commit: &str, state: &str) -> serde_json::Value {
     })
 }
 
+fn comments_on(id: u64, paths: &[&str]) -> serde_json::Value {
+    let page: Vec<serde_json::Value> = paths
+        .iter()
+        .map(|path| serde_json::json!({ "path": path, "body": "text" }))
+        .collect();
+    serde_json::json!({
+        "matches": format!("reviews/{id}/comments"),
+        "stdout": serde_json::json!([page]).to_string(),
+        "status": 0,
+    })
+}
+
+fn request(rig: &Rig) -> serde_json::Value {
+    let written = log(rig);
+    let line = written
+        .lines()
+        .find(|line| line.contains("--method POST"))
+        .expect("a review was posted");
+    let (_, rest) = line.split_once("--input ").expect("sent with --input");
+    let path = rest.split('\t').next().unwrap_or_default().trim();
+    let document = std::fs::read_to_string(path).expect("the staged request");
+    serde_json::from_str(&document).expect("a JSON request")
+}
+
 const CLEAN: &str = r#"{"findings":[]}"#;
+
+fn mixed_answer() -> String {
+    serde_json::json!({ "findings": [
+        {
+            "id": "wrong",
+            "class": "severe",
+            "evidence": "change.txt:1 does the wrong thing",
+            "impact": "the wrong thing happens",
+            "location": "change.txt:1",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+        },
+        {
+            "id": "elsewhere",
+            "class": "warning",
+            "evidence": "readme.txt:1 is stale",
+            "impact": "readers are misled",
+            "location": "readme.txt:1",
+        },
+        {
+            "id": "spans",
+            "class": "warning",
+            "evidence": "change.txt:1-2 spans past the hunk",
+            "impact": "the range leaves the change",
+            "location": "change.txt:1-2",
+        },
+    ]})
+    .to_string()
+}
 
 fn severe_answer() -> String {
     serde_json::json!({ "findings": [{
@@ -262,12 +315,9 @@ fn a_clean_review_approves_carrying_the_reviewed_commit_and_reports_only_the_rea
     assert_eq!(answer["event"], "APPROVE");
     assert_eq!(answer["commit_id"], rig.head.as_str());
     assert_eq!(answer["state"], "APPROVED");
-    let written = log(&rig);
-    assert!(
-        written.contains(&format!("commit_id={}", rig.head)),
-        "{written}"
-    );
-    assert!(written.contains("event=APPROVE"), "{written}");
+    let sent = request(&rig);
+    assert_eq!(sent["commit_id"], rig.head.as_str());
+    assert_eq!(sent["event"], "APPROVE");
     gone(&rig, &worktree);
 }
 
@@ -289,6 +339,7 @@ fn a_severe_finding_requests_changes_and_the_body_carries_it() {
         &rig,
         &[
             view(&rig, &rig.head, "OPEN", "main"),
+            comments_on(41, &["change.txt"]),
             no_reviews(),
             posted(41),
             read_back(41, &rig.head, "CHANGES_REQUESTED"),
@@ -297,14 +348,11 @@ fn a_severe_finding_requests_changes_and_the_body_carries_it() {
     )
     .expect("the submission");
     assert_eq!(answer["event"], "REQUEST_CHANGES");
-    let written = log(&rig);
-    assert!(written.contains("event=REQUEST_CHANGES"), "{written}");
-    assert!(written.contains("does the wrong thing"), "{written}");
-    let body = written
-        .lines()
-        .find(|line| line.contains("--method POST"))
-        .and_then(|line| line.split_once("-f body=").map(|(_, body)| body))
-        .expect("the review was posted with a body");
+    let sent = request(&rig);
+    assert_eq!(sent["event"], "REQUEST_CHANGES");
+    let text = sent.to_string();
+    assert!(text.contains("does the wrong thing"), "{text}");
+    let body = sent["body"].as_str().expect("a body");
     for trace in ["<!--", "blind review", "`wrong`", "**severe**", &rig.head] {
         assert!(
             !body.contains(trace),
@@ -312,6 +360,96 @@ fn a_severe_finding_requests_changes_and_the_body_carries_it() {
         );
     }
     gone(&rig, &worktree);
+}
+
+#[test]
+fn a_finding_inside_a_hunk_is_an_inline_comment_and_the_rest_stay_in_the_body() {
+    let rig = rig();
+    let worktree = reviewed(&rig, &mixed_answer());
+    let answer = gh(
+        &rig,
+        &[
+            view(&rig, &rig.head, "OPEN", "main"),
+            comments_on(41, &["change.txt"]),
+            no_reviews(),
+            posted(41),
+            read_back(41, &rig.head, "CHANGES_REQUESTED"),
+        ],
+        || submit(&rig.context, RUN),
+    )
+    .expect("the submission");
+    assert_eq!(answer["submitted"], true, "{answer}");
+    let sent = request(&rig);
+    assert_eq!(sent["commit_id"], rig.head.as_str());
+    assert_eq!(sent["event"], "REQUEST_CHANGES");
+    assert_eq!(
+        sent["comments"],
+        serde_json::json!([{
+            "path": "change.txt",
+            "line": 1,
+            "side": "RIGHT",
+            "body": "change.txt:1 does the wrong thing the wrong thing happens",
+        }])
+    );
+    let body = sent["body"].as_str().expect("a body");
+    assert!(!body.contains("does the wrong thing"), "{body}");
+    assert!(body.contains("readme.txt:1"), "{body}");
+    assert!(body.contains("change.txt:1-2"), "{body}");
+    assert!(body.contains("1 posted inline"), "{body}");
+    gone(&rig, &worktree);
+}
+
+#[test]
+fn a_review_whose_comments_did_not_land_is_unconfirmed() {
+    for listed in [
+        &[][..],
+        &["readme.txt"][..],
+        &["change.txt", "change.txt"][..],
+    ] {
+        let rig = rig();
+        let worktree = reviewed(&rig, &mixed_answer());
+        let failure = gh(
+            &rig,
+            &[
+                view(&rig, &rig.head, "OPEN", "main"),
+                comments_on(41, listed),
+                no_reviews(),
+                posted(41),
+                read_back(41, &rig.head, "CHANGES_REQUESTED"),
+            ],
+            || submit(&rig.context, RUN),
+        )
+        .expect_err("not confirmed");
+        assert!(
+            failure
+                .envelope()
+                .to_string()
+                .contains("pull-review-submission-unconfirmed"),
+            "{}",
+            failure.envelope()
+        );
+        assert!(worktree.is_dir(), "the claim was put down");
+    }
+}
+
+#[test]
+fn an_approval_with_no_finding_sends_no_comments() {
+    let rig = rig();
+    reviewed(&rig, CLEAN);
+    gh(
+        &rig,
+        &[
+            view(&rig, &rig.head, "OPEN", "main"),
+            no_reviews(),
+            posted(41),
+            read_back(41, &rig.head, "APPROVED"),
+        ],
+        || submit(&rig.context, RUN),
+    )
+    .expect("the submission");
+    let sent = request(&rig);
+    assert!(sent.get("comments").is_none(), "{sent}");
+    assert_eq!(sent["event"], "APPROVE");
 }
 
 #[test]
@@ -615,4 +753,35 @@ fn a_change_over_the_ceiling_is_never_submitted_clean() {
     assert_eq!(answer["reason"], "review-payload-too-large");
     assert!(!log(&rig).contains("--method POST"));
     gone(&rig, Path::new(held["worktree"].as_str().expect("a path")));
+}
+
+#[test]
+fn only_a_whole_range_inside_one_hunk_is_a_site() {
+    let mut changed = |_: &str| vec![3..=5, 9..=9];
+    let inside =
+        |location: &str, changed: &mut dyn FnMut(&str) -> Vec<std::ops::RangeInclusive<u32>>| {
+            super::site_in_change(Some(location), changed).is_some()
+        };
+    assert!(inside("a.rs:4", &mut changed));
+    assert!(inside("a.rs:3-5", &mut changed));
+    assert!(!inside("a.rs:5-6", &mut changed), "partly inside");
+    assert!(!inside("a.rs:5-9", &mut changed), "across two hunks");
+    assert!(!inside("a.rs", &mut changed), "no line");
+    assert!(super::site_in_change(None, &mut changed).is_none());
+}
+
+#[test]
+fn a_range_comment_names_both_ends_on_the_right_side() {
+    let site = crate::transport::claim::parse_finding_location("a.rs:3-5").expect("a range");
+    let comment = super::Comment {
+        site,
+        text: "t".to_owned(),
+    };
+    assert_eq!(
+        comment.json(),
+        serde_json::json!({
+            "path": "a.rs", "line": 5, "start_line": 3,
+            "side": "RIGHT", "start_side": "RIGHT", "body": "t",
+        })
+    );
 }
