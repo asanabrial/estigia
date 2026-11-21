@@ -16,6 +16,7 @@ use crate::transport::claim::{
     FindingLocation, changed_new_side_lines, parse_finding_location, stage,
 };
 use crate::transport::store::{PullReview, Store, store_path};
+use crate::transport::voice::{self, Renderer};
 use crate::transport::{Context, Failure, How, gh_json, run};
 
 const BODY_CEILING: usize = 60_000;
@@ -170,6 +171,40 @@ fn body_of(findings: &[&Finding], inline: usize) -> String {
     body
 }
 
+fn voiced(
+    context: &Context,
+    renderer: &Renderer,
+    body: String,
+    comments: &[Comment],
+) -> Result<(String, Vec<Comment>), Failure> {
+    let mut texts: Vec<String> = comments
+        .iter()
+        .map(|comment| comment.text.clone())
+        .collect();
+    if !body.is_empty() {
+        texts.push(body.clone());
+    }
+    let mut rendered = voice::render(context, renderer, &texts)?;
+    let body = if body.is_empty() {
+        body
+    } else {
+        rendered.pop().unwrap_or_default()
+    };
+    let comments = comments
+        .iter()
+        .zip(rendered)
+        .map(|(comment, text)| Comment {
+            site: FindingLocation {
+                path: comment.site.path.clone(),
+                start: comment.site.start,
+                end: comment.site.end,
+            },
+            text,
+        })
+        .collect();
+    Ok((body, comments))
+}
+
 fn reviews_path(pr: u64) -> String {
     format!("repos/{{owner}}/{{repo}}/pulls/{pr}/reviews")
 }
@@ -314,6 +349,14 @@ fn confirm_comments(
 
 /// `pr-review-submit`: sends the computed verdict, bound to the reviewed head.
 pub fn submit(context: &Context, run_id: &str) -> Result<serde_json::Value, Failure> {
+    submit_with(context, run_id, &Renderer::detached())
+}
+
+pub(crate) fn submit_with(
+    context: &Context,
+    run_id: &str,
+    renderer: &Renderer,
+) -> Result<serde_json::Value, Failure> {
     let store = Store::open(&store_path()?)?;
     let held = held_by(&store, run_id)?;
     if panel::payload_exceeds_ceiling(context, &held)? {
@@ -396,8 +439,13 @@ pub fn submit(context: &Context, run_id: &str) -> Result<serde_json::Value, Fail
                     ),
                 );
             }
-            let body = body_of(&unanchored, comments.len());
-            send(context, &held, event, &body, &comments)
+            let (body, voiced) = voiced(
+                context,
+                renderer,
+                body_of(&unanchored, comments.len()),
+                &comments,
+            )?;
+            send(context, &held, event, &body, &voiced)
                 .map_err(|failure| unconfirmed(&held, failure.detail()))?
         }
     };

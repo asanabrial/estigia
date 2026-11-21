@@ -594,3 +594,30 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   unreadable diff degrades to the body-only review without saying so. `site_in_change` keeps a range
   that spans two hunks, or one only partly inside a hunk, in the body, which loses the inline anchor
   the author could have had.
+
+- **Under a `Review voice` the text posted is not the text the panel answered, and only its shape is
+  checked.** With the row naming a voice, `pr_review` `submit` posts each inline comment and the
+  review body, and `review_thread` posts its reply, as a detached tool-less job reworded them
+  (`src/transport/voice.rs`), not as the lenses or the author wrote them. What is checked about the
+  answer, by `a_named_voice_rewrites_each_comment_and_the_body_and_moves_nothing_else` and
+  `an_answer_that_is_not_one_text_per_input_posts_nothing`: it is one JSON object with a `texts` list and
+  no other field, the list holds exactly as many texts as were given, and each is non-blank and at most
+  60,000 bytes, which is the ceiling `submit` already keeps a comment under. What is not: that a
+  reworded text still says what the written one did, that an identifier, path, code span, number
+  or quotation survived byte for byte, that no finding id, class or label came back, and that the language
+  and length are the voice's. Those are in the job's fixed instructions and nowhere compared, so a text
+  that drops a caveat, softens a finding or invents a line reference is posted as long as it is the right
+  count. The texts handed to the job come from findings a reviewer wrote after reading the diff under
+  review, and the job is told they are data; it has no tools, so what a hostile diff could do through it
+  is change the words posted under this account, not run anything. Nothing reads the voice file but
+  that job, and nothing reviews the file: it is the operator's.
+  Also not measured: what a rewording job costs, which no review budget counts; and whether
+  the CLI that runs it honours the tool-less flags on every build, which is the claim
+  [the isolation entry](#review-models-targets-and-panels) already leaves unmeasured for the panel.
+  A rendering is kept by a digest of the voice file's bytes and the text, so a retry posts the
+  words already used, but an edited voice file is a new key: a retry after an edit that finds no review of
+  the commit posts a different wording than the first attempt did. Because `submit` reads the repository's
+  own file strictly to learn the voice, a repository file with any row it cannot read stops `submit`
+  and `review_thread` as `review-voice-row-unreadable` even when no voice is named; only a
+  file that does not exist reads as no voice. The inline-comment read-back above still compares count and
+  path, never text, so it does not see the rewording either.

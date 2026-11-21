@@ -191,6 +191,21 @@ Five invariants, and the tests are named after them:
    and losing it is the point of the removal. What it holds and
    what decides from it is in [`honesty.md`](honesty.md).
 
+   `~/.estigia/voices/<name>.md` is the operator's own file and is only ever read: no Estigia command
+   creates, edits or removes one, and `setup`, `uninstall` and `config forget` leave the directory
+   alone. A repository names one with its `Review voice` row ([configuration](configuration.md)), and
+   the name is a word of lowercase letters, digits and `-`, never a path, so the file cannot be one
+   inside a checkout. It is read, at most 16 KiB, when `pr_review` `submit` or `review_thread` is about
+   to post, and its bytes are part of the key under which the store keeps what a rewording job
+   answered. The directory is the one that holds `state.db`, wherever that is.
+
+   The same store holds the table `rendered_texts` (schema 28): the key, the text a rewording job
+   answered for it and when. The key is a digest of the voice file's bytes and the one text it was asked to
+   reword, so a retried `submit` or `review_thread` finds the words it posted before and runs no second
+   job, and another voice file, or the same file edited, is another key. The first text kept for a key is
+   the one that stays. Each write drops rows older than ninety days. The rows are for
+   the retry only: they are not a record of what was posted, which is on GitHub.
+
    `~/.estigia/jobs/<id>/` is written at run time and never by `setup`. A review job's
    directory holds the manifest, the prompt, the runner's lock and logs, its `result.json`, and a
    `usage.json` carrying the reviewer CLI's own counters when it reported any. A check job, started
@@ -1635,12 +1650,13 @@ ownership checks.
 
 | Entry | Holds | Taken by `uninstall --all` |
 |---|---|---|
-| `state.db`, `-wal`, `-shm` | the workflow store: claims, states and the history of each state change, receipts, findings, verdicts, spend, tasks, the decision and role history, the session registry and the mailbox | yes, with the last agent, when no workspace or root record still reads it |
+| `state.db`, `-wal`, `-shm` | the workflow store: claims, states and the history of each state change, receipts, findings, verdicts, spend, tasks, the decision and role history, the session registry, the mailbox and the texts a `Review voice` job reworded | yes, with the last agent, when no workspace or root record still reads it |
 | `runs/`, `stop-after/`, stand-down files | run pointers and requests, live run state | yes, with the last agent |
 | `workspaces/`, `roots/` | which workspaces and configuration roots hold an install | yes, as the last adapter in each leaves |
 | `screen`, `repositories/` | the setup screen's language, the list of checkouts | no: the person's, not any agent's |
 | `lifecycle/` | machine-wide binary provenance records, see [`lifecycle.md`](lifecycle.md) | no |
-| `jobs/` | one directory per review job and per check job: manifest, prompt, lock, logs, `result.json`, `usage.json` | no |
+| `jobs/` | one directory per review job and per check job: manifest, prompt, lock, logs, `result.json`, `usage.json`; a rewording job's directory is removed when the call that started it ends | no |
+| `voices/` | the operator's voice files, `<name>.md`, which a repository's `Review voice` row names; read, never written by Estigia | no: the person's |
 | `snapshots/` | up to three daily copies of the store, for a person to restore by hand | yes, with the store, when it is taken |
 | `watched/` | `git status` records an earlier build wrote beside the state root; nothing reads, writes or removes them now, so a person may delete the directory | no |
 

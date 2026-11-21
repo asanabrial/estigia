@@ -178,11 +178,17 @@ fn main() {
         eprintln!("stand-in gh: a body bound for GitHub carries a hidden HTML comment: {line}");
         std::process::exit(97);
     }
+    let staged_body = arguments
+        .iter()
+        .position(|argument| argument == "--body-file")
+        .and_then(|at| arguments.get(at + 1).map(String::as_str))
+        .or_else(|| {
+            arguments
+                .iter()
+                .find_map(|argument| argument.strip_prefix("body=@"))
+        });
     if let Ok(path) = std::env::var("ESTIGIA_FAKE_BODY_LOG")
-        && let Some(at) = arguments
-            .iter()
-            .position(|argument| argument == "--body-file")
-        && let Some(staged) = arguments.get(at + 1)
+        && let Some(staged) = staged_body
         && let Ok(body) = std::fs::read_to_string(staged)
     {
         use std::io::Write;

@@ -358,4 +358,11 @@ pub(super) const MIGRATIONS: &[&str] = &[
         recorded_at INTEGER NOT NULL
     );
     ",
+    "
+    CREATE TABLE rendered_texts (
+        key TEXT PRIMARY KEY,
+        text TEXT NOT NULL,
+        at INTEGER NOT NULL
+    );
+    ",
 ];

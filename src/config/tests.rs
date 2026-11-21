@@ -122,6 +122,7 @@ fn every_variant() -> Vec<Setting> {
             | Setting::ExternalReviewers
             | Setting::CorrectionsAfterReady
             | Setting::MergeBy
+            | Setting::ReviewVoice
             | Setting::LoopPlugin
             | Setting::GoalLoopPlugin => setting,
         }
@@ -201,6 +202,7 @@ fn every_setting_is_in_the_table() {
         Setting::ExternalReviewers,
         Setting::CorrectionsAfterReady,
         Setting::MergeBy,
+        Setting::ReviewVoice,
         Setting::LoopPlugin,
         Setting::GoalLoopPlugin,
     ];
@@ -378,6 +380,7 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
             | Setting::Notifications
             | Setting::DeliveryPreset
             | Setting::StateNames
+            | Setting::ReviewVoice
             | Setting::ExternalReviewers => None,
         };
 
@@ -656,6 +659,7 @@ fn a_rendered_table_reads_back_identically() {
         publication_lanes: Some(vec!["ci.yml".to_owned()]),
         publication_lanes_exclude: vec!["release.yml".to_owned()],
         issue_requirement: crate::config::IssueRequirement::Off,
+        review_voice: crate::config::ReviewVoice::None,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: crate::config::Workflow::Autonomous,
         state_names: Vec::new(),
@@ -2803,4 +2807,36 @@ fn a_repository_file_with_the_current_label_and_value_reads_as_on() {
         requirement_in_a_repository_file("| Issue required | off |"),
         IssueRequirement::Off
     );
+}
+
+#[test]
+fn a_review_voice_row_in_the_contract_or_an_agent_file_is_read_by_nobody() {
+    let row = "| Review voice | house |\n";
+    assert_eq!(
+        Config::read(row, None).expect("reads").review_voice,
+        ReviewVoice::None
+    );
+    assert_eq!(
+        Config::read("", Some(row)).expect("reads").review_voice,
+        ReviewVoice::None
+    );
+    let (agent, _) = Config::read_scope_over(&Config::default(), row, Scope::Agent)
+        .expect("an agent file reads");
+    assert_eq!(agent.review_voice, ReviewVoice::None);
+}
+
+#[test]
+fn the_review_voice_grammar_is_none_or_lowercase_letters_digits_and_hyphens() {
+    assert_eq!(ReviewVoice::parse("none"), Some(ReviewVoice::None));
+    assert_eq!(
+        ReviewVoice::parse(" house-2 "),
+        Some(ReviewVoice::Named("house-2".to_owned()))
+    );
+    for refused in [
+        "", "House", "a/b", "../a", "a.md", "a b", "a_b", "NONE", "ñ",
+    ] {
+        assert_eq!(ReviewVoice::parse(refused), None, "{refused:?}");
+    }
+    assert_eq!(Setting::ReviewVoice.scope(), Scope::Repository);
+    assert_eq!(Setting::ReviewVoice.default_value(), "none");
 }

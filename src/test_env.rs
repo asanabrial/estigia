@@ -487,6 +487,26 @@ pub(crate) fn with_body_log<T>(
     )
 }
 
+/// [`with_body_log`] and [`with_counting_gh`] at once, for a write whose staged
+/// body is asserted on and whose later reads answer by call number.
+pub(crate) fn with_counting_body_log<T>(
+    directory: &Path,
+    answers: &str,
+    counts: &Path,
+    body_log: &Path,
+    body: impl FnOnce() -> T,
+) -> T {
+    with_scripted_gh_window(
+        directory,
+        answers,
+        &[
+            ("ESTIGIA_FAKE_COUNT", counts.as_os_str().to_owned()),
+            ("ESTIGIA_FAKE_BODY_LOG", body_log.as_os_str().to_owned()),
+        ],
+        body,
+    )
+}
+
 /// [`with_scripted_gh`] with `ESTIGIA_FAKE_ENV_LOG` pointed at `env_log`, so
 /// the `GH_REPO`, `GH_HOST` and `GH_TOKEN` one call's environment held are
 /// readable afterwards.

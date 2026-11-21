@@ -24,6 +24,7 @@ mod needs_person;
 mod outbox;
 mod pull_reviews;
 mod records;
+mod rendered;
 mod schema;
 mod sessions;
 mod snapshot;

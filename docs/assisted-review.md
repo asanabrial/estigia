@@ -33,8 +33,11 @@ draft. This loop never overrides a configured refusal or grants merge authority.
 5. Call `review_thread` with `thread_id`, the new `expected_head` and a `body_file`. To resolve,
    also supply `resolve: true` and the full `fix_commit` SHA. The fix must follow the thread's
    original commit and be an ancestor of the published head. A local-only fix is refused before
-   either reply or resolution. The reply is posted exactly as written, nothing appended, and it must
-   read back before resolving.
+   either reply or resolution. The reply is posted exactly as written, nothing appended, unless the
+   repository names a `Review voice`: then the text is reworded in that voice before anything is sent
+   ([a voice](#a-review-voice)), the reworded text is the one that must read back, and a voice that
+   cannot be applied stops the reply with nothing posted. Either way the reply must read back before
+   resolving.
 6. Repeat from step 2 on every new head. An approval for an older commit does not complete a
    review stage. Keep human merge authority as configured.
 7. The pull request is not reported finished until a reading of its exact head has CI `passed`,
@@ -60,7 +63,12 @@ exist. A repository's own hook may still refuse publication.
 and checked-out branch, requires one open PR, verifies
 the thread belongs to it, and checks the expected head before writes and during readback. Replies
 carry nothing but their text, and retries reuse an already confirmed identical reply by the current
-account, so the same text posted twice in one thread by one account is one reply.
+account, so the same text posted twice in one thread by one account is one reply. Under a
+`Review voice` the text is the reworded one, and the comparison is against the words kept from the
+first attempt, so a retry compares with, and posts, the same words and is still one reply. The
+rewording is not one of these checks: they read the head, the thread and the fix commit as they did,
+and nothing here verifies that the reworded reply still says what the written one did
+([what is and is not checked](honesty-review-panels.md)).
 A failed write/readback reports an unknown outcome, distinguishing a confirmed reply from an
 unconfirmed resolution. Do not report that the whole operation completed or retry blindly.
 
@@ -129,7 +137,8 @@ answer never comes is abandoned at its deadline with nothing killed.
 
 `pr_review` `submit` is the one road to GitHub. It sends `approved` as an approval and
 `changes-requested` as a request carrying the findings (evidence and impact, with no finding id, class
-or tool sentence), which otherwise stay local; an `escalated` verdict sends nothing. A finding whose
+or tool sentence), which otherwise stay local, in the words the reviewers wrote unless the repository
+names a [`Review voice`](#a-review-voice); an `escalated` verdict sends nothing. A finding whose
 whole location lies inside one hunk of the right side of the diff from the merge base to the head
 goes as an inline comment on that line or range; every other finding (a path the diff does not carry,
 a range that leaves its hunk or spans two, a text over the comment ceiling) stays in the body as
@@ -151,6 +160,44 @@ GitHub has no conditional write here, so a push between the last read and the po
 prevented, the same limit as the thread mutations above. A last read of the head reports
 `head_moved_during_submission`. A review attached to the reviewed commit is still that review, and
 what branch protection does with it is the host's.
+
+### A review voice
+
+A repository may name a voice with its `Review voice` row ([configuration](configuration.md)). Without
+one, or with `none`, nothing below applies: no file is read, no job runs, and the request is byte for
+byte the one `submit` and `review_thread` sent before the row existed.
+
+With one, the two roads that post prose reword it in one step first:
+
+- **What is reworded.** For `submit`, the text of every inline comment and, when it has one, the review
+  body. For `review_thread`, the reply. Not the event, the commit, the path, line or side of a
+  comment, how many comments there are, or which findings are inline: `place` decides those before
+  the voice is asked, and the voice is handed none of them.
+- **How.** One detached, tool-less reviewer job, the kind the panel launches, handed the voice file
+  (`voices/<name>.md` beside the local store, at most 16 KiB) and the texts. Its fixed instructions,
+  which the voice file does not write and cannot loosen, are: change wording only; keep
+  identifiers, paths, code, numbers and quoted text byte for byte; add no finding id, class, label or
+  sentence about tools; answer one text per input, in order, as JSON. It runs on the installed
+  `claude` or `codex` CLI the detached runner selects, never the host relay, so a host with neither
+  stops the post as `review-voice-render-failed`. The lenses and the refuter never see the voice,
+  so `settle_severe` still decides on evidence written plainly.
+- **When.** `submit` asks after it has found no review of this commit already sent and has read the
+  pull request as open, at the reviewed head and base, and before it posts, so a review that already
+  landed is answered for without a voice being asked. `review_thread` asks after it has read the reply
+  file and before it reads the pull request, so the checks that follow read the head and the thread
+  as late as they did.
+- **Remembered.** The rendered text is kept in the local store under a digest of the voice file's bytes
+  and the text it was asked to reword ([what is kept](what-it-writes.md)). A retry looks the key up
+  before launching a job, so it posts the same words and runs no second job; `already_sent` still
+  decides first. Editing the voice file is a new key.
+- **Fails closed.** A repository file that cannot be read, a named voice whose file is missing,
+  unreadable or over the cap, a job that fails, ends without an answer or runs past its deadline, and an
+  answer that is not one non-blank text per text given each stop the post with a refusal naming the
+  cause ([refusals](../skill/bindings/github/refusals.md)). The text as written is not posted in their
+  place, the claim is kept, and `pr_review` `release` stays available.
+
+Any later road that replies to a thread outside an assisted claim applies the voice the same way, by the
+same step, under the same row.
 
 ## Regression evidence
 

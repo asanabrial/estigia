@@ -381,6 +381,41 @@ impl IssueRequirement {
     }
 }
 
+/// The voice the text a review posts is worded in.
+///
+/// Repository-only: it is read from the repository's own file and nowhere else,
+/// and it names a file by a word, never by a path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReviewVoice {
+    /// The default: the text goes as it was written.
+    None,
+    /// The name of a file under `voices/` in the state directory.
+    Named(String),
+}
+
+impl ReviewVoice {
+    /// `none`, or a name of lowercase letters, digits and `-`.
+    pub fn parse(value: &str) -> Option<Self> {
+        let value = value.trim();
+        if value == "none" {
+            return Some(Self::None);
+        }
+        let name = !value.is_empty()
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+        name.then(|| Self::Named(value.to_owned()))
+    }
+
+    /// The value as written in the table.
+    pub fn as_value(&self) -> String {
+        match self {
+            Self::None => "none".to_owned(),
+            Self::Named(name) => name.clone(),
+        }
+    }
+}
+
 /// Who witnesses a claim in this repository.
 ///
 /// Repository-only: it is read from the repository's own file and nowhere else.
@@ -1025,6 +1060,8 @@ pub struct Config {
     pub decision_mode: DecisionMode,
     /// What a run holding no claim may write in a checkout whose tracker can name an issue.
     pub issue_requirement: IssueRequirement,
+    /// The voice a review's posted text is worded in.
+    pub review_voice: ReviewVoice,
     /// Who witnesses a claim in this repository.
     pub workflow: Workflow,
     /// `State names`: Estigia's states mapped onto the tracker's own.
@@ -1150,6 +1187,7 @@ impl Default for Config {
             publication_lanes_exclude: Vec::new(),
             decision_mode: DecisionMode::Ask,
             issue_requirement: IssueRequirement::Off,
+            review_voice: ReviewVoice::None,
             workflow: Workflow::Autonomous,
             state_names: Vec::new(),
             self_review: None,

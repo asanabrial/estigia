@@ -2,6 +2,7 @@ use super::*;
 use crate::config::{Config, Setting};
 
 mod no_ci;
+mod voice;
 
 fn stages(written: &str) -> Vec<ReviewStage> {
     let mut config = Config::default();
@@ -408,18 +409,22 @@ impl ThreadRig {
     }
 
     fn pr(&self, reply: bool, resolved: bool) -> serde_json::Value {
+        self.pr_replied(reply.then_some("Fixed the concern."), resolved)
+    }
+
+    fn pr_replied(&self, reply: Option<&str>, resolved: bool) -> serde_json::Value {
         let mut pr = Pr::open().thread("human", resolved).json();
         pr["headRefOid"] = serde_json::json!(self.fix);
         pr["commits"]["nodes"][0]["commit"]["oid"] = serde_json::json!(self.fix);
         let t = &mut pr["reviewThreads"]["nodes"][0];
         t["id"] = serde_json::json!("thread-1");
         t["comments"]["nodes"][0]["originalCommit"] = serde_json::json!({"oid":self.base});
-        if reply {
+        if let Some(reply) = reply {
             t["comments"]["nodes"]
                 .as_array_mut()
                 .unwrap()
                 .push(serde_json::json!({
-                    "id":"reply-1", "viewerDidAuthor":true, "body":"Fixed the concern.",
+                    "id":"reply-1", "viewerDidAuthor":true, "body":reply,
                 }));
         }
         pr

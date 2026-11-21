@@ -21,6 +21,12 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `pull-review-fork-refused` | The pull request is not read as coming from this repository. | A person reviews a fork's pull request. |
 | `pull-review-not-open` | The pull request is closed or merged. | Stop; nothing was created. |
 | `pull-review-own-pull-request` | This account opened the pull request. | Someone else reviews it. |
+| `review-voice-row-unreadable` | The repository's own file could not be read, so the `Review voice` it names is not known. Nothing was posted. | Make the file readable and valid, or set the row to `none`. |
+| `review-voice-file-missing` | The `Review voice` names a file in Estigia's `voices` directory that is not there. Nothing was posted. | Write the file the detail names, or set the row to `none`; `pr_review` `release` stays available. |
+| `review-voice-file-unreadable` | The voice file exists and is not readable UTF-8 text. Nothing was posted. | Make it readable, or set the row to `none`. |
+| `review-voice-file-too-large` | The voice file is over 16 KiB; the detail names its size. Nothing was posted. | Shorten it, or set the row to `none`. |
+| `review-voice-render-failed` | The job that rewords the text failed, ended without an answer or ran past its deadline. Nothing was posted. | Call the same operation again; text already reworded is reused. |
+| `review-voice-answer-malformed` | The job answered with other than one non-blank JSON text per text given. Nothing was posted. | Call the same operation again, or set the row to `none`. |
 | `head-moved` | The head is not the one read or the one reviewed. | `pr_review` `release`, then `claim` anew; no verdict carries across. |
 | `draft-pr-branch-not-checked-out` | The checkout does not have the pointer's branch checked out. | Return to the checkout/branch recorded by `assist`. |
 | `draft-pr-exists-ready` | A ready PR exists and correction policy is `refuse`. | A person decides the repository's correction policy; the run does not override it. |

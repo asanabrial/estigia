@@ -68,6 +68,7 @@ pub mod store;
 pub mod target;
 pub mod template;
 pub mod tier;
+pub(crate) mod voice;
 pub(crate) mod window;
 pub mod worktree;
 

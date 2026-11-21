@@ -525,6 +525,15 @@ pub const SPANISH: &[(&str, &str)] = &[
         "a number of lines, such as `800`",
         "un número de líneas, como `800`",
     ),
+    ("Review voice", "Voz de la revisión"),
+    (
+        "the voice the text of a pull request review and of a thread reply is worded in: none, or the name of a file in Estigia's `voices` directory",
+        "la voz en la que se redacta el texto de la revisión de un pull request y de la respuesta a un hilo: ninguna, o el nombre de un archivo del directorio `voices` de Estigia",
+    ),
+    (
+        "`none`, or a voice name of lowercase letters, digits and `-`, such as `house`",
+        "`none`, o el nombre de una voz con minúsculas, dígitos y `-`, como `house`",
+    ),
     ("Corrections per lineage", "Correcciones por linaje"),
     (
         "how many corrections one review lineage may spend before a person decides",
