@@ -1064,6 +1064,15 @@ fn inventory() -> Vec<Refusal> {
         ));
     }
     refusals.push(Refusal::not_started(
+        "published-transaction-missing",
+        "claude-abcd1234 holds no recorded publication of a pull request",
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "`publish_review` for this run's branch, which records the receipt every later step \
+             is read against",
+        ),
+    ));
+    refusals.push(Refusal::not_started(
         "draft-pr-run-not-assisted",
         "claude-abcd1234 has no local claim from `assist` naming a branch and a checkout",
         Resolution::no_command(

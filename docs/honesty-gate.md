@@ -182,6 +182,17 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     reported on the head holds the stages behind it and says it was never reported, since a check not yet
     started and a stage name matching no check look the same; an advisory check never holds them. Held
     against a fake `gh` by `src/transport/stages/tests.rs`.
+  - **The autonomous road proves less about the checkout than the assisted one, and leaves the shell
+    open.** `review_stages` and `review_thread` under an autonomous claim check the run's complete
+    receipt, the ownership marker and branch of its checkout, the live claim (`review_thread` only) and
+    that the single open pull request is the receipt's ([assisted review](assisted-review.md)). They
+    do not prove that nobody pushed between the last read and the mutation, that the receipt's
+    pull request is the one the person meant, or that the reply says what the fix did. The pointer
+    records no branch there, so the marker is the only record of it, and a marker the run itself
+    could rewrite is not evidence against that run. A raw `gh api graphql` mutation from the shell is
+    still allowed under a live autonomous claim and checks none of this; nothing refuses it, and
+    nothing here narrows that. Held by `src/harness/mcp/tests/autonomous_review_tests.rs` and
+    `src/transport/stages/tests/autonomous.rs`.
 - **No other setting is read by nobody.**
   An operator sets thirty-four rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location` and `Review budget` (for the review forecast line). The gate reads

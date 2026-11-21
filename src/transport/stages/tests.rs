@@ -1,6 +1,7 @@
 use super::*;
 use crate::config::{Config, Setting};
 
+mod autonomous;
 mod no_ci;
 mod voice;
 

@@ -277,7 +277,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     file: one that is there and cannot be read reads as the denying answers (`on` for `Issue required`,
     `unreadable` for `Git operation window`), so the gate refuses what those rows could have refused,
     and the refusal that stops an unclaimed write names the file and the read error.
-  - A test classifies every tool in the server's table as tracker writer, assisted-only, local writer or
+  - A test classifies every tool in the server's table as tracker writer, assisted-only, follow-up
+    (`review_stages` and `review_thread`, offered under both workflows), pull review, local writer or
     read, so a new tool fails until placed; a writer a person runs by hand through `gh` is not a tool call.
 - **The screen's door and event loop are unmeasured.** `the_screens_install_proceeds_on_a_source_build`
   drives `guided_install`, which always consents a source build (a person confirming the screen is that

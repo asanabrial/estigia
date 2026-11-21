@@ -184,6 +184,7 @@ use super::*;
 
 use crate::test_env::repository_with_commit;
 
+mod autonomous_review_tests;
 mod facade_tests;
 mod park_tests;
 
@@ -1146,7 +1147,7 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
             .iter()
             .filter(|tool| !tools::is_assisted_only(tool.name))
             .count(),
-        22
+        24
     );
 }
 
@@ -5570,6 +5571,7 @@ fn every_tool_is_a_tracker_writer_an_assisted_only_a_local_writer_or_a_read_and_
                 tools::TRACKER_WRITERS.contains(&tool.name),
             ),
             ("assisted only", tools::ASSISTED_ONLY.contains(&tool.name)),
+            ("follow up", tools::FOLLOW_UP_TOOLS.contains(&tool.name)),
             ("pull review", tools::PULL_REVIEW_TOOLS.contains(&tool.name)),
             ("local writer", LOCAL_WRITER_TOOLS.contains(&tool.name)),
             ("read", READ_TOOLS.contains(&tool.name)),
@@ -5590,6 +5592,7 @@ fn every_tool_is_a_tracker_writer_an_assisted_only_a_local_writer_or_a_read_and_
     for name in tools::TRACKER_WRITERS
         .iter()
         .chain(tools::ASSISTED_ONLY)
+        .chain(tools::FOLLOW_UP_TOOLS)
         .chain(tools::PULL_REVIEW_TOOLS)
         .chain(LOCAL_WRITER_TOOLS)
         .chain(READ_TOOLS)
@@ -7101,7 +7104,7 @@ fn an_assisted_menu_omits_every_tool_that_writes_the_tracker() {
             "{name} is refused in assisted work and was advertised"
         );
     }
-    for name in tools::ASSISTED_ONLY {
+    for name in tools::ASSISTED_ONLY.iter().chain(tools::FOLLOW_UP_TOOLS) {
         assert!(
             names.iter().any(|listed| listed == name),
             "{name} is the assisted work and was not advertised"
@@ -7121,8 +7124,14 @@ fn an_autonomous_menu_omits_the_assisted_only_tools_and_keeps_the_rest() {
             "{name} is refused outside assisted work and was advertised"
         );
     }
+    for name in tools::FOLLOW_UP_TOOLS {
+        assert!(
+            names.iter().any(|listed| listed == name),
+            "{name} is offered to an autonomous run and was not advertised"
+        );
+    }
     assert_eq!(names.len(), TOOLS.len() - tools::ASSISTED_ONLY.len());
-    assert_eq!(names.len(), 22, "the autonomous menu is {names:?}");
+    assert_eq!(names.len(), 24, "the autonomous menu is {names:?}");
 }
 
 #[test]

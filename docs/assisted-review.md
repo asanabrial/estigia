@@ -82,6 +82,42 @@ worktree shares their line) are refused in assisted runs so they cannot bypass t
 this is not a sandbox for arbitrary network clients. External review approvals expose their commit,
 not the historical base reviewed; the reader does not prove that historical base.
 
+## Following up on an autonomous pull request
+
+`review_stages` and `review_thread` are not assisted-only. A run that holds an issue under
+`Claim workflow: autonomous` and published its pull request reaches them through the receipt
+`publish_review` recorded, and `flow fix <pr> [<pr> …]` names the road to the skill
+([decision gates](../skill/references/decision-gates.md)). A run with `assisted` set keeps the road
+above, unchanged.
+
+An autonomous call is refused before GitHub is asked unless:
+
+- the pointer holds an issue, a worktree and a complete receipt (`published-transaction-missing`);
+- the branch the checkout's ownership marker names is the one checked out, and the marker names this
+  run and issue (`assisted-claim-stale`, the code the assisted road gives the same two checks);
+- for `review_thread`, `expected_head` is the receipt's head, so only a head this claim published and
+  recorded can be named (`review-thread-head-not-published`).
+
+Then `review_stages` reads the receipt's pull request by number, pinned to the marker's branch, and
+answers `pr`, `head`, `base`, `ci`, `failing_checks` and `open_threads` as above, with no `position` and
+no `next`, since the stages they name belong to `draft_pr` and `ready_pr`. `request_review` is refused
+`workflow-not-assisted`. `review_thread` renews the claim first (`verify_claim` in the state the pointer
+records), requires the single open pull request on the branch to be the receipt's
+(`review-thread-pr-unconfined`), and then replies, reads back and resolves exactly as above, through
+the `Review voice` when the repository names one.
+
+A fix is published by the ordinary road: back to `in-progress`, commit, `publish_review`, the review
+that publication licenses. Over an approved receipt each applicable comment is recorded with
+`record_review_finding` first, which is what clears `approved-republish-without-cause`; nothing here
+loosens that rule. A thread is resolved at publication, once the fix commit is an ancestor of the
+published head, not held for the new verdict.
+
+What this proves is what the assisted checks prove, with the marker standing in for the pointer's
+branch. What it does not: the same limits as above (a push between the last read and the mutation, and
+that ancestry is not a semantic fix), and that the shell stays open, because a raw `gh api` mutation
+under a live autonomous claim is still allowed and checks none of it
+([honesty](honesty-gate.md)).
+
 ## Reviewing a pull request this run did not build
 
 `pr_review` `claim` takes a review-only claim on one pull request, under every `Claim workflow` and

@@ -18,6 +18,17 @@ const REPLY: &str = "mutation($thread:ID!,$body:String!){addPullRequestReviewThr
 const RESOLVE: &str =
     "mutation($thread:ID!){resolveReviewThread(input:{threadId:$thread}){thread{id isResolved}}}";
 
+/// The claim an autonomous run answers a thread under: its issue, its live state, and the one
+/// pull request its receipt names.
+pub(crate) struct Held<'a> {
+    pub issue: u64,
+    pub run_id: &'a str,
+    pub expect_state: &'a str,
+    pub pr: u64,
+    pub head: &'a str,
+    pub now: &'a str,
+}
+
 pub(crate) fn respond(
     context: &Context,
     what: &Response<'_>,
@@ -25,10 +36,27 @@ pub(crate) fn respond(
     respond_with(context, what, &Renderer::detached())
 }
 
+pub(crate) fn respond_held(
+    context: &Context,
+    what: &Response<'_>,
+    held: &Held<'_>,
+) -> Result<serde_json::Value, Failure> {
+    respond_under(context, what, &Renderer::detached(), Some(held))
+}
+
 pub(crate) fn respond_with(
     context: &Context,
     what: &Response<'_>,
     renderer: &Renderer,
+) -> Result<serde_json::Value, Failure> {
+    respond_under(context, what, renderer, None)
+}
+
+fn respond_under(
+    context: &Context,
+    what: &Response<'_>,
+    renderer: &Renderer,
+    held: Option<&Held<'_>>,
 ) -> Result<serde_json::Value, Failure> {
     let body = std::fs::read_to_string(what.body_file)
         .map_err(|error| Failure::Read(format!("the thread reply could not be read: {error}")))?;
@@ -42,6 +70,23 @@ pub(crate) fn respond_with(
             "supply a nonempty reply and a full expected head SHA; resolution also requires a full fix_commit SHA",
             false,
         ));
+    }
+    if let Some(held) = held {
+        if !what.expected_head.eq_ignore_ascii_case(held.head) {
+            return Err(stop(
+                "review-thread-head-not-published",
+                "only the head this claim published and recorded can be named",
+                false,
+            ));
+        }
+        claim::verify_claim(
+            context,
+            held.issue,
+            held.run_id,
+            held.expect_state,
+            held.now,
+            None,
+        )?;
     }
     let remembered = claim::review_operation_id(
         "thread-reply-rendered",
@@ -63,6 +108,13 @@ pub(crate) fn respond_with(
         .get("number")
         .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| Failure::Read("the open PR has no number".to_owned()))?;
+    if held.is_some_and(|held| held.pr != number) {
+        return Err(stop(
+            "review-thread-pr-unconfined",
+            "the open PR on the claimed branch is not the one this claim published",
+            false,
+        ));
+    }
     let pr = read(context, number, what)?;
     let thread = find(&pr, what.thread_id)?;
     if let Some(fix) = what.fix_commit {

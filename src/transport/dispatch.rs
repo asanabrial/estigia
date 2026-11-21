@@ -704,6 +704,61 @@ pub fn dispatch(
     })
 }
 
+/// `review-stages` for an autonomous run: the flags the harness sends beside `--published-pr`
+/// are read here, apart from the arm, because an assisted call never sends them.
+fn published_stages(
+    context: &Context,
+    f: &Flags<'_>,
+    stages: &[crate::config::ReviewStage],
+) -> Result<serde_json::Value, Failure> {
+    let operation = "review-stages";
+    let wait_seconds = f
+        .get("wait-seconds")
+        .unwrap_or("0")
+        .parse::<u64>()
+        .map_err(|_| {
+            Failure::ConfigDefect(serde_json::json!({
+                "ok": false, "reason": "malformed-argument", "argument": "--wait-seconds",
+            }))
+        })?;
+    super::stages::review_published(
+        context,
+        &super::stages::Published {
+            pr: f.number("published-pr", operation)?,
+            branch: f.need("branch", operation)?,
+            stages,
+            expected_head: f.get("expected-head"),
+            wait_seconds,
+            now_secs: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| i64::try_from(since.as_secs()).unwrap_or_default())
+                .unwrap_or_default(),
+        },
+    )
+}
+
+/// `review-thread` for an autonomous run, which proves its live claim before it answers.
+fn published_thread(
+    context: &Context,
+    f: &Flags<'_>,
+    response: &super::stages::thread::Response<'_>,
+    now: &str,
+) -> Result<serde_json::Value, Failure> {
+    let operation = "review-thread";
+    super::stages::thread::respond_held(
+        context,
+        response,
+        &super::stages::thread::Held {
+            issue: super::outbox::resolve(f.number("issue", operation)?)?,
+            run_id: f.need("run-id", operation)?,
+            expect_state: f.need("expect-state", operation)?,
+            pr: f.number("published-pr", operation)?,
+            head: f.need("published-head", operation)?,
+            now,
+        },
+    )
+}
+
 fn run_operation(
     context: &Context,
     operation: &str,
@@ -1716,6 +1771,9 @@ fn run_operation(
         }
         "review-stages" => {
             let layered = context.layered();
+            if f.get("published-pr").is_some() {
+                return published_stages(context, &f, &layered.external_reviewers);
+            }
             let read = super::stages::review_stages(
                 context,
                 &super::stages::Stages {
@@ -1745,9 +1803,8 @@ fn run_operation(
             }
             Ok(read)
         }
-        "review-thread" => super::stages::thread::respond(
-            context,
-            &super::stages::thread::Response {
+        "review-thread" => {
+            let response = super::stages::thread::Response {
                 branch: f.need("branch", operation)?,
                 worktree: Path::new(f.need("worktree", operation)?),
                 thread_id: f.need("thread-id", operation)?,
@@ -1755,8 +1812,12 @@ fn run_operation(
                 fix_commit: f.get("fix-commit"),
                 body_file: Path::new(f.need("body-file", operation)?),
                 resolve: f.on("resolve"),
-            },
-        ),
+            };
+            if f.get("published-pr").is_some() {
+                return published_thread(context, &f, &response, now);
+            }
+            super::stages::thread::respond(context, &response)
+        }
         "ready-pr" => {
             let layered = context.layered();
             let ready = super::draft::mark_ready(

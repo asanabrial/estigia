@@ -4,7 +4,9 @@
 //! Nothing is recorded: the answer is a reading of the pull request as it is,
 //! so a stage is never carried forward from an earlier call. Review comments
 //! are other people's words and come back as data. A list GitHub answered only
-//! in part is refused rather than read as the whole of it.
+//! in part is refused rather than read as the whole of it. An autonomous run
+//! is read by [`review_published`]: its receipt's pull request, with no stage
+//! position.
 
 use super::claim::{PUBLISH_READBACK_ATTEMPTS, readback_delay_secs};
 use super::{Context, Failure, How, run};
@@ -55,26 +57,96 @@ pub fn review_stages(context: &Context, what: &Stages<'_>) -> Result<serde_json:
     stages_with_sleep(context, what, &mut |delay| std::thread::sleep(delay))
 }
 
-fn stages_with_sleep(
+/// One `review-stages` call for an autonomous run: the pull request its receipt names, read for
+/// CI and open threads, with no stage position because the stages are an assisted run's.
+#[derive(Debug, Clone, Copy)]
+pub struct Published<'a> {
+    /// The pull request number the run's receipt records.
+    pub pr: u64,
+    /// The branch the checkout's ownership marker names.
+    pub branch: &'a str,
+    /// `External reviewers`, which only decide whether a missing check is `none`.
+    pub stages: &'a [ReviewStage],
+    /// The published head this reading must describe, when supplied.
+    pub expected_head: Option<&'a str>,
+    /// Maximum polling sleep, at most 300 seconds; waiting requires an exact head.
+    pub wait_seconds: u64,
+    /// The present moment in Unix seconds.
+    pub now_secs: i64,
+}
+
+/// `review-stages` for an autonomous run — see [`Published`].
+pub fn review_published(
     context: &Context,
-    what: &Stages<'_>,
+    what: &Published<'_>,
+) -> Result<serde_json::Value, Failure> {
+    published_with_sleep(context, what, &mut |delay| std::thread::sleep(delay))
+}
+
+fn published_with_sleep(
+    context: &Context,
+    what: &Published<'_>,
     sleep: &mut dyn FnMut(std::time::Duration),
 ) -> Result<serde_json::Value, Failure> {
-    if what.wait_seconds > 300 || (what.wait_seconds > 0 && what.expected_head.is_none()) {
+    wait_is_valid(what.wait_seconds, what.expected_head)?;
+    let (pr, no_ci) = poll(
+        context,
+        &Poll {
+            number: what.pr,
+            branch: what.branch,
+            stages: what.stages,
+            expected_head: what.expected_head,
+            wait_seconds: what.wait_seconds,
+            now_secs: what.now_secs,
+        },
+        sleep,
+    )?;
+    let ci = ci_for_stages(&pr, what.stages, no_ci);
+    let mut answer = serde_json::json!({
+        "ok": true,
+        "pr": pr.get("number"),
+        "head": pr.get("headRefOid"),
+        "base": pr.get("baseRefOid"),
+        "ci": ci,
+        "open_threads": open_thread_nodes(&pr),
+        "tracker_written": false,
+    });
+    if ci == "failed" {
+        answer["failing_checks"] = serde_json::json!(failing_checks(&pr));
+    }
+    if ci == "none" {
+        answer["ci_note"] = serde_json::json!(NO_CI_NOTE);
+    }
+    answer["wait_timed_out"] =
+        serde_json::json!(what.wait_seconds > 0 && ci_pending(&pr, what.stages, no_ci));
+    Ok(answer)
+}
+
+fn wait_is_valid(wait_seconds: u64, expected_head: Option<&str>) -> Result<(), Failure> {
+    if wait_seconds > 300 || (wait_seconds > 0 && expected_head.is_none()) {
         return Err(Failure::ConfigDefect(serde_json::json!({
             "ok": false, "reason": "review-wait-invalid",
             "action": "waiting requires expected_head and wait_seconds between 0 and 300",
         })));
     }
-    let Some(number) = latest_pr(context, what.branch)? else {
-        return Ok(serde_json::json!({
-            "ok": true,
-            "position": "unpublished",
-            "next": "publish the branch with `draft_pr`",
-            "tracker_written": false,
-        }));
-    };
-    let mut pr = fetch(context, number)?;
+    Ok(())
+}
+
+struct Poll<'a> {
+    number: u64,
+    branch: &'a str,
+    stages: &'a [ReviewStage],
+    expected_head: Option<&'a str>,
+    wait_seconds: u64,
+    now_secs: i64,
+}
+
+fn poll(
+    context: &Context,
+    what: &Poll<'_>,
+    sleep: &mut dyn FnMut(std::time::Duration),
+) -> Result<(serde_json::Value, bool), Failure> {
+    let mut pr = fetch(context, what.number)?;
     verify_reading(&pr, what.branch, what.expected_head)?;
     let base = text(&pr, &["baseRefOid"]).map(str::to_owned);
     let mut remaining = what.wait_seconds;
@@ -87,7 +159,7 @@ fn stages_with_sleep(
         let delay = remaining.min(5);
         sleep(std::time::Duration::from_secs(delay));
         remaining -= delay;
-        pr = fetch(context, number)?;
+        pr = fetch(context, what.number)?;
         verify_reading(&pr, what.branch, what.expected_head)?;
         if text(&pr, &["baseRefOid"]) != base.as_deref() {
             return Err(stale("the pull request base changed during this reading"));
@@ -101,6 +173,35 @@ fn stages_with_sleep(
             &mut workflows,
         )?;
     }
+    Ok((pr, no_ci))
+}
+
+fn stages_with_sleep(
+    context: &Context,
+    what: &Stages<'_>,
+    sleep: &mut dyn FnMut(std::time::Duration),
+) -> Result<serde_json::Value, Failure> {
+    wait_is_valid(what.wait_seconds, what.expected_head)?;
+    let Some(number) = latest_pr(context, what.branch)? else {
+        return Ok(serde_json::json!({
+            "ok": true,
+            "position": "unpublished",
+            "next": "publish the branch with `draft_pr`",
+            "tracker_written": false,
+        }));
+    };
+    let (pr, no_ci) = poll(
+        context,
+        &Poll {
+            number,
+            branch: what.branch,
+            stages: what.stages,
+            expected_head: what.expected_head,
+            wait_seconds: what.wait_seconds,
+            now_secs: what.now_secs,
+        },
+        sleep,
+    )?;
     let mut answer = position(&pr, what.stages, what.ready_by, what.merge_by, no_ci);
     answer["wait_timed_out"] =
         serde_json::json!(what.wait_seconds > 0 && ci_pending(&pr, what.stages, no_ci));
@@ -691,6 +792,21 @@ fn review_stage(
     )
 }
 
+const NO_CI_NOTE: &str = "no CI was seen: the rollup stayed empty past the grace period, the head \
+                          holds no workflow file and no `check:` stage is declared; this is not a pass";
+
+fn open_thread_nodes(pr: &serde_json::Value) -> Vec<&serde_json::Value> {
+    nodes(pr, &["reviewThreads"])
+        .into_iter()
+        .filter(|thread| {
+            thread
+                .get("isResolved")
+                .and_then(serde_json::Value::as_bool)
+                == Some(false)
+        })
+        .collect()
+}
+
 /// Where `pr` (the GraphQL `pullRequest` this module reads) stands against
 /// `stages`, as one JSON answer naming the position and what comes next.
 pub(crate) fn position(
@@ -708,9 +824,7 @@ pub(crate) fn position(
             "head": pr.get("headRefOid"),
             "base": pr.get("baseRefOid"),
             "ci": ci,
-            "open_threads": nodes(pr, &["reviewThreads"]).into_iter()
-                .filter(|thread| thread.get("isResolved").and_then(serde_json::Value::as_bool) == Some(false))
-                .collect::<Vec<_>>(),
+            "open_threads": open_thread_nodes(pr),
             "position": position,
             "next": next,
             "tracker_written": false,
@@ -722,10 +836,7 @@ pub(crate) fn position(
             out["failing_checks"] = serde_json::json!(failing_checks(pr));
         }
         if ci == "none" {
-            out["ci_note"] = serde_json::json!(
-                "no CI was seen: the rollup stayed empty past the grace period, the head holds no \
-                 workflow file and no `check:` stage is declared; this is not a pass"
-            );
+            out["ci_note"] = serde_json::json!(NO_CI_NOTE);
         }
         out
     };
