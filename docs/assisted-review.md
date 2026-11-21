@@ -86,7 +86,7 @@ not the historical base reviewed; the reader does not prove that historical base
 
 `pr_review` `claim` takes a review-only claim on one pull request, under every `Claim workflow` and
 every `Tracker`, because it binds to the repository host and writes no tracker. An agent may take it
-as a person may, since the point is an unattended review.
+as a person may, since the point is an unattended review. `flow review <pr> [<pr> …]` names the road to the skill, one claim at a time ([decision gates](../skill/references/decision-gates.md)).
 
 The claim is a `pull_reviews` row in the local store, keyed on the repository and the pull request.
 The earliest claim whose horizon has not passed wins, and a loser is refused `pull-review-held`
