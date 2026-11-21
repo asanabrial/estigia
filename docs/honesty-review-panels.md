@@ -616,8 +616,18 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   [the isolation entry](#review-models-targets-and-panels) already leaves unmeasured for the panel.
   A rendering is kept by a digest of the voice file's bytes and the text, so a retry posts the
   words already used, but an edited voice file is a new key: a retry after an edit that finds no review of
-  the commit posts a different wording than the first attempt did. Because `submit` reads the repository's
-  own file strictly to learn the voice, a repository file with any row it cannot read stops `submit`
-  and `review_thread` as `review-voice-row-unreadable` even when no voice is named; only a
-  file that does not exist reads as no voice. The inline-comment read-back above still compares count and
-  path, never text, so it does not see the rewording either.
+  the commit posts a different wording than the first attempt did. `review_thread` closes that for a
+  reply: it keeps the text it is about to post under a key that holds the repository, the thread and the
+  input body, and no voice bytes, so a retry after an edit posts, or recognises, the same reply.
+  The voice is read from the repository's own file alone, tolerating a row for another setting that
+  does not parse; an unreadable file, or a `Review voice` row that does not parse, stops `submit` and
+  `review_thread` as `review-voice-row-unreadable`, even when no voice is named, since whether one was
+  named is then unknown. A file that does not exist reads as no voice. The voice path must be a regular
+  file, and at most the cap plus one byte of it is read.
+  The inline-comment read-back above still compares count and path, never text, so it does not see the
+  rewording either.
+  **The order of a rendering's answer is not checked, only its count and shape.** An answer that swaps
+  two texts puts one comment's words on another comment's line, and `submit` posts it: the sites
+  (path, line, side) are fixed before the voice is asked, the text placed on each is whatever the answer
+  holds at that position. The job is told to keep the order; nothing compares it, and one job per text,
+  which would, was rejected for what it costs.

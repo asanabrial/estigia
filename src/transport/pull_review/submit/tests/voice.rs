@@ -264,6 +264,50 @@ fn another_voice_file_is_another_rendering() {
     }
 }
 
+fn write_repository_rows(rig: &Rig, rows: &str) {
+    let path = crate::skill::repository_config_path(&rig.context.repo_dir);
+    std::fs::create_dir_all(path.parent().expect("a directory")).expect("a state directory");
+    crate::paths::replace_atomically(
+        &path,
+        &format!("| Setting | Value here |\n|---|---|\n{rows}"),
+    )
+    .expect("a repository file");
+}
+
+#[test]
+fn a_malformed_row_for_another_setting_does_not_stop_a_review_that_names_no_voice() {
+    let rig = rig();
+    let worktree = reviewed(&rig, &mixed_answer());
+    write_repository_rows(&rig, "| Change size | many |\n");
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    let answer = gh(&rig, &mixed_script(&rig, &["change.txt"]), || {
+        submit_with(&rig.context, RUN, &renderer)
+    })
+    .expect("the submission");
+    assert_eq!(answer["submitted"], true, "{answer}");
+    assert_eq!(request(&rig)["comments"][0]["body"], PLAIN_COMMENT);
+    assert_eq!(probe.launched(), 0);
+    gone(&rig, &worktree);
+}
+
+#[test]
+fn a_malformed_voice_row_still_stops_the_submission_beside_a_good_one() {
+    let rig = rig();
+    let worktree = reviewed(&rig, &mixed_answer());
+    write_repository_rows(
+        &rig,
+        "| Change size | 400 |\n| Review voice | ../outside |\n",
+    );
+    let (renderer, _) = stand_in::renderer(Answers::Prefixed);
+    let failure = gh(&rig, &mixed_script(&rig, &["change.txt"]), || {
+        submit_with(&rig.context, RUN, &renderer)
+    })
+    .expect_err("an unreadable voice row");
+    assert_eq!(failure.envelope()["reason"], "review-voice-row-unreadable");
+    assert!(!log(&rig).contains("--method POST"));
+    assert!(worktree.is_dir());
+}
+
 #[test]
 fn a_landed_review_is_answered_for_without_a_voice_being_asked() {
     let rig = rig();

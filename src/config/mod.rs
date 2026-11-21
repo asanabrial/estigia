@@ -1316,6 +1316,20 @@ impl Config {
         (config, settings, refused.or(folded).or(retired))
     }
 
+    /// What `Review voice` rows in `document` say, whatever the other rows hold.
+    ///
+    /// A row for another setting is not read at all; a `Review voice` row that
+    /// does not parse is refused, since whether a voice was named is then unknown.
+    pub(crate) fn review_voice_in(document: &str) -> Result<ReviewVoice, Refusal> {
+        let mut config = Self::default();
+        for (label, value) in settings::rows(document) {
+            if Setting::from_label(&label) == Some(Setting::ReviewVoice) {
+                Setting::ReviewVoice.apply_stored(&mut config, &value)?;
+            }
+        }
+        Ok(config.review_voice)
+    }
+
     /// Lays the authorisation rows a repository's file may tighten over `config`.
     ///
     /// A row is honoured unless it is `auto` over a `base` that says `ask`; the

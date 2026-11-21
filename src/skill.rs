@@ -1709,6 +1709,10 @@ impl RepositorySnapshot {
         Ok(RepositoryLayer { config, settings })
     }
 
+    fn review_voice(&self) -> Result<crate::config::ReviewVoice, Refusal> {
+        Config::review_voice_in(&self.document).map_err(|refusal| named_by(refusal, &self.path))
+    }
+
     fn layer_over_keeping_what_parses(&self, base: &Config) -> RepositoryLayer {
         let (mut config, mut settings) = Config::read_scope_over_keeping_what_parses(
             base,
@@ -1759,6 +1763,19 @@ pub(crate) fn repository_snapshot(repo_dir: &Path) -> Result<Option<RepositorySn
 #[cfg(test)]
 pub(crate) fn inject_repository_snapshot_replacement(document: String) {
     REPOSITORY_SNAPSHOT_REPLACEMENT.with(|replacement| *replacement.borrow_mut() = Some(document));
+}
+
+/// The voice this checkout's own file names, read from that file alone.
+///
+/// A row for another setting that does not parse does not stop this read; an
+/// unreadable file, or a `Review voice` row that does not parse, does.
+pub(crate) fn repository_review_voice(
+    repo_dir: &Path,
+) -> Result<crate::config::ReviewVoice, Refusal> {
+    match repository_snapshot(repo_dir)? {
+        Some(snapshot) => snapshot.review_voice(),
+        None => Ok(crate::config::ReviewVoice::None),
+    }
 }
 
 /// The exact repository-scoped rows this checkout's document owns.
