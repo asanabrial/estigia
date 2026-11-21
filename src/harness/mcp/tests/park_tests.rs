@@ -22,7 +22,6 @@ fn context(root: &std::path::Path) -> GateContext {
         operation_window: GitOperationWindow::parse("enabled 09:00-17:00").expect("a schedule"),
         issue_requirement: crate::config::IssueRequirement::Off,
         repository_config_unreadable: None,
-        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: crate::harness::RENEWAL_WINDOW,

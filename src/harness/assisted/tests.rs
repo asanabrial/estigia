@@ -73,7 +73,6 @@ fn new_rig() -> Rig {
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
         repository_config_unreadable: None,
-        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(Workflow::Assisted),
         window: Duration::ZERO,

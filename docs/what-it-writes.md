@@ -1587,12 +1587,10 @@ holding no claim in a checkout with a tracker. `on` refuses, with `issue-require
 the default branch, a push whose destination is the default branch, and a `gh pr merge`. A file write,
 a shell write placed or not, a commit on another branch, `git stash`, `git rm`, branch and worktree
 commands, `git pull`, a push to another branch, `gh pr create` and a GitHub write that is no boundary
-pass, claim or not. The repository's `Unclaimed GitHub writes` row (`held`, the default, or `allowed`,
-answered only by the same file) holds the boundaries too: an unclaimed `gh pr merge`, a `git merge` on
-the default branch, `git tag`, release or `gh api` mutation is refused under `on`, and `Merge by` is not
-read on this path; `allowed` lets those boundaries pass while a commit or a push to the default branch
-stays held, and [`honesty.md`](honesty.md) says what that costs; `off` holds none of these
-boundaries, and `Issue required` is the only row that can hold a commit or a push.
+pass, claim or not. `on` holds the other boundaries too: an unclaimed `gh pr merge`, a `git merge` on
+the default branch, `git tag`, release or `gh api` mutation is refused, and `Merge by` is not read on
+this path; `off` holds none of these boundaries. A leftover `Unclaimed GitHub writes` row in a
+repository file is ignored.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.
 

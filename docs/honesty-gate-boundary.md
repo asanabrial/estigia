@@ -62,24 +62,23 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     matching` (every branch the remote shares, with no refspec on the line) passes.
     `git pull` and `git rebase` can put commits on the default branch from the checkout and pass, and `git
     merge --abort` read through the boundary list is held like a merge.
-  - **`gh pr merge`, `git merge` on the default branch and the boundaries below stay under `Unclaimed GitHub
-    writes`, and `Merge by` is not read on this path.** An unclaimed `git tag`, release, `gh api` mutation
-    or declared irreversible command is refused under `on` unless the repository says `Unclaimed GitHub
-    writes: allowed`, and so are `gh pr merge` and a `git merge` on the default branch, through
-    `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`. `allowed` is the
-    operator's own declaration that a skill writing through `gh api` and `gh pr merge` unclaimed is not to
-    be stopped on each call; it drops no refusal on a commit or a push to the default branch. **What this
-    costs:** a person's own `git tag` in a session that holds no claim is refused; under `held` a skill that
-    reviews and then merges meets one refusal per merge; and a pull request approved at the exact head does
-    not clear it, because the skills that need this road do not take it. A command the fragment lists do not
-    name is not found, and a GraphQL mutation behind a shell variable still passes. A GitHub write that is
-    no boundary (`gh pr review`, `gh pr comment`) is never held. A call launched outside every repository is
-    left alone, and the git operation window's own refusals are unchanged. Held by
-    `an_unclaimed_github_write_is_refused_under_required`, `an_unclaimed_github_write_passes_when_the_policy_is_off`,
+  - **`gh pr merge`, `git merge` on the default branch and the boundaries below are held under `on`, and
+    `Merge by` is not read on this path.** An unclaimed `git tag`, release, `gh api` mutation or declared
+    irreversible command is refused under `on`, and so are `gh pr merge` and a `git merge` on the default
+    branch, through `issue_requirement::decision` from both `decide_observing` and `adjudicate_pushing`.
+    No row loosens it: a repository file still carrying the removed `Unclaimed GitHub writes` row is read
+    with that row ignored. **What this costs:** a person's own `git tag` in a session that holds no claim
+    is refused; a skill that reviews and then merges meets one refusal per merge; and a pull request
+    approved at the exact head does not clear it, because the skills that need this road do not take it. A
+    command the fragment lists do not name is not found, and a GraphQL mutation behind a shell variable
+    still passes. A GitHub write that is no boundary (`gh pr review`, `gh pr comment`) is never held. A
+    call launched outside every repository is left alone, and the git operation window's own refusals are
+    unchanged. Held by `an_unclaimed_github_write_is_refused_under_required`,
+    `an_unclaimed_github_write_passes_when_the_policy_is_off`,
     `a_github_write_that_is_no_integration_passes_under_every_value`,
     `a_github_read_passes_under_every_value`, `an_unclaimed_github_write_is_held_through_the_gate_command_too`,
-    `a_tag_and_a_release_keep_their_answer_under_both_values_of_the_github_writes_row`,
-    `allowed_lets_the_github_writes_pass_under_required` and `allowed_still_holds_what_the_policy_holds`.
+    `a_tag_and_a_release_are_held_off_the_default_branch_too` and
+    `a_leftover_unclaimed_github_writes_row_does_not_let_an_unclaimed_merge_through`.
   - **An assisted run cannot carry a GitHub write past the claim beside an admitted boundary.** `git pull;
     gh pr review 3 --approve` and a declared boundary followed by a GitHub write are refused
     `assisted-remote-write-unverified`, checked only after `assisted-does-not-deliver`,

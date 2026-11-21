@@ -381,39 +381,6 @@ impl IssueRequirement {
     }
 }
 
-/// Whether a run holding no claim may merge, tag, release or write to GitHub.
-///
-/// Repository-only: it is read from the repository's own file and nowhere else.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UnclaimedGithubWrites {
-    /// The default: an unclaimed pull request merge, release, tag, `gh api` mutation or merge on
-    /// the default branch is held as `Issue required` holds a commit there.
-    Held,
-    /// Those boundaries pass with no question under `on`.
-    Allowed,
-}
-
-impl UnclaimedGithubWrites {
-    /// The value as written in the table.
-    pub fn as_value(self) -> &'static str {
-        match self {
-            Self::Held => "held",
-            Self::Allowed => "allowed",
-        }
-    }
-
-    /// Every answer, under an exhaustive match.
-    pub fn all() -> Vec<Self> {
-        let every = vec![Self::Held, Self::Allowed];
-        for policy in &every {
-            match policy {
-                Self::Held | Self::Allowed => {}
-            }
-        }
-        every
-    }
-}
-
 /// Who witnesses a claim in this repository.
 ///
 /// Repository-only: it is read from the repository's own file and nowhere else.
@@ -1058,8 +1025,6 @@ pub struct Config {
     pub decision_mode: DecisionMode,
     /// What a run holding no claim may write in a checkout whose tracker can name an issue.
     pub issue_requirement: IssueRequirement,
-    /// Whether a run holding no claim may merge, tag, release or write to GitHub.
-    pub unclaimed_github_writes: UnclaimedGithubWrites,
     /// Who witnesses a claim in this repository.
     pub workflow: Workflow,
     /// `State names`: Estigia's states mapped onto the tracker's own.
@@ -1185,7 +1150,6 @@ impl Default for Config {
             publication_lanes_exclude: Vec::new(),
             decision_mode: DecisionMode::Ask,
             issue_requirement: IssueRequirement::Off,
-            unclaimed_github_writes: UnclaimedGithubWrites::Held,
             workflow: Workflow::Autonomous,
             state_names: Vec::new(),
             self_review: None,

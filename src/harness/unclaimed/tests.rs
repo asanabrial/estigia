@@ -21,7 +21,6 @@ fn context(root: &Path, repo: &Path) -> GateContext {
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
         repository_config_unreadable: None,
-        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: Duration::from_secs(120),
