@@ -1063,6 +1063,12 @@ fn inventory() -> Vec<Refusal> {
             ),
         ));
     }
+    for call in [
+        crate::transport::window::ReviewThreadCall::Named,
+        crate::transport::window::ReviewThreadCall::QueryNotOnTheLine,
+    ] {
+        refusals.push(crate::harness::review_thread_api::refused(call));
+    }
     refusals.push(Refusal::not_started(
         "published-transaction-missing",
         "claude-abcd1234 holds no recorded publication of a pull request",

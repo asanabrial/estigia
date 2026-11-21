@@ -114,9 +114,10 @@ published head, not held for the new verdict.
 
 What this proves is what the assisted checks prove, with the marker standing in for the pointer's
 branch. What it does not: the same limits as above (a push between the last read and the mutation, and
-that ancestry is not a semantic fix), and that the shell stays open, because a raw `gh api` mutation
-under a live autonomous claim is still allowed and checks none of it
-([honesty](honesty-gate.md)).
+that ancestry is not a semantic fix), and that the shell is only partly closed: a raw `gh api` call
+that mutates a review thread or review comment is refused under a live autonomous claim
+(`review-thread-api-mutation-unverified`, naming `review_thread`), while a mutation spelled through a
+variable, an alias or a script is not read ([honesty](honesty-gate.md)).
 
 ## Reviewing a pull request this run did not build
 

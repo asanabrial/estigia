@@ -202,6 +202,87 @@ fn gh_writes_are_classified_and_reads_are_not() {
     }
 }
 
+fn thread_call(line: &str) -> Option<ReviewThreadCall> {
+    let words: Vec<&str> = line.split_whitespace().collect();
+    gh_api_review_thread(&words)
+}
+
+#[test]
+fn a_graphql_mutation_naming_a_thread_or_review_comment_is_a_review_thread_call() {
+    for name in [
+        "resolveReviewThread",
+        "unresolveReviewThread",
+        "addPullRequestReviewThreadReply",
+        "addPullRequestReviewComment",
+    ] {
+        let line = format!("gh api graphql -f query='mutation {{ {name}(input: {{}}) {{ x }} }}'");
+        assert_eq!(thread_call(&line), Some(ReviewThreadCall::Named), "{line}");
+        let lowered = line.to_ascii_lowercase();
+        assert_eq!(
+            thread_call(&lowered),
+            Some(ReviewThreadCall::Named),
+            "{lowered}"
+        );
+    }
+    assert_eq!(
+        thread_call(
+            "gh api graphql -f owner=o -F query=\"mutation { resolveReviewThread(input:{}) { x } }\""
+        ),
+        Some(ReviewThreadCall::Named)
+    );
+    assert_eq!(
+        thread_call("gh api graphql -fquery=mutation{resolveReviewThread(input:{}){x}}"),
+        Some(ReviewThreadCall::Named)
+    );
+}
+
+#[test]
+fn a_review_comment_endpoint_written_through_is_a_review_thread_call() {
+    for line in [
+        "gh api -X POST repos/o/r/pulls/7/comments -f body=x",
+        "gh api repos/o/r/pulls/7/comments -f body=x",
+        "gh api --method PATCH repos/o/r/pulls/comments/55 -f body=x",
+        "gh api -X DELETE /repos/o/r/pulls/comments/55",
+        "gh api -X POST repos/o/r/pulls/7/comments/55/replies -f body=x",
+        "gh api -X POST repos/o/r/pulls/7/comments?per_page=1 -f body=x",
+    ] {
+        assert_eq!(thread_call(line), Some(ReviewThreadCall::Named), "{line}");
+    }
+}
+
+#[test]
+fn a_query_that_is_not_on_the_line_is_unknown() {
+    for line in [
+        "gh api graphql --input body.json",
+        "gh api graphql -F query=@mutation.graphql",
+        "gh api graphql -f query=@mutation.graphql -f x=y",
+    ] {
+        assert_eq!(
+            thread_call(line),
+            Some(ReviewThreadCall::QueryNotOnTheLine),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn reads_and_other_writes_are_not_review_thread_calls() {
+    for line in [
+        "gh api graphql -f query='{ repository { pullRequest { reviewThreads(first: 5) { nodes { id } } } } }'",
+        "gh api -X GET repos/o/r/pulls/7/comments",
+        "gh api repos/o/r/pulls/7/comments",
+        "gh api -X POST repos/o/r/issues/7/comments -f body=x",
+        "gh api graphql -f query='mutation { addReaction(input: {}) { x } }'",
+        "gh api graphql -f query='mutation { addPullRequestReview(input: {}) { x } }'",
+        "gh api graphql -f query='mutation { resolveReviewThreadsAll(input: {}) { x } }'",
+        "gh api graphql -f query='mutation { addReaction(input: {}) { x } }' -f body=resolveReviewThread",
+        "gh api -X PUT repos/o/r/pulls/7/merge",
+        "gh pr comment 7 --body x",
+    ] {
+        assert_eq!(thread_call(line), None, "{line}");
+    }
+}
+
 #[test]
 fn a_call_declared_as_a_gh_write_is_one_whatever_it_spells() {
     assert!(is_outbound_write(&["gh", "frobnicate"], How::write()));

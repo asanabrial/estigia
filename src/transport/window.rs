@@ -249,51 +249,172 @@ fn gh_writes(args: &[&str]) -> bool {
     }
 }
 
-fn api_writes(args: &[&str]) -> bool {
-    let mut method = None;
-    let mut fields = false;
-    let mut endpoint = None;
-    let mut unreadable = false;
-    let mut rest = args.iter().skip_while(|arg| **arg != "api").skip(1);
-    while let Some(arg) = rest.next() {
-        let flag = arg.to_ascii_lowercase();
-        if matches!(flag.as_str(), "-x" | "--method") {
-            method = rest.next().map(|value| value.to_ascii_uppercase());
-        } else if let Some(value) = flag
-            .strip_prefix("--method=")
-            .or_else(|| flag.strip_prefix("-x"))
-        {
-            method = Some(value.to_ascii_uppercase());
-        } else if FIELD_FLAGS.contains(&flag.as_str()) {
-            fields = true;
-            let value = rest.next().copied().unwrap_or_default();
-            unreadable |= flag == "--input" || reads_a_file(value);
-        } else if attached_field(&flag) {
-            fields = true;
-            let value = if flag.starts_with("--") {
-                arg.split_once('=').map_or("", |(_, value)| value)
-            } else {
-                &arg[2..]
-            };
-            unreadable |= flag.starts_with("--input=") || reads_a_file(value);
-        } else if FLAGS_WITH_A_VALUE.contains(&flag.as_str())
-            || matches!(
-                flag.as_str(),
-                "-q" | "--jq" | "-t" | "--template" | "--cache" | "-p" | "--preview"
-            )
-        {
-            rest.next();
-        } else if !arg.starts_with('-') && endpoint.is_none() {
-            endpoint = Some(*arg);
+#[derive(Default)]
+struct ApiCall<'a> {
+    method: Option<String>,
+    fields: bool,
+    endpoint: Option<&'a str>,
+    unreadable: bool,
+    query: Option<String>,
+    in_query: bool,
+}
+
+impl<'a> ApiCall<'a> {
+    fn read(args: &[&'a str]) -> Self {
+        let mut call = Self::default();
+        let mut rest = args.iter().skip_while(|arg| **arg != "api").skip(1);
+        while let Some(arg) = rest.next() {
+            let flag = arg.to_ascii_lowercase();
+            if call.in_query {
+                if looks_like_a_flag(arg) {
+                    call.in_query = false;
+                } else if call.endpoint.is_some() || *arg != "graphql" {
+                    if let Some(query) = call.query.as_mut() {
+                        query.push(' ');
+                        query.push_str(arg);
+                    }
+                    continue;
+                }
+            }
+            if matches!(flag.as_str(), "-x" | "--method") {
+                call.method = rest.next().map(|value| value.to_ascii_uppercase());
+            } else if let Some(value) = flag
+                .strip_prefix("--method=")
+                .or_else(|| flag.strip_prefix("-x"))
+            {
+                call.method = Some(value.to_ascii_uppercase());
+            } else if FIELD_FLAGS.contains(&flag.as_str()) {
+                call.fields = true;
+                let value = rest.next().copied().unwrap_or_default();
+                call.unreadable |= flag == "--input" || reads_a_file(value);
+                if flag != "--input" {
+                    call.take_field(value);
+                }
+            } else if attached_field(&flag) {
+                call.fields = true;
+                let value = if flag.starts_with("--") {
+                    arg.split_once('=').map_or("", |(_, value)| value)
+                } else {
+                    &arg[2..]
+                };
+                call.unreadable |= flag.starts_with("--input=") || reads_a_file(value);
+                if !flag.starts_with("--input=") {
+                    call.take_field(value);
+                }
+            } else if FLAGS_WITH_A_VALUE.contains(&flag.as_str())
+                || matches!(
+                    flag.as_str(),
+                    "-q" | "--jq" | "-t" | "--template" | "--cache" | "-p" | "--preview"
+                )
+            {
+                rest.next();
+            } else if !arg.starts_with('-') && call.endpoint.is_none() {
+                call.endpoint = Some(*arg);
+            }
+        }
+        call
+    }
+
+    fn take_field(&mut self, field: &str) {
+        let Some((key, value)) = field.split_once('=') else {
+            return;
+        };
+        if !key.trim_matches(['"', '\'']).eq_ignore_ascii_case("query") {
+            return;
+        }
+        if !value.trim_start_matches(['"', '\'']).starts_with('@') {
+            self.query = Some(value.to_owned());
+            self.in_query = true;
         }
     }
-    if endpoint == Some("graphql") {
-        return unreadable || args.iter().any(|arg| arg.contains("mutation"));
+
+    fn graphql(&self) -> bool {
+        self.endpoint == Some("graphql")
     }
-    match method {
-        Some(method) => method != "GET",
-        None => fields,
+
+    fn writes(&self, args: &[&str]) -> bool {
+        if self.graphql() {
+            return self.unreadable || args.iter().any(|arg| arg.contains("mutation"));
+        }
+        match &self.method {
+            Some(method) => method != "GET",
+            None => self.fields,
+        }
     }
+}
+
+fn looks_like_a_flag(word: &str) -> bool {
+    let mut bytes = word.bytes();
+    bytes.next() == Some(b'-')
+        && bytes
+            .next()
+            .is_some_and(|b| b == b'-' || b.is_ascii_alphabetic())
+}
+
+fn api_writes(args: &[&str]) -> bool {
+    ApiCall::read(args).writes(args)
+}
+
+/// What a `gh api` call that writes would change, when it is a review thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ReviewThreadCall {
+    /// A mutation on the line names a thread or review comment, or the REST endpoint is one.
+    Named,
+    /// A GraphQL call whose query is not on the line, so what it mutates is unknown.
+    QueryNotOnTheLine,
+}
+
+const REVIEW_THREAD_MUTATIONS: &[&str] = &[
+    "resolvereviewthread",
+    "unresolvereviewthread",
+    "addpullrequestreviewthreadreply",
+    "addpullrequestreviewcomment",
+];
+
+/// Whether this `gh` call is an API write that addresses a pull request review thread
+/// or review comment, read from the same words [`gh_api_writes`] reads.
+pub(crate) fn gh_api_review_thread(args: &[&str]) -> Option<ReviewThreadCall> {
+    if !gh_api_writes(args) {
+        return None;
+    }
+    let call = ApiCall::read(args);
+    if call.graphql() {
+        return match &call.query {
+            Some(query) if names_a_thread_mutation(query) => Some(ReviewThreadCall::Named),
+            Some(_) => None,
+            None => Some(ReviewThreadCall::QueryNotOnTheLine),
+        };
+    }
+    call.endpoint
+        .is_some_and(addresses_review_comments)
+        .then_some(ReviewThreadCall::Named)
+}
+
+fn names_a_thread_mutation(query: &str) -> bool {
+    let query = query.to_ascii_lowercase();
+    let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    REVIEW_THREAD_MUTATIONS.iter().any(|name| {
+        query.match_indices(name).any(|(at, _)| {
+            !query[..at].chars().next_back().is_some_and(word)
+                && !query[at + name.len()..].chars().next().is_some_and(word)
+        })
+    })
+}
+
+fn addresses_review_comments(endpoint: &str) -> bool {
+    let path = endpoint.split(['?', '#']).next().unwrap_or_default();
+    let path = path.trim_matches(|c: char| c == '/' || c == '"' || c == '\'');
+    let segments: Vec<String> = path.split('/').map(str::to_ascii_lowercase).collect();
+    let tail = |from_the_end: usize| {
+        segments
+            .len()
+            .checked_sub(from_the_end)
+            .and_then(|at| segments.get(at))
+            .map(String::as_str)
+    };
+    (tail(3) == Some("pulls") && tail(1) == Some("comments"))
+        || (tail(5) == Some("pulls") && tail(3) == Some("comments") && tail(1) == Some("replies"))
+        || (tail(3) == Some("pulls") && tail(2) == Some("comments"))
 }
 
 fn reads_a_file(field: &str) -> bool {

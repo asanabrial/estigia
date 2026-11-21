@@ -174,6 +174,7 @@ const REFUSED: &[&str] = &[
     "review-wait-invalid",
     "review-thread-invalid",
     "review-thread-pr-unconfined",
+    "review-thread-api-mutation-unverified",
     "review-thread-head-not-published",
     "review-thread-fix-unpublished",
     "agent-configuration-unwritable",

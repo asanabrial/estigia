@@ -182,17 +182,24 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     reported on the head holds the stages behind it and says it was never reported, since a check not yet
     started and a stage name matching no check look the same; an advisory check never holds them. Held
     against a fake `gh` by `src/transport/stages/tests.rs`.
-  - **The autonomous road proves less about the checkout than the assisted one, and leaves the shell
-    open.** `review_stages` and `review_thread` under an autonomous claim check the run's complete
+  - **The autonomous road proves less about the checkout than the assisted one, and leaves part of the
+    shell open.** `review_stages` and `review_thread` under an autonomous claim check the run's complete
     receipt, the ownership marker and branch of its checkout, the live claim (`review_thread` only) and
     that the single open pull request is the receipt's ([assisted review](assisted-review.md)). They
     do not prove that nobody pushed between the last read and the mutation, that the receipt's
     pull request is the one the person meant, or that the reply says what the fix did. The pointer
     records no branch there, so the marker is the only record of it, and a marker the run itself
-    could rewrite is not evidence against that run. A raw `gh api graphql` mutation from the shell is
-    still allowed under a live autonomous claim and checks none of this; nothing refuses it, and
-    nothing here narrows that. Held by `src/harness/mcp/tests/autonomous_review_tests.rs` and
-    `src/transport/stages/tests/autonomous.rs`.
+    could rewrite is not evidence against that run. A shell `gh api` call the gate already reads as a
+    write is refused under a live autonomous claim (`review-thread-api-mutation-unverified`, after the
+    claim verifies) when it is a GraphQL mutation whose query on the line names `resolveReviewThread`,
+    `unresolveReviewThread`, `addPullRequestReviewThreadReply` or `addPullRequestReviewComment`, a
+    mutating call on `pulls/<n>/comments`, `pulls/<n>/comments/<id>/replies` or
+    `pulls/comments/<id>`, or a GraphQL call whose query is not on the line (`--input`, an `@file`
+    field). Every other API write is decided as before, and a read stays a read. Still open: a mutation
+    spelled through a shell variable, substitution, alias or script, which the gate does not read, and
+    `gh pr comment` and `gh pr review`. Held by `src/harness/mcp/tests/autonomous_review_tests.rs`,
+    `src/transport/stages/tests/autonomous.rs`, `src/transport/window/tests.rs` and
+    `src/harness/tests.rs`.
 - **No other setting is read by nobody.**
   An operator sets thirty-four rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location` and `Review budget` (for the review forecast line). The gate reads
