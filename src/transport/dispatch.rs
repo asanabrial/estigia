@@ -1810,7 +1810,7 @@ fn run_operation(
                 thread_id: f.need("thread-id", operation)?,
                 expected_head: f.need("expected-head", operation)?,
                 fix_commit: f.get("fix-commit"),
-                body_file: Path::new(f.need("body-file", operation)?),
+                body_file: f.get("body-file").map(Path::new),
                 resolve: f.on("resolve"),
             };
             if f.get("published-pr").is_some() {

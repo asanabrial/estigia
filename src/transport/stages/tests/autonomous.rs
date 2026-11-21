@@ -149,6 +149,40 @@ fn a_held_claim_renews_before_the_reply_and_the_fix_resolves_the_thread() {
 }
 
 #[test]
+fn a_held_claim_resolves_a_thread_with_a_reply_alone() {
+    let rig = ThreadRig::new();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("log");
+    let script = held_script(
+        &rig,
+        crate::test_env::live_holder_issue(RUN, 12, "review"),
+        &[
+            rig.pr(false, false),
+            rig.pr(true, false),
+            rig.pr(true, false),
+            rig.pr(true, true),
+        ],
+    );
+    let result = crate::test_env::with_counting_logging_gh(
+        bin.path(),
+        &script,
+        &rig.root.path().join("counts"),
+        &log,
+        || thread::respond_held(&rig.context, &rig.response(None, true), &held(&rig, 7)),
+    )
+    .unwrap();
+    assert_eq!(result["resolution_confirmed"], true);
+    assert!(result["fix_commit"].is_null());
+    let calls = logged(&log);
+    let at = |needle: &str| calls.iter().position(|call| call.contains(needle));
+    assert!(
+        at("issue view") < at("addPullRequestReviewThreadReply"),
+        "{calls:?}"
+    );
+    assert!(at("resolveReviewThread").is_some(), "{calls:?}");
+}
+
+#[test]
 fn a_claim_that_is_not_held_sends_nothing_and_lists_nothing() {
     let rig = ThreadRig::new();
     let bin = crate::test_env::scripted_gh();

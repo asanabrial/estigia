@@ -69,8 +69,9 @@ For each follow-up, use `review_stages` with `expected_head` and `wait_seconds` 
 that published head's CI. A timeout or missing checks is not green; `none` is not green either. `open_threads` includes all
 authors and full conversations, independent of stage ordering; incomplete lists refuse the reading.
 Fix applicable concerns, commit, and publish with `draft_pr` under `Corrections after ready`.
-Use its confirmed head in `review_thread`: supply the thread ID and reply file; resolving also
-requires `fix_commit`, a descendant of the thread's original commit already on that published head.
+Use its confirmed head in `review_thread`: supply the thread ID and reply file; resolving needs
+no `fix_commit`, but one given must descend from the thread's original commit and already be on that
+published head. A thread already answered by this account resolves with no reply file.
 Only the selected threads are resolved, after the reply reads back. A repository's `Review voice`
 rewords the reply first, and a voice that cannot be applied stops it with nothing posted. A changed head restarts the
 cycle with fresh CI and review evidence. Ordinary shell pushes have no refs before Git runs and
