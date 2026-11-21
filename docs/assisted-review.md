@@ -227,10 +227,30 @@ With one, the two roads that post prose reword it in one step first:
   landed is answered for without a voice being asked. `review_thread` asks after it has read the reply
   file and before it reads the pull request, so the checks that follow read the head and the thread
   as late as they did.
-- **Remembered.** The rendered text is kept in the local store under a digest of the voice file's bytes
-  and the text it was asked to reword ([what is kept](what-it-writes.md)). A retry looks the key up
-  before launching a job, so it posts the same words and runs no second job; `already_sent` still
-  decides first. Editing the voice file is a new key; `review_thread` additionally keeps the reply it
+- **Typing habits.** A voice may carry `voices/<name>.habits.json` beside it, at most 16 KiB, read only
+  when there is something to render. It is not shown to the job, which cannot be relied on to
+  reproduce a frequency; code applies it to each text the job answered, before the text is kept. Every
+  field is optional and unknown fields are refused: `accents` (`dropped`, a probability per accented
+  word, matched without regard to case, that its acute accents `á é í ó ú` are removed, and `other`
+  for an accented word not listed; `ñ` and `ü` never change), `lowercase_start`, `final_stop_dropped`
+  (one trailing `.`, never `...`, `?` or `!`), `opening_marks_dropped` (each `¿` and `¡`),
+  `space_before_closing_mark` (before each `?` or `!` that follows a letter) and `typo` (`share` and
+  `min_words`: in a text of at least that many words, with that probability, two adjacent inner
+  letters of one ASCII word of six letters or more are swapped, never a word of `accents.dropped`).
+  Fenced code, code spans, URLs, text in straight double quotes, `@mentions` and any token that is not
+  a plain word (a digit, `_`, `$`, `/`, `\`, `.`, `:`, `(`, a backtick, `->`, or a capital after the
+  first letter) are never touched, and `lowercase_start` does not apply when the first token is one of
+  them. Every habit is applied over one segmentation of the text, so none rewrites what another
+  protected. The draws come from a stream derived with SHA-256 from the habits file's bytes and the
+  rendered text, so the same text under the same file is always written the same way and no clock or
+  process id enters. Without the file nothing changes. A file that cannot be honoured (not a regular
+  file, unreadable, over the cap, not UTF-8 or the shape, an unknown field, a probability outside 0 to
+  1) stops the post as `review-voice-habits-invalid` before any job is launched.
+- **Remembered.** The rendered text, with its habits applied, is kept in the local store under a digest
+  of the voice file's bytes, the habits file's bytes when there is one, and the text it was asked to
+  reword ([what is kept](what-it-writes.md)). A retry looks the key up
+  before launching a job, so it posts the same words, applies nothing a second time and runs no second
+  job; `already_sent` still decides first. Editing the voice file or the habits file is a new key; `review_thread` additionally keeps the reply it
   posts under a key without the voice, so a retry after an edit does not post a second reply. An
   approval with nothing to reword reads no voice file.
 - **Fails closed.** A repository file that cannot be read, a `Review voice` row that does not parse

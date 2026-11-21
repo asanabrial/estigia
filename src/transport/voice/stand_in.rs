@@ -101,6 +101,15 @@ pub(crate) fn write_voice(name: &str, text: &str) {
     crate::paths::replace_atomically(&dir.join(format!("{name}.md")), text).expect("a voice file");
 }
 
+pub(crate) fn habits_path(name: &str) -> std::path::PathBuf {
+    voices_dir().join(format!("{name}.habits.json"))
+}
+
+pub(crate) fn write_habits(name: &str, bytes: &[u8]) {
+    std::fs::create_dir_all(voices_dir()).expect("a voices directory");
+    crate::paths::replace_bytes_atomically(&habits_path(name), bytes).expect("a habits file");
+}
+
 pub(crate) fn name_voice(repo_dir: &Path, value: &str) {
     let path = crate::skill::repository_config_path(repo_dir);
     std::fs::create_dir_all(path.parent().expect("a directory")).expect("a state directory");

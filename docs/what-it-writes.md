@@ -200,9 +200,12 @@ Five invariants, and the tests are named after them:
    answered. The directory is the one that holds `state.db`, wherever that is.
 
    The same store holds the table `rendered_texts` (schema 28): the key, the text a rewording job
-   answered for it and when. The key is a digest of the voice file's bytes and the one text it was asked to
-   reword, so a retried `submit` or `review_thread` finds the words it posted before and runs no second
-   job, and another voice file, or the same file edited, is another key. A second kind of key, a digest of
+   answered for it and when, with the voice's typing habits already applied
+   ([the habits file](assisted-review.md#a-review-voice), `voices/<name>.habits.json`, read and never
+   written like the voice). The key is a digest of the voice file's bytes, the habits file's bytes when
+   there is one, and the one text it was asked to reword, so a retried `submit` or `review_thread`
+   finds the words it posted before and runs no second job, and another voice file, or the same file
+   edited, is another key. A second kind of key, a digest of
    the repository, the thread and the reply as written, holds the reply `review_thread` is about to post,
    so a retry after the voice was edited recognises it rather than posting another. The first text kept for a key is
    the one that stays. Each write drops rows older than ninety days. The rows are for
@@ -1658,7 +1661,7 @@ ownership checks.
 | `screen`, `repositories/` | the setup screen's language, the list of checkouts | no: the person's, not any agent's |
 | `lifecycle/` | machine-wide binary provenance records, see [`lifecycle.md`](lifecycle.md) | no |
 | `jobs/` | one directory per review job and per check job: manifest, prompt, lock, logs, `result.json`, `usage.json`; a rewording job's directory is removed when the call that started it ends | no |
-| `voices/` | the operator's voice files, `<name>.md`, which a repository's `Review voice` row names; read, never written by Estigia | no: the person's |
+| `voices/` | the operator's voice files, `<name>.md`, and their optional `<name>.habits.json`, which a repository's `Review voice` row names; read, never written by Estigia | no: the person's |
 | `snapshots/` | up to three daily copies of the store, for a person to restore by hand | yes, with the store, when it is taken |
 | `watched/` | `git status` records an earlier build wrote beside the state root; nothing reads, writes or removes them now, so a person may delete the directory | no |
 

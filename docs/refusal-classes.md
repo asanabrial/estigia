@@ -186,8 +186,9 @@ Judgement calls that could have gone the other way:
 - `review-claim-admits-no-write` is `not_started` and stays the same on every retry while the claim
   is held; `head-moved` is `stale`, and no verdict carries across it; `pull-review-submission-unconfirmed`
   is `unknown`, and the review may have landed.
-- `review-voice-file-missing`, `review-voice-file-too-large` and `review-voice-answer-malformed` are
-  `refused`: a file, its size or an answer was read and a rule says no, with nothing posted.
+- `review-voice-file-missing`, `review-voice-file-too-large`, `review-voice-habits-invalid` and
+  `review-voice-answer-malformed` are `refused`: a file, its size, its shape or an answer was read and
+  a rule says no, with nothing posted.
   `review-voice-file-unreadable`, `review-voice-row-unreadable` and `review-voice-render-failed` are
   `unavailable`: a file, the repository's own file or a rewording job could not be read or finished, and
   a retry may find them.

@@ -177,6 +177,101 @@ fn a_job_that_could_not_be_written_leaves_no_directory_and_starts_nothing() {
     assert_eq!(jobs_left(), 0);
 }
 
+const STOP_DROPPED: &[u8] = br#"{ "final_stop_dropped": 1.0 }"#;
+
+#[test]
+fn a_habits_file_beside_the_voice_is_applied_before_the_text_is_kept() {
+    let (repo, context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    stand_in::write_habits("house", STOP_DROPPED);
+    stand_in::name_voice(repo.path(), "house");
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    assert_eq!(
+        render_one(&context, &renderer, "Hola.").expect("a rendering"),
+        "voiced: Hola"
+    );
+    assert!(!probe.prompt().contains("final_stop_dropped"));
+}
+
+#[test]
+fn a_retry_reads_the_kept_text_and_applies_the_habits_nothing_more() {
+    let (repo, context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    stand_in::write_habits("house", STOP_DROPPED);
+    stand_in::name_voice(repo.path(), "house");
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    let first = render_one(&context, &renderer, "Hola. .").expect("a rendering");
+    assert_eq!(first, "voiced: Hola. ");
+    assert_eq!(
+        render_one(&context, &renderer, "Hola. .").expect("a retry"),
+        first
+    );
+    assert_eq!(probe.launched(), 1);
+}
+
+#[test]
+fn editing_the_habits_file_is_another_key_and_asks_the_job_again() {
+    let (repo, context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    stand_in::write_habits("house", STOP_DROPPED);
+    stand_in::name_voice(repo.path(), "house");
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    render_one(&context, &renderer, "Hola.").expect("a rendering");
+    stand_in::write_habits("house", br#"{ "final_stop_dropped": 0.0 }"#);
+    assert_eq!(
+        render_one(&context, &renderer, "Hola.").expect("another rendering"),
+        "voiced: Hola."
+    );
+    assert_eq!(probe.launched(), 2);
+}
+
+fn habits_reason(write: impl Fn(&std::path::Path)) -> (serde_json::Value, usize) {
+    let (repo, context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    stand_in::name_voice(repo.path(), "house");
+    let path = stand_in::habits_path("house");
+    let _ = std::fs::remove_dir_all(&path);
+    let _ = std::fs::remove_file(&path);
+    write(&path);
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    let failure = render_one(&context, &renderer, "text").expect_err("invalid habits");
+    (failure.envelope(), probe.launched())
+}
+
+fn written(bytes: &'static [u8]) -> impl Fn(&std::path::Path) {
+    move |path| std::fs::write(path, bytes).expect("a habits file")
+}
+
+#[test]
+fn every_invalid_habits_file_stops_the_post_and_launches_no_job() {
+    let over = vec![b' '; 16 * 1024 + 1];
+    let over: &'static [u8] = Box::leak(over.into_boxed_slice());
+    type Making = Box<dyn Fn(&std::path::Path)>;
+    let cases: [(&str, Making); 7] = [
+        (
+            "directory",
+            Box::new(|path| std::fs::create_dir_all(path).expect("a directory")),
+        ),
+        ("cap", Box::new(written(over))),
+        ("utf8", Box::new(written(&[0xff, 0xfe, 0x7b]))),
+        ("json", Box::new(written(b"not json"))),
+        ("field", Box::new(written(br#"{ "unknown": 1 }"#))),
+        ("high", Box::new(written(br#"{ "lowercase_start": 1.5 }"#))),
+        ("low", Box::new(written(br#"{ "lowercase_start": -0.1 }"#))),
+    ];
+    for (name, write) in cases {
+        let (envelope, launched) = habits_reason(write);
+        assert_eq!(envelope["reason"], "review-voice-habits-invalid", "{name}");
+        assert!(
+            envelope["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("house.habits.json")),
+            "{name}: {envelope}"
+        );
+        assert_eq!(launched, 0, "{name}");
+    }
+}
+
 #[test]
 fn a_row_the_repository_file_cannot_be_read_from_stops_rather_than_posting_plain() {
     let (repo, context) = context();
