@@ -263,6 +263,25 @@ With one, the two roads that post prose reword it in one step first:
 Any later road that replies to a thread outside an assisted claim applies the voice the same way, by the
 same step, under the same row.
 
+**Trying a voice.** Two commands post nothing, need no claim and work outside a repository; the name
+on the command line is the voice, and the `Review voice` row of the directory they run in is never
+read.
+
+- `estigia voice check <name>` reads `voices/<name>.md` and its habits file with the readers a post
+  uses and prints both paths, their sizes and whether there is a habits file (`--json` prints one
+  object). What a post would refuse it refuses, with the same code: `review-voice-file-missing`,
+  `review-voice-file-unreadable`, `review-voice-file-too-large`, `review-voice-habits-invalid`. A name
+  that is not lowercase letters, digits and `-` is answered as `review-voice-file-missing`.
+- `estigia voice preview <name> <file>...` takes one text from each file, runs them in the order
+  given through the same step a post uses (the job with the fixed instructions, its answer admitted,
+  then the habits) and prints them, separated by a line holding only `---` (`--json` prints
+  `{"texts": [...]}`). The model is the one a post would use, from `Model routing`. A failed job
+  exits non-zero as `review-voice-render-failed` and prints no text. Nothing is kept: the remembered
+  rendered texts are neither read nor written, so a preview never changes what a later post says, and
+  two previews of one text may differ in wording while the habits stay the same for a given rendered
+  text. `--habits-only` launches no job and applies only the habits file to the texts as given; with
+  no habits file the texts come back unchanged and stderr says so.
+
 ## Regression evidence
 
 `src/transport/draft/tests.rs` holds the real bare-remote matrix for draft/ready follow-ups with

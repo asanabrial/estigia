@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{VOICE_CAP, answer_through, read_capped, render, render_one};
+use super::{VOICE_CAP, answer_through, preview, read_capped, render, render_one};
 use crate::transport::Context;
 use crate::transport::voice::stand_in::{self, Answers};
 
@@ -156,21 +156,14 @@ fn a_job_whose_status_cannot_be_read_is_killed_and_its_directory_removed() {
 
 #[test]
 fn a_job_that_could_not_be_written_leaves_no_directory_and_starts_nothing() {
-    let (repo, context) = context();
+    let (repo, _context) = context();
     stand_in::name_voice(repo.path(), "house");
     let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
-    let failure = answer_through(
-        &context,
-        &renderer,
-        "house",
-        "voice",
-        &["text"],
-        |dir, _| {
-            std::fs::create_dir_all(dir).expect("a directory");
-            std::fs::write(dir.join("prompt"), "half").expect("a partial job");
-            Err(crate::transport::Failure::Write("no space".to_owned()))
-        },
-    )
+    let failure = answer_through("", &renderer, "house", "voice", &["text"], |dir, _| {
+        std::fs::create_dir_all(dir).expect("a directory");
+        std::fs::write(dir.join("prompt"), "half").expect("a partial job");
+        Err(crate::transport::Failure::Write("no space".to_owned()))
+    })
     .expect_err("an unwritten job");
     assert!(matches!(failure, crate::transport::Failure::Write(_)));
     assert_eq!(probe.launched(), 0);
@@ -270,6 +263,109 @@ fn every_invalid_habits_file_stops_the_post_and_launches_no_job() {
         );
         assert_eq!(launched, 0, "{name}");
     }
+}
+
+fn refusal_of(failure: crate::transport::Failure) -> (String, String) {
+    let envelope = failure.envelope();
+    let text = |key: &str| envelope[key].as_str().unwrap_or_default().to_owned();
+    (text("reason"), text("action"))
+}
+
+#[test]
+fn a_voice_with_its_habits_is_checked_and_both_paths_are_named() {
+    let (_repo, _context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    stand_in::write_habits("house", STOP_DROPPED);
+    let checked = preview::check("house").expect("a usable voice");
+    assert!(checked.voice.ends_with("house.md"));
+    assert_eq!(checked.voice_bytes, "Plain and brief.".len() as u64);
+    let (path, bytes) = checked.habits.expect("a habits file");
+    assert!(path.ends_with("house.habits.json"));
+    assert_eq!(bytes, STOP_DROPPED.len() as u64);
+}
+
+#[test]
+fn a_voice_without_habits_is_usable_and_says_there_are_none() {
+    let (_repo, _context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    assert!(preview::check("house").expect("usable").habits.is_none());
+}
+
+#[test]
+fn check_refuses_what_a_post_refuses_with_the_same_code_and_no_repository_advice() {
+    let (_repo, _context) = context();
+    let (missing, _) = refusal_of(preview::check("house").expect_err("no voice file"));
+    assert_eq!(missing, "review-voice-file-missing");
+    stand_in::write_voice("house", &"x".repeat(VOICE_CAP as usize + 1));
+    let (large, action) = refusal_of(preview::check("house").expect_err("too large"));
+    assert_eq!(large, "review-voice-file-too-large");
+    assert!(!action.contains("Review voice"), "{action}");
+    stand_in::write_voice("house", "Plain and brief.");
+    stand_in::write_habits("house", br#"{ "unknown": 1 }"#);
+    let (habits, action) = refusal_of(preview::check("house").expect_err("bad habits"));
+    assert_eq!(habits, "review-voice-habits-invalid");
+    assert!(!action.contains("Review voice"), "{action}");
+}
+
+#[test]
+fn a_name_that_could_be_a_path_is_refused_before_anything_is_read() {
+    let (_repo, _context) = context();
+    let (reason, _) = refusal_of(preview::check("../outside").expect_err("not a name"));
+    assert_eq!(reason, "review-voice-file-missing");
+}
+
+const ALL_ONES: &[u8] = br#"{ "lowercase_start": 1.0, "final_stop_dropped": 1.0,
+    "accents": { "other": 1.0 } }"#;
+
+#[test]
+fn habits_only_applies_the_habits_and_launches_no_job() {
+    let (_repo, _context) = context();
+    stand_in::write_habits("house", ALL_ONES);
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    let given = texts(&["Está listo."]);
+    let done = preview::preview("", &renderer, "house", &given, true).expect("habits only");
+    assert_eq!(done.texts, ["esta listo"]);
+    assert!(done.habits);
+    assert_eq!(probe.launched(), 0);
+}
+
+#[test]
+fn habits_only_without_a_habits_file_returns_the_texts_unchanged() {
+    let (_repo, _context) = context();
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    let given = texts(&["Está listo."]);
+    let done = preview::preview("", &renderer, "house", &given, true).expect("unchanged");
+    assert_eq!(done.texts, given);
+    assert!(!done.habits);
+    assert_eq!(probe.launched(), 0);
+}
+
+#[test]
+fn a_preview_prints_the_jobs_answers_with_the_habits_in_order_and_keeps_nothing() {
+    let (repo, context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    stand_in::write_habits("house", STOP_DROPPED);
+    stand_in::name_voice(repo.path(), "other");
+    let (renderer, probe) = stand_in::renderer(Answers::Prefixed);
+    let given = texts(&["Uno.", "Dos."]);
+    let done = preview::preview("", &renderer, "house", &given, false).expect("a preview");
+    assert_eq!(done.texts, ["voiced: Uno", "voiced: Dos"]);
+    assert_eq!(probe.launched(), 1);
+    stand_in::name_voice(repo.path(), "house");
+    render_one(&context, &renderer, "Uno.").expect("a post's rendering");
+    assert_eq!(probe.launched(), 2);
+}
+
+#[test]
+fn a_preview_whose_job_fails_refuses_and_returns_no_text() {
+    let (_repo, _context) = context();
+    stand_in::write_voice("house", "Plain and brief.");
+    let renderer = stand_in::renderer_that_refuses();
+    let failure = preview::preview("", &renderer, "house", &texts(&["Uno."]), false)
+        .expect_err("a failed job");
+    let (reason, action) = refusal_of(failure);
+    assert_eq!(reason, "review-voice-render-failed");
+    assert!(!action.contains("Review voice"), "{action}");
 }
 
 #[test]

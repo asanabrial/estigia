@@ -25,7 +25,7 @@ mod loop_stop;
 
 pub use args::{
     Cli, Command, ConfigAction, GoalAction, ReviewAction, SessionAction, SessionsAction,
-    StatusAction, StoreAction,
+    StatusAction, StoreAction, VoiceAction,
 };
 
 /// A note for whoever is watching, on standard error.
@@ -624,6 +624,84 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             ConfigAction::Repos => config_repos(cli.json),
             ConfigAction::Forget { repo } => config_forget(repo.as_deref(), cli.json),
         },
+
+        Command::Voice { action } => voice(action, cli.json),
+    }
+}
+
+fn voice(action: &VoiceAction, json: bool) -> Result<(), Refusal> {
+    let refused =
+        |failure: crate::transport::Failure| crate::transport::claim::failure_refusal(&failure);
+    match action {
+        VoiceAction::Check { name } => {
+            let checked = crate::transport::voice::preview::check(name).map_err(refused)?;
+            let habits = checked
+                .habits
+                .as_ref()
+                .map(|(path, bytes)| serde_json::json!({ "path": path, "bytes": bytes }));
+            if json {
+                print_json(&serde_json::json!({
+                    "ok": true,
+                    "voice": { "path": checked.voice, "bytes": checked.voice_bytes },
+                    "habits": habits,
+                }));
+                return Ok(());
+            }
+            say!(
+                "voice: {} ({} bytes)",
+                checked.voice.display(),
+                checked.voice_bytes
+            );
+            match &checked.habits {
+                Some((path, bytes)) => say!("habits: {} ({bytes} bytes)", path.display()),
+                None => say!("habits: none"),
+            }
+            Ok(())
+        }
+        VoiceAction::Preview {
+            name,
+            files,
+            habits_only,
+        } => {
+            let texts = files
+                .iter()
+                .map(|file| {
+                    std::fs::read_to_string(file).map_err(|error| {
+                        refused(crate::transport::Failure::Read(format!(
+                            "{} could not be read as text: {error}",
+                            file.display()
+                        )))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let context = crate::transport::Context::live(
+                harness::control_surface(),
+                launch_directory()?,
+                None,
+            );
+            let previewed = crate::transport::voice::preview::preview(
+                context.get("Model routing").unwrap_or(""),
+                &crate::transport::voice::Renderer::detached(),
+                name,
+                &texts,
+                *habits_only,
+            )
+            .map_err(refused)?;
+            if *habits_only && !previewed.habits {
+                eprintln!("estigia: voice `{name}` has no habits file; the texts are unchanged");
+            }
+            if json {
+                print_json(&serde_json::json!({ "texts": previewed.texts }));
+                return Ok(());
+            }
+            for (at, text) in previewed.texts.iter().enumerate() {
+                if at > 0 {
+                    say!("---");
+                }
+                say!("{text}");
+            }
+            Ok(())
+        }
     }
 }
 

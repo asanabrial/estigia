@@ -62,6 +62,8 @@ mod sources;
 mod status_doctor;
 #[path = "pipe/sync.rs"]
 mod sync;
+#[path = "pipe/voice.rs"]
+mod voice;
 
 use std::io::Read;
 use std::process::{Command, Stdio};
