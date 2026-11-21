@@ -71,7 +71,8 @@ authors and full conversations, independent of stage ordering; incomplete lists 
 Fix applicable concerns, commit, and publish with `draft_pr` under `Corrections after ready`.
 Use its confirmed head in `review_thread`: supply the thread ID and reply file; resolving also
 requires `fix_commit`, a descendant of the thread's original commit already on that published head.
-Only the selected threads are resolved, after the reply reads back. A changed head restarts the
+Only the selected threads are resolved, after the reply reads back. A repository's `Review voice`
+rewords the reply first, and a voice that cannot be applied stops it with nothing posted. A changed head restarts the
 cycle with fresh CI and review evidence. Ordinary shell pushes have no refs before Git runs and
 remain refused; generic API mutations cannot bypass the typed thread checks. Do not replace Husky.
 

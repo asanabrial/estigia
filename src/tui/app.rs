@@ -309,6 +309,7 @@ pub(super) const TUI_SETTINGS: &[Setting] = &[
     Setting::ReviewBudget,
     Setting::ChangeSize,
     Setting::CorrectionsPerLineage,
+    Setting::ReviewVoice,
     Setting::LoopPlugin,
     Setting::GoalLoopPlugin,
     Setting::Summary,

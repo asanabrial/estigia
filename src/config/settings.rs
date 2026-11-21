@@ -13,7 +13,7 @@ use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use super::{
     Authority, Config, DEFAULT_ASK_TIMEOUT, DecisionMode, Evidence, GitOperationWindow,
     IssueRequirement, Language, LoopPlugin, Notifications, Profile, PublicationLane, RepoRef,
-    RepositoryHost, ReviewBudget, Tracker, Workflow, WorktreeRoot, delivery,
+    RepositoryHost, ReviewBudget, ReviewVoice, Tracker, Workflow, WorktreeRoot, delivery,
 };
 use crate::setup::AgentAdapter;
 
@@ -59,6 +59,8 @@ pub enum Setting {
     ChangeSize,
     /// How many corrections one review lineage may spend before a person decides.
     CorrectionsPerLineage,
+    /// The voice the text a review posts is worded in.
+    ReviewVoice,
     /// Commands this repository treats as irreversible.
     Boundaries,
     /// The language the plain-language summary sentence is written in.
@@ -140,6 +142,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting::ReviewBudget,
     Setting::ChangeSize,
     Setting::CorrectionsPerLineage,
+    Setting::ReviewVoice,
     // Agent runtime.
     Setting::Models,
     Setting::LoopPlugin,
@@ -359,6 +362,7 @@ pub const REPOSITORY_SETTINGS: &[Setting] = &[
     Setting::CorrectionsAfterReady,
     Setting::MergeBy,
     Setting::GitOperationWindow,
+    Setting::ReviewVoice,
 ];
 
 /// Everything the options page offers, in table order.
@@ -392,6 +396,7 @@ pub const OPTIONS_SETTINGS: &[Setting] = &[
     Setting::ReviewBudget,
     Setting::ChangeSize,
     Setting::CorrectionsPerLineage,
+    Setting::ReviewVoice,
     Setting::Summary,
     Setting::Body,
     Setting::Notifications,
@@ -492,6 +497,7 @@ impl Setting {
             | Self::ExternalReviewers
             | Self::CorrectionsAfterReady
             | Self::MergeBy
+            | Self::ReviewVoice
             | Self::GitOperationWindow => Scope::Repository,
         }
     }
@@ -528,6 +534,7 @@ impl Setting {
             | Self::PublicationLanesExclude
             | Self::ReviewBudget
             | Self::ChangeSize
+            | Self::ReviewVoice
             | Self::CorrectionsPerLineage => Group::ReviewAndChange,
             Self::Models | Self::LoopPlugin | Self::GoalLoopPlugin => Group::AgentRuntime,
             Self::Summary | Self::Body | Self::Notifications => Group::Language,
@@ -598,6 +605,7 @@ impl Setting {
             | Self::ReadyBy
             | Self::ExternalReviewers
             | Self::CorrectionsAfterReady
+            | Self::ReviewVoice
             | Self::MergeBy => false,
         }
     }
@@ -652,6 +660,10 @@ impl Setting {
             }
             Self::IssueRequirement => {
                 "whether a run holding no claim may write in this repository: allowed or refused"
+            }
+            Self::ReviewVoice => {
+                "the voice the text of a pull request review and of a thread reply is worded in: \
+                 none, or the name of a file in Estigia's `voices` directory"
             }
             Self::Workflow => {
                 "who witnesses a claim in this repository: Estigia writes the tracker, or the \
@@ -742,6 +754,7 @@ impl Setting {
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::CorrectionsPerLineage => Answers::some(&["3", "1"]),
             Self::IssueRequirement => Answers::all(&["on", "off"]),
+            Self::ReviewVoice => Answers::some(&["none", "house"]),
             Self::Workflow => Answers::all(&["autonomous", "assisted"]),
             // `custom` is accepted and not offered, for the reason `Profile`'s is.
             Self::DeliveryPreset => Answers::some(&["autonomous", "assisted", "team"]),
@@ -794,6 +807,7 @@ impl Setting {
             Self::Body => "Issue body language",
             Self::Notifications => "Notifications",
             Self::IssueRequirement => "Issue required",
+            Self::ReviewVoice => "Review voice",
             Self::Workflow => "Claim workflow",
             Self::DeliveryPreset => "Delivery preset",
             Self::StateNames => "State names",
@@ -962,6 +976,13 @@ impl Setting {
                 "a commit or merge on the default branch, a push to it or a pull request merge by a \
                  run holding no claim is refused until an issue is claimed"
             }
+            (Self::ReviewVoice, "none") => {
+                "a review and a thread reply are posted as they were written"
+            }
+            (Self::ReviewVoice, _) => {
+                "a review's comments and body and a thread reply are reworded in the voice that \
+                 file describes before they are posted; a missing or oversized file stops the post"
+            }
             (Self::Workflow, "autonomous") => {
                 "Estigia holds the claim and writes the tracker, as it always has"
             }
@@ -1113,6 +1134,9 @@ impl Setting {
                 "`none`, or workflow files separated by commas such as `release.yml`"
             }
             Self::IssueRequirement => "`on`, or `off`",
+            Self::ReviewVoice => {
+                "`none`, or a voice name of lowercase letters, digits and `-`, such as `house`"
+            }
             Self::Workflow => "`autonomous`, or `assisted`",
             Self::DeliveryPreset => "`autonomous`, `assisted`, `team`, or `custom`",
             Self::StateNames => {
@@ -1386,6 +1410,10 @@ impl Setting {
                     _ => return Err(self.reject(value)),
                 }
             }
+            Self::ReviewVoice => {
+                config.review_voice =
+                    ReviewVoice::parse(value).ok_or_else(|| self.reject(value))?;
+            }
             Self::Workflow => {
                 config.workflow = match lower(value).trim() {
                     "autonomous" => Workflow::Autonomous,
@@ -1511,6 +1539,7 @@ impl Setting {
                 }
             }
             Self::IssueRequirement => config.issue_requirement.as_value().to_owned(),
+            Self::ReviewVoice => config.review_voice.as_value(),
             Self::Workflow => config.workflow.as_value().to_owned(),
             Self::DeliveryPreset => config.delivery_preset().map_or_else(
                 || "custom".to_owned(),

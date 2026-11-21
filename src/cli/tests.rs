@@ -8970,6 +8970,72 @@ fn issue_required_refuses_its_retired_values_like_any_unknown_value() {
 }
 
 #[test]
+fn the_review_voice_is_written_to_the_repository_file_and_nowhere_else() {
+    let rig = authorisation_rig(&Config::default());
+    super::repository_set(Setting::ReviewVoice, "house", rig.repo.path(), &rig.options)
+        .expect("the repository may answer its own row");
+    let written = std::fs::read_to_string(crate::skill::repository_config_path(rig.repo.path()))
+        .expect("the file was created");
+    assert!(written.contains("| Review voice | house |"), "{written}");
+    let layered = crate::skill::layer_repository(&Config::default(), rig.repo.path())
+        .expect("the file reads back");
+    assert_eq!(
+        layered.review_voice,
+        crate::config::ReviewVoice::Named("house".to_owned())
+    );
+
+    let refusal = super::config_set(
+        "Review voice",
+        "none",
+        None,
+        false,
+        false,
+        &rig.options,
+        false,
+    )
+    .expect_err("a machine-wide value was accepted");
+    assert_eq!(refusal.code, "setting-only-the-repositorys");
+    let refusal = super::config_set(
+        "Review voice",
+        "none",
+        Some("claude-code"),
+        false,
+        false,
+        &rig.options,
+        false,
+    )
+    .expect_err("a per-agent value was accepted");
+    assert_eq!(refusal.code, "setting-not-per-agent");
+}
+
+#[test]
+fn a_review_voice_that_could_point_at_a_path_is_refused_and_nothing_is_written() {
+    let rig = authorisation_rig(&Config::default());
+    for value in [
+        "../house",
+        "a/b",
+        "house.md",
+        "/etc/passwd",
+        "House",
+        "",
+        "my voice",
+    ] {
+        let refusal = super::config_set(
+            "Review voice",
+            value,
+            None,
+            true,
+            false,
+            &rig.options,
+            false,
+        )
+        .expect_err("a value that is not a voice name was accepted");
+        assert_eq!(refusal.code, "config-value-unrecognised", "{value:?}");
+    }
+    assert!(!crate::skill::repository_config_path(rig.repo.path()).exists());
+}
+
+#[test]
 fn config_set_refuses_the_removed_unclaimed_github_writes_label_as_an_unknown_setting() {
     let rig = authorisation_rig(&Config::default());
     let refusal = super::config_set(

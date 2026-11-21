@@ -157,7 +157,7 @@ fn decode<'a, T: Deserialize<'a>>(object: &'a str) -> Result<T, Refusal> {
     serde_json::from_str(object).map_err(malformed)
 }
 
-fn unfenced(text: &str) -> Result<&str, Refusal> {
+pub(crate) fn unfenced(text: &str) -> Result<&str, Refusal> {
     let text = text.trim();
     let Some(after) = text.strip_prefix("```") else {
         return Ok(text);

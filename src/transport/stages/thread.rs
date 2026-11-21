@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use super::{fetch, nodes, text, verify_reading};
+use crate::transport::voice::{self, Renderer};
 use crate::transport::{Context, Failure, How, claim, run};
 
 pub(crate) struct Response<'a> {
@@ -21,6 +22,14 @@ pub(crate) fn respond(
     context: &Context,
     what: &Response<'_>,
 ) -> Result<serde_json::Value, Failure> {
+    respond_with(context, what, &Renderer::detached())
+}
+
+pub(crate) fn respond_with(
+    context: &Context,
+    what: &Response<'_>,
+    renderer: &Renderer,
+) -> Result<serde_json::Value, Failure> {
     let body = std::fs::read_to_string(what.body_file)
         .map_err(|error| Failure::Read(format!("the thread reply could not be read: {error}")))?;
     if body.trim().is_empty()
@@ -34,6 +43,7 @@ pub(crate) fn respond(
             false,
         ));
     }
+    let reply = voice::render_one(context, renderer, &body)?;
     let prs = claim::open_prs(context, what.branch)?;
     let [pr] = prs.as_slice() else {
         return Err(stop(
@@ -60,7 +70,6 @@ pub(crate) fn respond(
             &body,
         ],
     );
-    let reply = body;
     let mut reply_id = confirmed_reply(thread, &reply).map(str::to_owned);
     if reply_id.is_none() {
         let nonce = std::time::SystemTime::now()

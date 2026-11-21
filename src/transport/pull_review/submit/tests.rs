@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use super::submit;
+mod voice;
+
+use super::{submit, submit_with};
 use crate::outcome::Refusal;
 use crate::reviewer::job::{OnThread, Spawner};
 use crate::reviewer::{Adapter, Invocation};
