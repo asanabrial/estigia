@@ -62,6 +62,7 @@ pub mod prune;
 pub mod refusal_class;
 pub(crate) mod registry;
 pub(crate) mod review_claim;
+pub(crate) mod review_thread_api;
 pub mod roles;
 pub mod session;
 pub mod shell;
@@ -1715,22 +1716,28 @@ fn head_of(directory: &std::path::Path) -> Option<String> {
 /// to another command on the line decides nothing, and an explicit `GET` stays
 /// a read whatever fields it carries.
 fn mutates_through_the_api(normalized: &str) -> bool {
+    !gh_calls(normalized, |call| {
+        crate::transport::window::gh_api_writes(call).then_some(())
+    })
+    .is_empty()
+}
+
+fn gh_calls<T>(normalized: &str, read: impl Fn(&[&str]) -> Option<T>) -> Vec<T> {
     operation_window::shell_commands(normalized)
         .iter()
-        .any(|command| {
+        .filter_map(|command| {
             let words: Vec<&str> = command
                 .split_whitespace()
                 .map(|word| word.trim_matches(|c| c == '"' || c == '\''))
                 .collect();
-            words
+            let at = words
                 .iter()
-                .position(|word| *word == "gh" || word.ends_with("/gh"))
-                .is_some_and(|at| {
-                    let mut call = words[at..].to_vec();
-                    call[0] = "gh";
-                    crate::transport::window::gh_api_writes(&call)
-                })
+                .position(|word| *word == "gh" || word.ends_with("/gh"))?;
+            let mut call = words[at..].to_vec();
+            call[0] = "gh";
+            read(&call)
         })
+        .collect()
 }
 
 /// The population and boundary `REPOSITORY_SHELL` enforces.
@@ -3557,6 +3564,9 @@ fn decide_observing(
                 // from here `state` is the tracker's answer rather than the
                 // run's belief — which is what makes it safe to decide on.
                 run.mark_verified();
+                if let Some(refusal) = review_thread_api::refusal(action, observed) {
+                    return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
+                }
                 if state == "in-progress"
                     && let Some(refusal) = near_miss_integration(
                         action,

@@ -8732,3 +8732,100 @@ fn a_quote_scan_reads_an_ansi_c_span_and_an_escaped_double_quote_as_bash_does() 
         "{quoted} is one double-quoted argument and was read as {action:?}"
     );
 }
+
+fn autonomous_api_decision(lines: &[&str]) -> Vec<(String, Decision)> {
+    let repo = crate::test_env::repository_with_commit();
+    let root = tempfile::tempdir().expect("a gate root");
+    let mut context = context(root.path());
+    context.repo_dir = repo.path().to_path_buf();
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
+    let mut base = sworn(33, repo.path());
+    base.worktree = Some(repo.path().to_path_buf());
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        &base.run_id,
+        33,
+        "in-progress",
+    )]);
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        lines
+            .iter()
+            .map(|line| {
+                let input = json!({ "command": line });
+                let (action, how, command) = classify_observing("Bash", &input, &[]);
+                let observed = Observed {
+                    command: Some(command),
+                    checkout: None,
+                    push_refs: Vec::new(),
+                };
+                let decision = gate_observing(&context, &mut base.clone(), &action, how, &observed);
+                ((*line).to_owned(), decision)
+            })
+            .collect()
+    })
+}
+
+#[test]
+fn an_autonomous_claim_refuses_a_shell_api_call_that_mutates_a_review_thread() {
+    let mutation = |name: &str| {
+        format!("gh api graphql -f query='mutation {{ {name}(input: {{}}) {{ x }} }}'")
+    };
+    let refused = [
+        mutation("resolveReviewThread"),
+        mutation("unresolveReviewThread"),
+        mutation("addPullRequestReviewThreadReply"),
+        mutation("addPullRequestReviewComment"),
+        "gh api -X POST repos/o/r/pulls/7/comments -f body=x".to_owned(),
+        "gh api -X POST repos/o/r/pulls/7/comments/55/replies -f body=x".to_owned(),
+        "gh api -X PATCH repos/o/r/pulls/comments/55 -f body=x".to_owned(),
+        "gh api graphql --input body.json".to_owned(),
+        "gh api graphql -F query=@mutation.graphql".to_owned(),
+    ];
+    let lines: Vec<&str> = refused.iter().map(String::as_str).collect();
+    for (line, decision) in autonomous_api_decision(&lines) {
+        match decision {
+            Decision::Deny(refusal) => {
+                assert_eq!(
+                    refusal.code, "review-thread-api-mutation-unverified",
+                    "{line}"
+                );
+                assert!(refusal.to_string().contains("`review_thread`"), "{line}");
+            }
+            other => panic!("`{line}` was not refused under an autonomous claim: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn an_unreadable_graphql_query_is_told_to_be_written_on_the_line() {
+    let decisions = autonomous_api_decision(&["gh api graphql --input body.json"]);
+    let Decision::Deny(refusal) = &decisions[0].1 else {
+        panic!("not refused: {:?}", decisions[0].1);
+    };
+    assert!(
+        refusal.to_string().contains("written on the line"),
+        "{refusal}"
+    );
+}
+
+#[test]
+fn an_autonomous_claim_still_allows_the_api_calls_that_touch_no_review_thread() {
+    let allowed = [
+        "gh api graphql -f query='{ repository { pullRequest { reviewThreads(first: 5) { nodes { id } } } } }'",
+        "gh api -X GET repos/o/r/pulls/7/comments",
+        "gh api repos/o/r/pulls/7/comments",
+        "gh api -X POST repos/o/r/issues/7/comments -f body=x",
+        "gh api graphql -f query='mutation { addReaction(input: {}) { x } }'",
+    ];
+    for (line, decision) in autonomous_api_decision(&allowed) {
+        assert!(
+            !matches!(&decision, Decision::Deny(refusal) if refusal.code == "review-thread-api-mutation-unverified"),
+            "`{line}` was refused as a review thread mutation: {decision:?}"
+        );
+    }
+}

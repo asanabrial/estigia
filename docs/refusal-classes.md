@@ -193,6 +193,9 @@ Judgement calls that could have gone the other way:
   a retry may find them.
 - `review-thread-head-not-published` is `refused`: the head named was read against the receipt this
   run holds and is not the one it published, so the rule says no before GitHub is asked.
+- `review-thread-api-mutation-unverified` is `refused`: the shell line was read and names a review
+  thread or review comment mutation, or a GraphQL query the gate cannot read, under an autonomous
+  claim, so the rule says no before the call runs.
 - `assisted-claim-stale`, `assisted-claim-not-in-force` and `reviewer-definition-changed` are `stale`:
   what the run held moved. `assisted-claim-stale` is also what an autonomous run is told when the
   checkout's ownership marker or branch no longer matches its claim at `review_stages` or

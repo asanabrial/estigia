@@ -350,6 +350,16 @@ fn an_assisted_api_mutation_cannot_bypass_pushed_fix_verification() {
     assert_eq!(denied_as(&decision), "assisted-api-mutation-unverified");
 }
 
+#[test]
+fn an_assisted_review_thread_mutation_keeps_its_own_refusal() {
+    let mut rig = new_rig();
+    let decision = decide_line(
+        &mut rig,
+        "gh api graphql -f query='mutation { resolveReviewThread(input: {}) { x } }'",
+    );
+    assert_eq!(denied_as(&decision), "assisted-api-mutation-unverified");
+}
+
 fn decide_line(rig: &mut Rig, line: &str) -> Decision {
     let input = serde_json::json!({ "command": line });
     let (action, how, command) = crate::harness::classify_observing("Bash", &input, &[]);
