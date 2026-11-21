@@ -90,13 +90,17 @@ fn named(context: &Context) -> Result<Option<String>, Failure> {
     }
 }
 
-fn read_voice(name: &str) -> Result<String, Failure> {
+fn voice_path(file: &str) -> Result<std::path::PathBuf, Failure> {
     let state = store_path()?;
-    let path = state
+    Ok(state
         .parent()
         .ok_or_else(|| Failure::Read("the state directory has no parent".to_owned()))?
         .join("voices")
-        .join(format!("{name}.md"));
+        .join(file))
+}
+
+fn read_voice(name: &str) -> Result<String, Failure> {
+    let path = voice_path(&format!("{name}.md"))?;
     let missing = format!(
         "write the voice file at {} or set `Review voice` to `none` for this repository; \
          nothing was posted and `pr_review` `release` is still available",
@@ -342,10 +346,14 @@ pub(crate) fn render(
         return Ok(Vec::new());
     }
     let voice = read_voice(&name)?;
+    let habits = habits::read(&name)?;
     let store = Store::open(&store_path()?)?;
     let keys: Vec<String> = texts
         .iter()
-        .map(|text| review_operation_id("rendered-text", &[&voice, text]))
+        .map(|text| match &habits {
+            Some(habits) => review_operation_id("rendered-text", &[&voice, text, &habits.source]),
+            None => review_operation_id("rendered-text", &[&voice, text]),
+        })
         .collect();
     let mut kept = keys
         .iter()
@@ -358,7 +366,11 @@ pub(crate) fn render(
         let rendered = admitted(&raw, inputs.len())?;
         let now = clock()?;
         for (at, text) in missing.iter().zip(&rendered) {
-            store.keep_rendered_text(&keys[*at], text, now)?;
+            let text = match &habits {
+                Some(habits) => habits.apply(text),
+                None => text.clone(),
+            };
+            store.keep_rendered_text(&keys[*at], &text, now)?;
             kept[*at] = store.rendered_text(&keys[*at])?;
         }
     }
@@ -384,6 +396,8 @@ pub(crate) fn render_one(
         .pop()
         .ok_or_else(|| Failure::Read("the rendering answered nothing".to_owned()))
 }
+
+mod habits;
 
 #[cfg(test)]
 pub(crate) mod stand_in;

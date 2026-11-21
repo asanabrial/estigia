@@ -460,6 +460,7 @@ const REFUSED: &[&str] = &[
     "review-voice-answer-malformed",
     "review-voice-file-missing",
     "review-voice-file-too-large",
+    "review-voice-habits-invalid",
     "reviewer-cli-missing",
     "reviewer-definition-unowned",
     "reviewer-error-result",

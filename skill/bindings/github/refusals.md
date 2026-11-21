@@ -26,6 +26,7 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `review-voice-file-missing` | The `Review voice` names a file in Estigia's `voices` directory that is not there. Nothing was posted. | Write the file the detail names, or set the row to `none`; `pr_review` `release` stays available. |
 | `review-voice-file-unreadable` | The voice file exists and is not readable UTF-8 text. Nothing was posted. | Make it readable, or set the row to `none`. |
 | `review-voice-file-too-large` | The voice file is over 16 KiB; the detail names its size. Nothing was posted. | Shorten it, or set the row to `none`. |
+| `review-voice-habits-invalid` | The `<name>.habits.json` file beside the voice cannot be honoured: it is not a regular file, cannot be read, is over 16 KiB, is not UTF-8 or the JSON shape, names an unknown field or holds a probability outside 0 to 1; the detail names the file and the cause. No job was launched and nothing was posted. | Correct the file or remove it. |
 | `review-voice-render-failed` | The job that rewords the text failed, ended without an answer or ran past its deadline. Nothing was posted. | Call the same operation again; text already reworded is reused. |
 | `review-voice-answer-malformed` | The job answered with other than one non-blank JSON text per text given. Nothing was posted. | Call the same operation again, or set the row to `none`. |
 | `head-moved` | The head is not the one read or the one reviewed. | `pr_review` `release`, then `claim` anew; no verdict carries across. |
