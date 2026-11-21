@@ -255,8 +255,7 @@ struct ApiCall<'a> {
     fields: bool,
     endpoint: Option<&'a str>,
     unreadable: bool,
-    query: Option<String>,
-    in_query: bool,
+    query_on_the_line: bool,
 }
 
 impl<'a> ApiCall<'a> {
@@ -265,17 +264,6 @@ impl<'a> ApiCall<'a> {
         let mut rest = args.iter().skip_while(|arg| **arg != "api").skip(1);
         while let Some(arg) = rest.next() {
             let flag = arg.to_ascii_lowercase();
-            if call.in_query {
-                if looks_like_a_flag(arg) {
-                    call.in_query = false;
-                } else if call.endpoint.is_some() || *arg != "graphql" {
-                    if let Some(query) = call.query.as_mut() {
-                        query.push(' ');
-                        query.push_str(arg);
-                    }
-                    continue;
-                }
-            }
             if matches!(flag.as_str(), "-x" | "--method") {
                 call.method = rest.next().map(|value| value.to_ascii_uppercase());
             } else if let Some(value) = flag
@@ -323,8 +311,7 @@ impl<'a> ApiCall<'a> {
             return;
         }
         if !value.trim_start_matches(['"', '\'']).starts_with('@') {
-            self.query = Some(value.to_owned());
-            self.in_query = true;
+            self.query_on_the_line = true;
         }
     }
 
@@ -341,14 +328,6 @@ impl<'a> ApiCall<'a> {
             None => self.fields,
         }
     }
-}
-
-fn looks_like_a_flag(word: &str) -> bool {
-    let mut bytes = word.bytes();
-    bytes.next() == Some(b'-')
-        && bytes
-            .next()
-            .is_some_and(|b| b == b'-' || b.is_ascii_alphabetic())
 }
 
 fn api_writes(args: &[&str]) -> bool {
@@ -379,19 +358,18 @@ pub(crate) fn gh_api_review_thread(args: &[&str]) -> Option<ReviewThreadCall> {
     }
     let call = ApiCall::read(args);
     if call.graphql() {
-        return match &call.query {
-            Some(query) if names_a_thread_mutation(query) => Some(ReviewThreadCall::Named),
-            Some(_) => None,
-            None => Some(ReviewThreadCall::QueryNotOnTheLine),
-        };
+        if args.iter().any(|word| names_a_thread_mutation(word)) {
+            return Some(ReviewThreadCall::Named);
+        }
+        return (!call.query_on_the_line).then_some(ReviewThreadCall::QueryNotOnTheLine);
     }
     call.endpoint
         .is_some_and(addresses_review_comments)
         .then_some(ReviewThreadCall::Named)
 }
 
-fn names_a_thread_mutation(query: &str) -> bool {
-    let query = query.to_ascii_lowercase();
+fn names_a_thread_mutation(word: &str) -> bool {
+    let query = word.to_ascii_lowercase();
     let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
     REVIEW_THREAD_MUTATIONS.iter().any(|name| {
         query.match_indices(name).any(|(at, _)| {

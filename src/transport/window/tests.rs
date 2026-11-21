@@ -237,6 +237,16 @@ fn a_graphql_mutation_naming_a_thread_or_review_comment_is_a_review_thread_call(
 }
 
 #[test]
+fn a_thread_mutation_named_anywhere_in_a_graphql_write_is_a_review_thread_call() {
+    for line in [
+        "gh api graphql -f query='mutation { addReaction(input:{content:\"x -a y\"}) {x} resolveReviewThread(input:{threadId:\"T\"}) {x} }'",
+        "gh api graphql -f query='mutation { addReaction(input: {}) { x } }' -f body=resolveReviewThread",
+    ] {
+        assert_eq!(thread_call(line), Some(ReviewThreadCall::Named), "{line}");
+    }
+}
+
+#[test]
 fn a_review_comment_endpoint_written_through_is_a_review_thread_call() {
     for line in [
         "gh api -X POST repos/o/r/pulls/7/comments -f body=x",
@@ -275,7 +285,6 @@ fn reads_and_other_writes_are_not_review_thread_calls() {
         "gh api graphql -f query='mutation { addReaction(input: {}) { x } }'",
         "gh api graphql -f query='mutation { addPullRequestReview(input: {}) { x } }'",
         "gh api graphql -f query='mutation { resolveReviewThreadsAll(input: {}) { x } }'",
-        "gh api graphql -f query='mutation { addReaction(input: {}) { x } }' -f body=resolveReviewThread",
         "gh api -X PUT repos/o/r/pulls/7/merge",
         "gh pr comment 7 --body x",
     ] {

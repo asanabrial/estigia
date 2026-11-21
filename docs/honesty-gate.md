@@ -191,11 +191,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     records no branch there, so the marker is the only record of it, and a marker the run itself
     could rewrite is not evidence against that run. A shell `gh api` call the gate already reads as a
     write is refused under a live autonomous claim (`review-thread-api-mutation-unverified`, after the
-    claim verifies) when it is a GraphQL mutation whose query on the line names `resolveReviewThread`,
+    claim verifies) when it is a GraphQL write any word of which names `resolveReviewThread`,
     `unresolveReviewThread`, `addPullRequestReviewThreadReply` or `addPullRequestReviewComment`, a
     mutating call on `pulls/<n>/comments`, `pulls/<n>/comments/<id>/replies` or
     `pulls/comments/<id>`, or a GraphQL call whose query is not on the line (`--input`, an `@file`
-    field). Every other API write is decided as before, and a read stays a read. Still open: a mutation
+    field). The line is split on whitespace with its quoting lost, so the name is looked for in every
+    word and one written inside another field's value refuses too. Every other API write is decided as
+    before, and a read stays a read. Still open: a mutation
     spelled through a shell variable, substitution, alias or script, which the gate does not read, and
     `gh pr comment` and `gh pr review`. Held by `src/harness/mcp/tests/autonomous_review_tests.rs`,
     `src/transport/stages/tests/autonomous.rs`, `src/transport/window/tests.rs` and
