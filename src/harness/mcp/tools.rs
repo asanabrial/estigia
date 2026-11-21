@@ -1320,7 +1320,8 @@ pub const TOOLS: &[Tool] = &[
                        reading; `wait_seconds` polls CI for that head (0-300). Every push requires \
                        a new reading. `request_review` asks for the current stage's review. `ci` \
                        is `passed`, `failed` (with `failing_checks`), `pending`, `missing` or \
-                       `none` (no CI was seen, never a pass).",
+                       `none` (no CI was seen, never a pass). An autonomous run gets its \
+                       receipt's `ci` and `open_threads`, no position.",
         operation: "review-stages",
         arguments: &[
             RUN_ID,
@@ -1341,7 +1342,8 @@ pub const TOOLS: &[Tool] = &[
         description: "Reply to one thread on the assisted branch's open PR and optionally resolve \
                       it. Requires the exact published head. Resolution requires a fix commit \
                       after the thread's original commit and already on that head. Verifies \
-                      thread ownership and reads writes back; never proves a fix is semantically correct.",
+                      thread ownership and reads writes back; never proves a fix is semantically correct. \
+                      An autonomous run names its receipt's head.",
         operation: "review-thread",
         arguments: &[
             RUN_ID,
@@ -2315,13 +2317,11 @@ pub const TRACKER_WRITERS: &[&str] = &[
 
 /// The tools that exist only where `Workflow` is `assisted`, and are refused
 /// everywhere else.
-pub const ASSISTED_ONLY: &[&str] = &[
-    "assist",
-    "draft_pr",
-    "ready_pr",
-    "review_stages",
-    "review_thread",
-];
+pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr"];
+
+/// The follow-up tools offered under both workflows: an assisted run reaches them through its
+/// local claim, an autonomous one through the receipt of the pull request it published.
+pub const FOLLOW_UP_TOOLS: &[&str] = &["review_stages", "review_thread"];
 
 /// The tools of a review-only claim on a pull request. Not tracker writers and
 /// not assisted-only: they bind to the repository host, and they are what a

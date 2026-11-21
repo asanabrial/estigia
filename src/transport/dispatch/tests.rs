@@ -427,6 +427,18 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
     // `review` was left unable to publish at all.
     const OPERATOR_ONLY: &[(&str, &str, &str)] = &[
         (
+            "review-stages",
+            "published-pr",
+            "read from the run pointer's receipt by the tool server: it is the pull request the \
+             run published, which a caller naming it could point elsewhere",
+        ),
+        (
+            "review-thread",
+            "published-pr",
+            "read from the run pointer's receipt by the tool server: it is the pull request the \
+             run published, which a caller naming it could point elsewhere",
+        ),
+        (
             "draft-pr",
             "published-head",
             "read from the run pointer by the tool server: it is what the run already pushed, \

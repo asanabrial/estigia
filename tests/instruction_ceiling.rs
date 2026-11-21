@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 #[rustfmt::skip]
 const DOCUMENTS: &[(&str, usize)] = &[
-    ("skill/SKILL.md", 26_818),
+    ("skill/SKILL.md", 27_215),
 
     ("skill/agents/analyst.md", 2_052),
 
@@ -43,13 +43,13 @@ const DOCUMENTS: &[(&str, usize)] = &[
 
     ("skill/bindings/github/delivery.md", 42_913),
 
-    ("skill/bindings/github/operations-guarantees.md", 40_758),
+    ("skill/bindings/github/operations-guarantees.md", 41_350),
 
     ("skill/bindings/github/operations.md", 58_767),
 
     ("skill/bindings/github/recovery.md", 6_744),
 
-    ("skill/bindings/github/refusals.md", 63_982),
+    ("skill/bindings/github/refusals.md", 64_260),
 
     ("skill/bindings/github/setup.md", 1_672),
 
@@ -63,7 +63,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
 
     ("skill/references/analyst.md", 3_188),
 
-    ("skill/references/decision-gates.md", 6_297),
+    ("skill/references/decision-gates.md", 8_146),
 
     ("skill/references/domain-composition.md", 9_798),
 

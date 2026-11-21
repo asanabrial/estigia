@@ -137,8 +137,42 @@ fn branch_checked_out(branch: &str, worktree: &Path) -> Result<(), String> {
 }
 
 pub(super) fn standing(run: &Run) -> Result<String, String> {
-    let issue = run.issue.as_ref().ok_or("the pointer names no issue")?;
+    if run.issue.is_none() {
+        return Err("the pointer names no issue".to_owned());
+    }
     let branch = run.branch.as_deref().ok_or("the pointer names no branch")?;
+    standing_on(run, branch)
+}
+
+/// [`standing`] for a run whose pointer records no branch: the branch is the one the ownership
+/// marker in its checkout names, and the two halves then hold against that name.
+pub(super) fn standing_marked(run: &Run) -> Result<String, String> {
+    let worktree = run
+        .worktree
+        .as_deref()
+        .ok_or("the pointer names no worktree")?;
+    let marker = crate::transport::branch::read_ownership(worktree)
+        .map_err(|failure| {
+            format!(
+                "the ownership marker could not be read: {}",
+                failure.detail()
+            )
+        })?
+        .ok_or_else(|| {
+            format!(
+                "{} holds no ownership marker, so no run is known to own it",
+                worktree.display()
+            )
+        })?;
+    let branch = marker
+        .get("branch")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("the ownership marker names no branch")?;
+    standing_on(run, branch)
+}
+
+fn standing_on(run: &Run, branch: &str) -> Result<String, String> {
+    let issue = run.issue.as_ref().ok_or("the pointer names no issue")?;
     let worktree = run
         .worktree
         .as_deref()

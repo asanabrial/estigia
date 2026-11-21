@@ -191,8 +191,12 @@ Judgement calls that could have gone the other way:
   `review-voice-file-unreadable`, `review-voice-row-unreadable` and `review-voice-render-failed` are
   `unavailable`: a file, the repository's own file or a rewording job could not be read or finished, and
   a retry may find them.
+- `review-thread-head-not-published` is `refused`: the head named was read against the receipt this
+  run holds and is not the one it published, so the rule says no before GitHub is asked.
 - `assisted-claim-stale`, `assisted-claim-not-in-force` and `reviewer-definition-changed` are `stale`:
-  what the run held moved. The five reasons the gate stands aside for (`not-watched`, `nothing-sworn`,
+  what the run held moved. `assisted-claim-stale` is also what an autonomous run is told when the
+  checkout's ownership marker or branch no longer matches its claim at `review_stages` or
+  `review_thread`. The five reasons the gate stands aside for (`not-watched`, `nothing-sworn`,
   `no-tracker`, `another-checkout`, `outside-the-claim`) are not refusals and carry no class.
 
 A code that appears in the table cannot be moved without moving its tests: the class is part of the

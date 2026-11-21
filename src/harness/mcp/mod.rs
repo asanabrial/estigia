@@ -519,11 +519,87 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
     Ok(flags)
 }
 
+/// What `review_stages` and `review_thread` need from an autonomous run before any call to the
+/// host: the receipt of the pull request it published and a checkout whose marker and branch still
+/// say the run owns it. The receipt's head travels with `review_thread`, which refuses any other.
+fn autonomous_follow_up_flags(
+    tool: &Tool,
+    arguments: &Value,
+    run: &session::Run,
+    flags: &mut Vec<String>,
+) -> Result<(), ToolFailure> {
+    let run_id = run.run_id.as_str();
+    let refuse = |refusal: Refusal| ToolFailure::Refused(Box::new(refusal));
+    if tool.operation == "review-stages"
+        && arguments.get("request_review").and_then(Value::as_bool) == Some(true)
+    {
+        return Err(refuse(Refusal::not_started(
+            "workflow-not-assisted",
+            "`review_stages` requests a review only where the `Workflow` row is `assisted`: an \
+             autonomous run reads CI and threads and has no stage to request",
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::OperatorKnowledge,
+                "`review_stages` without `request_review`",
+            ),
+        )));
+    }
+    let Some(receipt) = run
+        .review_transaction
+        .as_ref()
+        .filter(|receipt| receipt.is_complete())
+    else {
+        return Err(refuse(Refusal::not_started(
+            "published-transaction-missing",
+            format!(
+                "{run_id} holds no recorded publication of a pull request, so there is no pull \
+                 request of this claim's to read or answer on"
+            ),
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::OperatorKnowledge,
+                "`publish_review` for this run's branch, which records the receipt every later \
+                 step is read against",
+            ),
+        )));
+    };
+    let stale = |why: String| {
+        refuse(Refusal::not_started(
+            "assisted-claim-stale",
+            format!("{run_id}'s claim no longer matches this checkout: {why}"),
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::OperatorKnowledge,
+                "the ownership marker and checked-out branch matching this run's recorded claim",
+            ),
+        ))
+    };
+    let branch = super::assisted::standing_marked(run).map_err(stale)?;
+    let (Some(worktree), Some(issue)) = (run.worktree.as_ref(), run.issue_number()) else {
+        return Err(stale("the pointer names no numbered issue".to_owned()));
+    };
+    flags.push("--branch".to_owned());
+    flags.push(branch);
+    flags.push("--published-pr".to_owned());
+    flags.push(receipt.pr.to_string());
+    if tool.operation == "review-thread" {
+        flags.push("--published-head".to_owned());
+        flags.push(receipt.head.clone());
+        flags.push("--worktree".to_owned());
+        flags.push(worktree.display().to_string());
+        flags.push("--issue".to_owned());
+        flags.push(issue.to_string());
+        flags.push("--run-id".to_owned());
+        flags.push(run_id.to_owned());
+        flags.push("--expect-state".to_owned());
+        flags.push(run.state.clone().unwrap_or_else(|| "review".to_owned()));
+    }
+    Ok(())
+}
+
 fn read_only_tracker_refusal(name: &str, context: &GateContext) -> Refusal {
     let tracker = context.tracker.as_value();
     if context.workflow == Some(crate::config::Workflow::Assisted) {
         let admitted = tools::ASSISTED_ONLY
             .iter()
+            .chain(tools::FOLLOW_UP_TOOLS)
             .chain(tools::NEEDS_NO_TRANSPORT)
             .filter(|name| tools::retired(name).is_none())
             .copied()
@@ -1740,7 +1816,10 @@ fn run_tool_answering(
     }
 
     let verifies_thread = tool.operation == "review-thread";
-    if matches!(
+    let follows_up = matches!(tool.operation, "review-stages" | "review-thread");
+    if follows_up && !run.assisted && context.workflow != Some(crate::config::Workflow::Assisted) {
+        autonomous_follow_up_flags(tool, arguments, &run, &mut flags)?;
+    } else if matches!(
         tool.operation,
         "draft-pr" | "ready-pr" | "review-stages" | "review-thread"
     ) {

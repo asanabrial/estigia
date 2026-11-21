@@ -174,7 +174,7 @@ why `transition` grew when it took `blocked_until`'s clause, even as four tools 
 
 The list depends on the process's `GateContext`, fixed for the process, so `listChanged` stays false.
 Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool; under any other readable
-workflow it omits `ASSISTED_ONLY`; an unreadable context or an unknown workflow lists all. A hidden
+workflow it omits `ASSISTED_ONLY` (`review_stages` and `review_thread` are not in it); an unreadable context or an unknown workflow lists all. A hidden
 name still dispatches and refuses with its own typed reason.
 
 | `tools/list` result, issue #5 | Names | Bytes |
