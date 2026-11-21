@@ -43,7 +43,14 @@ pub(crate) fn respond_with(
             false,
         ));
     }
-    let reply = voice::render_one(context, renderer, &body)?;
+    let remembered = claim::review_operation_id(
+        "thread-reply-rendered",
+        &[&context.repo_dir.to_string_lossy(), what.thread_id, &body],
+    );
+    let reply = match voice::recall(&remembered)? {
+        Some(posted) => posted,
+        None => voice::render_one(context, renderer, &body)?,
+    };
     let prs = claim::open_prs(context, what.branch)?;
     let [pr] = prs.as_slice() else {
         return Err(stop(
@@ -72,6 +79,7 @@ pub(crate) fn respond_with(
     );
     let mut reply_id = confirmed_reply(thread, &reply).map(str::to_owned);
     if reply_id.is_none() {
+        voice::remember(&remembered, &reply)?;
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()

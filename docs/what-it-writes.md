@@ -202,7 +202,9 @@ Five invariants, and the tests are named after them:
    The same store holds the table `rendered_texts` (schema 28): the key, the text a rewording job
    answered for it and when. The key is a digest of the voice file's bytes and the one text it was asked to
    reword, so a retried `submit` or `review_thread` finds the words it posted before and runs no second
-   job, and another voice file, or the same file edited, is another key. The first text kept for a key is
+   job, and another voice file, or the same file edited, is another key. A second kind of key, a digest of
+   the repository, the thread and the reply as written, holds the reply `review_thread` is about to post,
+   so a retry after the voice was edited recognises it rather than posting another. The first text kept for a key is
    the one that stays. Each write drops rows older than ninety days. The rows are for
    the retry only: they are not a record of what was posted, which is on GitHub.
 

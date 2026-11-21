@@ -170,9 +170,11 @@ byte the one `submit` and `review_thread` sent before the row existed.
 With one, the two roads that post prose reword it in one step first:
 
 - **What is reworded.** For `submit`, the text of every inline comment and, when it has one, the review
-  body. For `review_thread`, the reply. Not the event, the commit, the path, line or side of a
-  comment, how many comments there are, or which findings are inline: `place` decides those before
-  the voice is asked, and the voice is handed none of them.
+  body. For `review_thread`, the reply. Not the event, the commit, how many comments there are, or
+  which findings are inline, and the sites stay fixed: `place` decides the path, line and side of each
+  comment before the voice is asked, and the voice is handed none of them. The text placed on each
+  site is the answer's entry at that position, and the order of the answer is not checked
+  ([what that leaves open](honesty-review-panels.md)).
 - **How.** One detached, tool-less reviewer job, the kind the panel launches, handed the voice file
   (`voices/<name>.md` beside the local store, at most 16 KiB) and the texts. Its fixed instructions,
   which the voice file does not write and cannot loosen, are: change wording only; keep
@@ -189,8 +191,11 @@ With one, the two roads that post prose reword it in one step first:
 - **Remembered.** The rendered text is kept in the local store under a digest of the voice file's bytes
   and the text it was asked to reword ([what is kept](what-it-writes.md)). A retry looks the key up
   before launching a job, so it posts the same words and runs no second job; `already_sent` still
-  decides first. Editing the voice file is a new key.
-- **Fails closed.** A repository file that cannot be read, a named voice whose file is missing,
+  decides first. Editing the voice file is a new key; `review_thread` additionally keeps the reply it
+  posts under a key without the voice, so a retry after an edit does not post a second reply. An
+  approval with nothing to reword reads no voice file.
+- **Fails closed.** A repository file that cannot be read, a `Review voice` row that does not parse
+  (another row that does not parse is left alone), a named voice whose file is missing,
   unreadable or over the cap, a job that fails, ends without an answer or runs past its deadline, and an
   answer that is not one non-blank text per text given each stop the post with a refusal naming the
   cause ([refusals](../skill/bindings/github/refusals.md)). The text as written is not posted in their

@@ -109,3 +109,28 @@ fn a_retried_reply_under_a_voice_is_one_reply_in_the_same_words() {
     assert_eq!(second["reply_id"], "reply-1");
     assert_eq!(probe.launched(), 1, "the retry rendered again");
 }
+
+#[test]
+fn a_reply_posted_but_not_read_back_is_not_posted_again_after_the_voice_is_edited() {
+    let rig = ThreadRig::new();
+    stand_in::write_voice("house", "Sound like a colleague.");
+    stand_in::name_voice(rig.repo.path(), "house");
+    let (renderer, probe) = stand_in::renderer(Answers::Counting);
+    let first_words = "voiced #1: Fixed the concern.";
+    let unread = rig.script(&[rig.pr(false, false)]);
+    let (first, posted) = respond_voiced(&rig, &unread, &renderer);
+    let first = first.expect_err("the reply did not read back");
+    assert_eq!(
+        first.envelope()["reason"],
+        "review-thread-write-unconfirmed"
+    );
+    assert_eq!(posted, [first_words]);
+
+    stand_in::write_voice("house", "Now write formally.");
+    let already = rig.script(&[rig.pr_replied(Some(first_words), true)]);
+    let (second, again) = respond_voiced(&rig, &already, &renderer);
+    let second = second.expect("the retry");
+    assert!(again.is_empty(), "a second reply was posted: {again:?}");
+    assert_eq!(second["reply_id"], "reply-1");
+    assert_eq!(probe.launched(), 1, "the retry rendered again");
+}

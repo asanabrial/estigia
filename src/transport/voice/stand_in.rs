@@ -123,6 +123,21 @@ pub(crate) fn renderer_that_refuses() -> Renderer {
     Renderer::on(OnThread(|| Ok(Box::new(Refuses) as Box<dyn Adapter>)))
 }
 
+pub(crate) const STARTED_PID: u32 = 4242;
+
+struct BrokenLock;
+
+impl crate::reviewer::job::Spawner for BrokenLock {
+    fn start(&self, dir: &Path) -> Result<u32, crate::transport::Failure> {
+        std::fs::create_dir_all(dir.join("lock")).expect("a lock that cannot be opened");
+        Ok(STARTED_PID)
+    }
+}
+
+pub(crate) fn renderer_whose_job_status_cannot_be_read(kill: impl Fn(u32) + 'static) -> Renderer {
+    Renderer::on(BrokenLock).within(300, kill)
+}
+
 struct Hangs;
 
 impl Adapter for Hangs {

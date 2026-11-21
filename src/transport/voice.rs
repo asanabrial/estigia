@@ -1,8 +1,9 @@
+use std::io::Read;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
-use crate::config::{Config, ModelRouting, ReviewVoice};
+use crate::config::{ModelRouting, ReviewVoice};
 use crate::reviewer::job::{Detached, JobResult, JobStatus, Spawner, job_status, write_job};
 use crate::reviewer::{Invocation, Receipt, reviewer_model};
 use crate::transport::claim::{jobs_dir, review_operation_id};
@@ -72,8 +73,8 @@ fn refuse(reason: &str, detail: String, action: &str) -> Failure {
 }
 
 fn named(context: &Context) -> Result<Option<String>, Failure> {
-    match crate::skill::layer_repository(&Config::default(), &context.repo_dir) {
-        Ok(config) => Ok(match config.review_voice {
+    match crate::skill::repository_review_voice(&context.repo_dir) {
+        Ok(voice) => Ok(match voice {
             ReviewVoice::None => None,
             ReviewVoice::Named(name) => Some(name),
         }),
@@ -112,8 +113,13 @@ fn read_voice(name: &str) -> Result<String, Failure> {
              repository; nothing was posted",
         )
     };
-    let size = match std::fs::metadata(&path) {
-        Ok(found) => found.len(),
+    match std::fs::metadata(&path) {
+        Ok(found) if found.file_type().is_file() => {}
+        Ok(_) => {
+            return Err(unreadable(std::io::Error::other(
+                "it is not a regular file",
+            )));
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Err(refuse(
                 "review-voice-file-missing",
@@ -125,25 +131,33 @@ fn read_voice(name: &str) -> Result<String, Failure> {
             ));
         }
         Err(error) => return Err(unreadable(error)),
-    };
-    if size > VOICE_CAP {
+    }
+    let file = std::fs::File::open(&path).map_err(unreadable)?;
+    let bytes = read_capped(file).map_err(unreadable)?;
+    if bytes.len() as u64 > VOICE_CAP {
         return Err(refuse(
             "review-voice-file-too-large",
             format!(
-                "the voice file {} is {size} bytes and the cap is {VOICE_CAP}",
-                path.display()
+                "the voice file {} is {} bytes or more and the cap is {VOICE_CAP}",
+                path.display(),
+                bytes.len()
             ),
             "shorten the voice file below the cap, or set `Review voice` to `none` for this \
              repository; nothing was posted",
         ));
     }
-    let bytes = std::fs::read(&path).map_err(unreadable)?;
     String::from_utf8(bytes).map_err(|error| {
         unreadable(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             error.to_string(),
         ))
     })
+}
+
+fn read_capped(source: impl std::io::Read) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    source.take(VOICE_CAP + 1).read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 fn prompt(voice: &str, inputs: &[&str]) -> String {
@@ -206,6 +220,24 @@ fn clock() -> Result<u64, Failure> {
         .ok_or_else(|| Failure::Read("the clock is unreadable".to_owned()))
 }
 
+struct Job<'a> {
+    dir: std::path::PathBuf,
+    kill: &'a dyn Fn(u32),
+    pid: Option<u32>,
+    stop: bool,
+}
+
+impl Drop for Job<'_> {
+    fn drop(&mut self) {
+        if self.stop
+            && let Some(pid) = self.pid
+        {
+            (self.kill)(pid);
+        }
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
 fn answer_of(
     context: &Context,
     renderer: &Renderer,
@@ -213,17 +245,33 @@ fn answer_of(
     voice: &str,
     inputs: &[&str],
 ) -> Result<Vec<u8>, Failure> {
+    answer_through(context, renderer, name, voice, inputs, write_job)
+}
+
+fn answer_through(
+    context: &Context,
+    renderer: &Renderer,
+    name: &str,
+    voice: &str,
+    inputs: &[&str],
+    write: impl Fn(&std::path::Path, &Invocation) -> Result<(), Failure>,
+) -> Result<Vec<u8>, Failure> {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_nanos())
         .unwrap_or_default();
     let process = std::process::id().to_string();
     let id = review_operation_id("voice-job", &[name, &nanos.to_string(), &process, voice]);
-    let dir = jobs_dir()?.join(&id);
+    let mut job = Job {
+        dir: jobs_dir()?.join(&id),
+        kill: &*renderer.kill,
+        pid: None,
+        stop: false,
+    };
     let routing =
         ModelRouting::parse_keeping_what_parses(context.get("Model routing").unwrap_or(""));
-    write_job(
-        &dir,
+    write(
+        &job.dir,
         &Invocation {
             role: ROLE.to_owned(),
             receipt: Receipt {
@@ -238,21 +286,24 @@ fn answer_of(
             model: reviewer_model(&routing.0),
         },
     )?;
-    let outcome = wait_for(renderer, &dir);
-    let _ = std::fs::remove_dir_all(&dir);
-    outcome
+    wait_for(renderer, &mut job)
 }
 
-fn wait_for(renderer: &Renderer, dir: &std::path::Path) -> Result<Vec<u8>, Failure> {
-    let pid = renderer.spawner.start(dir).map_err(|failure| {
+fn wait_for(renderer: &Renderer, job: &mut Job<'_>) -> Result<Vec<u8>, Failure> {
+    let pid = renderer.spawner.start(&job.dir).map_err(|failure| {
         failed(format!(
             "the rendering job did not start: {}",
             failure.detail()
         ))
     })?;
+    job.pid = Some(pid);
     let began = Instant::now();
     loop {
-        match job_status(dir).map_err(|failure| failed(failure.detail()))? {
+        let status = job_status(&job.dir).map_err(|failure| {
+            job.stop = true;
+            failed(failure.detail())
+        })?;
+        match status {
             JobStatus::Finished(JobResult::Answer(bytes)) => return Ok(bytes),
             JobStatus::Finished(JobResult::Refused(refusal)) => {
                 return Err(failed(format!(
@@ -266,7 +317,7 @@ fn wait_for(renderer: &Renderer, dir: &std::path::Path) -> Result<Vec<u8>, Failu
                 ));
             }
             JobStatus::Running if began.elapsed().as_secs() >= renderer.seconds => {
-                (renderer.kill)(pid);
+                job.stop = true;
                 return Err(failed(format!(
                     "the rendering job had not answered after {} seconds and was stopped",
                     renderer.seconds
@@ -287,10 +338,10 @@ pub(crate) fn render(
     let Some(name) = named(context)? else {
         return Ok(texts.to_vec());
     };
-    let voice = read_voice(&name)?;
     if texts.is_empty() {
         return Ok(Vec::new());
     }
+    let voice = read_voice(&name)?;
     let store = Store::open(&store_path()?)?;
     let keys: Vec<String> = texts
         .iter()
@@ -314,6 +365,14 @@ pub(crate) fn render(
     kept.into_iter()
         .map(|text| text.ok_or_else(|| Failure::Read("a rendered text was not kept".to_owned())))
         .collect()
+}
+
+pub(crate) fn recall(key: &str) -> Result<Option<String>, Failure> {
+    Store::open(&store_path()?)?.rendered_text(key)
+}
+
+pub(crate) fn remember(key: &str, text: &str) -> Result<(), Failure> {
+    Store::open(&store_path()?)?.keep_rendered_text(key, text, clock()?)
 }
 
 pub(crate) fn render_one(
