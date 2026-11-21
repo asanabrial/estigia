@@ -396,6 +396,8 @@ fn every_command_that_prints_honours_the_global_json_flag() {
         vec!["config", "set", "Change size", "400", "--json"],
         vec!["config", "repos", "--json"],
         vec!["config", "forget", "--json"],
+        vec!["voice", "check", "house", "--json"],
+        vec!["voice", "preview", "house", "n.txt", "--json"],
         vec!["setup", "--all", "--dry-run", "--json"],
         vec!["uninstall", "--all", "--dry-run", "--json"],
         vec!["sync", "--json"],

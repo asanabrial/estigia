@@ -293,6 +293,10 @@ Thirty-four typed settings, in [`docs/configuration.md`](docs/configuration.md),
 in one order by `estigia config list`, the setup screen and the reference alike. Each row says whose
 answer it is: this agent's, this repository's, every checkout's or this machine's.
 
+A review voice is tried before it is used: `estigia voice check <name>` reads its files as a post would,
+and `estigia voice preview <name> <file>...` rewords texts through it and prints them, posting nothing
+([how](docs/assisted-review.md#a-review-voice)).
+
 ## The ratchet
 
 A message may name a command only when running it discharges the block; a refusal carries a typed code

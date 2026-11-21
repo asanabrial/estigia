@@ -243,17 +243,17 @@ impl Drop for Job<'_> {
 }
 
 fn answer_of(
-    context: &Context,
+    routing: &str,
     renderer: &Renderer,
     name: &str,
     voice: &str,
     inputs: &[&str],
 ) -> Result<Vec<u8>, Failure> {
-    answer_through(context, renderer, name, voice, inputs, write_job)
+    answer_through(routing, renderer, name, voice, inputs, write_job)
 }
 
 fn answer_through(
-    context: &Context,
+    routing: &str,
     renderer: &Renderer,
     name: &str,
     voice: &str,
@@ -272,8 +272,7 @@ fn answer_through(
         pid: None,
         stop: false,
     };
-    let routing =
-        ModelRouting::parse_keeping_what_parses(context.get("Model routing").unwrap_or(""));
+    let routing = ModelRouting::parse_keeping_what_parses(routing);
     write(
         &job.dir,
         &Invocation {
@@ -332,6 +331,29 @@ fn wait_for(renderer: &Renderer, job: &mut Job<'_>) -> Result<Vec<u8>, Failure> 
     }
 }
 
+fn reworded(
+    routing: &str,
+    renderer: &Renderer,
+    name: &str,
+    voice: &str,
+    habits: Option<&habits::Habits>,
+    inputs: &[&str],
+) -> Result<Vec<String>, Failure> {
+    let raw = answer_of(routing, renderer, name, voice, inputs)?;
+    let rendered = admitted(&raw, inputs.len())?;
+    Ok(rendered
+        .iter()
+        .map(|text| with_habits(habits, text))
+        .collect())
+}
+
+fn with_habits(habits: Option<&habits::Habits>, text: &str) -> String {
+    match habits {
+        Some(habits) => habits.apply(text),
+        None => text.to_owned(),
+    }
+}
+
 /// Rewords `texts` in the voice this repository names, or returns them
 /// unchanged when it names none. The answer holds exactly one text per input.
 pub(crate) fn render(
@@ -362,15 +384,11 @@ pub(crate) fn render(
     let missing: Vec<usize> = (0..texts.len()).filter(|at| kept[*at].is_none()).collect();
     if !missing.is_empty() {
         let inputs: Vec<&str> = missing.iter().map(|at| texts[*at].as_str()).collect();
-        let raw = answer_of(context, renderer, &name, &voice, &inputs)?;
-        let rendered = admitted(&raw, inputs.len())?;
+        let routing = context.get("Model routing").unwrap_or("");
+        let rendered = reworded(routing, renderer, &name, &voice, habits.as_ref(), &inputs)?;
         let now = clock()?;
         for (at, text) in missing.iter().zip(&rendered) {
-            let text = match &habits {
-                Some(habits) => habits.apply(text),
-                None => text.clone(),
-            };
-            store.keep_rendered_text(&keys[*at], &text, now)?;
+            store.keep_rendered_text(&keys[*at], text, now)?;
             kept[*at] = store.rendered_text(&keys[*at])?;
         }
     }
@@ -398,6 +416,7 @@ pub(crate) fn render_one(
 }
 
 mod habits;
+pub(crate) mod preview;
 
 #[cfg(test)]
 pub(crate) mod stand_in;

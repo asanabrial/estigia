@@ -828,6 +828,35 @@ pub enum Command {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Check a review voice's files, or see how it rewords a text, posting nothing.
+    Voice {
+        /// What to do with the voice.
+        #[command(subcommand)]
+        action: VoiceAction,
+    },
+}
+
+/// What `estigia voice` does. Neither action needs a claim or a repository.
+#[derive(Debug, Subcommand)]
+pub enum VoiceAction {
+    /// Read `voices/<name>.md` and its habits file as a post would, and say if they are usable.
+    Check {
+        /// The voice's name, as its file is called.
+        name: String,
+    },
+    /// Reword the texts in the files through the voice and print them, posting nothing.
+    ///
+    /// Each file holds one text. Nothing is kept: a later post asks the job again.
+    Preview {
+        /// The voice's name, as its file is called.
+        name: String,
+        /// Files, each holding one text, reworded and printed in this order.
+        #[arg(required = true)]
+        files: Vec<std::path::PathBuf>,
+        /// Apply only the habits file; launch no job.
+        #[arg(long)]
+        habits_only: bool,
+    },
 }
 
 /// What `estigia status` does, beyond saying what is installed.
