@@ -31,9 +31,11 @@ draft. This loop never overrides a configured refusal or grants merge authority.
    reused; a ready PR follows `Corrections after ready`. `push-ready` leaves it ready, `redraft`
    returns it to draft, and `refuse` stops. Reused PR titles/bodies are not replaced.
 5. Call `review_thread` with `thread_id`, the new `expected_head` and a `body_file`. To resolve,
-   also supply `resolve: true` and the full `fix_commit` SHA. The fix must follow the thread's
-   original commit and be an ancestor of the published head. A local-only fix is refused before
-   either reply or resolution. The reply is posted exactly as written, nothing appended, unless the
+   also supply `resolve: true`; a `fix_commit` is optional, so a refuted thread resolves on its reply
+   alone. A `fix_commit`, when given, is the full SHA, must follow the thread's original commit and
+   be an ancestor of the published head; a local-only fix is refused before either reply or
+   resolution. A thread whose last comment is already this account's resolves with `resolve: true`
+   and no `body_file`: nothing is posted, and `reply_confirmed` is `false`. The reply is posted exactly as written, nothing appended, unless the
    repository names a `Review voice`: then the text is reworded in that voice before anything is sent
    ([a voice](#a-review-voice)), the reworded text is the one that must read back, and a voice that
    cannot be applied stops the reply with nothing posted. Either way the reply must read back before

@@ -404,8 +404,15 @@ impl ThreadRig {
             thread_id: "thread-1",
             expected_head: &self.fix,
             fix_commit: fix,
-            body_file: &self.body,
+            body_file: Some(&self.body),
             resolve,
+        }
+    }
+
+    fn answered(&self, resolve: bool) -> thread::Response<'_> {
+        thread::Response {
+            body_file: None,
+            ..self.response(None, resolve)
         }
     }
 
@@ -487,8 +494,132 @@ fn a_thread_is_replied_to_and_resolved_only_after_the_fix_is_published() {
 }
 
 #[test]
+fn a_thread_is_resolved_with_a_reply_alone_and_claims_no_fix() {
+    let rig = ThreadRig::new();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("log");
+    let script = rig.script(&[
+        rig.pr(false, false),
+        rig.pr(true, false),
+        rig.pr(true, false),
+        rig.pr(true, true),
+    ]);
+    let result = crate::test_env::with_counting_logging_gh(
+        bin.path(),
+        &script,
+        &rig.root.path().join("counts"),
+        &log,
+        || thread::respond(&rig.context, &rig.response(None, true)),
+    )
+    .unwrap();
+    assert_eq!(result["resolution_confirmed"], true);
+    assert!(result["fix_commit"].is_null());
+    let calls = logged(&log);
+    for mutation in ["addPullRequestReviewThreadReply", "resolveReviewThread"] {
+        assert_eq!(
+            calls.iter().filter(|call| call.contains(mutation)).count(),
+            1,
+            "{mutation}"
+        );
+    }
+}
+
+#[test]
+fn retrying_a_resolution_without_a_fix_after_the_reply_posts_no_second_reply() {
+    let rig = ThreadRig::new();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("log");
+    let script = rig.script(&[rig.pr(true, false), rig.pr(true, false), rig.pr(true, true)]);
+    let result = crate::test_env::with_counting_logging_gh(
+        bin.path(),
+        &script,
+        &rig.root.path().join("counts"),
+        &log,
+        || thread::respond(&rig.context, &rig.response(None, true)),
+    )
+    .unwrap();
+    assert_eq!(result["resolution_confirmed"], true);
+    let calls = logged(&log);
+    assert!(
+        !calls
+            .iter()
+            .any(|call| call.contains("addPullRequestReviewThreadReply")),
+        "{calls:?}"
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|call| call.contains("resolveReviewThread"))
+    );
+}
+
+#[test]
+fn an_answered_thread_is_resolved_with_no_reply_and_only_the_resolve_is_sent() {
+    let rig = ThreadRig::new();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("log");
+    let script = rig.script(&[rig.pr(true, false), rig.pr(true, false), rig.pr(true, true)]);
+    let result = crate::test_env::with_counting_logging_gh(
+        bin.path(),
+        &script,
+        &rig.root.path().join("counts"),
+        &log,
+        || thread::respond(&rig.context, &rig.answered(true)),
+    )
+    .unwrap();
+    assert_eq!(result["resolution_confirmed"], true);
+    assert_eq!(result["reply_confirmed"], false);
+    assert!(result["reply_id"].is_null());
+    let mutations: Vec<String> = logged(&log)
+        .into_iter()
+        .filter(|call| call.contains("query=mutation"))
+        .collect();
+    assert_eq!(mutations.len(), 1, "{mutations:?}");
+    assert!(mutations[0].contains("resolveReviewThread"));
+}
+
+#[test]
+fn a_thread_whose_last_comment_is_not_ours_is_not_resolved_without_a_reply() {
+    let rig = ThreadRig::new();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("log");
+    let failure = crate::test_env::with_logging_gh(
+        bin.path(),
+        &rig.script(&[rig.pr(false, false)]),
+        &log,
+        || thread::respond(&rig.context, &rig.answered(true)),
+    )
+    .unwrap_err();
+    assert_eq!(failure.envelope()["reason"], "review-thread-invalid");
+    assert!(
+        !logged(&log)
+            .iter()
+            .any(|call| call.contains("query=mutation"))
+    );
+}
+
+#[test]
+fn no_reply_and_no_resolution_is_invalid_and_so_is_a_blank_reply() {
+    let rig = ThreadRig::new();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("log");
+    std::fs::write(&rig.body, "  \n").unwrap();
+    for what in [rig.answered(false), rig.response(None, true)] {
+        let failure = crate::test_env::with_logging_gh(
+            bin.path(),
+            &rig.script(&[rig.pr(true, false)]),
+            &log,
+            || thread::respond(&rig.context, &what),
+        )
+        .unwrap_err();
+        assert_eq!(failure.envelope()["reason"], "review-thread-invalid");
+    }
+    assert!(logged(&log).is_empty());
+}
+
+#[test]
 fn unpushed_or_old_fixes_and_foreign_threads_are_refused_before_a_write() {
-    for invalid in ["unpushed", "old", "foreign", "no-fix", "wrong-head"] {
+    for invalid in ["unpushed", "old", "foreign", "malformed", "wrong-head"] {
         let rig = ThreadRig::new();
         let bin = crate::test_env::scripted_gh();
         let log = rig.root.path().join("log");
@@ -502,13 +633,22 @@ fn unpushed_or_old_fixes_and_foreign_threads_are_refused_before_a_write() {
         let fix = match invalid {
             "unpushed" => Some(rig.local.as_str()),
             "old" => Some(rig.base.as_str()),
-            "no-fix" => None,
+            "malformed" => Some("abc123"),
             _ => Some(rig.fix.as_str()),
         };
-        crate::test_env::with_logging_gh(bin.path(), &rig.script(&[pr]), &log, || {
-            thread::respond(&rig.context, &rig.response(fix, true))
-        })
-        .expect_err(invalid);
+        let failure =
+            crate::test_env::with_logging_gh(bin.path(), &rig.script(&[pr]), &log, || {
+                thread::respond(&rig.context, &rig.response(fix, true))
+            })
+            .expect_err(invalid);
+        let reason = match invalid {
+            "unpushed" | "old" => Some("review-thread-fix-unpublished"),
+            "malformed" => Some("review-thread-invalid"),
+            _ => None,
+        };
+        if let Some(reason) = reason {
+            assert_eq!(failure.envelope()["reason"], reason, "{invalid}");
+        }
         assert!(
             !logged(&log)
                 .iter()

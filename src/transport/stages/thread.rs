@@ -10,7 +10,7 @@ pub(crate) struct Response<'a> {
     pub thread_id: &'a str,
     pub expected_head: &'a str,
     pub fix_commit: Option<&'a str>,
-    pub body_file: &'a Path,
+    pub body_file: Option<&'a Path>,
     pub resolve: bool,
 }
 
@@ -58,16 +58,22 @@ fn respond_under(
     renderer: &Renderer,
     held: Option<&Held<'_>>,
 ) -> Result<serde_json::Value, Failure> {
-    let body = std::fs::read_to_string(what.body_file)
-        .map_err(|error| Failure::Read(format!("the thread reply could not be read: {error}")))?;
-    if body.trim().is_empty()
+    let body = what
+        .body_file
+        .map(|file| {
+            std::fs::read_to_string(file).map_err(|error| {
+                Failure::Read(format!("the thread reply could not be read: {error}"))
+            })
+        })
+        .transpose()?;
+    if body.as_deref().is_some_and(|body| body.trim().is_empty())
+        || (body.is_none() && !what.resolve)
         || !oid(what.expected_head)
         || what.fix_commit.is_some_and(|commit| !oid(commit))
-        || (what.resolve && what.fix_commit.is_none())
     {
         return Err(stop(
             "review-thread-invalid",
-            "supply a nonempty reply and a full expected head SHA; resolution also requires a full fix_commit SHA",
+            "supply a nonempty reply (it may be left out only to resolve) and a full expected head SHA; a fix_commit, when given, must be a full SHA",
             false,
         ));
     }
@@ -88,13 +94,18 @@ fn respond_under(
             None,
         )?;
     }
-    let remembered = claim::review_operation_id(
-        "thread-reply-rendered",
-        &[&context.repo_dir.to_string_lossy(), what.thread_id, &body],
-    );
-    let reply = match voice::recall(&remembered)? {
-        Some(posted) => posted,
-        None => voice::render_one(context, renderer, &body)?,
+    let remembered = body.as_deref().map(|body| {
+        claim::review_operation_id(
+            "thread-reply-rendered",
+            &[&context.repo_dir.to_string_lossy(), what.thread_id, body],
+        )
+    });
+    let reply = match (&remembered, body.as_deref()) {
+        (Some(remembered), Some(body)) => Some(match voice::recall(remembered)? {
+            Some(posted) => posted,
+            None => voice::render_one(context, renderer, body)?,
+        }),
+        _ => None,
     };
     let prs = claim::open_prs(context, what.branch)?;
     let [pr] = prs.as_slice() else {
@@ -120,53 +131,65 @@ fn respond_under(
     if let Some(fix) = what.fix_commit {
         verify_fix(what, thread, fix)?;
     }
-    let key = claim::review_operation_id(
-        "thread-reply",
-        &[
-            what.thread_id,
-            what.expected_head,
-            what.fix_commit.unwrap_or_default(),
-            &body,
-        ],
-    );
-    let mut reply_id = confirmed_reply(thread, &reply).map(str::to_owned);
-    if reply_id.is_none() {
-        voice::remember(&remembered, &reply)?;
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let staged = claim::stage(&reply, &format!("thread-{key}-{nonce}.md"))?;
-        let mutation = mutate(context, REPLY, what.thread_id, Some(&staged));
-        let _ = std::fs::remove_file(&staged);
-        mutation.map_err(|failure| unknown("reply", false, failure))?;
-        let seen =
-            read(context, number, what).map_err(|failure| unknown("reply", false, failure))?;
-        reply_id = confirmed_reply(find(&seen, what.thread_id)?, &reply).map(str::to_owned);
+    let replied = reply.is_some();
+    let mut reply_id = None;
+    if let (Some(reply), Some(remembered), Some(body)) = (&reply, &remembered, body.as_deref()) {
+        let key = claim::review_operation_id(
+            "thread-reply",
+            &[
+                what.thread_id,
+                what.expected_head,
+                what.fix_commit.unwrap_or_default(),
+                body,
+            ],
+        );
+        reply_id = confirmed_reply(thread, reply).map(str::to_owned);
         if reply_id.is_none() {
-            return Err(unknown(
-                "reply",
-                false,
-                Failure::Read("the exact reply was not listed".to_owned()),
-            ));
+            voice::remember(remembered, reply)?;
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let staged = claim::stage(reply, &format!("thread-{key}-{nonce}.md"))?;
+            let mutation = mutate(context, REPLY, what.thread_id, Some(&staged));
+            let _ = std::fs::remove_file(&staged);
+            mutation.map_err(|failure| unknown("reply", false, failure))?;
+            let seen =
+                read(context, number, what).map_err(|failure| unknown("reply", false, failure))?;
+            reply_id = confirmed_reply(find(&seen, what.thread_id)?, reply).map(str::to_owned);
+            if reply_id.is_none() {
+                return Err(unknown(
+                    "reply",
+                    false,
+                    Failure::Read("the exact reply was not listed".to_owned()),
+                ));
+            }
         }
+    } else if !last_comment_is_ours(thread) {
+        return Err(stop(
+            "review-thread-invalid",
+            "the thread's last comment is not this account's, so a reply is required",
+            false,
+        ));
     }
     if what.resolve {
-        let seen =
-            read(context, number, what).map_err(|failure| unknown("resolution", true, failure))?;
+        let seen = read(context, number, what)
+            .map_err(|failure| unknown("resolution", replied, failure))?;
         let thread = find(&seen, what.thread_id)?;
-        verify_fix(what, thread, what.fix_commit.unwrap_or_default())
-            .map_err(|failure| unknown("resolution", true, failure))?;
+        if let Some(fix) = what.fix_commit {
+            verify_fix(what, thread, fix)
+                .map_err(|failure| unknown("resolution", replied, failure))?;
+        }
         if thread
             .get("isResolved")
             .and_then(serde_json::Value::as_bool)
             != Some(true)
         {
             mutate(context, RESOLVE, what.thread_id, None)
-                .map_err(|failure| unknown("resolution", true, failure))?;
+                .map_err(|failure| unknown("resolution", replied, failure))?;
         }
-        let seen =
-            read(context, number, what).map_err(|failure| unknown("resolution", true, failure))?;
+        let seen = read(context, number, what)
+            .map_err(|failure| unknown("resolution", replied, failure))?;
         if find(&seen, what.thread_id)?
             .get("isResolved")
             .and_then(serde_json::Value::as_bool)
@@ -174,14 +197,14 @@ fn respond_under(
         {
             return Err(unknown(
                 "resolution",
-                true,
+                replied,
                 Failure::Read("the thread did not read back resolved".to_owned()),
             ));
         }
     }
     Ok(serde_json::json!({
         "ok": true, "pr": number, "head": what.expected_head, "thread_id": what.thread_id,
-        "reply_id": reply_id, "reply_confirmed": true, "resolution_confirmed": what.resolve,
+        "reply_id": reply_id, "reply_confirmed": replied, "resolution_confirmed": what.resolve,
         "fix_commit": what.fix_commit, "tracker_written": false,
     }))
 }
@@ -229,6 +252,14 @@ fn confirmed_reply<'a>(thread: &'a serde_json::Value, body: &str) -> Option<&'a 
             .then(|| text(comment, &["id"]))
             .flatten()
         })
+}
+
+fn last_comment_is_ours(thread: &serde_json::Value) -> bool {
+    nodes(thread, &["comments"])
+        .last()
+        .and_then(|comment| comment.get("viewerDidAuthor"))
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
 }
 
 fn verify_fix(what: &Response<'_>, thread: &serde_json::Value, fix: &str) -> Result<(), Failure> {

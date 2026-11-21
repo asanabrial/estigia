@@ -9,7 +9,7 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `missing-argument` | A required argument was not passed. The refusal names it in `argument`. | Pass it and call again. |
 | `review-wait-invalid` | CI polling has no expected head or exceeds 300 seconds. | Pass the published `expected_head` and a wait from 0 through 300 to `review_stages`. |
 | `assisted-review-head-moved` | The PR branch, head or polling base changed. | Read the new published head and restart CI/review inspection; do not reuse old evidence. |
-| `review-thread-invalid` | A reply is blank, a SHA is incomplete, or resolution has no fix SHA. | Supply a reply file, full `expected_head`, and `fix_commit` when resolving. |
+| `review-thread-invalid` | A reply is blank or missing without `resolve`, a SHA is incomplete, or a reply-less resolution finds the thread's last comment is not this account's. | Supply a reply file and a full `expected_head`; a `fix_commit`, when given, is a full SHA. |
 | `review-thread-pr-unconfined` | There is not exactly one open PR or the thread does not belong to it; under an autonomous claim, that PR is also not the receipt's. | Read the claimed branch's PR and use its thread ID. |
 | `review-thread-head-not-published` | Under an autonomous claim, `expected_head` is not the head the run's receipt recorded. Nothing was sent to GitHub. | `publish_review` the fix, then name the head it recorded. |
 | `review-thread-fix-unpublished` | The fix is not strictly after the thread's original commit and already on the published head, or ancestry is unknown. | Publish the correction first and supply its confirmed head and fix SHA. |

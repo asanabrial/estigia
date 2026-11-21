@@ -1340,8 +1340,8 @@ pub const TOOLS: &[Tool] = &[
         name: "review_thread",
         contract_name: "review thread",
         description: "Reply to one thread on the assisted branch's open PR and optionally resolve \
-                      it. Requires the exact published head. Resolution requires a fix commit \
-                      after the thread's original commit and already on that head. Verifies \
+                      it. Requires the exact published head. A fix commit, when given, must follow \
+                      the thread's original commit and already be on that head. Verifies \
                       thread ownership and reads writes back; never proves a fix is semantically correct. \
                       An autonomous run names its receipt's head.",
         operation: "review-thread",
@@ -1349,9 +1349,13 @@ pub const TOOLS: &[Tool] = &[
             RUN_ID,
             Argument::required("thread_id", "string", "Thread ID from review_stages.open_threads."),
             Argument::required("expected_head", "string", "Exact published 40-hex commit SHA."),
-            Argument::required("body_file", "string", "Path to the reply text."),
-            Argument::optional("fix_commit", "string", "Published fix SHA; required to resolve."),
-            Argument::optional("resolve", "boolean", "Resolve only after the reply and published fix are verified."),
+            Argument::optional(
+                "body_file",
+                "string",
+                "Reply text path; omit only with resolve when the last comment is yours.",
+            ),
+            Argument::optional("fix_commit", "string", "Published fix SHA, verified when given."),
+            Argument::optional("resolve", "boolean", "Resolve after the reply is read back and any fix_commit is verified."),
         ],
         effect: PointerEffect::None,
         writes: true,
