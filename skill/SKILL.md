@@ -1,6 +1,6 @@
 ---
 name: flow
-description: "Trigger: flow triage [conditions], flow dev [domain-rules] [issue-number], bare flow (the combined analyst-developer, routing to which issue from tracker state), and the long forms analyst and developer. Also claim issue, move task states. Triage files at most one evidenced issue; without conditions, audit the repository critically."
+description: "Trigger: flow triage [conditions], flow dev [domain-rules] [issue-number], bare flow (the combined analyst-developer, routing to which issue from tracker state), flow review <pr> [<pr> …] (review pull requests this run did not build, in order), and the long forms analyst and developer. Also claim issue, move task states. Triage files at most one evidenced issue; without conditions, audit the repository critically."
 license: GPL-2.0
 metadata:
   author: asanabrial
@@ -11,7 +11,8 @@ metadata:
 
 ## Activation Contract
 
-Use for `flow triage [conditions]`, `flow dev [domain-rules] [issue-number]`, bare `flow`, analyst or developer work, claims, and workflow-state transitions.
+Use for `flow triage [conditions]`, `flow dev [domain-rules] [issue-number]`, `flow review <pr> [<pr> …]`, bare `flow`, analyst or developer work, claims, and workflow-state transitions.
+`flow review` is neither role: it reviews each named pull request this run did not build, and the sequence is in the `flow review` rows of [decision gates](references/decision-gates.md).
 `triage` and `dev` are the roles' short names; `analyst` and `developer` remain accepted and mean the same thing. Naming no role word is the combined analyst-developer, which loads both rule books and does both jobs; a role word, when written, still names one role — `flow dev`/`flow developer` and `flow triage`/`flow analyst` each narrow to that role, and `flow dev <n>` also to that issue — and is never inferred from anything but the words above and the routing row below. Where `Claim workflow` is `assisted`, `flow <issue>` and `flow dev <issue>` (`<issue>` a number or a tracker key) are both the assisted row in [decision gates](references/decision-gates.md), taken before any developer step and with no claim.
 Analyst conditions and dev domains are optional: a bounded target is the scope; otherwise the analyst audits the repository and the dev implements the selected issue.
 Read repository instructions first and load only the tracker binding selected by operator configuration before tracker work.
@@ -67,7 +68,7 @@ Crossing a threshold selects delegated work only. Size, file count, and risk do 
 
 | Situation | Action |
 |---|---|
-| A pull request this run did not build must be reviewed; an `assisted` repository (`Claim workflow`); no tracker, or not a Git repository; a tracker, routing or renewal read failed; a renewal answers "stop"; a holder looks abandoned; work must be put down | Read the matching row in [decision gates](references/decision-gates.md) before acting. A failed read is not an answer and never clearance. |
+| A pull request this run did not build must be reviewed, alone or as `flow review <pr> [<pr> …]`; an `assisted` repository (`Claim workflow`); no tracker, or not a Git repository; a tracker, routing or renewal read failed; a renewal answers "stop"; a holder looks abandoned; work must be put down | Read the matching row in [decision gates](references/decision-gates.md) before acting. A failed read is not an answer and never clearance. |
 | Invoked with no role word | The combined analyst-developer: load both rule books (the analyst's is [analyst](references/analyst.md)), each bar governing its own half and neither relaxed — the analyst's evidence bar for every finding it files, the dev's delivery bar for every change it delivers — and route to which issue, not which role, from the tracker in order, saying which branch answered: this run's held issue -> resume at its recorded state; else an unassigned `review`, then an unassigned `ready`, then an `analysis` item to specify, and triage only when every queue is empty — work in flight first. `flow dev` and `flow triage` (or `developer` and `analyst`) narrow to one role. Never route from a label, assignee, prose, or observed worktree: claim rules refuse them. Text after bare `flow` is triage conditions or dev domain rules. |
 | A domain route is recorded | Analyst loads the left rule book; dev loads the right; the combined analyst-developer loads both, each bar governing its own half and neither relaxed. State explicitly when implementation routing is absent. |
 | Runtime mechanics or independent-context acquisition vary | Follow [runtime notes](references/runtime-notes.md); runtime limits change the mechanism, never the invariant. |
@@ -142,6 +143,7 @@ authority nor independence.
 ## Output Contract
 
 - Analyst: [analyst](references/analyst.md) owns what it returns.
+- `flow review`: one line per pull request, as [decision gates](references/decision-gates.md) states.
 - Developer: return the issue and exact state, holder, branch/worktree, review URL and immutable head/base/delivery identities, tests/review/CI/publications, and any blocker, handoff, rollback, or next owner. Surface claim, horizon, credential, capability, and resource limits from the focused references; never reinterpret an unknown result as clearance.
 
 ## References
