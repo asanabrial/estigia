@@ -27,17 +27,27 @@ const CREATES_A_COMMIT: &[&str] = &[
 const RECOVERS: &[&str] = &["--abort", "--quit", "--skip"];
 
 fn commits_or_pushes(literal: &str) -> bool {
+    let fragments: Vec<&str> = CREATES_A_COMMIT
+        .iter()
+        .copied()
+        .chain(std::iter::once("git push"))
+        .collect();
+    names_any(literal, &fragments)
+}
+
+/// Whether the line names one of `fragments` as a command it runs, an abort, quit or skip of a
+/// commit-creating one not counting.
+pub(super) fn names_any(literal: &str, fragments: &[&str]) -> bool {
     let view =
         super::shell::data_view(&super::shell::unquote_plain_words(literal)).to_ascii_lowercase();
     let mut normalized = format!("{} ", super::without_leading_options(&view));
-    for fragment in CREATES_A_COMMIT {
+    for fragment in fragments {
         for flag in RECOVERS {
             normalized = normalized.replace(&format!("{fragment} {flag} "), " ");
         }
     }
-    CREATES_A_COMMIT
+    fragments
         .iter()
-        .chain(std::iter::once(&"git push"))
         .any(|fragment| super::contains_whole_command(&normalized, fragment))
 }
 

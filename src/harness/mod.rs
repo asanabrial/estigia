@@ -1781,25 +1781,6 @@ pub(crate) fn shell_code(literal: &str) -> String {
     without_leading_options(&view)
 }
 
-/// The repository write a line carries beside the boundary it was classified as.
-///
-/// [`classify_observing`] answers with the line's strongest command, so for a run holding no
-/// claim, whose policy reads writes and not boundaries, the write would go unread.
-pub(crate) fn write_beside_a_boundary(action: &Action, literal: Option<&str>) -> Option<String> {
-    if !matches!(action, Action::Boundary { .. }) || unclaimed::is_a_push(action) {
-        return None;
-    }
-    let literal = literal?;
-    let unquoted = shell::unquote_plain_words(literal);
-    let view = shell::data_view(&unquoted).to_ascii_lowercase();
-    let code = without_leading_options(&view);
-    if contains_whole_command(&code, "git push") {
-        return Some("git push".to_owned());
-    }
-    let normalized = without_leading_options(&unquoted.to_ascii_lowercase());
-    repository_write_in(&code, &normalized).or_else(|| shell::writes_a_file(&view))
-}
-
 fn names_fragment(code: &str, fragment: &str) -> bool {
     if fragment != "git stash" {
         return code.contains(fragment);
@@ -3330,21 +3311,6 @@ fn decide_observing(
             if let Some(refusal) = operation_window::check_protected(context, action) {
                 return Decision::Deny(Box::new(prefixed(refusal, command, observed)));
             }
-            if run.issue.is_none() && !run.assisted && !run.unreadable {
-                let literal = match observed.command.as_ref().map(|seen| &seen.literal) {
-                    Some(Established::Known(text)) => Some(text.as_str()),
-                    _ => None,
-                };
-                match issue_requirement::decision(context, action, how, literal, &[]) {
-                    Some(Decision::Deny(refusal)) => {
-                        return Decision::Deny(Box::new(prefixed(*refusal, command, observed)));
-                    }
-                    Some(Decision::Ask(refusal)) => {
-                        return Decision::Ask(Box::new(prefixed(*refusal, command, observed)));
-                    }
-                    _ => {}
-                }
-            }
             return Decision::Outside(Aside::NotWatched);
         }
         Action::Write { .. } => "write",
@@ -3414,13 +3380,12 @@ fn decide_observing(
         if let Some(refusal) = unclaimed::refusal(context, &context.repo_dir, action, literal) {
             return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
         }
-        let write_targets = observed
-            .command
-            .as_ref()
-            .map(|command| command.write_targets.as_slice())
-            .unwrap_or_default();
-        let subject = write_beside_a_boundary(action, literal).unwrap_or(subject);
-        return match issue_requirement::decision(context, action, how, literal, write_targets) {
+        let pushed: Vec<String> = observed
+            .push_refs
+            .iter()
+            .map(|(_, remote)| remote.clone())
+            .collect();
+        return match issue_requirement::decision(context, action, literal, &pushed) {
             Some(Decision::Deny(refusal)) => {
                 Decision::Deny(Box::new(prefixed(*refusal, &subject, observed)))
             }
