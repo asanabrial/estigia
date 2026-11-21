@@ -576,3 +576,21 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `the_lens_count_stated_beside_review_tier_is_the_one_the_tier_derives`. The tier's boundary claim in the
   `src/transport/tier.rs` module doc is not crossed by any test, since `source_text::code_of` strips
   comments; the falsifiable absolute was removed.
+
+- **A pull request review's inline comments are confirmed by count and path, not by line or text, and the
+  create-review call's atomicity was not measured.** `pr_review` `submit` posts a finding whose whole
+  range sits inside one hunk of `held.merge_base..held.head` as a `comments` entry of the one
+  create-review call, and `pull-review-submission-unconfirmed` is answered when `…/reviews/{id}/comments`
+  lists a different number of comments or a different multiset of paths than were sent
+  (`a_review_whose_comments_did_not_land_is_unconfirmed`). Not compared: each comment's line, side and
+  text. A retry that finds this account's review of the commit recomputes the expected comments from
+  the same diff and holds the found review to them; a review sent with no comment is not asked for its
+  comments, so one carrying comments nobody sent reads back as submitted. The anchoring is decided
+  locally because GitHub is read to refuse the whole review for one comment outside the diff, and that
+  refusal, the claim that the call lands whole or not at all, the REST field names for a range
+  (`line`, `start_line`, `side`, `start_side`) and the per-comment size limit were not run against
+  GitHub; `COMMENT_CEILING` is a guess at the limit, and a longer finding stays in the body. A diff that
+  cannot be read for a finding's path leaves that finding in the body rather than refusing, so an
+  unreadable diff degrades to the body-only review without saying so. `site_in_change` keeps a range
+  that spans two hunks, or one only partly inside a hunk, in the body, which loses the inline anchor
+  the author could have had.

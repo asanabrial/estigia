@@ -5265,9 +5265,9 @@ pub(crate) fn parse_merged_spends(run_id: &str, spend: &str) -> Result<Vec<Merge
 /// itself reports — the platform this repository is developed on pastes a
 /// path the other way, and a borrow could not carry the rewritten text.
 pub(crate) struct FindingLocation {
-    path: String,
-    start: u32,
-    end: u32,
+    pub(crate) path: String,
+    pub(crate) start: u32,
+    pub(crate) end: u32,
 }
 
 /// Whether a path reads as repository-relative rather than absolute or
@@ -5371,7 +5371,7 @@ fn finding_location_field(start: u32, end: u32) -> String {
 /// a real repository without any tracker at all — the same reason
 /// [`never_ran_signal`] is its own function rather than inlined into
 /// [`classify_reds`].
-fn changed_new_side_lines(
+pub(crate) fn changed_new_side_lines(
     context: &Context,
     base: &str,
     head: &str,
