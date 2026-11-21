@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use super::{Action, Decision, GateContext};
-use crate::config::{IssueRequirement, UnclaimedGithubWrites};
+use crate::config::IssueRequirement;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 /// The stable code of this refusal.
@@ -81,14 +81,6 @@ pub(crate) enum Scope {
     Unknown,
 }
 
-/// How a hold was reached: by work that reaches the default branch, or by a merge or another
-/// boundary `Unclaimed GitHub writes` could have let pass.
-#[derive(Clone, Copy)]
-pub(crate) enum Reach {
-    Placed,
-    GithubWrite,
-}
-
 #[derive(Default)]
 struct Reading {
     commits: bool,
@@ -133,8 +125,7 @@ impl Reading {
 /// destination is the default branch, and `gh pr merge`. Every other modification passes, and so
 /// does `git pull`, `gh pr create` and a GitHub write that is no boundary. A boundary that is none
 /// of those (`git tag`, `gh release`, a `gh api` mutation, a command this repository declared
-/// irreversible) is held as before unless `Unclaimed GitHub writes` is `allowed` in a repository
-/// file this process could read; so are `gh pr merge` and `git merge`.
+/// irreversible) is held too, and so are `gh pr merge` and `git merge` on the default branch.
 ///
 /// What cannot be established is held, for this set only: a current branch that cannot be read, a
 /// directory a `cd` or `-C` does not name literally, a push destination the line does not spell.
@@ -157,28 +148,18 @@ pub fn decision(
     let pushes_to_default = reading.pushes
         && push_may_reach_the_default_branch(directories.as_deref(), literal, pushed);
     if (reading.commits && on_default == Some(true)) || pushes_to_default {
-        return held(context, requirement, &scope, Reach::Placed);
-    }
-    if context.unclaimed_github_writes == UnclaimedGithubWrites::Allowed
-        && context.repository_config_unreadable.is_none()
-    {
-        return None;
+        return held(context, requirement, &scope);
     }
     let outside = matches!(scope, Scope::Outside);
     let github = (reading.merges && on_default == Some(true))
         || ((reading.pr_merges || reading.other_boundary) && !outside);
     if github {
-        return held(context, requirement, &scope, Reach::GithubWrite);
+        return held(context, requirement, &scope);
     }
     None
 }
 
-fn held(
-    context: &GateContext,
-    requirement: IssueRequirement,
-    scope: &Scope,
-    reach: Reach,
-) -> Option<Decision> {
+fn held(context: &GateContext, requirement: IssueRequirement, scope: &Scope) -> Option<Decision> {
     if let Some(refusal) = &context.repository_config_unreadable {
         return Some(Decision::Deny(Box::new(refusal.clone())));
     }
@@ -188,7 +169,6 @@ fn held(
             assisted,
             requirement,
             scope,
-            reach,
         )))),
         IssueRequirement::Off => None,
     }
@@ -528,12 +508,7 @@ fn holds_a_git_entry(directory: &Path) -> Option<bool> {
 /// The refusal for an unclaimed call that would put work on the default branch.
 ///
 /// The clause bound to `scope` keeps it honest: only a scope Git named may name a directory.
-pub(crate) fn refusal(
-    assisted: bool,
-    requirement: IssueRequirement,
-    scope: &Scope,
-    reach: Reach,
-) -> Refusal {
+pub(crate) fn refusal(assisted: bool, requirement: IssueRequirement, scope: &Scope) -> Refusal {
     let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
          work in; or `Issue required` set to `off` for this repository, when its default branch \
@@ -543,13 +518,6 @@ pub(crate) fn refusal(
          change, then a branch started with `claim`'s `branch` and `base`, which gives the isolated \
          checkout to work in; or `Issue required` set to `off` for this repository, \
          when its default branch needs no claim"
-    };
-    let way_in = match reach {
-        Reach::GithubWrite => format!(
-            "{way_in}; or `Unclaimed GitHub writes` set to `allowed` for this repository, when \
-             only its GitHub writes need no claim"
-        ),
-        Reach::Placed => way_in.to_string(),
     };
     let here = match scope {
         Scope::Repository(_) => " in this repository",

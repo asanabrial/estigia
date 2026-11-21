@@ -15,7 +15,6 @@ fn context(mode: DecisionMode, state_root: &Path) -> GateContext {
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
         repository_config_unreadable: None,
-        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: mode,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: super::super::RENEWAL_WINDOW,

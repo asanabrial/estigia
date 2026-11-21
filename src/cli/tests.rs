@@ -60,7 +60,6 @@ fn inventory() -> Vec<Refusal> {
             &crate::harness::issue_requirement::Scope::Repository(std::path::PathBuf::from(
                 "/a/checkout",
             )),
-            crate::harness::issue_requirement::Reach::Placed,
         ),
         crate::harness::unclaimed::not_claimed(false),
         crate::harness::decision_mode::refusal(&[], true),
@@ -3197,7 +3196,6 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
     }
 
     assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::IssueRequirement));
-    assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::UnclaimedGithubWrites));
     assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::Workflow));
     assert!(crate::config::REPOSITORY_SETTINGS.contains(&Setting::GitOperationWindow));
 
@@ -3210,7 +3208,7 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
     let end = body.find("\n}\n").unwrap_or(body.len());
     assert_eq!(
         body[..end].matches("installed.").count(),
-        11,
+        10,
         "the gate reads a different number of settings than this test names, \
          and every one of them has to be repository-wide"
     );
@@ -8514,7 +8512,6 @@ fn release_context(
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
         repository_config_unreadable: None,
-        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: std::time::Duration::from_secs(120),
@@ -8973,50 +8970,20 @@ fn issue_required_refuses_its_retired_values_like_any_unknown_value() {
 }
 
 #[test]
-fn unclaimed_github_writes_are_written_to_the_repository_file_and_nowhere_else() {
+fn config_set_refuses_the_removed_unclaimed_github_writes_label_as_an_unknown_setting() {
     let rig = authorisation_rig(&Config::default());
-    super::repository_set(
-        Setting::UnclaimedGithubWrites,
-        "allowed",
-        rig.repo.path(),
-        &rig.options,
-    )
-    .expect("the repository may answer its own row");
-    let written = std::fs::read_to_string(crate::skill::repository_config_path(rig.repo.path()))
-        .expect("the file was created");
-    assert!(
-        written.contains("| Unclaimed GitHub writes | allowed |"),
-        "{written}"
-    );
-    let layered = crate::skill::layer_repository(&Config::default(), rig.repo.path())
-        .expect("the file reads back");
-    assert_eq!(
-        layered.unclaimed_github_writes,
-        crate::config::UnclaimedGithubWrites::Allowed
-    );
-
     let refusal = super::config_set(
         "Unclaimed GitHub writes",
         "held",
         None,
-        false,
-        false,
-        &rig.options,
-        false,
-    )
-    .expect_err("a machine-wide value was accepted");
-    assert_eq!(refusal.code, "setting-only-the-repositorys");
-    let refusal = super::config_set(
-        "Unclaimed GitHub writes",
-        "held",
-        Some("claude-code"),
-        false,
+        true,
         false,
         &rig.options,
         false,
     )
-    .expect_err("a per-agent value was accepted");
-    assert_eq!(refusal.code, "setting-not-per-agent");
+    .expect_err("the removed label was accepted");
+    assert_eq!(refusal.code, "setting-unknown");
+    assert!(!crate::skill::repository_config_path(rig.repo.path()).exists());
 }
 
 #[test]

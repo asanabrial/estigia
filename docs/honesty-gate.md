@@ -183,7 +183,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     started and a stage name matching no check look the same; an advisory check never holds them. Held
     against a fake `gh` by `src/transport/stages/tests.rs`.
 - **No other setting is read by nobody.**
-  An operator sets thirty-four rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets thirty-three rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location` and `Review budget` (for the review forecast line). The gate reads
   `Irreversible commands`, and `Git operation window` is read from the repository's own file by the transport and the gate alike, never through `context.get`; and the payload's prose names the rest of the acted-on rows. The four rows that
   had exactly one answer (`Delivery route`, `Review delegation`, `Merge strategy`, `Review protocol`) were

@@ -3847,16 +3847,13 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
                 if shipped.contains("context.boundaries") {
                     reads.push("irreversible commands".to_owned());
                 }
-                // The gate reads these two rows as fields on `GateContext` rather
+                // The gate reads these rows as fields on `GateContext` rather
                 // than through `context.get`, so the field is the read.
                 if shipped.contains("context.integration") {
                     reads.push("integration mode".to_owned());
                 }
                 if shipped.contains("context.issue_requirement") {
                     reads.push("issue required".to_owned());
-                }
-                if shipped.contains("context.unclaimed_github_writes") {
-                    reads.push("unclaimed github writes".to_owned());
                 }
                 if shipped.contains("context.decision_mode") {
                     reads.push("decision mode".to_owned());

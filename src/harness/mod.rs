@@ -3195,14 +3195,10 @@ pub struct GateContext {
     /// What a run holding no claim may write here. Read from the repository's own file only.
     pub issue_requirement: crate::config::IssueRequirement,
     /// The repository's own file was there and could not be read, so the rows it carries are
-    /// unknown. The rows the gate enforces here read as their denying values — `Unclaimed write
-    /// policy` as `required`, `Unclaimed GitHub writes` as `held` — and a refusal carrying this
-    /// names the file and what the read answered rather than the standard one. `None` when the
+    /// unknown. The rows the gate enforces here read as their denying values — `Issue required`
+    /// as `on` — and a refusal carrying this names the file and what the read answered rather than the standard one. `None` when the
     /// file was absent, readable, or held only a row that did not parse.
     pub repository_config_unreadable: Option<Refusal>,
-    /// Whether a run holding no claim may merge, tag, release or write to GitHub. Read from the
-    /// repository's own file only.
-    pub unclaimed_github_writes: crate::config::UnclaimedGithubWrites,
     /// Whether a question tool is put to the person or refused and decided here.
     pub decision_mode: crate::config::DecisionMode,
     /// Who witnesses a claim here. Read from the repository's own file only; `None` when

@@ -34,7 +34,6 @@ fn context(root: &Path, window: GitOperationWindow) -> GateContext {
         operation_window: window,
         issue_requirement: crate::config::IssueRequirement::Off,
         repository_config_unreadable: None,
-        unclaimed_github_writes: crate::config::UnclaimedGithubWrites::Held,
         decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
     }
