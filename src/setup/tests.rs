@@ -6190,6 +6190,35 @@ fn every_agents_own_files_come_back_byte_for_byte() {
     );
 }
 
+#[test]
+fn uninstall_preserves_cursor_hook_files_without_estigia_hooks() {
+    for original in [
+        "{\n  \"version\": 1, \"hooks\": {}\n}\n",
+        "{\n  \"version\": 1, \"hooks\": {}, \"mine\": 1\n}\n",
+    ] {
+        let (_home, options) = sandbox();
+        let adapter = agent("cursor");
+        let hooks = resolve_paths(adapter, &options)
+            .expect("paths resolve")
+            .hooks
+            .expect("Cursor hooks path");
+        fs::create_dir_all(hooks.parent().expect("hooks parent")).expect("create hooks directory");
+        fs::write(&hooks, original).expect("write operator hooks");
+
+        let report = uninstall(adapter, &options).expect("uninstall succeeds");
+
+        assert_eq!(
+            fs::read_to_string(&hooks).expect("operator hooks survive"),
+            original,
+        );
+        assert!(report.actions.iter().any(|action| {
+            action.kind == ActionKind::Hooks
+                && action.path == hooks
+                && action.change == Change::Unchanged
+        }));
+    }
+}
+
 /// An uninstall leaves no empty husk of Estigia's own making.
 ///
 /// A wrapper Estigia created is Estigia's to remove, and a wrapper the operator

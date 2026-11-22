@@ -115,12 +115,12 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   (`Situation | Action`, `Load | When`). `a_document_with_no_usable_block_is_read_the_same_by_both` puts six
   shapes of unmarked and half-written document to both readers, with a floor failing if the transport reads
   nothing anywhere.
-- **An uninstall takes an empty `hooks` wrapper it may not have written.** When Estigia's entries leave a
-  settings file the now-empty `hooks` object goes with them. An operator who wrote `"hooks": {}` themselves
-  loses it (measured: `estigia setup cursor --uninstall` on a machine where nothing was ever installed rewrites
-  that file and reports `update`). Telling the two apart needs a record of what this crate created, which
-  exists for the instruction file (`created_outside`) and not for this;
-  `an_uninstall_leaves_no_empty_husk_of_its_own_making` asserts the decidable half.
+- **An uninstall cannot tell who created a hooks wrapper once Estigia has populated it.** When
+  uninstall removes Estigia's hooks and the wrapper is then empty, it removes the wrapper too. This
+  can remove an operator-created wrapper that was empty before setup. Uninstall preserves the file
+  byte for byte when it finds no Estigia hook to remove.
+  `uninstall_preserves_cursor_hook_files_without_estigia_hooks` checks this for Cursor.
+  `an_uninstall_leaves_no_empty_husk_of_its_own_making` covers the removal of generated wrappers.
 - **Fifty-three refusals the transport can give are named in no prose an agent reads.**
   `every_refusal_the_port_can_give_is_one_somebody_has_been_told_how_to_answer` reads `TRANSPORT_VOCABULARY`
   (the vocabulary `build.rs` generates from all three spellings a refusal can take), one entry per code, and
