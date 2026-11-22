@@ -80,6 +80,9 @@ Five invariants, and the tests are named after them:
    Delete that record and uninstall
    removes nothing, which is the honest reading of no evidence.
 
+   A hook configuration file with no Estigia hook to remove stays byte for byte as found. This
+   includes an operator-created empty `hooks` object.
+
    `REPLACE` is a file that was never Estigia's; `OVERWRITE` is Estigia's file with your edit in it
    (the digest differs), and a machine one release behind still reads `update`, because its record
    predates digests. On the way out, a file whose contents moved since Estigia wrote them is

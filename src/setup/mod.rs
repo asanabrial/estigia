@@ -4254,28 +4254,36 @@ pub fn uninstall_from(
             }
             _ => strip_hooks(hooks, &existing)?,
         };
-        let scaffolding = adapter
-            .gate_spec()
-            .map_or(&[][..], |spec| spec.envelope.scaffolding());
-        let desired = without_scaffolding(&desired, scaffolding);
-        actions.push(
-            if is_now_empty(&desired, ActionKind::Hooks, scaffolding, true) {
-                pending.insert(hooks.clone(), None);
-                discard(hooks, ActionKind::Hooks, options.dry_run)?
-            } else {
-                pending.insert(
-                    hooks.clone(),
-                    Some(as_the_file_was(Some(&existing), &desired)),
-                );
-                write_file(
-                    hooks,
-                    Some(&existing),
-                    &desired,
-                    ActionKind::Hooks,
-                    options.dry_run,
-                )?
-            },
-        );
+        if desired == existing {
+            actions.push(SetupAction {
+                kind: ActionKind::Hooks,
+                path: hooks.clone(),
+                change: Change::Unchanged,
+            });
+        } else {
+            let scaffolding = adapter
+                .gate_spec()
+                .map_or(&[][..], |spec| spec.envelope.scaffolding());
+            let desired = without_scaffolding(&desired, scaffolding);
+            actions.push(
+                if is_now_empty(&desired, ActionKind::Hooks, scaffolding, true) {
+                    pending.insert(hooks.clone(), None);
+                    discard(hooks, ActionKind::Hooks, options.dry_run)?
+                } else {
+                    pending.insert(
+                        hooks.clone(),
+                        Some(as_the_file_was(Some(&existing), &desired)),
+                    );
+                    write_file(
+                        hooks,
+                        Some(&existing),
+                        &desired,
+                        ActionKind::Hooks,
+                        options.dry_run,
+                    )?
+                },
+            );
+        }
     }
 
     // A plain uninstall takes everything Estigia wrote, gate plugin included.
@@ -4451,7 +4459,6 @@ fn without_scaffolding(desired: &str, scaffolding: &[&str]) -> String {
     let Some(object) = root.as_object_mut() else {
         return desired.to_owned();
     };
-    // An emptied `hooks` says nothing and was not there before.
     if object
         .get("hooks")
         .and_then(Value::as_object)
