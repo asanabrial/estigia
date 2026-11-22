@@ -237,6 +237,15 @@ With one, the two roads that post prose reword it in one step first:
   `space_before_closing_mark` (before each `?` or `!` that follows a letter) and `typo` (`share` and
   `min_words`: in a text of at least that many words, with that probability, two adjacent inner
   letters of one ASCII word of six letters or more are swapped, never a word of `accents.dropped`).
+  `typo.kinds` varies the slip: an object of `swapped`, `dropped`, `doubled` and `neighbour`, each a
+  weight from 0 to 1 (a weight outside it, or another key, is refused). After the word is chosen the
+  kind is drawn from the same stream with probability proportional to its weight, and never touches
+  the first or last letter: `swapped` is the swap above, `dropped` removes one inner letter,
+  `doubled` writes one twice, `neighbour` replaces one with the letter beside it on its row of a
+  QWERTY keyboard (`qwertyuiop`, `asdfghjkl`, `zxcvbnm`), keeping its case. A kind that cannot apply
+  to the chosen word falls back to `dropped`. Without `kinds`, or with every weight 0, nothing is
+  drawn and the slip is the swap as before; adding `kinds` changes the file's bytes and so its stream,
+  as any edit does.
   Fenced code, code spans, URLs, text in straight double quotes, `@mentions` and any token that is not
   a plain word (a digit, `_`, `$`, `/`, `\`, `.`, `:`, `(`, a backtick, `->`, or a capital after the
   first letter) are never touched, and `lowercase_start` does not apply when the first token is one of

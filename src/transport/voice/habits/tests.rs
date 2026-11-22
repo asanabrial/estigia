@@ -156,6 +156,47 @@ fn a_typo_swaps_two_adjacent_inner_letters_of_one_long_enough_word() {
     assert_eq!(sorted_a, sorted_b);
 }
 
+const PINNED: [&str; 6] = [
+    "Caso 0: la rveision completa del cambio general sigue pendiente",
+    "Caso 1: la revision completa del cambio general sigue pendinete",
+    "Caso 2: la revision completa del cambio general sigue penidente",
+    "Caso 3: la rveision completa del cambio general sigue pendiente",
+    "Caso 4: la revision comlpeta del cambio general sigue pendiente",
+    "Caso 5: la revision cmopleta del cambio general sigue pendiente",
+];
+
+const PINNED_AT_ZERO: [&str; 6] = [
+    "Caso 0: la revision completa del cambio general sigue penidente",
+    "Caso 1: la revision compelta del cambio general sigue pendiente",
+    "Caso 2: la revision completa del cambio gneeral sigue pendiente",
+    "Caso 3: la revision comlpeta del cambio general sigue pendiente",
+    "Caso 4: la revision completa del cambio genearl sigue pendiente",
+    "Caso 5: la revision completa del cabmio general sigue pendiente",
+];
+
+fn pinned_texts() -> Vec<String> {
+    (0..6)
+        .map(|n| format!("Caso {n}: la revision completa del cambio general sigue pendiente"))
+        .collect()
+}
+
+#[test]
+fn a_typo_without_kinds_is_written_as_it_always_was() {
+    let typo = habits(r#"{ "typo": { "share": 1.0, "min_words": 3 } }"#);
+    let got: Vec<String> = pinned_texts().iter().map(|text| typo.apply(text)).collect();
+    assert_eq!(got, PINNED);
+}
+
+#[test]
+fn kinds_all_at_zero_write_the_text_as_no_kinds_does() {
+    let zero = habits(
+        r#"{ "typo": { "share": 1.0, "min_words": 3,
+             "kinds": { "swapped": 0.0, "dropped": 0.0, "doubled": 0.0, "neighbour": 0.0 } } }"#,
+    );
+    let got: Vec<String> = pinned_texts().iter().map(|text| zero.apply(text)).collect();
+    assert_eq!(got, PINNED_AT_ZERO);
+}
+
 #[test]
 fn a_text_shorter_than_the_minimum_gets_no_typo_and_a_listed_word_never_does() {
     let typo = habits(
@@ -180,8 +221,119 @@ fn a_file_that_is_not_the_shape_is_refused_with_its_cause() {
         r#"{ "accents": { "other": -1.0 } }"#,
         r#"{ "typo": { "share": 3.0, "min_words": 1 } }"#,
         r#"{ "typo": { "share": 0.5, "extra": 1 } }"#,
+        r#"{ "typo": { "kinds": { "dropped": 1.5 } } }"#,
+        r#"{ "typo": { "kinds": { "doubled": -0.1 } } }"#,
+        r#"{ "typo": { "kinds": { "transposed": 0.5 } } }"#,
     ] {
         assert!(Habits::parse(bad.as_bytes()).is_err(), "{bad}");
     }
     assert!(Habits::parse(&[0xff, 0xfe]).is_err());
+}
+
+fn kinds(weights: &str) -> Habits {
+    habits(&format!(
+        r#"{{ "typo": {{ "share": 1.0, "min_words": 1, "kinds": {{ {weights} }} }} }}"#
+    ))
+}
+
+fn slips(habits: &Habits, total: usize) -> Vec<(Vec<char>, Vec<char>)> {
+    (0..total)
+        .map(|n| {
+            let given = format!("Caso {n}: la revision completa del cambio general");
+            let got = habits.apply(&given);
+            let before: Vec<&str> = given.split(' ').collect();
+            let after: Vec<&str> = got.split(' ').collect();
+            let moved: Vec<usize> = (0..before.len())
+                .filter(|at| before[*at] != after[*at])
+                .collect();
+            assert_eq!(moved.len(), 1, "{got}");
+            (
+                before[moved[0]].chars().collect(),
+                after[moved[0]].chars().collect(),
+            )
+        })
+        .collect()
+}
+
+fn dropped(a: &[char], b: &[char]) -> bool {
+    b.len() + 1 == a.len() && (1..a.len() - 1).any(|at| [&a[..at], &a[at + 1..]].concat() == b)
+}
+
+fn doubled(a: &[char], b: &[char]) -> bool {
+    a.len() + 1 == b.len()
+        && (1..a.len() - 1).any(|at| b[at] == b[at + 1] && [&b[..at], &b[at + 1..]].concat() == a)
+}
+
+fn beside(a: char, b: char) -> bool {
+    ["qwertyuiop", "asdfghjkl", "zxcvbnm"].iter().any(|row| {
+        row.find(a)
+            .zip(row.find(b))
+            .is_some_and(|(x, y)| x.abs_diff(y) == 1)
+    })
+}
+
+fn replaced(a: &[char], b: &[char]) -> bool {
+    let diff: Vec<usize> = (0..a.len().min(b.len()))
+        .filter(|at| a[*at] != b[*at])
+        .collect();
+    a.len() == b.len()
+        && diff.len() == 1
+        && diff[0] > 0
+        && diff[0] < a.len() - 1
+        && beside(a[diff[0]], b[diff[0]])
+}
+
+fn swapped(a: &[char], b: &[char]) -> bool {
+    let diff: Vec<usize> = (0..a.len().min(b.len()))
+        .filter(|at| a[*at] != b[*at])
+        .collect();
+    a.len() == b.len()
+        && diff.len() == 2
+        && diff[0] > 0
+        && diff[1] == diff[0] + 1
+        && a[diff[0]] == b[diff[1]]
+        && a[diff[1]] == b[diff[0]]
+        && diff[1] < a.len() - 1
+}
+
+#[test]
+fn each_kind_alone_makes_exactly_its_own_edit() {
+    type Edit = fn(&[char], &[char]) -> bool;
+    let cases: [(&str, Edit); 4] = [
+        (r#""swapped": 1.0"#, swapped),
+        (r#""dropped": 1.0"#, dropped),
+        (r#""doubled": 1.0"#, doubled),
+        (r#""neighbour": 1.0"#, replaced),
+    ];
+    for (weights, edit) in cases {
+        for (a, b) in slips(&kinds(weights), 60) {
+            assert!(edit(&a, &b), "{weights}: {a:?} -> {b:?}");
+            assert_eq!(a[0], b[0]);
+        }
+    }
+}
+
+#[test]
+fn two_kinds_at_equal_weight_each_take_about_half_of_the_slips() {
+    let both = slips(&kinds(r#""dropped": 0.5, "doubled": 0.5"#), 400);
+    let drops = both.iter().filter(|(a, b)| dropped(a, b)).count();
+    let doubles = both.iter().filter(|(a, b)| doubled(a, b)).count();
+    assert_eq!(drops + doubles, 400);
+    assert!((140..=260).contains(&drops), "{drops}");
+}
+
+#[test]
+fn a_word_the_drawn_kind_cannot_change_is_slipped_as_dropped() {
+    let swap = kinds(r#""swapped": 1.0"#);
+    assert_eq!(swap.apply("aaaaaaa"), "aaaaaa");
+}
+
+#[test]
+fn a_kind_never_reaches_a_word_that_is_protected_or_listed() {
+    let guarded = habits(
+        r#"{ "accents": { "dropped": { "podriamos": 0.0 }, "other": 0.0 },
+             "typo": { "share": 1.0, "min_words": 1, "kinds": { "dropped": 1.0 } } }"#,
+    );
+    let given = "podriamos `revision` https://example.test/revision \"completa\" @general";
+    assert_eq!(guarded.apply(given), given);
 }

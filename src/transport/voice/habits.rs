@@ -36,6 +36,109 @@ struct Accents {
 struct Typo {
     share: f64,
     min_words: usize,
+    kinds: Option<Kinds>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields, default)]
+struct Kinds {
+    swapped: f64,
+    dropped: f64,
+    doubled: f64,
+    neighbour: f64,
+}
+
+#[derive(Clone, Copy)]
+enum Kind {
+    Swapped,
+    Dropped,
+    Doubled,
+    Neighbour,
+}
+
+impl Kinds {
+    fn weights(&self) -> [(Kind, f64); 4] {
+        [
+            (Kind::Swapped, self.swapped),
+            (Kind::Dropped, self.dropped),
+            (Kind::Doubled, self.doubled),
+            (Kind::Neighbour, self.neighbour),
+        ]
+    }
+
+    fn draw(&self, stream: &mut Stream) -> Kind {
+        let total: f64 = self.weights().iter().map(|(_, weight)| weight).sum();
+        let mut left = stream.next() * total;
+        let mut last = Kind::Swapped;
+        for (kind, weight) in self
+            .weights()
+            .into_iter()
+            .filter(|(_, weight)| *weight > 0.0)
+        {
+            last = kind;
+            if left < weight {
+                break;
+            }
+            left -= weight;
+        }
+        last
+    }
+}
+
+const ROWS: [&str; 3] = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
+
+fn beside(letter: char) -> Vec<char> {
+    let lower = letter.to_ascii_lowercase();
+    ROWS.iter()
+        .find_map(|row| {
+            let at = row.find(lower)?;
+            let row: Vec<char> = row.chars().collect();
+            Some(
+                [at.checked_sub(1), Some(at + 1)]
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|near| row.get(near).copied())
+                    .map(|near| {
+                        if letter.is_uppercase() {
+                            near.to_ascii_uppercase()
+                        } else {
+                            near
+                        }
+                    })
+                    .collect(),
+            )
+        })
+        .unwrap_or_default()
+}
+
+fn swap_inner(letters: &mut [char], stream: &mut Stream) -> bool {
+    let inner: Vec<usize> = (1..letters.len() - 2)
+        .filter(|at| letters[*at] != letters[*at + 1])
+        .collect();
+    if inner.is_empty() {
+        return false;
+    }
+    let at = inner[stream.pick(inner.len())];
+    letters.swap(at, at + 1);
+    true
+}
+
+fn edit_inner(letters: &mut Vec<char>, kind: Kind, stream: &mut Stream) -> bool {
+    let at = 1 + stream.pick(letters.len() - 2);
+    match kind {
+        Kind::Dropped => {
+            letters.remove(at);
+        }
+        Kind::Doubled => letters.insert(at, letters[at]),
+        _ => {
+            let near = beside(letters[at]);
+            if near.is_empty() {
+                return false;
+            }
+            letters[at] = near[stream.pick(near.len())];
+        }
+    }
+    true
 }
 
 impl Spec {
@@ -50,6 +153,12 @@ impl Spec {
         ]
         .into_iter()
         .chain(self.accents.dropped.values().copied())
+        .chain(
+            self.typo
+                .kinds
+                .iter()
+                .flat_map(|kinds| kinds.weights().map(|(_, weight)| weight)),
+        )
     }
 }
 
@@ -316,14 +425,23 @@ impl Habits {
             return;
         };
         let mut letters: Vec<char> = word.core.chars().collect();
-        let inner: Vec<usize> = (1..letters.len() - 2)
-            .filter(|at| letters[*at] != letters[*at + 1])
-            .collect();
-        if inner.is_empty() {
+        let drawn = self
+            .spec
+            .typo
+            .kinds
+            .as_ref()
+            .filter(|kinds| kinds.weights().iter().any(|(_, weight)| *weight > 0.0));
+        let kind = drawn.map_or(Kind::Swapped, |kinds| kinds.draw(stream));
+        let done = match kind {
+            Kind::Swapped => swap_inner(&mut letters, stream),
+            _ => edit_inner(&mut letters, kind, stream),
+        };
+        if !done && drawn.is_none() {
             return;
         }
-        let at = inner[stream.pick(inner.len())];
-        letters.swap(at, at + 1);
+        if !done {
+            edit_inner(&mut letters, Kind::Dropped, stream);
+        }
         word.core = letters.into_iter().collect();
     }
 
