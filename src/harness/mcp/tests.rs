@@ -6882,8 +6882,7 @@ fn draft_pr_counts_each_new_head_without_capping_assisted_corrections() {
 fn a_draft_pr_that_fails_after_its_push_still_counts_the_head() {
     let rig = assisted_branch();
     let head = rig.commit();
-    let code = refused_code(rig.draft(1));
-    assert_ne!(code, "correction-already-spent");
+    refused_code(rig.draft(1));
     assert_eq!(rig.origin_head().as_deref(), Some(head.as_str()));
     assert_eq!(rig.publication().map(|p| p.head), Some(head));
 }

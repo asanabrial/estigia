@@ -3198,7 +3198,7 @@ fn config_edit(agent: Option<&str>, options: &SetupOptions) -> Result<(), Refusa
         && let Ok(here) = std::env::current_dir()
         && let Some(repository) = skill::repository_snapshot(&here)?
     {
-        writable.config = repository.edit_scope_over(&writable.config)?;
+        writable.config = repository.edit_scope_over(&writable.config);
     }
     let Some(config) = crate::tui::edit(agent, writable.config.clone())? else {
         println!("nothing changed");

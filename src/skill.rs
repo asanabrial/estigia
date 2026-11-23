@@ -1695,12 +1695,13 @@ pub(crate) struct RepositoryLayer {
 }
 
 impl RepositorySnapshot {
-    pub(crate) fn edit_scope_over(&self, base: &Config) -> Result<Config, Refusal> {
-        in_file(
-            &self.path,
-            Config::read_scope_over(base, &self.document, crate::config::Scope::Repository),
+    pub(crate) fn edit_scope_over(&self, base: &Config) -> Config {
+        Config::read_scope_over_keeping_what_parses(
+            base,
+            &self.document,
+            crate::config::Scope::Repository,
         )
-        .map(|(config, _)| config)
+        .0
     }
 
     /// Applies this exact document to one lower-layer baseline.

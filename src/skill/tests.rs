@@ -2918,9 +2918,19 @@ fn the_editor_reads_only_the_repository_scoped_rows_of_a_checkout() {
     let edited = super::repository_snapshot(&path)
         .expect("a readable file")
         .expect("a repository layer")
-        .edit_scope_over(&base)
-        .expect("rows that parse");
+        .edit_scope_over(&base);
     let size = crate::config::Setting::ChangeSize;
     assert_eq!(edited.workflow, crate::config::Workflow::Assisted);
     assert_eq!(size.value_of(&edited), size.value_of(&base));
+}
+
+#[test]
+fn the_editor_opens_over_a_repository_row_that_does_not_parse() {
+    let (_repository, path) =
+        repository_with_rows("| Issue required | sideways |\n| Claim workflow | assisted |\n");
+    let edited = super::repository_snapshot(&path)
+        .expect("a readable file")
+        .expect("a repository layer")
+        .edit_scope_over(&crate::config::Config::default());
+    assert_eq!(edited.workflow, crate::config::Workflow::Assisted);
 }
