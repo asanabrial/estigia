@@ -64,26 +64,28 @@ API stops the run before any repository write, and the refusal names which it wa
 
 ## Moving a mapped state
 
-With `State names` at `none` — the default — no state is moved and people move every one. Where it
-maps a state, as `in-progress=In Progress, review=In Review, done=Done` does, the issue follows the run:
-`assist` moves it to the `in-progress` name once the checkout exists, `ready_pr` to the `review` name
-once the pull request reads back ready, and `review_stages` to the `done` name when it reads the
-pull request merged. Each move reads the issue's state and its team's states
-(`query EstigiaStates`), sends one `mutation EstigiaMove` (`issueUpdate` with the state's id) and reads
-the state back. An issue already there is not moved again (`moved: false`). A resumed `assist` reads the
-state type (`query EstigiaStanding`) and moves only from `triage`, `backlog` or `unstarted`; otherwise
-`linear_state` names the `state` and `state_type` it read with `moved: false`, or carries
-`read_failed: true` when the read failed, and nothing moves.
+Only mapped destinations are written. With `State names` at `none` (the default), people move every state.
 
-The move is reported under `linear_state` beside the tool's own answer, never folded into it: the
-checkout, the ready pull request or the merge happened whatever Linear answered. The answer's
-`tracker_written` reads `true` when the state moved and `null` when the move's outcome is unknown. Its refusals are
-`linear-state-unknown` (the team has no state of that name; nothing is sent), `linear-move-refused`
-(Linear did not accept the mutation — a read-only credential is the common cause) and
-`linear-move-unconfirmed` (the mutation was sent and no answer could be read) and
-`linear-move-not-read-back` (it reads back as another state); the last three are an unknown world, so a
-run reads the issue before claiming it moved. The credential needs write access to issues for this;
-with `State names` at `none` a read-only one is enough.
+| Observation | Destination |
+|---|---|
+| `assist` creates the checkout | `in-progress` |
+| `assist` resumes it | `in-progress` only from `triage`, `backlog` or `unstarted` in `EstigiaStanding`. Otherwise report the observed `state` and `state_type` |
+| `ready_pr` confirms ready | `review` |
+| `review_stages` reads an open PR | Blocking comments, or drift outside both mapped active states (including Todo and Backlog), take precedence and select `in-progress`. Otherwise a ready head with passed CI, completed blocking checks and zero open threads selects `review`, even while awaiting human review |
+| `review_stages` reads a merge | `done` |
+
+A `push-ready` correction keeps the current state. Every stage reading repeats the decision.
+
+`EstigiaStates` reads the current and offered states. An issue already at the destination reports
+`moved: false`. A move sends one `EstigiaMove` (`issueUpdate` with the target ID) and reads the
+state back. The tool reports its own result alongside `linear_state`. A confirmed change returns
+`moved: true` and `tracker_written: true`. An unreadable initial state during the correction cycle
+or resumed assist returns `read_failed: true` without a mutation.
+
+`linear-state-unknown` means the team lacks the mapped name. After a mutation, `linear-move-refused`
+means Linear rejected it, `linear-move-unconfirmed` means its response or the read-back was unreadable,
+and `linear-move-not-read-back` means another state was observed. All three leave `tracker_written: null`
+and `world: unknown`. Read the issue before reporting its state.
 
 ## The refusals this source gives
 
