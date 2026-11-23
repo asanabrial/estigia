@@ -1118,6 +1118,7 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
         "create",
         "deliver",
         "draft_pr",
+        "edit_pr",
         "escalate_review",
         "handoff_review",
         "inbox",
@@ -1141,7 +1142,7 @@ fn the_tool_surface_is_exactly_the_names_it_keeps() {
     ];
     kept.sort_unstable();
     assert_eq!(exposed, kept);
-    assert_eq!(TOOLS.len(), 27);
+    assert_eq!(TOOLS.len(), 28);
     assert_eq!(
         TOOLS
             .iter()
@@ -2830,6 +2831,7 @@ fn every_tool_sends_flags_the_transport_accepts() {
             | "review-computed-verdict"
             | "spend" => &["--operation-id"],
             "review-thread" => &["--branch", "--worktree"],
+            "edit-pr" => &["--branch"],
             "draft-pr" => &[
                 "--branch",
                 "--worktree",
@@ -7054,7 +7056,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 44_770;
+const TOOLS_LIST_CEILING: usize = 45_407;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7110,7 +7112,7 @@ fn an_assisted_menu_omits_every_tool_that_writes_the_tracker() {
             "{name} is the assisted work and was not advertised"
         );
     }
-    assert_eq!(names.len(), 14, "the assisted menu is {names:?}");
+    assert_eq!(names.len(), 15, "the assisted menu is {names:?}");
 }
 
 #[test]
