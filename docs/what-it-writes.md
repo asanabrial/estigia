@@ -1134,6 +1134,8 @@ parser (`toml_edit`), so a comment, the order of keys, spacing, CRLF line ending
 all survive, and every spelling of the same table — `[hooks.state."<key>"]`,
 `[hooks."state"."<key>"]`, `[ hooks.state."<key>" ]`, a single-quoted key, a dotted definition —
 names one entry rather than being duplicated. `[mcp_servers.estigia]` is still edited by the line: the removal runs through its keys, including past a comment that a later key follows, and stops at the next table header or at a comment with no key after it, which stays.
+An update sets `command` and `args` and keeps every other key and sub-table the entry holds, such as
+a `default_tools_approval_mode` or a tool's `approval_mode`; an uninstall removes the whole entry.
 Before writing, `setup` re-parses the whole file it is about to write and reads the trust back under
 `hooks.state`: a file that does not parse, or whose trust is not the one the entry earned, is refused
 rather than written, and that guard covers the `[mcp_servers.estigia]` edit in the same file.
