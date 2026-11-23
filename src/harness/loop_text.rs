@@ -133,6 +133,9 @@ commits, pushes and GitHub writes wait for it, local work does not. Finish the l
 worktree, then end the turn: this loop waits until {at} and resumes the session then, starting with \
 `estigia flush`.";
 
+const PERSON_RECHECK: &str = " Everything this run pushed is published. Read its review stages once; \
+if only a person is left, end the turn and the loop waits again.";
+
 const WINDOW_WAIT: &str = "waiting for the git operation window to open at {at}";
 
 const WINDOW_OPEN: &str = "estigia: the git operation window is open. Run `estigia flush` first, \
@@ -222,6 +225,7 @@ pub fn preamble_parts() -> Value {
         "assisted": ASSISTED,
         "window_closed": WINDOW_CLOSED,
         "window_timed": WINDOW_TIMED,
+        "person_recheck": PERSON_RECHECK,
         "window_wait": WINDOW_WAIT,
         "window_open": WINDOW_OPEN,
     })

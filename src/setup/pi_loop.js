@@ -308,7 +308,7 @@ const enqueue = (pi, goal, dischargeable, issue = null) =>
     { triggerTurn: true, deliverAs: "followUp" },
   );
 
-const consider = async (pi, ctx, session) => {
+const consider = async (pi, ctx, session, lapsed) => {
   const goal = loops.get(session);
   if (!running(goal)) return;
   const cwd = goal.directory;
@@ -362,6 +362,28 @@ const consider = async (pi, ctx, session) => {
       delete goal.window;
       disarm(session);
       tell(pi, fill(PREAMBLE.window_open, { issue, run_id: goal.run_id }));
+      reacted(goal, "enqueued");
+      return;
+    }
+    const person = typeof read.said?.waiting === "string" ? read.said.waiting : "";
+    if (person !== "") {
+      if (typeof read.said?.stop_after === "string" && read.said.stop_after !== "") {
+        stop(
+          ctx,
+          session,
+          `the agent asked to stop after the current task (${read.said.stop_after}), which waits on ${person}`,
+          "stopped-on-request",
+        );
+        await clearStopAfter(session, cwd);
+        return;
+      }
+      if (!lapsed || read.said?.standing !== "assisted-held") {
+        waited(pi, ctx, session, person);
+        return;
+      }
+      if (!running(loops.get(session)) || stopRequested.has(session)) return;
+      disarm(session);
+      tell(pi, held(issue, goal.run_id) + PREAMBLE.person_recheck);
       reacted(goal, "enqueued");
       return;
     }
@@ -422,12 +444,12 @@ const consider = async (pi, ctx, session) => {
   reacted(goal, "enqueued");
 };
 
-const decide = async (pi, ctx, session) => {
+const decide = async (pi, ctx, session, lapsed = false) => {
   if (deciding.has(session)) return;
   deciding.add(session);
   try {
     try {
-      await consider(pi, ctx, session);
+      await consider(pi, ctx, session, lapsed);
     } finally {
       const why = stopRequested.get(session);
       if (why !== undefined) {
@@ -453,7 +475,7 @@ const guarded = async (ctx, session, work) => {
 const tick = (pi, ctx, session) =>
   guarded(ctx, session, async () => {
     if (!same(ctx, session) || !idle(ctx)) return;
-    await decide(pi, ctx, session);
+    await decide(pi, ctx, session, true);
   });
 
 export default function (pi) {

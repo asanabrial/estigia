@@ -262,7 +262,15 @@ holds a live claim, on which issue, and, when it holds none, how many issues it 
 text alone**: the sentence the Claude and Codex `Stop` hooks hand back, naming the issue
 and the run, with no preamble and no `/flow dev`, because the session already holds that context. The preamble and the objective go out once, at
 `/flow-loop`, and again whenever the run holds no live claim and the loop continues on claimable or
-dischargeable work. A live answer that names no issue stops the loop. Completion is not a value the
+dischargeable work. A live answer that names no issue stops the loop.
+
+**A live claim that only a person can advance is waited on, not continued.** `estigia goal --json`
+carries `waiting` beside `live` when an autonomous claim is `blocked` or its newest receipt is escalated,
+and when an assisted claim's checkout has no uncommitted change and its `HEAD` is the head `draft_pr`
+last pushed. A read that fails reports no wait. OpenCode and Pi wait on the `--wait` timer; when it
+lapses an assisted claim gets one turn to read its review stages, and an autonomous one waits again.
+Codex and Claude Code allow the stop, which is not terminal. A pending `stop-after` ends the loop
+in every host. A closed git operation window is decided first. Completion is not a value the
 agent supplies: the plugin reads no `<promise>` and takes no done input.
 
 **The objective defaults
@@ -315,7 +323,8 @@ names the issue. A run holding no live claim there answers the standing `assiste
 `estigia goal start` says the same when it stores such a loop. A Linear tracker has such a queue (the
 Linear binding's *The loop's queue*), so there the loop reads it, and `goal --json` carries the head
 issue's key as `next`, which the continuation names as `/flow dev <KEY>`. A held assisted claim reads
-`assisted-held` and live, because no tracker answers for it, so the loop keeps going while it is held. The goal is read again right before a prompt is
+`assisted-held` and live, because no tracker answers for it, so the loop keeps going while work on it is
+unpublished. The goal is read again right before a prompt is
 enqueued, and an operator stop that arrives while a decision is in flight is held until that decision finishes, so no prompt is enqueued and no timer armed after it.
 
 Continuation
@@ -339,7 +348,7 @@ complete` adjudicates, read-only, whether delivery evidence proves the goal comp
 not on the run pointer: `release` forgets the pointer and the loop reads the request only
 after the claim is released. The next `estigia goal` carries it as `stop_after`, and when the run is not live the plugin
 stops with the request as the reason instead of enqueueing or waiting; while the run holds a live
-claim the request changes nothing. The stop consumes it, `estigia goal
+claim the request changes nothing, unless that claim waits on a person. The stop consumes it, `estigia goal
 stop-after --clear` takes one back, and a fresh `/flow-loop`
 clears one an earlier loop left behind. `/flow-status`
 prints a pending request beside the tracker answer.
@@ -444,6 +453,7 @@ is the only terminator, and Codex imposes no cap of its own.
 | The run | The hook answers |
 |---|---|
 | holds a live claim | `{"decision":"block","reason":…}` with the reason Claude Code's `Stop` gives |
+| holds a live claim that waits on a person, with the window open | allows the stop, with `systemMessage` naming the wait; a pending stop-after request ends the loop and is consumed |
 | holds none and a stop-after request is pending | allows the stop, with `systemMessage` naming the request, and consumes it |
 | holds none, and `claimable + dischargeable > 0` | `block`, reason = the shared preamble naming the `codex-…` run id, a blank line, and `$flow dev` |
 | holds none, and only `held` or `pending` work is left | allows the stop, with `systemMessage` naming what the queue waits on |
@@ -514,8 +524,8 @@ On every install, whatever the row says, `estigia setup claude-code` also writes
 **What the `Stop` hook decides.** While a stored loop is running, the hook continues the turn with the
 next `/flow` prompt — the preamble from `harness::loop_text` and the `Slash` invocation, the same
 shared decision Codex's hook uses — or, while the run holds a live claim, with the held text alone
-(`harness::hook::stop_block`), whenever `estigia goal` says the run is live or another issue is
-claimable or dischargeable. It honours a pending `stop-after`; stops at the stored `--max`, counted
+(`harness::hook::stop_block`), whenever `estigia goal` says the run is live and waits on nobody, or another
+issue is claimable or dischargeable. It honours a pending `stop-after`; stops at the stored `--max`, counted
 by `estigia goal --completed`; lets the turn end and
 says what the queue waits on when only held or pending work is left, since a `Stop` hook cannot wait;
 and retries an answer it cannot confirm, with a pause, up to the same bound
