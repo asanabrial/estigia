@@ -1815,13 +1815,13 @@ fn run_tool_answering(
         flags.push(key);
     }
 
-    let verifies_thread = tool.operation == "review-thread";
+    let verifies_assisted_standing = matches!(tool.operation, "review-thread" | "edit-pr");
     let follows_up = matches!(tool.operation, "review-stages" | "review-thread");
     if follows_up && !run.assisted && context.workflow != Some(crate::config::Workflow::Assisted) {
         autonomous_follow_up_flags(tool, arguments, &run, &mut flags)?;
     } else if matches!(
         tool.operation,
-        "draft-pr" | "ready-pr" | "review-stages" | "review-thread"
+        "draft-pr" | "ready-pr" | "edit-pr" | "review-stages" | "review-thread"
     ) {
         let (Some(branch), Some(worktree), true) = (&run.branch, &run.worktree, run.assisted)
         else {
@@ -1837,7 +1837,7 @@ fn run_tool_answering(
                 ),
             ))));
         };
-        if verifies_thread {
+        if verifies_assisted_standing {
             super::assisted::standing(&run).map_err(|why| ToolFailure::Refused(Box::new(Refusal::not_started(
                 "assisted-claim-stale",
                 format!("{run_id}'s local claim no longer matches this checkout: {why}"),

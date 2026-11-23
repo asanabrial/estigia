@@ -304,3 +304,63 @@ fn the_row_stops_only_a_new_head_and_only_once_it_is_spent() {
         assert!(rig.on_origin(), "{same_head}/{spent}");
     }
 }
+#[test]
+fn editing_an_assisted_pr_rejects_closing_keywords_before_contacting_github() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = crate::test_env::answers(&[]);
+    let body = rig.body("Closes #12");
+    let outcome = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        edit_metadata(
+            &rig.context,
+            &EditMetadata {
+                branch: "issue-12",
+                title: "A title",
+                body_file: &body,
+            },
+        )
+    });
+    assert_eq!(
+        reason(&outcome.expect_err("a closing keyword is refused")),
+        "closing-keyword-live"
+    );
+    assert!(logged(&rig, &log).is_empty());
+}
+
+#[test]
+fn editing_an_assisted_pr_reports_an_unknown_readback() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = crate::test_env::answers(&[
+        serde_json::json!({"matches": "pr list", "stdout": "[{\"number\":7}]"}),
+        serde_json::json!({"matches": "number,title,body,state,headRefName", "status": 1}),
+        serde_json::json!({
+            "matches": "pr view",
+            "stdout": r#"{"number":7,"state":"OPEN","headRefName":"issue-12"}"#,
+        }),
+        serde_json::json!({"matches": "pr edit", "stdout": ""}),
+    ]);
+    let body = rig.body("Revised description.");
+    let outcome = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        edit_metadata(
+            &rig.context,
+            &EditMetadata {
+                branch: "issue-12",
+                title: "A revised title",
+                body_file: &body,
+            },
+        )
+    });
+    let envelope = outcome
+        .expect_err("GitHub did not confirm the edit")
+        .envelope();
+    assert_eq!(envelope["reason"], "edit-pr-not-read-back");
+    assert_eq!(envelope["world"], "unknown");
+    assert!(
+        logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr edit"))
+    );
+}

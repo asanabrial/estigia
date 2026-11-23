@@ -1838,6 +1838,14 @@ fn run_operation(
                 ready,
             ))
         }
+        "edit-pr" => super::draft::edit_metadata(
+            context,
+            &super::draft::EditMetadata {
+                branch: f.need("branch", operation)?,
+                title: f.need("title", operation)?,
+                body_file: Path::new(f.need("body-file", operation)?),
+            },
+        ),
         _ => Err(Failure::ConfigDefect(serde_json::json!({
             "ok": false,
             "reason": "unknown-operation",

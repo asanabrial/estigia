@@ -207,7 +207,8 @@ fn remote_write_unverified(command: &str) -> Refusal {
         ),
         way_out(
             "the typed tools: `review_thread` for replies and resolutions, `ready_pr` to mark \
-             ready, `draft_pr` to publish; anything else by a person",
+             ready, `draft_pr` to publish and `edit_pr` to update this run's pull request title \
+             and body; anything else by a person",
         ),
     )
 }
