@@ -946,7 +946,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "wait_seconds",
                 "integer",
-                "Seconds to wait for a running job; capped at 900, with `checks` at 50.",
+                "Seconds to wait for a running job; capped at 900.",
             )
             .counting_from(1),
             Argument::optional(
@@ -1767,8 +1767,8 @@ pub const INTERNAL: &[Tool] = &[
         description: "Run the checks the base declares in `estigia.generated.toml` as a detached \
                       job in this run's clean checkout and record a receipt bound to the \
                       published digest. Answers `declared: false`, `cached`, or `running` with \
-                      `ask_after`: call again to collect. Output tails are in the answer, not the \
-                      receipt. The verdict and `release_ci` refuse without a passing receipt. \
+                      `ask_after`: call again to collect. A failing answer carries output tails, the \
+                      receipt none. The verdict and `release_ci` refuse without a passing receipt. \
                       Requires a live review claim.",
         operation: "run-checks",
         arguments: &[
@@ -1778,7 +1778,7 @@ pub const INTERNAL: &[Tool] = &[
                 "wait_seconds",
                 "integer",
                 "Seconds to wait for the job before answering `running`; omitted answers at once. \
-                 Capped at 50.",
+                 Capped at 900.",
             )
             .counting_from(1),
             Argument::optional(
