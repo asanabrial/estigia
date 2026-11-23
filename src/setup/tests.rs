@@ -6764,6 +6764,24 @@ fn a_comment_inside_the_codex_table_does_not_orphan_its_keys() {
 }
 
 #[test]
+fn a_codex_entry_naming_a_windows_path_is_written_once() {
+    let command = "C:\\Users\\a\\estigia.exe";
+    let first = crate::setup::render::render_codex_mcp("model = \"gpt-5\"\n", command);
+    let parsed: toml_edit::DocumentMut = first.parse().expect("still TOML");
+    let entry = &parsed["mcp_servers"]["estigia"];
+    assert_eq!(entry["command"].as_str(), Some(command), "{first}");
+    assert_eq!(
+        entry["args"].as_array().map(ToString::to_string).as_deref(),
+        Some(" [\"mcp\"]"),
+        "{first}"
+    );
+    assert_eq!(
+        crate::setup::render::render_codex_mcp(&first, command),
+        first
+    );
+}
+
+#[test]
 fn the_codex_entry_keeps_the_operators_keys_and_sub_tables() {
     for name in ["estigia", "\"estigia\""] {
         let existing = format!(

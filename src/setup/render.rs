@@ -644,7 +644,7 @@ fn strip_zcode_mcp(root: &mut Value) {
 pub(super) fn render_codex_mcp(existing: &str, command: &str) -> String {
     let kept = strip_codex_mcp(existing);
     let quoted = serde_json::to_string(command).unwrap_or_else(|_| format!("\"{command}\""));
-    let block = codex_entry_keeping_operator_keys(existing, command).unwrap_or_else(|| {
+    let block = codex_entry_keeping_operator_keys(existing, &quoted).unwrap_or_else(|| {
         format!("[mcp_servers.{SERVER_NAME}]\ncommand = {quoted}\nargs = [\"mcp\"]")
     });
     let base = kept.trim_end();
@@ -658,7 +658,7 @@ pub(super) fn render_codex_mcp(existing: &str, command: &str) -> String {
 /// The entry already in the file with `command` and `args` set and every other key and sub-table
 /// kept, or `None` where no such table can be read. A comment above a header stays with
 /// [`strip_codex_mcp`], which leaves it in the rest of the file.
-fn codex_entry_keeping_operator_keys(existing: &str, command: &str) -> Option<String> {
+fn codex_entry_keeping_operator_keys(existing: &str, quoted: &str) -> Option<String> {
     let mut document: toml_edit::DocumentMut = existing.parse().ok()?;
     let mut entry = document
         .get_mut("mcp_servers")?
@@ -666,7 +666,8 @@ fn codex_entry_keeping_operator_keys(existing: &str, command: &str) -> Option<St
         .remove(SERVER_NAME)?
         .into_table()
         .ok()?;
-    entry["command"] = toml_edit::value(command);
+    // Parsed from the spelling a first setup writes: a Windows path must not become a literal string.
+    entry["command"] = toml_edit::value(quoted.parse::<toml_edit::Value>().ok()?);
     entry["args"] = toml_edit::value(toml_edit::Array::from_iter(["mcp"]));
     entry.set_implicit(false);
     without_header_comments(&mut entry);
