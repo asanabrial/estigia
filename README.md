@@ -55,8 +55,9 @@ turn the first into the second. That distinction is most of the design.
 
 It rests on two pillars: *the claimed issue is the record of the work*, and *the publication is the
 review candidate*. Four principles follow from them: small work stays small; review is sized by risk;
-a review lineage gets a bounded number of corrections (`Corrections per lineage`, default 3); and the
-heavyweight two-judge review (Judgment Day) runs only when asked for.
+an autonomous review lineage gets a bounded number of corrections (`Corrections per lineage`, default
+3) and an assisted pull request any number; and the heavyweight two-judge review (Judgment Day) runs
+only when asked for.
 
 You start it with `flow` (analyse and build, choosing the next issue from the tracker), `flow dev
 [issue]` (build) or `flow triage` (analyse and file at most one evidenced issue). A run then goes

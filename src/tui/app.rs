@@ -1,12 +1,13 @@
 //! The state a key press moves, with no terminal in it.
 
 use crate::config::{
-    AGENT_SETTINGS, Config, ModelRouting, ModelTarget, OPTIONS_SETTINGS, Scope, Setting,
+    AGENT_SETTINGS, Config, ModelRouting, ModelTarget, OPTIONS_SETTINGS, Scope, Setting, Workflow,
 };
 use crate::outcome::Refusal;
 use crate::setup::{AGENTS, AgentAdapter, Applies, ModelCatalogSource};
 use crate::tui::words::{TONGUES, Tongue, fill, t};
 use crate::tui::{InstallReceipt, Plan};
+use std::borrow::Cow;
 
 /// What the shell around the state machine has to do next.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -266,8 +267,6 @@ pub(super) const AGENT_TUI_SETTINGS_WITH_LOOP_ONLY: &[Setting] = &[
 
 /// The same, for an adapter with no loop to switch.
 ///
-/// A second slice rather than a filter: `rows` hands back `&'static [Setting]`
-/// and it is the **one** list both the cursor and the drawing walk.
 /// [`Setting::applies_to_agent`] decides which of the two an adapter is offered,
 /// and the writer ([`crate::setup::write_agent_configuration_wholly`]) is
 /// narrowed the same way, so the screen and the file agree.
@@ -670,8 +669,8 @@ impl App {
     }
 
     /// The rows this screen offers.
-    pub fn rows(&self) -> &'static [Setting] {
-        match self.purpose {
+    pub fn rows(&self) -> Cow<'static, [Setting]> {
+        let rows = match self.purpose {
             // A named adapter is edited through the rows that differ by agent; a
             // machine-wide or repository row is `config set`'s, not one agent's.
             Purpose::OneTable(Some(adapter)) => agent_rows(adapter),
@@ -681,6 +680,18 @@ impl App {
                 Page::Detail => self.per_agent_rows(),
                 Page::Home | Page::Agents | Page::Doctor | Page::Help => &[],
             },
+        };
+        if rows.contains(&Setting::CorrectionsPerLineage)
+            && self.shown_config(Setting::Workflow).workflow == Workflow::Assisted
+        {
+            Cow::Owned(
+                rows.iter()
+                    .copied()
+                    .filter(|setting| *setting != Setting::CorrectionsPerLineage)
+                    .collect(),
+            )
+        } else {
+            Cow::Borrowed(rows)
         }
     }
 

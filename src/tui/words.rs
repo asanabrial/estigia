@@ -443,8 +443,8 @@ pub const SPANISH: &[(&str, &str)] = &[
     ),
     ("Claim workflow", "Flujo de reclamación"),
     (
-        "who witnesses a claim in this repository: Estigia writes the tracker, or the team coordinates and Estigia does not",
-        "quién da fe de un reclamo en este repositorio: Estigia escribe en el tracker, o el equipo coordina y Estigia no",
+        "whether Estigia or the team coordinates claims. Assisted pull requests have no correction limit",
+        "quién coordina la asignación de tareas, Estigia o el equipo. Los pull requests asistidos no tienen límite de correcciones",
     ),
     ("`autonomous`, or `assisted`", "`autonomous` o `assisted`"),
     ("Delivery", "Entrega"),
@@ -536,8 +536,8 @@ pub const SPANISH: &[(&str, &str)] = &[
     ),
     ("Corrections per lineage", "Correcciones por linaje"),
     (
-        "how many corrections one review lineage may spend before a person decides",
-        "cuántas correcciones puede gastar un linaje de revisión antes de que decida una persona",
+        "how many corrections an autonomous review lineage may publish before a person decides",
+        "cuántas correcciones puede publicar un linaje de revisión autónomo antes de que decida una persona",
     ),
     (
         "a positive whole number, such as `3`",

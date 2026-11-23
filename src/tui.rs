@@ -1675,7 +1675,7 @@ fn draw_options(frame: &mut ratatui::Frame<'_>, app: &App) {
         app,
         rows,
         // What the cursor walks, not the full list.
-        app.rows(),
+        &app.rows(),
         &padded(t!(app.tongue, "REPOSITORY OPTIONS")),
         here.is_none(),
     );
@@ -1848,13 +1848,14 @@ fn draw_configuration_rows(
     focused: bool,
 ) -> ratatui::layout::Rect {
     let models = app.model_targets();
+    let rows = app.rows();
     if models.is_empty() {
-        draw_settings(frame, app, area, app.rows(), title, focused);
+        draw_settings(frame, app, area, &rows, title, focused);
         return area;
     }
 
     let on_model = app.model_profile_at_cursor() || app.model_target_at_cursor().is_some();
-    let preferred = u16::try_from(app.rows().len() + 2).unwrap_or(area.height);
+    let preferred = u16::try_from(rows.len() + 2).unwrap_or(area.height);
     let sections = {
         let mut seen: Vec<crate::config::ModelSection> = Vec::new();
         for target in &models {
@@ -1878,14 +1879,7 @@ fn draw_configuration_rows(
         Constraint::Length(area.height.saturating_sub(settings_height)),
     ])
     .areas(area);
-    draw_settings(
-        frame,
-        app,
-        settings,
-        app.rows(),
-        title,
-        focused && !on_model,
-    );
+    draw_settings(frame, app, settings, &rows, title, focused && !on_model);
     let model_title = padded(t!(app.tongue, "MODELS"));
     draw_model_rows(
         frame,
@@ -2641,10 +2635,11 @@ fn draw_picker(frame: &mut ratatui::Frame<'_>, app: &App, over: ratatui::layout:
         // configuration panels already count their own settings from zero. A
         // group heading is a drawn row, so the setting's list position counts
         // the headings above it.
-        None if app.page == Page::Options => {
-            settings_list_index(app.rows(), app.options_at.saturating_sub(SCREEN_ROWS.len()))
-        }
-        None => settings_list_index(app.rows(), app.selected),
+        None if app.page == Page::Options => settings_list_index(
+            &app.rows(),
+            app.options_at.saturating_sub(SCREEN_ROWS.len()),
+        ),
+        None => settings_list_index(&app.rows(), app.selected),
     };
     let row = inner.y + u16::try_from(at_in_panel).unwrap_or(0);
     let panel_bottom = over.y.saturating_add(over.height);

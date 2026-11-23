@@ -44,11 +44,13 @@ draft. This loop never overrides a configured refusal or grants merge authority.
    review stage. Keep human merge authority as configured.
 7. The pull request is not reported finished until a reading of its exact head has CI `passed`,
    `failed` or `none` and every blocking stage's comments are addressed. A new push restarts the
-   reading. The rounds are bounded by `Corrections per lineage`: `draft_pr` keeps the count on the
-   run pointer, answers it as `corrections_spent` and `corrections_allowed`, and refuses a new head
-   past it as `draft-pr-corrections-spent` before pushing. The run then reports what is left to the
-   person, who may raise the row. A pushed merge of the base is a new head and counts as a round; the
-   same head published again does not. What the count cannot see is in [honesty](honesty.md).
+   reading. Assisted publishing has no correction cap: each new
+   head still passes the branch, fast-forward, closing-keyword, correction policy and Git operation
+   window checks, then reads back the published PR. The run pointer reports the number of new heads
+   it has pushed for visibility, but the count does not refuse a correction. A pushed merge of the
+   base is a new head; publishing the same head again does not increment the count. Autonomous
+   review lineages still use `Corrections per lineage`. What the count cannot see is in
+   [honesty](honesty.md).
 
 ## Why not ordinary shell push?
 

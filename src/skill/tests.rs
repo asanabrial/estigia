@@ -2909,3 +2909,18 @@ fn an_asset_digest_moves_with_any_byte_and_no_metadata() {
         "line endings must not move the digest"
     );
 }
+
+#[test]
+fn the_editor_reads_only_the_repository_scoped_rows_of_a_checkout() {
+    let (_repository, path) =
+        repository_with_rows("| Claim workflow | assisted |\n| Change size | 5 |\n");
+    let base = crate::config::Config::default();
+    let edited = super::repository_snapshot(&path)
+        .expect("a readable file")
+        .expect("a repository layer")
+        .edit_scope_over(&base)
+        .expect("rows that parse");
+    let size = crate::config::Setting::ChangeSize;
+    assert_eq!(edited.workflow, crate::config::Workflow::Assisted);
+    assert_eq!(size.value_of(&edited), size.value_of(&base));
+}
