@@ -285,15 +285,22 @@ fn verify_reading(
             "the pull request no longer names the expected branch and head",
         ));
     }
-    if text(pr, &["state"]) == Some("OPEN") {
-        let commit = nodes(pr, &["commits"])
-            .first()
-            .and_then(|node| text(node, &["commit", "oid"]));
-        if commit.is_none() || commit != text(pr, &["headRefOid"]) {
+    match text(pr, &["state"]) {
+        Some("CLOSED" | "MERGED") => return Ok(()),
+        Some("OPEN") => {}
+        _ => {
             return Err(Failure::Read(
-                "checks were not read for the pull request's exact head".to_owned(),
+                "the pull request state could not be read".to_owned(),
             ));
         }
+    }
+    let commit = nodes(pr, &["commits"])
+        .first()
+        .and_then(|node| text(node, &["commit", "oid"]));
+    if commit.is_none() || commit != text(pr, &["headRefOid"]) {
+        return Err(Failure::Read(
+            "checks were not read for the pull request's exact head".to_owned(),
+        ));
     }
     Ok(())
 }
