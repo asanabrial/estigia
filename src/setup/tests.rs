@@ -6764,6 +6764,60 @@ fn a_comment_inside_the_codex_table_does_not_orphan_its_keys() {
 }
 
 #[test]
+fn the_codex_entry_keeps_the_operators_keys_and_sub_tables() {
+    for name in ["estigia", "\"estigia\""] {
+        let existing = format!(
+            concat!(
+                "model = \"gpt-5\"\n\n",
+                "[mcp_servers.{name}]\n",
+                "default_tools_approval_mode = \"approve\"\n",
+                "command = \"/old\"\n",
+                "args = [\"mcp\"]\n",
+                "enabled_tools = [\n  \"claim\",\n  \"release\",\n]\n\n",
+                "# mine, above the sub-table\n",
+                "[mcp_servers.{name}.tools.release]\n",
+                "approval_mode = \"approve\"\n\n",
+                "[otra]\nk = 1\n",
+            ),
+            name = name
+        );
+        let once = crate::setup::render::render_codex_mcp(&existing, "/new");
+        let parsed: toml_edit::DocumentMut = once.parse().expect("still TOML");
+        let entry = &parsed["mcp_servers"]["estigia"];
+        assert_eq!(entry["command"].as_str(), Some("/new"), "{once}");
+        assert_eq!(
+            entry["default_tools_approval_mode"].as_str(),
+            Some("approve"),
+            "{once}"
+        );
+        assert_eq!(
+            entry["enabled_tools"].as_array().map(toml_edit::Array::len),
+            Some(2),
+            "{once}"
+        );
+        assert_eq!(
+            entry["tools"]["release"]["approval_mode"].as_str(),
+            Some("approve"),
+            "{once}"
+        );
+        assert_eq!(parsed["otra"]["k"].as_integer(), Some(1), "{once}");
+        assert_eq!(
+            once.matches("# mine, above the sub-table").count(),
+            1,
+            "{once}"
+        );
+        assert_eq!(
+            crate::setup::render::render_codex_mcp(&once, "/new"),
+            once,
+            "a second render changed the file"
+        );
+        let left = crate::setup::render::strip_codex_mcp(&once);
+        assert!(!left.contains("mcp_servers"), "{left}");
+        assert!(!left.contains("approval_mode"), "{left}");
+    }
+}
+
+#[test]
 fn a_comment_after_the_codex_tables_last_key_survives_a_comment_inside_it() {
     let existing = concat!(
         "[mcp_servers.estigia]\n",

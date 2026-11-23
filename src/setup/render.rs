@@ -644,12 +644,46 @@ fn strip_zcode_mcp(root: &mut Value) {
 pub(super) fn render_codex_mcp(existing: &str, command: &str) -> String {
     let kept = strip_codex_mcp(existing);
     let quoted = serde_json::to_string(command).unwrap_or_else(|_| format!("\"{command}\""));
-    let block = format!("[mcp_servers.{SERVER_NAME}]\ncommand = {quoted}\nargs = [\"mcp\"]");
+    let block = codex_entry_keeping_operator_keys(existing, command).unwrap_or_else(|| {
+        format!("[mcp_servers.{SERVER_NAME}]\ncommand = {quoted}\nargs = [\"mcp\"]")
+    });
     let base = kept.trim_end();
     if base.is_empty() {
         format!("{block}\n")
     } else {
         format!("{base}\n\n{block}\n")
+    }
+}
+
+/// The entry already in the file with `command` and `args` set and every other key and sub-table
+/// kept, or `None` where no such table can be read. A comment above a header stays with
+/// [`strip_codex_mcp`], which leaves it in the rest of the file.
+fn codex_entry_keeping_operator_keys(existing: &str, command: &str) -> Option<String> {
+    let mut document: toml_edit::DocumentMut = existing.parse().ok()?;
+    let mut entry = document
+        .get_mut("mcp_servers")?
+        .as_table_like_mut()?
+        .remove(SERVER_NAME)?
+        .into_table()
+        .ok()?;
+    entry["command"] = toml_edit::value(command);
+    entry["args"] = toml_edit::value(toml_edit::Array::from_iter(["mcp"]));
+    entry.set_implicit(false);
+    without_header_comments(&mut entry);
+    let mut servers = toml_edit::Table::new();
+    servers.set_implicit(true);
+    servers.insert(SERVER_NAME, toml_edit::Item::Table(entry));
+    let mut alone = toml_edit::DocumentMut::new();
+    alone.insert("mcp_servers", toml_edit::Item::Table(servers));
+    Some(alone.to_string().trim().to_owned())
+}
+
+fn without_header_comments(table: &mut toml_edit::Table) {
+    table.decor_mut().set_prefix("\n");
+    for (_, item) in table.iter_mut() {
+        if let Some(inner) = item.as_table_mut() {
+            without_header_comments(inner);
+        }
     }
 }
 
@@ -668,10 +702,10 @@ pub(super) fn opens_estigia_table(line: &str) -> bool {
 /// one predicate, so which lines to lift out and whether there is anything to
 /// lift out cannot drift apart.
 fn opens_estigia_section(line: &str) -> bool {
+    let line = line.trim();
     opens_estigia_table(line)
-        || line
-            .trim()
-            .starts_with(&format!("[mcp_servers.{SERVER_NAME}."))
+        || line.starts_with(&format!("[mcp_servers.{SERVER_NAME}."))
+        || line.starts_with(&format!("[mcp_servers.\"{SERVER_NAME}\"."))
 }
 
 /// The lines under Estigia's table, up to the next table header: the one place
