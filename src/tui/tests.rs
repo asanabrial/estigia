@@ -428,7 +428,7 @@ fn an_agents_page_asks_only_what_differs_by_agent() {
     // agent looks at it, and asking eleven times invites eleven answers.
     let app = per_agent();
     assert_eq!(
-        app.rows(),
+        app.rows().as_ref(),
         &[
             Setting::Profile,
             Setting::Delivery,
@@ -456,7 +456,7 @@ fn an_agents_page_asks_only_what_differs_by_agent() {
     );
 
     let app = options();
-    assert_eq!(app.rows(), OPTIONS_SETTINGS);
+    assert_eq!(app.rows().as_ref(), OPTIONS_SETTINGS);
     assert!(app.rows().contains(&Setting::Tracker));
     assert!(!app.rows().contains(&Setting::Models));
 }
@@ -2471,7 +2471,7 @@ fn config_edit_is_one_table_and_never_asks_a_question_it_was_already_told() {
     assert_eq!(app.focus, Focus::Picking, "Enter did not open the row");
     app.press(Key::Esc);
     assert_eq!(app.focus, Focus::List);
-    assert_eq!(app.rows(), rows);
+    assert_eq!(app.rows().as_ref(), rows);
 
     // An answer lands in the one table, for a row this agent owns. A
     // machine-wide row is not one agent's to answer: `config set --agent`
@@ -2999,7 +2999,7 @@ fn a_warning_is_visible_on_whichever_page_raised_it() {
 #[test]
 fn the_options_page_is_on_the_menu_and_holds_what_is_not_about_an_agent() {
     let mut app = options();
-    assert_eq!(app.rows(), OPTIONS_SETTINGS);
+    assert_eq!(app.rows().as_ref(), OPTIONS_SETTINGS);
     for setting in AGENT_SETTINGS {
         assert!(
             !app.rows().contains(setting),
@@ -3008,7 +3008,7 @@ fn the_options_page_is_on_the_menu_and_holds_what_is_not_about_an_agent() {
     }
     // And an agent's page no longer offers them, or the same row could be answered twice
     // with two answers, of which only the later write survives.
-    for setting in per_agent().rows() {
+    for setting in per_agent().rows().iter() {
         assert!(
             !OPTIONS_SETTINGS.contains(setting),
             "{setting:?} is on an agent's page and on the options page"
@@ -8439,6 +8439,38 @@ fn the_delivery_preset_fills_its_rows_on_the_screen_and_a_fixed_row_says_why() {
     app.set(Setting::SelfReview, "off").expect("off");
     assert_eq!(app.shown_value(Setting::DeliveryPreset), "custom");
     assert_eq!(app.shown_value(Setting::MergeBy), "person");
+}
+
+#[test]
+fn the_correction_limit_follows_the_selected_claim_workflow() {
+    for mut app in [options(), App::one_table(None, Config::default())] {
+        walk_to(&mut app, Setting::CorrectionsPerLineage);
+        app.set(Setting::CorrectionsPerLineage, "5")
+            .expect("a custom limit");
+        assert!(
+            paint(&app, 130, 65).contains("autonomous review lineage"),
+            "the limit's help should name the workflow"
+        );
+
+        for preset in ["assisted", "team"] {
+            walk_to(&mut app, Setting::DeliveryPreset);
+            app.set(Setting::DeliveryPreset, preset).expect(preset);
+            let painted = paint(&app, 130, 65);
+            assert!(!painted.contains("Corrections per lineage"), "{painted}");
+            for _ in 0..app.row_count() {
+                assert_ne!(
+                    app.setting_at_cursor(),
+                    Some(Setting::CorrectionsPerLineage)
+                );
+                app.press(Key::Down);
+            }
+        }
+
+        app.set(Setting::DeliveryPreset, "autonomous")
+            .expect("autonomous");
+        walk_to(&mut app, Setting::CorrectionsPerLineage);
+        assert_eq!(app.shown_value(Setting::CorrectionsPerLineage), "5");
+    }
 }
 
 #[test]

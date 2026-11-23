@@ -656,7 +656,7 @@ impl Setting {
             }
             Self::ChangeSize => "how many changed lines a pull request aims to stay under",
             Self::CorrectionsPerLineage => {
-                "how many corrections one review lineage may spend before a person decides"
+                "how many corrections an autonomous review lineage may publish before a person decides"
             }
             Self::IssueRequirement => {
                 "whether a run holding no claim may write in this repository: allowed or refused"
@@ -666,8 +666,7 @@ impl Setting {
                  none, or the name of a file in Estigia's `voices` directory"
             }
             Self::Workflow => {
-                "who witnesses a claim in this repository: Estigia writes the tracker, or the \
-                 team coordinates and Estigia does not"
+                "whether Estigia or the team coordinates claims. Assisted pull requests have no correction limit"
             }
             Self::DeliveryPreset => {
                 "the delivery rows below at once: a known flow in one choice, which any row after \

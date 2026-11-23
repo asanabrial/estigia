@@ -3193,7 +3193,13 @@ fn record_unwritable(file: &std::path::Path, error: &std::io::Error) -> Refusal 
 
 /// Opens the screen, and writes only what comes back from it.
 fn config_edit(agent: Option<&str>, options: &SetupOptions) -> Result<(), Refusal> {
-    let writable = writable_config(agent, options)?;
+    let mut writable = writable_config(agent, options)?;
+    if agent.is_none()
+        && let Ok(here) = std::env::current_dir()
+        && let Some(repository) = skill::repository_snapshot(&here)?
+    {
+        writable.config = repository.edit_scope_over(&writable.config)?;
+    }
     let Some(config) = crate::tui::edit(agent, writable.config.clone())? else {
         println!("nothing changed");
         return Ok(());

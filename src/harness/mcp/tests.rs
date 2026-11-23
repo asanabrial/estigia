@@ -2830,14 +2830,7 @@ fn every_tool_sends_flags_the_transport_accepts() {
             | "review-computed-verdict"
             | "spend" => &["--operation-id"],
             "review-thread" => &["--branch", "--worktree"],
-            "draft-pr" => &[
-                "--branch",
-                "--worktree",
-                "--issue",
-                "--published-head",
-                "--corrections-spent",
-            ],
-            "ready-pr" => &["--branch", "--worktree", "--issue"],
+            "draft-pr" | "ready-pr" => &["--branch", "--worktree", "--issue"],
             "review-stages" => &["--branch", "--issue"],
             _ => &[],
         };
@@ -6853,37 +6846,36 @@ fn refused_code(outcome: Result<Value, ToolFailure>) -> String {
 }
 
 #[test]
-fn draft_pr_counts_each_new_head_and_refuses_the_one_past_the_row() {
+fn draft_pr_counts_each_new_head_without_capping_assisted_corrections() {
     let rig = assisted_branch();
     rig.allow_corrections(1);
 
     let original = rig.commit();
     let first = rig.draft(0).expect("the original publishes");
     assert_eq!(first["corrections_spent"], 0, "{first}");
-    assert_eq!(first["corrections_allowed"], 1, "{first}");
+    assert_eq!(first["corrections_allowed"], "unlimited", "{first}");
 
     let again = rig.draft(0).expect("the same head is no new round");
     assert_eq!(again["corrections_spent"], 0, "{again}");
     assert_eq!(rig.publication().map(|p| p.head), Some(original));
 
-    let corrected = rig.commit();
+    rig.commit();
     let second = rig.draft(0).expect("the one correction the row allows");
     assert_eq!(second["corrections_spent"], 1, "{second}");
     assert_eq!(rig.draft(0).expect("a retry of it")["corrections_spent"], 1);
 
-    let past = rig.commit();
-    assert_eq!(refused_code(rig.draft(0)), "draft-pr-corrections-spent");
-    assert_eq!(rig.origin_head().as_deref(), Some(corrected.as_str()));
-    let held = rig.publication().expect("the count stays on the pointer");
+    let third_head = rig.commit();
+    let third = rig.draft(0).expect("assisted corrections are unlimited");
+    assert_eq!(third["corrections_spent"], 2, "{third}");
+    assert_eq!(third["corrections_allowed"], "unlimited", "{third}");
+    assert_eq!(rig.origin_head(), Some(third_head.clone()));
+    let held = rig
+        .publication()
+        .expect("the latest head stays on the pointer");
     assert_eq!(
         (held.head.as_str(), held.corrections),
-        (corrected.as_str(), 1)
+        (third_head.as_str(), 2)
     );
-
-    rig.allow_corrections(2);
-    let raised = rig.draft(0).expect("a person's raised row clears the hold");
-    assert_eq!(raised["corrections_spent"], 2, "{raised}");
-    assert_eq!(rig.origin_head(), Some(past));
 }
 
 #[test]
@@ -6891,7 +6883,7 @@ fn a_draft_pr_that_fails_after_its_push_still_counts_the_head() {
     let rig = assisted_branch();
     let head = rig.commit();
     let code = refused_code(rig.draft(1));
-    assert_ne!(code, "draft-pr-corrections-spent");
+    assert_ne!(code, "correction-already-spent");
     assert_eq!(rig.origin_head().as_deref(), Some(head.as_str()));
     assert_eq!(rig.publication().map(|p| p.head), Some(head));
 }

@@ -1858,14 +1858,6 @@ fn run_tool_answering(
             flags.push("--issue".to_owned());
             flags.push(issue.to_string());
         }
-        if tool.operation == "draft-pr"
-            && let Some(published) = run.published_on(branch)
-        {
-            flags.push("--published-head".to_owned());
-            flags.push(published.head.clone());
-            flags.push("--corrections-spent".to_owned());
-            flags.push(published.corrections.to_string());
-        }
     }
 
     if tool.operation == "run-checks"
@@ -1931,7 +1923,7 @@ fn run_tool_answering(
             crate::transport::dispatch::dispatch(&transport, tool.operation, &flags, &now_stamp());
     }
     if tool.operation == "draft-pr" {
-        count_assisted_push(&mut answered, &transport, &context.state_root, &mut run);
+        count_assisted_push(&mut answered, &context.state_root, &mut run);
     }
     let answer = match answered {
         Ok(value) => tracker::Answer {
@@ -2221,7 +2213,6 @@ fn held_spend_receipt(run: &session::Run, issue: u64, spend: &str) -> Option<Str
 /// Counts the head a `draft_pr` call landed, including one that failed after its push.
 fn count_assisted_push(
     answered: &mut Result<Value, crate::transport::Failure>,
-    transport: &crate::transport::Context,
     state_root: &std::path::Path,
     run: &mut session::Run,
 ) {
@@ -2240,8 +2231,7 @@ fn count_assisted_push(
     });
     if let Ok(value) = answered {
         value["corrections_spent"] = json!(after.published_on(&branch).map(|p| p.corrections));
-        value["corrections_allowed"] =
-            json!(crate::transport::claim::corrections_per_lineage(transport));
+        value["corrections_allowed"] = json!("unlimited");
         if !recorded {
             value["corrections_not_recorded"] = json!(true);
         }

@@ -253,16 +253,14 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   - **`draft_pr` counts corrections on the run pointer, so the count is only as durable as the pointer.**
     The first head a run lands is the original and each different head after it a correction, a pushed merge
     of the base included, because a merge can carry any edit and nothing here tells a clean one from another;
-    the same head again is a retry and counts nothing. A new head past `Corrections per lineage` is
-    `draft-pr-corrections-spent` before any host call. What it does not hold: `release` removes the pointer,
+    the same head again is a retry and counts nothing. The count is reported and refuses nothing: an
+    assisted run may push any number of corrections. What it does not hold: `release` removes the pointer,
     so a run that releases and calls `assist` again starts at zero; a second run on the same branch from
     another machine has its own count; the first head of an adopted branch reads as an original although the
     branch already had a pull request; a failed call is counted from the checkout's remote-tracking ref, which
     a clone whose fetch refspec omits the branch does not update, and such a failure is not counted; and a
-    pointer that will not write answers `corrections_not_recorded` instead of holding the next call. The way
-    past it, raising the row with `estigia config set`, is refused to an agent by the gate's substring match,
-    with the limits that matching has everywhere. Held by
-    `draft_pr_counts_each_new_head_and_refuses_the_one_past_the_row` and its neighbours in
+    pointer that will not write answers `corrections_not_recorded`. Held by
+    `draft_pr_counts_each_new_head_without_capping_assisted_corrections` and its neighbours in
     `src/harness/mcp/tests.rs`.
   - **Coordination is left to the team**: nothing reads another person's claim, assignee or label, `assist`
     refuses a second run on one branch on this machine only, and Estigia cannot tell that the person, not the
