@@ -10645,7 +10645,7 @@ fn require_pr_matches(
 }
 
 /// Replaces a reused PR's title, and its body when one was supplied.
-fn edit_pr(
+pub(super) fn edit_pr(
     context: &Context,
     pr: &serde_json::Value,
     title: &str,

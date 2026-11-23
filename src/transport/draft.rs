@@ -12,8 +12,8 @@
 //! no review to wait for, so the draft is marked ready and read back again.
 
 use super::claim::{
-    PUBLISH_READBACK_ATTEMPTS, Push, open_prs, pr_number, publish_schedule, push_to_origin,
-    readback_delay_secs, stage,
+    PUBLISH_READBACK_ATTEMPTS, Push, edit_pr, open_prs, pr_number, publish_schedule,
+    push_to_origin, readback_delay_secs, stage,
 };
 use super::{Context, Failure, How, run};
 use crate::config::Corrections;
@@ -143,23 +143,7 @@ pub fn edit_metadata(
             "the branch's pull request is not confirmed open with the expected branch".to_owned(),
         ));
     }
-    let body_file = stage(&body, "edit-pr")?;
-    let edit = run(
-        &[
-            "gh",
-            "pr",
-            "edit",
-            &number.to_string(),
-            "--title",
-            what.title,
-            "--body-file",
-            &body_file,
-        ],
-        Some(&context.repo_dir),
-        How::write(),
-    );
-    let _ = std::fs::remove_file(body_file);
-    edit.map_err(|failure| {
+    edit_pr(context, open, what.title, Some(&body)).map_err(|failure| {
         Failure::Write(format!(
             "editing pull request #{number} may have landed: {}",
             failure.detail()
