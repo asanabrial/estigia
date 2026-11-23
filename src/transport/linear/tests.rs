@@ -256,6 +256,7 @@ fn states_in(current: &str) -> String {
             { "id": "s-todo", "name": "Todo" },
             { "id": "s-doing", "name": "In Progress" },
             { "id": "s-review", "name": "In Review" },
+            { "id": "s-ready", "name": "Ready For Review" },
             { "id": "s-done", "name": "Done" },
         ]}},
     }}})
@@ -438,7 +439,7 @@ fn the_states_follow_state_is_called_with_are_ones_state_names_maps() {
     }
 }
 
-fn merged_pull_request() -> String {
+fn merged_pull_request() -> serde_json::Value {
     serde_json::json!({ "data": { "repository": { "pullRequest": {
         "number": 7, "state": "MERGED", "isDraft": false, "headRefOid": "abc", "headRefName": "eng-123",
         "mergeCommit": { "oid": "m1" }, "author": { "login": "alexis" },
@@ -447,7 +448,6 @@ fn merged_pull_request() -> String {
         "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
         "commits": { "nodes": [] },
     }}}})
-    .to_string()
 }
 
 fn linear_repository(root: &std::path::Path) -> crate::transport::Context {
@@ -464,7 +464,14 @@ fn linear_repository(root: &std::path::Path) -> crate::transport::Context {
     for (setting, value) in [
         (crate::config::Setting::Tracker, "linear ENG"),
         (crate::config::Setting::DeliveryPreset, "team"),
-        (crate::config::Setting::StateNames, "done=Done"),
+        (
+            crate::config::Setting::StateNames,
+            "in-progress=In Progress, review=Ready For Review, done=Done",
+        ),
+        (
+            crate::config::Setting::ExternalReviewers,
+            "check:cubic@cubic-bot, review:any",
+        ),
     ] {
         setting.apply(&mut config, value).expect("a row");
     }
@@ -475,6 +482,7 @@ fn linear_repository(root: &std::path::Path) -> crate::transport::Context {
             crate::config::Setting::Tracker,
             crate::config::Setting::Workflow,
             crate::config::Setting::StateNames,
+            crate::config::Setting::ExternalReviewers,
             crate::config::Setting::SelfReview,
             crate::config::Setting::ReadyBy,
             crate::config::Setting::CorrectionsAfterReady,
@@ -493,6 +501,8 @@ fn linear_repository(root: &std::path::Path) -> crate::transport::Context {
 fn stages_through_dispatch(
     context: &crate::transport::Context,
     issue: &str,
+    pr: serde_json::Value,
+    states: Vec<serde_json::Value>,
 ) -> (
     Result<serde_json::Value, crate::transport::Failure>,
     Vec<String>,
@@ -503,9 +513,9 @@ fn stages_through_dispatch(
             "matches": "repo view",
             "stdout": r#"{"owner":{"login":"example"},"name":"repo"}"#,
         }),
-        serde_json::json!({ "matches": "api graphql", "stdout": merged_pull_request() }),
+        serde_json::json!({ "matches": "api graphql", "stdout": pr.to_string() }),
     ];
-    entries.extend(a_move("In Review", accepted(), "Done"));
+    entries.extend(states);
     let flags: Vec<String> = ["--branch", "eng-123", "--issue", issue]
         .iter()
         .map(|part| (*part).to_owned())
@@ -531,7 +541,12 @@ fn linear_calls(calls: &[String]) -> Vec<&String> {
 fn reading_the_merge_through_dispatch_moves_the_linear_issue_to_its_done_name() {
     let root = tempfile::tempdir().expect("a root");
     let context = linear_repository(root.path());
-    let (answer, calls) = stages_through_dispatch(&context, "ENG-123");
+    let (answer, calls) = stages_through_dispatch(
+        &context,
+        "ENG-123",
+        merged_pull_request(),
+        a_move("In Review", accepted(), "Done"),
+    );
     let answer = answer.expect("merged");
     assert_eq!(answer["position"], "merged");
     assert_eq!(answer["linear_state"]["state"], "Done", "{answer}");
@@ -542,11 +557,140 @@ fn reading_the_merge_through_dispatch_moves_the_linear_issue_to_its_done_name() 
 fn a_github_issue_read_merged_through_dispatch_sends_nothing_to_linear() {
     let root = tempfile::tempdir().expect("a root");
     let context = linear_repository(root.path());
-    let (answer, calls) = stages_through_dispatch(&context, "7");
+    let (answer, calls) = stages_through_dispatch(
+        &context,
+        "7",
+        merged_pull_request(),
+        a_move("In Review", accepted(), "Done"),
+    );
     let answer = answer.expect("merged");
     assert_eq!(answer["position"], "merged");
     assert!(answer.get("linear_state").is_none(), "{answer}");
     assert!(linear_calls(&calls).is_empty(), "{calls:?}");
+}
+
+fn open_review(resolved: bool, check: &str) -> serde_json::Value {
+    let mut response = merged_pull_request();
+    let pr = &mut response["data"]["repository"]["pullRequest"];
+    pr["state"] = serde_json::json!("OPEN");
+    pr["commits"]["nodes"] = serde_json::json!([{ "commit": {
+        "oid": "abc", "statusCheckRollup": { "contexts": {
+            "pageInfo": { "hasNextPage": false }, "nodes": [{
+                "name": "cubic", "status": check, "conclusion": "SUCCESS",
+            }]
+        }}
+    }}]);
+    pr["reviewThreads"]["nodes"] = serde_json::json!([{
+        "isResolved": resolved,
+        "comments": { "pageInfo": { "hasNextPage": false }, "nodes": [{
+            "author": { "login": "cubic-bot" }
+        }]}
+    }]);
+    response
+}
+
+#[test]
+fn open_review_reconciles_the_issue_from_the_current_head_and_linear_state() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = linear_repository(root.path());
+    let done = "COMPLETED";
+    let pending = "IN_PROGRESS";
+    let working = "In Progress";
+    let review = "Ready For Review";
+    for (resolved, check, before, after, position) in [
+        (false, done, "Todo", working, "comments-to-address"),
+        (true, done, working, review, "awaiting-review"),
+        (true, done, review, review, "awaiting-review"),
+        (false, done, review, working, "comments-to-address"),
+        (true, pending, "Backlog", working, "check-pending"),
+        (true, pending, working, working, "check-pending"),
+        (true, done, "Todo", working, "awaiting-review"),
+    ] {
+        let (answer, calls) = stages_through_dispatch(
+            &context,
+            "ENG-123",
+            open_review(resolved, check),
+            a_move(before, accepted(), after),
+        );
+        let answer = answer.expect("a stage reading");
+        assert_eq!(answer["position"], position, "{answer}");
+        assert_eq!(answer["linear_state"]["state"], after, "{answer}");
+        assert_eq!(answer["linear_state"]["moved"], before != after, "{answer}");
+        assert_eq!(answer["tracker_written"], before != after, "{answer}");
+        assert_eq!(
+            mutations(&calls).len(),
+            usize::from(before != after),
+            "{calls:?}"
+        );
+    }
+}
+
+#[test]
+fn an_open_thread_outside_the_blocking_stage_still_prevents_the_return_to_review() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = linear_repository(root.path());
+    let mut response = open_review(false, "COMPLETED");
+    let thread = &mut response["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"][0];
+    thread["comments"]["nodes"][0]["author"]["login"] = serde_json::json!("other[bot]");
+    let (answer, calls) = stages_through_dispatch(
+        &context,
+        "ENG-123",
+        response,
+        a_move("In Progress", accepted(), "Ready For Review"),
+    );
+    let answer = answer.expect("a stage reading");
+    assert_eq!(answer["position"], "awaiting-review");
+    assert_eq!(answer["linear_state"]["moved"], false, "{answer}");
+    assert!(mutations(&calls).is_empty(), "{calls:?}");
+}
+
+#[test]
+fn an_unreadable_pr_state_cannot_move_a_linear_issue() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = linear_repository(root.path());
+    let mut response = open_review(true, "COMPLETED");
+    response["data"]["repository"]["pullRequest"]["state"] = serde_json::Value::Null;
+    let (answer, calls) = stages_through_dispatch(
+        &context,
+        "ENG-123",
+        response,
+        a_move("Todo", accepted(), "In Progress"),
+    );
+    assert!(answer.is_err(), "{answer:?}");
+    assert!(linear_calls(&calls).is_empty(), "{calls:?}");
+}
+
+#[test]
+fn open_review_distinguishes_failed_reads_before_and_after_the_move() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = linear_repository(root.path());
+    for nth in [1, 2] {
+        let mut states = a_move("Todo", accepted(), "In Progress");
+        states[nth - 1] = serde_json::json!({
+            "matches": "EstigiaStates", "nth": nth, "status": 1, "stderr": "socket hang up",
+        });
+        let (answer, calls) =
+            stages_through_dispatch(&context, "ENG-123", open_review(false, "COMPLETED"), states);
+        let answer = answer.expect("the PR reading succeeded");
+        if nth == 1 {
+            assert_eq!(answer["linear_state"]["read_failed"], true, "{answer}");
+            assert_eq!(answer["linear_state"]["moved"], false, "{answer}");
+            assert_eq!(answer["tracker_written"], false, "{answer}");
+        } else {
+            assert_eq!(
+                answer["linear_state"]["reason"], "linear-move-unconfirmed",
+                "{answer}"
+            );
+            assert_eq!(answer["linear_state"]["world"], "unknown", "{answer}");
+            assert!(answer["linear_state"].get("moved").is_none(), "{answer}");
+            assert_eq!(
+                answer["tracker_written"],
+                serde_json::Value::Null,
+                "{answer}"
+            );
+        }
+        assert_eq!(mutations(&calls).len(), nth - 1, "{calls:?}");
+    }
 }
 
 fn drafting_through_dispatch(
@@ -992,11 +1136,7 @@ fn an_accepted_move_whose_read_back_fails_is_an_unknown_world() {
     let failure = answer.expect_err("an accepted move that could not be read back");
     let envelope = failure.envelope();
     assert_eq!(envelope["world"], "unknown", "{envelope}");
-    assert_eq!(
-        a_reason(&failure),
-        "linear-move-not-read-back",
-        "{envelope}"
-    );
+    assert_eq!(a_reason(&failure), "linear-move-unconfirmed", "{envelope}");
     assert!(
         !envelope.to_string().contains("nothing was created"),
         "{envelope}"

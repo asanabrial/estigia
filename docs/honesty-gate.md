@@ -546,13 +546,12 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   workflow` is not assisted, and `config set Workflow autonomous --repo` where `Tracker` is already Linear;
   `doctor` and run start refuse it). `assist` reads the issue's title and description with one constant
   GraphQL query (`a_read_spawns_linear_api_with_the_query_and_sends_no_mutation`); `where` reads a key's
-  state and URL with `STANDING_QUERY`, a finished issue included; `STATES_QUERY` and
-  `MOVE_MUTATION` are sent only through `move_issue`, which `follow_state` calls only for a state the
-  repository's `State names` row maps and only for a Linear key
-  (`follow_state_moves_only_a_mapped_state_of_a_linear_issue`). A move is read back, reported under
-  `linear_state` and never retried; a read-back that cannot be completed after Linear accepted the move
-  answers `linear-move-not-read-back` with `world: unknown`, never the not-done `linear-unreachable`
-  (`an_accepted_move_whose_read_back_fails_is_an_unknown_world`), so a run that ignores a failed one leaves Linear behind the work. Every
+  state and URL with `STANDING_QUERY`, a finished issue included. The
+  [Linear binding](../skill/bindings/linear.md#moving-a-mapped-state) describes when a mapped state
+  follows the run. `open_review_reconciles_the_issue_from_the_current_head_and_linear_state` drives
+  the correction cycle through dispatch and counts the mutations. A move is read back once.
+  `an_accepted_move_whose_read_back_fails_is_an_unknown_world` checks that losing that read
+  returns `linear-move-unconfirmed` with `world: unknown`. Every
   operation is `linear api --variables-json <variables> <operation>` through the crate's one process boundary
   with a 30-second deadline; the CLI holds the credential, so Estigia never reads or passes the key. What it
   does **not** do: it writes Linear only to move a mapped state, and does not prove a credential can be

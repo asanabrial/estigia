@@ -290,11 +290,19 @@ pub fn has_attachment(identity: &Identity, url: &str) -> Result<bool, Failure> {
 /// does not have, a mutation Linear refuses and a read-back that disagrees are
 /// each a stop naming which, and the last is `world: unknown`.
 pub fn move_issue(identity: &Identity, target: &str) -> Result<serde_json::Value, Failure> {
+    move_from(identity, target, read_states(identity)?)
+}
+
+fn move_from(
+    identity: &Identity,
+    target: &str,
+    states: States,
+) -> Result<serde_json::Value, Failure> {
     let States {
         id,
         current: from,
         offered: states,
-    } = read_states(identity)?;
+    } = states;
     if from.eq_ignore_ascii_case(target) {
         return Ok(serde_json::json!({ "ok": true, "moved": false, "state": from }));
     }
@@ -353,10 +361,10 @@ pub fn move_issue(identity: &Identity, target: &str) -> Result<serde_json::Value
         Err(failure) => {
             return Err(Failure::Stop(serde_json::json!({
                 "ok": false,
-                "reason": "linear-move-not-read-back",
+                "reason": "linear-move-unconfirmed",
                 "world": "unknown",
                 "detail": format!(
-                    "{identity} was moved to {target:?} and its state could not be read back: {}",
+                    "Linear accepted the move of {identity} to {target:?} but its state could not be read back: {}",
                     failure.detail()
                 ),
                 "action": "read the issue in Linear; do not report it moved or unmoved",
@@ -417,9 +425,16 @@ fn read_states(identity: &Identity) -> Result<States, Failure> {
                 .collect()
         })
         .unwrap_or_default();
+    let id = text(issue.get("id"));
+    let current = text(issue.pointer("/state/name"));
+    if id.is_empty() || current.is_empty() {
+        return Err(unreachable_api(&Failure::Read(format!(
+            "{identity} read back without an issue id or a current state name"
+        ))));
+    }
     Ok(States {
-        id: text(issue.get("id")),
-        current: text(issue.get("state").and_then(|state| state.get("name"))),
+        id,
+        current,
         offered: states,
     })
 }
@@ -432,7 +447,7 @@ pub fn follow_state(
     names: &[(String, String)],
     identity: Option<&Identity>,
     state: &str,
-    mut answer: serde_json::Value,
+    answer: serde_json::Value,
 ) -> serde_json::Value {
     let Some(identity @ Identity::Key(_)) = identity else {
         return answer;
@@ -444,6 +459,10 @@ pub fn follow_state(
         Ok(moved) => moved,
         Err(failure) => failure.envelope(),
     };
+    report_move(answer, moved)
+}
+
+fn report_move(mut answer: serde_json::Value, moved: serde_json::Value) -> serde_json::Value {
     if let Some(object) = answer.as_object_mut() {
         if object.contains_key("tracker_written") {
             if moved["moved"] == true {
@@ -455,6 +474,70 @@ pub fn follow_state(
         object.insert("linear_state".to_owned(), moved);
     }
     answer
+}
+
+pub(super) fn follow_review(
+    names: &[(String, String)],
+    identity: Option<&Identity>,
+    answer: serde_json::Value,
+) -> serde_json::Value {
+    let position = answer["position"].as_str();
+    match position {
+        Some("merged") => return follow_state(names, identity, DELIVERED, answer),
+        Some("closed" | "unpublished") | None => return answer,
+        _ => {}
+    }
+    let Some(identity @ Identity::Key(_)) = identity else {
+        return answer;
+    };
+    let mapped = |state| {
+        names
+            .iter()
+            .find(|(key, _)| key == state)
+            .map(|(_, name)| name.as_str())
+    };
+    let started = mapped(STARTED);
+    let review = mapped(IN_REVIEW);
+    if started.is_none() && review.is_none() {
+        return answer;
+    }
+    let states = match read_states(identity) {
+        Ok(states) => states,
+        Err(failure) => return report_move(answer, unread_state(failure)),
+    };
+    let outside = started.zip(review).is_some_and(|(started, review)| {
+        !states.current.eq_ignore_ascii_case(started)
+            && !states.current.eq_ignore_ascii_case(review)
+    });
+    let target = if position == Some("comments-to-address") || outside {
+        started
+    } else if matches!(
+        position,
+        Some("awaiting-review" | "review-to-request" | "ready-to-merge" | "awaiting-merge")
+    ) && answer["ci"] == "passed"
+        && answer["open_threads"].as_array().is_some_and(Vec::is_empty)
+    {
+        review
+    } else {
+        None
+    };
+    let moved = match target {
+        Some(target) => {
+            move_from(identity, target, states).unwrap_or_else(|failure| failure.envelope())
+        }
+        None => serde_json::json!({ "ok": true, "moved": false, "state": states.current }),
+    };
+    report_move(answer, moved)
+}
+
+fn unread_state(failure: Failure) -> serde_json::Value {
+    let mut envelope = failure.envelope();
+    envelope["moved"] = serde_json::Value::Bool(false);
+    envelope["read_failed"] = serde_json::Value::Bool(true);
+    envelope["action"] = serde_json::Value::String(
+        "the issue's state was not read, so it was left alone; read it in Linear before saying where it stands".to_owned(),
+    );
+    envelope
 }
 
 /// [`follow_state`] for an `assist` answer: the started state on a first call, and on a resume
@@ -495,17 +578,7 @@ pub fn follow_started(
             "state": standing.state,
             "state_type": standing.state_type,
         }),
-        Err(failure) => {
-            let mut envelope = failure.envelope();
-            envelope["moved"] = serde_json::Value::Bool(false);
-            envelope["read_failed"] = serde_json::Value::Bool(true);
-            envelope["action"] = serde_json::Value::String(
-                "the issue's state was not read, so it was left alone; read it in Linear before \
-                 saying where it stands"
-                    .to_owned(),
-            );
-            envelope
-        }
+        Err(failure) => unread_state(failure),
     };
     if let Some(object) = answer.as_object_mut() {
         object.insert("linear_state".to_owned(), unmoved);
