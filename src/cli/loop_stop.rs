@@ -276,7 +276,17 @@ pub(super) fn decide(
         && let Some(issue) = &reading.issue
     {
         let Some(at) = &reading.opens_at else {
-            return Decision::Continue(stop_block(issue, run_id));
+            let Some(waiting) = &reading.waiting else {
+                return Decision::Continue(stop_block(issue, run_id));
+            };
+            let requested = reading.stop_after.is_some();
+            let reason = format!("waiting on {waiting}");
+            return Decision::Stop {
+                value: ended(&reason),
+                reason,
+                terminal: requested,
+                requested,
+            };
         };
         if reading.claimable.unwrap_or(0) + reading.dischargeable.unwrap_or(0) > 0 {
             let mut value = stop_block(issue, run_id);

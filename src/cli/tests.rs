@@ -6096,6 +6096,7 @@ fn goal_json_carries_the_completed_count() {
         unadmitted: None,
         next: None,
         opens_at: None,
+        waiting: None,
         completed: Some(2),
         stop_after: None,
     };
@@ -6127,6 +6128,7 @@ fn goal_json_carries_the_dischargeable_count() {
         unadmitted: None,
         next: None,
         opens_at: None,
+        waiting: None,
         completed: None,
         stop_after: None,
     };
@@ -6628,6 +6630,7 @@ fn goal_json_carries_what_is_held_pending_and_unconditioned() {
         unadmitted: None,
         next: None,
         opens_at: None,
+        waiting: None,
         completed: None,
         stop_after: None,
     };
@@ -9752,6 +9755,7 @@ fn reading(standing: &'static str, live: bool, counts: [Option<u64>; 5]) -> supe
         unadmitted: None,
         next: None,
         opens_at: None,
+        waiting: None,
         completed: None,
         stop_after: None,
     }
@@ -11457,5 +11461,110 @@ fn a_live_claim_in_a_closed_window_with_work_claimable_is_told_to_park_and_take_
         let told = value["reason"].as_str().unwrap_or_default();
         assert!(told.contains("`park: true`"), "{told}");
         assert!(!told.contains("end the turn"), "{told}");
+    }
+}
+
+#[test]
+fn a_live_claim_that_waits_on_a_person_lets_the_loop_stop() {
+    for (asked, requested) in [(None, false), (Some("enough"), true)] {
+        let decision = super::loop_stop::decide(
+            "claude-abc",
+            crate::harness::loop_text::Invocation::Slash,
+            None,
+            None,
+            || {},
+            || {
+                let mut reading = reading("assisted-held", true, [None; 5]);
+                reading.waiting = Some("a person: the work is published".to_owned());
+                reading.stop_after = asked.map(str::to_owned);
+                reading
+            },
+        );
+        assert_eq!(decision.consumes_stop_request(), requested);
+        assert!(
+            matches!(&decision, super::loop_stop::Decision::Stop { terminal, .. } if *terminal == requested),
+            "a wait on a person ended the loop for good, or a request did not"
+        );
+        let answer = decision.into_value();
+        assert!(answer.get("decision").is_none(), "{answer}");
+        assert!(
+            answer["systemMessage"]
+                .as_str()
+                .is_some_and(|text| text.contains("a person: the work is published")),
+            "{answer}"
+        );
+    }
+}
+
+#[test]
+fn a_published_clean_assisted_checkout_waits_on_a_person() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let state = root.path().join("state");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&state).expect("the state directory");
+    std::fs::create_dir_all(&repo).expect("the checkout");
+    let git = |args: &[&str]| {
+        let ran = std::process::Command::new("git")
+            .args(["-c", "user.name=a", "-c", "user.email=a@example.invalid"])
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "core.hooksPath=/dev/null",
+            ])
+            .args(args)
+            .current_dir(&repo)
+            .output()
+            .expect("git runs");
+        assert!(ran.status.success(), "{args:?}");
+        String::from_utf8_lossy(&ran.stdout).trim().to_owned()
+    };
+    git(&["init", "-q", "-b", "abc-2"]);
+    git(&["commit", "-q", "--allow-empty", "-m", "one"]);
+    let run_id = harness::session::run_id("claude", "goal-person-1");
+    let mut run = harness::session::Run::new(run_id.clone());
+    run.issue = Some(crate::identity::Identity::Key("ABC-2".to_owned()));
+    run.assisted = true;
+    run.branch = Some("abc-2".to_owned());
+    run.worktree = Some(repo.clone());
+    run.record_assisted_push("abc-2", &git(&["rev-parse", "HEAD"]));
+    harness::session::store(&state, &run).expect("the pointer writes");
+    let context = linear_context(&repo, &state);
+    let waiting = || super::goal_reading(&context, &run_id, false).waiting;
+
+    let published = super::goal_reading(&context, &run_id, false);
+    assert!(published.live);
+    assert!(published.waiting.is_some(), "published work was not a wait");
+    assert!(super::goal_json(&run_id, &published)["waiting"].is_string());
+
+    std::fs::write(repo.join("draft"), "x").expect("an uncommitted file");
+    assert_eq!(waiting(), None, "uncommitted work was a wait");
+    std::fs::remove_file(repo.join("draft")).expect("the file goes");
+    git(&["commit", "-q", "--allow-empty", "-m", "two"]);
+    assert_eq!(waiting(), None, "an unpublished commit was a wait");
+}
+
+#[test]
+fn a_blocked_autonomous_claim_waits_on_a_person() {
+    for (state, waits) in [("blocked", true), ("in-progress", false)] {
+        crate::transport::store::forget_scratch_store();
+        let root = tempfile::tempdir().expect("a temporary root");
+        let state_root = root.path().join("state");
+        let repo = root.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("the checkout the tracker reads in");
+        let run_id = harness::session::run_id("opencode", &format!("goal-person-{state}"));
+        goal_pointer(&state_root, &run_id, Some(7));
+        let mut run = harness::session::load(&state_root, &run_id);
+        run.state = Some(state.to_owned());
+        harness::session::store(&state_root, &run).expect("the pointer writes");
+        let context = release_context(&repo, &state_root);
+        let bin = crate::test_env::scripted_gh();
+        let script =
+            crate::test_env::answers(&[crate::test_env::live_holder_issue(&run_id, 7, state)]);
+        let reading = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            super::goal_reading(&context, &run_id, false)
+        });
+        assert!(reading.live, "{}", super::goal_line(&run_id, &reading));
+        assert_eq!(reading.waiting.is_some(), waits, "{state}");
     }
 }

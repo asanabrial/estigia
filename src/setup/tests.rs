@@ -11457,6 +11457,31 @@ const cases = {};
   clean();
 }
 
+for (const standing of ["assisted-held", "passed"]) {
+  const person = {
+    exitCode: 0,
+    stdout: JSON.stringify({
+      run_id: "opencode-abc", live: true, issue: 42, standing, waiting: "a person: published",
+    }),
+  };
+  const w = await world({ answers: [started, person, person, person] });
+  await w.run(0, "flow-loop", "do the thing");
+  await until(() => w.prompts.length >= 1, "person: the first prompt");
+  w.turn(DIRECTORY);
+  await until(() => w.storage.get(KEY)?.waiting, "person: the wait recorded");
+  const first = { prompts: w.prompts.length, outcome: w.storage.get(KEY).last.outcome, timers: live().length };
+  await fire();
+  const lapsed = { prompts: w.prompts.length };
+  if (lapsed.prompts > 1) {
+    w.turn(DIRECTORY);
+    await until(() => live().length === 1, "person: the second wait");
+  }
+  (cases.person ??= {})[standing] = {
+    first, lapsed, after: { prompts: w.prompts.length, timers: live().length },
+  };
+  clean();
+}
+
 {
   const w = await world({
     answers: [started, empty({ claimable: 0, dischargeable: 0, held: 0, pending: 0, unconditioned: 2 })],
@@ -11980,6 +12005,19 @@ fn the_loop_plugin_waits_on_held_or_pending_work_and_asks_again() {
         window["goal"].get("window").is_none(),
         "the wait outlived the opening: {window}"
     );
+
+    for (standing, prompts) in [("assisted-held", 2), ("passed", 1)] {
+        let person = &cases["person"][standing];
+        assert_eq!(
+            person["first"]["prompts"], 1,
+            "{standing} enqueued: {person}"
+        );
+        assert_eq!(person["first"]["outcome"], "waiting: a person: published");
+        assert_eq!(person["first"]["timers"], 1, "{standing}: {person}");
+        assert_eq!(person["lapsed"]["prompts"], prompts, "{standing}: {person}");
+        assert_eq!(person["after"]["prompts"], prompts, "{standing}: {person}");
+        assert_eq!(person["after"]["timers"], 1, "{standing}: {person}");
+    }
 
     let wait = &cases["wait"];
     assert_eq!(wait["first"]["prompts"], 1, "a wait enqueued: {wait}");
@@ -19536,6 +19574,23 @@ const out = {};
   out.waits = { waiting, resumed, waitingAgain, afterShutdown: held.length };
 }
 
+for (const standing of ["assisted-held", "passed"]) {
+  use({ answer: { ...LIVE, standing, waiting: "a person: published" } });
+  const s = await scenario();
+  await start(s, "x");
+  await turn(s);
+  const waits = () => held.filter((entry) => entry.delay !== 30000);
+  const first = { prompts: s.sent.length, timers: waits().length };
+  const due = waits()[0];
+  held.splice(held.indexOf(due), 1);
+  due.fn();
+  await until(() => s.sent.length === 2 || waits().length === 1);
+  const lapsed = s.sent.length;
+  if (lapsed === 2) await turn(s);
+  (out.person ??= {})[standing] = { first, lapsed, after: s.sent.length, timers: waits().length };
+  await s.handlers.session_shutdown({ type: "session_shutdown" }, s.ctx);
+}
+
 {
   const opens = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
   use({ answer: { ...LIVE, opens_at: opens } });
@@ -19888,6 +19943,15 @@ fn the_pi_loop_waits_on_held_or_pending_work_and_asks_again() {
         ),
         "the woken attempt was not told to flush first: {window}"
     );
+
+    for (standing, prompts) in [("assisted-held", 2), ("passed", 1)] {
+        let person = &cases["person"][standing];
+        assert_eq!(person["first"]["prompts"], 1, "{standing}: {person}");
+        assert_eq!(person["first"]["timers"], 1, "{standing}: {person}");
+        assert_eq!(person["lapsed"], prompts, "{standing}: {person}");
+        assert_eq!(person["after"], prompts, "{standing}: {person}");
+        assert_eq!(person["timers"], 1, "{standing}: {person}");
+    }
 
     let waits = &cases["waits"];
     assert_eq!(waits["waiting"]["prompts"], 1, "{waits}");

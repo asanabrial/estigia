@@ -732,13 +732,19 @@ fn stop_waiting(state: &str, recorded: &[(&str, &str)]) -> Value {
             )
             .expect("the issue imports");
     }
-    run_as(
+    let answer = run_as(
         Dialect::ClaudeCode,
         Some("claude-code"),
         Event::Stop,
         &stop_input("stop-waiting-1"),
         Some(&context),
-    )
+    );
+    assert_eq!(
+        person_wait(&context, &run).is_some(),
+        answer == json!({}),
+        "the loop's reading and the Stop hook disagree: {answer}"
+    );
+    answer
 }
 
 #[test]

@@ -2229,6 +2229,28 @@ const consider = async (ctx, sessionID, lapsed) => {{
       await reacted(ctx, sessionID, "enqueued");
       return;
     }}
+    const person = typeof read.said?.waiting === "string" ? read.said.waiting : "";
+    if (person !== "") {{
+      if (typeof read.said?.stop_after === "string" && read.said.stop_after !== "") {{
+        await stop(
+          ctx,
+          sessionID,
+          `the agent asked to stop after the current task (${{read.said.stop_after}}), which waits on ${{person}}`,
+          "stopped-on-request",
+        );
+        await clearStopAfter(sessionID, cwd);
+        return;
+      }}
+      if (!lapsed || read.said?.standing !== "assisted-held") {{
+        await waited(ctx, sessionID, person);
+        return;
+      }}
+      if (!running(await ctx.storage.get(KEY + sessionID)) || stopRequested.has(sessionID)) return;
+      disarm(sessionID);
+      await tell(ctx, sessionID, held(issue, goal.run_id) + PREAMBLE.person_recheck);
+      await reacted(ctx, sessionID, "enqueued");
+      return;
+    }}
   }} else {{
     if (typeof read.said?.stop_after === "string" && read.said.stop_after !== "") {{
       await stop(

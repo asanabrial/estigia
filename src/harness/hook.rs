@@ -1664,6 +1664,26 @@ pub fn stop_block(issue: &crate::identity::Identity, run_id: &str) -> Value {
     })
 }
 
+/// What a person still owes a live claim, when the run has nothing left to do for it.
+pub(crate) fn person_wait(context: &GateContext, run: &session::Run) -> Option<String> {
+    let issue = run.issue.as_ref()?;
+    if !run.assisted {
+        return waiting_on_a_person(context, run)
+            .then(|| format!("a person: issue #{issue} is blocked or its review is escalated"));
+    }
+    let branch = run.branch.as_deref()?;
+    let published = run.published_on(branch)?;
+    let worktree = run.worktree.as_deref()?;
+    if super::head_of(worktree)? != published.head {
+        return None;
+    }
+    let status = super::proof_git_command(worktree, &["status", "--porcelain"])
+        .output()
+        .ok()?;
+    (status.status.success() && status.stdout.is_empty())
+        .then(|| format!("a person: everything on {branch} for issue #{issue} is published"))
+}
+
 fn waiting_on_a_person(context: &GateContext, run: &session::Run) -> bool {
     if run.state.as_deref() == Some("blocked") {
         return true;
