@@ -356,7 +356,8 @@ One level per screen, and one list per level; there is no focus to move between 
 
 The TUI shows `Corrections per lineage` only while `Claim workflow` is `autonomous`. It keeps
 the configured limit when the row is hidden. In a checkout, the shared `config edit` screen opens
-with that checkout's repository-scoped rows, including its workflow.
+with that checkout's repository-scoped rows, including its workflow; a row there that does not parse is
+left out and the screen still opens.
 
 | Key | Does |
 |---|---|
