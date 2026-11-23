@@ -304,7 +304,10 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
         .execute("UPDATE meta SET schema_version = 99", [])
         .expect("writes");
 
-    assert!(matches!(Store::open(&path), Err(Failure::Read(_))));
+    let Err(Failure::Read(detail)) = Store::open(&path) else {
+        panic!("a newer schema must refuse the writing open");
+    };
+    assert!(detail.contains("restart the MCP server"), "{detail}");
 }
 
 #[test]
@@ -1374,6 +1377,14 @@ fn a_store_of_another_schema_is_unreadable_and_is_left_unmigrated() {
     let failure = super::ledger::Ledger::read_timeline_at(&path, &repo(), 7)
         .expect_err("a newer schema is not read");
 
+    let envelope = failure.envelope();
+    assert!(
+        envelope["detail"]
+            .as_str()
+            .expect("detail")
+            .contains("restart the MCP server"),
+        "{envelope}"
+    );
     assert_eq!(reason_of(failure), "review-status-store-unreadable");
     let raw = rusqlite::Connection::open(&path).expect("opens raw");
     let version: u32 = raw

@@ -1779,12 +1779,11 @@ fn run_operation(
                     })))?,
                 },
             )?;
-            if read.get("position").and_then(serde_json::Value::as_str) == Some("merged") {
+            if layered.workflow == crate::config::Workflow::Assisted {
                 let issue = f.get("issue").map(|_| identity()).transpose()?;
-                return Ok(super::linear::follow_state(
+                return Ok(super::linear::follow_review(
                     &layered.state_names,
                     issue.as_ref(),
-                    super::linear::DELIVERED,
                     read,
                 ));
             }

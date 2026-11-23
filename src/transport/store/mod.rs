@@ -225,13 +225,25 @@ pub(crate) fn open_for_read(path: &Path) -> Result<Option<Store>, Failure> {
     )
     .map_err(unreadable("open"))?;
     let store = Store { connection };
-    let known = u32::try_from(schema::MIGRATIONS.len()).unwrap_or(u32::MAX);
-    if store.schema_version()? > known {
-        return Err(Failure::Read(
-            "the local store carries a schema newer than this build reads".to_owned(),
-        ));
-    }
+    check_schema(store.schema_version()?)?;
     Ok(Some(store))
+}
+
+fn supported_schema() -> u32 {
+    u32::try_from(schema::MIGRATIONS.len()).unwrap_or(u32::MAX)
+}
+
+fn check_schema(current: u32) -> Result<(), Failure> {
+    let supported = supported_schema();
+    if current > supported {
+        return Err(Failure::Read(format!(
+            "the local store carries schema {current}; this Estigia build ({}) reads up to {supported}. \
+             Use a build that supports schema {current}. For an open agent session, restart the MCP server \
+             with that executable before retrying",
+            crate::build_info::VERSION
+        )));
+    }
+    Ok(())
 }
 
 const WAL_ATTEMPTS: u32 = 5;
@@ -362,7 +374,6 @@ impl Store {
     }
 
     fn migrate_after_read(&self, path: &Path, after_read: impl FnOnce()) -> Result<(), Failure> {
-        let known = u32::try_from(schema::MIGRATIONS.len()).unwrap_or(u32::MAX);
         self.connection
             .execute_batch("CREATE TABLE IF NOT EXISTS meta (schema_version INTEGER NOT NULL);")
             .map_err(unreadable("create its version table"))?;
@@ -372,11 +383,8 @@ impl Store {
             .optional()
             .map_err(unreadable("read its schema version"))?
             .unwrap_or(0);
-        if current > known {
-            return Err(Failure::Read(format!(
-                "the local store is schema {current} and this build understands up to {known}"
-            )));
-        }
+        check_schema(current)?;
+        let known = supported_schema();
         let fresh = current == 0;
         if !fresh && current < known {
             snapshot::take_pre_migration_snapshot(
@@ -399,6 +407,7 @@ impl Store {
                 .optional()
                 .map_err(unreadable("re-read its schema version"))?
                 .unwrap_or(0);
+            check_schema(inside)?;
             if inside as usize >= version {
                 continue;
             }

@@ -262,11 +262,12 @@ impl Ledger {
         )
         .map_err(|error| unreadable(error.to_string()))?;
         let store = Store { connection };
-        let known = u32::try_from(super::schema::MIGRATIONS.len()).unwrap_or(u32::MAX);
+        let known = super::supported_schema();
         let found = store
             .schema_version()
             .map_err(|failure| unreadable(failure.detail()))?;
-        if found != known {
+        super::check_schema(found).map_err(|failure| unreadable(failure.detail()))?;
+        if found < known {
             return Err(unreadable(format!(
                 "the store carries schema {found}, this binary reads {known}"
             )));
