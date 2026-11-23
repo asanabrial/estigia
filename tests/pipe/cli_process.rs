@@ -1066,3 +1066,66 @@ fn review_model_prints_the_recorded_model_bare_and_nothing_when_there_is_none() 
     let said: serde_json::Value = serde_json::from_str(out.trim()).expect("one JSON answer");
     assert_eq!(said["model"], "anthropic/claude-x", "{said}");
 }
+
+#[test]
+fn a_running_mcp_reports_how_to_reopen_a_store_migrated_between_calls() {
+    use std::io::{BufRead, Write};
+
+    let rig = tracker_rig();
+    let path = rig.home.path().join(".estigia").join("state.db");
+    let store = estigia::transport::store::Store::open(&path).expect("a current store");
+    let supported = store.schema_version().expect("the schema version");
+    drop(store);
+    let mut child = tracker_command(rig.home.path(), rig.repo.path(), rig.bin.path(), "[]")
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("the MCP server starts");
+    let mut stdin = child.stdin.take().expect("piped input");
+    let mut stdout = std::io::BufReader::new(child.stdout.take().expect("piped output"));
+    let mut read_issue = |id: u32| {
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "list_state", "arguments": {
+                "run_id": "codex-1234abcd", "issue": 9_000_000_000_001_u64
+            }}
+        });
+        writeln!(stdin, "{request}").expect("the request is sent");
+        let mut response = String::new();
+        stdout.read_line(&mut response).expect("the server answers");
+        serde_json::from_str::<serde_json::Value>(&response).expect("a JSON-RPC answer")
+    };
+    let before = read_issue(1);
+    assert_eq!(before["result"]["isError"], false, "{before}");
+    let newer = supported + 1;
+    let other = rusqlite::Connection::open(&path).expect("a second connection");
+    other
+        .execute("UPDATE meta SET schema_version = ?1", [newer])
+        .expect("a newer schema");
+    let after = read_issue(2);
+    drop(stdin);
+    assert!(child.wait().expect("the server exits").success());
+    assert_eq!(after["result"]["isError"], true, "{after}");
+    let detail = after["result"]["content"][0]["text"]
+        .as_str()
+        .expect("the refusal");
+    for expected in [
+        format!("schema {newer}"),
+        format!("up to {supported}"),
+        estigia::build_info::VERSION.to_owned(),
+        "restart the MCP server".to_owned(),
+    ] {
+        assert!(
+            detail.contains(&expected),
+            "{expected:?} missing from {detail}"
+        );
+    }
+    assert_eq!(
+        other
+            .query_row("SELECT schema_version FROM meta", [], |row| row
+                .get::<_, u32>(0))
+            .expect("the retained schema"),
+        newer
+    );
+}

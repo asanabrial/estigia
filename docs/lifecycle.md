@@ -88,6 +88,12 @@ The newest such copy of each schema is kept; the cadence's three-snapshot retent
 one. A fresh store has nothing to copy, and the read-only openers never migrate. Rolling back means
 restoring that copy by hand under the older binary.
 
+A running MCP server keeps the executable it started with. If another process migrates the store
+beyond the schema that executable supports, the next store open reports the running build, its
+highest supported schema and the schema it found. When a freshly started CLI can read the store,
+restart the MCP server with that same executable. If the CLI also reports an incompatible schema,
+install a build that supports the reported schema before restarting the server.
+
 The official release installers now extract the checksum-verified archive and ask that extracted
 candidate to run the hidden, argument-free `__record-install` admission command before replacing the
 installed executable. The candidate resolves its own `current_exe`, hashes bytes reopened through
