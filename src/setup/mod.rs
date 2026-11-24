@@ -3659,6 +3659,28 @@ fn setup_into_with_skill(
                         .unwrap_or_default(),
                 ));
             }
+            if existing
+                .as_deref()
+                .and_then(render::parse_settings)
+                .is_some_and(|root| {
+                    root.get("hooks")
+                        .and_then(Value::as_object)
+                        .is_some_and(serde_json::Map::is_empty)
+                })
+            {
+                let record = empty_hook_wrapper_record(&paths.skill_root, hooks);
+                let held = step!(read_pending(&record, pending));
+                if held.is_none() {
+                    actions.push(write_step!(write_file(
+                        &record,
+                        None,
+                        "{}\n",
+                        ActionKind::Skill,
+                        options.dry_run,
+                    )));
+                    pending.insert(record, Some("{}\n".to_owned()));
+                }
+            }
             actions.push(write_step!(write_file(
                 hooks,
                 existing.as_deref(),
@@ -4242,6 +4264,14 @@ pub fn uninstall_from(
     }
 
     let mut trusted_keys: Vec<String> = Vec::new();
+    let wrapper_record = paths
+        .hooks
+        .as_ref()
+        .map(|hooks| empty_hook_wrapper_record(&paths.skill_root, hooks));
+    let preserve_wrapper = match &wrapper_record {
+        Some(path) => read_pending(path, pending)?.is_some(),
+        None => false,
+    };
     if let Some(hooks) = paths.hooks.as_ref()
         && let Some(existing) = read_pending(hooks, pending)?
     {
@@ -4264,9 +4294,10 @@ pub fn uninstall_from(
             let scaffolding = adapter
                 .gate_spec()
                 .map_or(&[][..], |spec| spec.envelope.scaffolding());
-            let desired = without_scaffolding(&desired, scaffolding);
+            let desired = without_scaffolding(&desired, scaffolding, preserve_wrapper);
             actions.push(
-                if is_now_empty(&desired, ActionKind::Hooks, scaffolding, true) {
+                if !preserve_wrapper && is_now_empty(&desired, ActionKind::Hooks, scaffolding, true)
+                {
                     pending.insert(hooks.clone(), None);
                     discard(hooks, ActionKind::Hooks, options.dry_run)?
                 } else {
@@ -4283,6 +4314,14 @@ pub fn uninstall_from(
                     )?
                 },
             );
+        }
+    }
+
+    if let Some(path) = wrapper_record.filter(|_| preserve_wrapper) {
+        actions.push(discard(&path, ActionKind::Skill, options.dry_run)?);
+        pending.insert(path, None);
+        if !options.dry_run {
+            let _ = fs::remove_dir(&paths.skill_root);
         }
     }
 
@@ -4435,23 +4474,14 @@ pub fn uninstall_from(
     })
 }
 
-/// Whether what is left after Estigia's part comes out holds nothing at all.
-///
-/// The sharper half of invariant two: lifting our block out of a file that
-/// **only ever held our block** must not leave an empty husk behind. Emptiness
-/// is judged after the removal, not by remembering who created the file.
-/// Takes back the keys Estigia wrote around its own entries, once they are gone.
-///
-/// Only when nothing of Estigia's is left: while an entry of its own is still
-/// there, the scaffolding is still holding it up. And only when the
-/// scaffolding is *all* that is left — `version` is Cursor's own required
-/// field, and an operator who kept hooks of their own had it before Estigia
-/// was installed.
-fn without_scaffolding(desired: &str, scaffolding: &[&str]) -> String {
-    // Not skipped when there is no scaffolding: an emptied `hooks` is Estigia's
-    // whatever the envelope carries around it.
-    // Through the one reader, like the four in `render`; the parse failure is
-    // not an error here, it is a shrug.
+fn empty_hook_wrapper_record(skill_root: &Path, hooks: &Path) -> PathBuf {
+    let key = skill::record::digest_of(&skill::record::spell(hooks));
+    skill_root
+        .join(".estigia")
+        .join(format!("empty-hooks-{key}"))
+}
+
+fn without_scaffolding(desired: &str, scaffolding: &[&str], preserve_wrapper: bool) -> String {
     let Ok(mut root) = serde_json::from_str::<Value>(render::without_mark(desired)) else {
         return desired.to_owned();
     };
@@ -4459,7 +4489,11 @@ fn without_scaffolding(desired: &str, scaffolding: &[&str]) -> String {
     let Some(object) = root.as_object_mut() else {
         return desired.to_owned();
     };
-    if object
+    if preserve_wrapper {
+        object
+            .entry("hooks")
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    } else if object
         .get("hooks")
         .and_then(Value::as_object)
         .is_some_and(serde_json::Map::is_empty)

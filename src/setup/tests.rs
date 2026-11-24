@@ -6219,6 +6219,60 @@ fn uninstall_preserves_cursor_hook_files_without_estigia_hooks() {
     }
 }
 
+#[test]
+fn cursor_uninstall_restores_preexisting_empty_hook_wrapper() {
+    for original in [
+        concat!("{\n", "  \"version\": 1,\n", "  \"hooks\": {}\n", "}\n"),
+        concat!(
+            "{\n",
+            "  \"version\": 1,\n",
+            "  \"hooks\": {},\n",
+            "  \"mine\": 1\n",
+            "}\n"
+        ),
+    ] {
+        let (_home, options) = sandbox();
+        let adapter = agent("cursor");
+        let paths = resolve_paths(adapter, &options).expect("paths resolve");
+        let hooks = paths.hooks.expect("Cursor hooks path");
+        fs::create_dir_all(hooks.parent().expect("hooks parent")).expect("create hooks directory");
+        fs::write(&hooks, original).expect("write operator hooks");
+
+        let dry_run = SetupOptions {
+            dry_run: true,
+            ..options.clone()
+        };
+        setup(adapter, &Config::default(), &dry_run).expect("preview setup");
+        assert_eq!(
+            fs::read_to_string(&hooks).expect("operator hooks"),
+            original
+        );
+        assert!(!paths.skill_root.exists());
+
+        for _ in 0..2 {
+            setup(adapter, &Config::default(), &options).expect("setup succeeds");
+        }
+        let record = empty_hook_wrapper_record(&paths.skill_root, &hooks);
+        assert!(record.is_file());
+        let installed = fs::read_to_string(&hooks).expect("installed hooks");
+        assert_ne!(installed, original);
+        uninstall(adapter, &dry_run).expect("preview uninstall");
+        assert_eq!(
+            fs::read_to_string(&hooks).expect("installed hooks"),
+            installed
+        );
+        assert!(record.is_file());
+        uninstall(adapter, &options).expect("uninstall succeeds");
+        assert!(!record.exists());
+        assert!(!paths.skill_root.exists());
+
+        assert_eq!(
+            fs::read_to_string(&hooks).expect("operator hooks survive"),
+            original
+        );
+    }
+}
+
 /// An uninstall leaves no empty husk of Estigia's own making.
 ///
 /// A wrapper Estigia created is Estigia's to remove, and a wrapper the operator
@@ -6256,14 +6310,6 @@ fn an_uninstall_leaves_no_empty_husk_of_its_own_making() {
             "{\n  \"mine\": 1\n}\n",
             "{slug}: an empty wrapper Estigia created outlived the uninstall"
         );
-
-        // The other side is **not** asserted, and the honesty contract says
-        // why: `without_scaffolding` removes an empty `hooks` on the reading
-        // that Estigia put it there, and an operator who wrote one themselves
-        // loses it. Measured — `estigia setup cursor --uninstall` on a machine
-        // where nothing was ever installed rewrites that file. Telling the two
-        // apart needs a record of what this crate created, which exists for the
-        // instruction file and not for this one.
     }
 }
 

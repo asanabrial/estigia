@@ -82,6 +82,9 @@ Five invariants, and the tests are named after them:
 
    A hook configuration file with no Estigia hook to remove stays byte for byte as found. This
    includes an operator-created empty `hooks` object.
+   When setup fills an existing empty `hooks` object, it first records the hook file's path as
+   a digest under the skill's `.estigia` directory. Uninstall uses that record to restore the
+   empty wrapper if it removes the last managed hook, then removes the record.
 
    `REPLACE` is a file that was never Estigia's; `OVERWRITE` is Estigia's file with your edit in it
    (the digest differs), and a machine one release behind still reads `update`, because its record
