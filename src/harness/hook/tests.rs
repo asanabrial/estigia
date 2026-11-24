@@ -2750,13 +2750,39 @@ fn a_repository_key_reads_only_the_origins_github_url() {
     );
 }
 
-fn queue_writes(count: usize) {
-    use crate::transport::store::{OutboxKind, Repo, Store, store_path};
-    let repo = Repo {
+fn fixture_repo() -> crate::transport::store::Repo {
+    crate::transport::store::Repo {
         host: "github.com".to_owned(),
         owner: "fixture".to_owned(),
         name: "repo".to_owned(),
-    };
+    }
+}
+
+fn empty_the_queue() {
+    use crate::transport::store::{OutboxState, Store, store_path};
+    let repo = fixture_repo();
+    let mut held = Store::open(&store_path().expect("a path")).expect("opens");
+    while let Some(row) = held.next_outbox(&repo).expect("reads the queue") {
+        held.mark_outbox(row.seq, OutboxState::Sent, None, "2026-06-01T00:00Z")
+            .expect("marks it sent");
+    }
+}
+
+fn within_one_minute<T>(clock: impl Fn() -> u64, mut build: impl FnMut() -> T) -> T {
+    for _ in 0..3 {
+        empty_the_queue();
+        let before = clock() / 60;
+        let built = build();
+        if clock() / 60 == before {
+            return built;
+        }
+    }
+    panic!("three attempts in a row crossed a minute");
+}
+
+fn queue_writes(count: usize) {
+    use crate::transport::store::{OutboxKind, Store, store_path};
+    let repo = fixture_repo();
     let mut held = Store::open(&store_path().expect("a path")).expect("opens");
     for number in 0..count {
         crate::transport::outbox::queue_in(
@@ -2883,13 +2909,42 @@ fn a_closed_window_says_what_is_queued_and_starts_nothing() {
 }
 
 #[test]
+fn a_pair_built_across_a_minute_is_built_again_from_the_same_queue() {
+    use crate::transport::store::{Store, store_path};
+    let ticks = std::cell::RefCell::new([59, 60, 60, 119].into_iter());
+    let mut attempts = 0;
+    let built = within_one_minute(
+        || ticks.borrow_mut().next().expect("a scripted second"),
+        || {
+            attempts += 1;
+            queue_writes(1);
+            let held = Store::open(&store_path().expect("a path")).expect("opens");
+            (attempts, held.unsent_outbox().expect("counts the queue"))
+        },
+    );
+    assert_eq!(built, (2, 1));
+}
+
+#[test]
+#[should_panic(expected = "three attempts in a row crossed a minute")]
+fn a_pair_that_always_crosses_a_minute_gives_up_instead_of_hanging() {
+    let second = std::cell::Cell::new(0);
+    within_one_minute(|| second.replace(second.get() + 60), || ());
+}
+
+#[test]
 fn the_text_served_to_pi_does_not_change_as_writes_queue() {
     let run = session::Run::new("pi-abcd1234".to_owned());
     at_minutes(20 * 60, || {
-        queue_writes(1);
-        let one = session_start_text(&closed_context(), &run, None);
-        queue_writes(4);
-        let five = session_start_text(&closed_context(), &run, None);
+        let (one, five) = within_one_minute(
+            || session::now_seconds().expect("a clock"),
+            || {
+                queue_writes(1);
+                let one = session_start_text(&closed_context(), &run, None);
+                queue_writes(4);
+                (one, session_start_text(&closed_context(), &run, None))
+            },
+        );
         assert_eq!(one, five);
         assert!(
             one.contains("GitHub writes are queued; nothing reaches"),
