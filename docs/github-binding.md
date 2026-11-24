@@ -113,7 +113,8 @@ the contract requires and no tool performs is declared in `NOT_EXPOSED` with the
 section of `bindings/` that carries it; it is not advertised, so the surface never offers a call
 nothing answers, and a seam test holds the two lists together: an operation that is neither exposed
 nor declared fails the build. The operations the tools absorbed keep their capability under the
-surviving name: `claim` performs `reclaim` through `takeover`, `list_state` answers identities through
+surviving name: `claim` performs `reclaim` through `takeover` (and a live holder's takeover needs the
+person-only `estigia hand-over` confirmation), `list_state` answers identities through
 `identities`, `review_status` carries the publication lane and the correction count, `review_read`
 reads what six tools used to and, with `view: tier` and `parent_head`, narrows a repair's range and,
 with `view: target`, classifies base movement; `collect_review_input` starts a reviewer with `launch`

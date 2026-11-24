@@ -487,6 +487,15 @@ fn every_command_that_prints_honours_the_global_json_flag() {
             "a fixture",
             "--json",
         ],
+        vec![
+            "hand-over",
+            "7",
+            "--to",
+            "claude-nothing0",
+            "--reason",
+            "a fixture",
+            "--json",
+        ],
         // The relay's three halves, run on a machine holding no run: each reaches
         // a refusal on standard error and prints nothing on standard output.
         vec!["review", "prompt", "--name", "review-risk", "--json"],

@@ -2004,6 +2004,17 @@ fn run_tool_answering(
         route_through_deliver(tool.name, body, || delivers(context));
         capture_through_collect(tool.name, body);
     }
+    if tool.operation == "reclaim" {
+        note_displaced_run(
+            body.as_mut(),
+            &context.state_root,
+            run_id,
+            arguments
+                .get("issue")
+                .and_then(Value::as_u64)
+                .unwrap_or_default(),
+        );
+    }
     if compact && let Some(body) = body.as_mut() {
         compact_review_status(tool.name, body);
     }
@@ -2056,6 +2067,50 @@ fn checkout_notice(
         || (operation == "transition"
             && arguments.get("to").and_then(Value::as_str) == Some("done"));
     super::changes::held_notice(worktree.filter(|_| putting_down)?)
+}
+
+/// Sends the displaced run the message that tells it to stop, and records on
+/// the takeover's answer whether the message went.
+///
+/// The takeover stands whatever the mailbox answers — the issue has already
+/// changed hands, and a message that could not be sent is reported, never
+/// undone. A retried takeover wrote nothing new, so it sends nothing either.
+fn note_displaced_run(
+    body: Option<&mut Value>,
+    state_root: &std::path::Path,
+    taker: &str,
+    issue: u64,
+) {
+    let Some(body) = body else {
+        return;
+    };
+    if body.get("reused_existing_reclaim").and_then(Value::as_bool) == Some(true) {
+        return;
+    }
+    let Some(displaced) = body
+        .get("reclaimed_from")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+    else {
+        return;
+    };
+    let text = format!(
+        "issue #{issue} was taken from you by {taker}. Stop work on it and release anything you \
+         still hold: the takeover is recorded, and a write on it after this moment is refused."
+    );
+    match super::mailbox::send_shaped(
+        state_root,
+        Some(taker),
+        &displaced,
+        &text,
+        &super::mailbox::Shape::default(),
+    ) {
+        Ok(_) => body["notified"] = json!(true),
+        Err(refusal) => {
+            body["notified"] = json!(false);
+            body["notify_refused"] = json!(format!("{}: {}", refusal.code, refusal.message));
+        }
+    }
 }
 
 /// The text of a successful tool answer.

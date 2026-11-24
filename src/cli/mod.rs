@@ -529,6 +529,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             cli.json,
         ),
 
+        Command::HandOver { issue, to, reason } => hand_over(issue, to, reason, cli.json),
+
         Command::Release { run_id } => release(run_id, cli.json),
 
         Command::Gate {
@@ -5680,6 +5682,59 @@ fn recover(
                 body: Some(failure.envelope()),
             };
             Err(harness::tracker::translate(&answer, "recover")
+                .unwrap_or_else(|| unreachable!("a failed call is never exit code 0")))
+        }
+    }
+}
+
+/// Records a person's confirmation for one live takeover.
+fn hand_over(issue: &str, to: &str, reason: &str, json: bool) -> Result<(), Refusal> {
+    let number: u64 = issue
+        .trim()
+        .parse()
+        .map_err(|_| harness::issue_not_a_number(issue))?;
+    let gate = gate_context("")?;
+    let named = gate.tracker.named_repo();
+    let context =
+        crate::transport::Context::live(gate.skill_root.clone(), gate.repo_dir, named.clone());
+    let _gh_pin = harness::gh_repo_pin();
+    harness::apply_gh_repo_locked(named.as_deref());
+    let stamp = harness::session::stamp_of(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_secs())
+            .unwrap_or_default(),
+    );
+    match crate::transport::claim::hand_over(
+        &context,
+        &crate::transport::claim::HandOver {
+            issue: number,
+            to,
+            reason,
+            now: &stamp,
+        },
+    ) {
+        Ok(answer) => {
+            if json {
+                print_json(&answer);
+            } else {
+                say!(
+                    "confirmed: {} may take #{number} from {} (epoch {})",
+                    answer["to"].as_str().unwrap_or_default(),
+                    answer["from"].as_str().unwrap_or_default(),
+                    answer["from_operation"].as_str().unwrap_or_default()
+                );
+                say!("  nothing was written to the tracker: the confirmation is on this machine,");
+                say!("  bound to that epoch and that run, and it matches no later takeover.");
+            }
+            Ok(())
+        }
+        Err(failure) => {
+            let answer = harness::tracker::Answer {
+                code: failure.code(),
+                body: Some(failure.envelope()),
+            };
+            Err(harness::tracker::translate(&answer, "hand-over")
                 .unwrap_or_else(|| unreachable!("a failed call is never exit code 0")))
         }
     }

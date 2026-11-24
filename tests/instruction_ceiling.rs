@@ -39,17 +39,17 @@ const DOCUMENTS: &[(&str, usize)] = &[
 
     ("skill/assets/analyst-issue-template.md", 4_459),
 
-    ("skill/bindings/github.md", 20_739),
+    ("skill/bindings/github.md", 20_853),
 
     ("skill/bindings/github/delivery.md", 42_913),
 
-    ("skill/bindings/github/operations-guarantees.md", 42_210),
+    ("skill/bindings/github/operations-guarantees.md", 42_449),
 
-    ("skill/bindings/github/operations.md", 58_767),
+    ("skill/bindings/github/operations.md", 60_349),
 
     ("skill/bindings/github/recovery.md", 6_744),
 
-    ("skill/bindings/github/refusals.md", 65_350),
+    ("skill/bindings/github/refusals.md", 66_373),
 
     ("skill/bindings/github/setup.md", 1_672),
 
@@ -71,7 +71,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
 
     ("skill/references/runtime-notes.md", 23_157),
 
-    ("skill/references/safety-incidents.md", 16_216),
+    ("skill/references/safety-incidents.md", 16_341),
 ];
 
 const LINE_CEILING: usize = 2_000;

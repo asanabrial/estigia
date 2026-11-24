@@ -647,6 +647,24 @@ pub enum Command {
         reason: String,
     },
 
+    /// Confirm that one run may take a live claim from another.
+    ///
+    /// A person's command: the gate refuses an agent's shell line for it. The record is local and
+    /// posts nothing to the tracker; it is bound to the live epoch it displaces and to the run
+    /// named, so it confirms that one takeover and no later one.
+    HandOver {
+        /// The issue whose live claim is handed over.
+        issue: String,
+
+        /// The run a person names as the taker, as `SessionStart` reported it.
+        #[arg(long)]
+        to: String,
+
+        /// Why the live holder is being displaced.
+        #[arg(long)]
+        reason: String,
+    },
+
     /// Put an issue down. Releases the tracker projection and forgets the run.
     Release {
         /// This run's id.
