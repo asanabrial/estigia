@@ -1311,6 +1311,19 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "edit_pr",
+        contract_name: "edit pull request metadata",
+        description: "Update the title and body of the open pull request belonging to this assisted run. The branch is selected from the run's claim, and the requested metadata must read back before success is reported.",
+        operation: "edit-pr",
+        arguments: &[
+            RUN_ID,
+            Argument::required("title", "string", "The replacement pull request title."),
+            Argument::required("body_file", "string", "Path to the replacement pull request body."),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
         name: "review_stages",
         contract_name: "review stages",
         description: "Where an assisted run's pull request stands in `External reviewers`, read \
@@ -2261,6 +2274,7 @@ pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("transition", "run_id"),
     ("draft_pr", "run_id"),
     ("ready_pr", "run_id"),
+    ("edit_pr", "run_id"),
     ("review_stages", "run_id"),
     ("review_thread", "run_id"),
 ];
@@ -2321,7 +2335,7 @@ pub const TRACKER_WRITERS: &[&str] = &[
 
 /// The tools that exist only where `Workflow` is `assisted`, and are refused
 /// everywhere else.
-pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr"];
+pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr", "edit_pr"];
 
 /// The follow-up tools offered under both workflows: an assisted run reaches them through its
 /// local claim, an autonomous one through the receipt of the pull request it published.

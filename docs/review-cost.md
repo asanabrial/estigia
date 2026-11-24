@@ -161,6 +161,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `review_tier` and `target` become `review_read` views, `launch_review_input` and `run_checks` become `collect_review_input` arguments, `record_computed_verdict` and `release_ci` become `deliver`'s `until` | 37 | 55,146 |
 | `heartbeat`, `blocked_until`, `ensure_states` and `start_branch` absorb into `comment`, `transition` and `claim`; `comment` and `transition` gain the merged arguments | 33 | 52,798 |
 | `send_message` takes `question`, `inbox` takes `wait`; `record_spend` becomes `spend` on `release`, `handoff_review` and `deliver`; `handoff`, `list_sessions` and `judge_workspaces` become CLI commands | 27 | 46,607 |
+| `edit_pr` joins for assisted pull request metadata edits | 28 | 45,407 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the

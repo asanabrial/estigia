@@ -261,3 +261,181 @@ fn without_a_self_review_ready_needs_no_reviewed_head() {
     let (outcome, _) = ready_with(&rig, false, None);
     outcome.expect("nothing was reviewed, so nothing is stated");
 }
+
+#[test]
+fn editing_an_assisted_pr_rejects_closing_keywords_before_contacting_github() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = crate::test_env::answers(&[]);
+    let body = rig.body("Closes #12");
+    let outcome = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        edit_metadata(
+            &rig.context,
+            &EditMetadata {
+                branch: "issue-12",
+                title: "A title",
+                body_file: &body,
+            },
+        )
+    });
+    assert_eq!(
+        reason(&outcome.expect_err("a closing keyword is refused")),
+        "closing-keyword-live"
+    );
+    assert!(logged(&rig, &log).is_empty());
+}
+
+#[test]
+fn editing_an_assisted_pr_reports_an_unknown_readback() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = crate::test_env::answers(&[
+        serde_json::json!({"matches": "pr list", "stdout": "[{\"number\":7}]"}),
+        serde_json::json!({"matches": "number,title,body,state,headRefName", "status": 1}),
+        serde_json::json!({
+            "matches": "pr view",
+            "stdout": r#"{"number":7,"state":"OPEN","headRefName":"issue-12"}"#,
+        }),
+        serde_json::json!({"matches": "pr edit", "stdout": ""}),
+    ]);
+    let body = rig.body("Revised description.");
+    let outcome = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        edit_metadata(
+            &rig.context,
+            &EditMetadata {
+                branch: "issue-12",
+                title: "A revised title",
+                body_file: &body,
+            },
+        )
+    });
+    let envelope = outcome
+        .expect_err("GitHub did not confirm the edit")
+        .envelope();
+    assert_eq!(envelope["reason"], "edit-pr-not-read-back");
+    assert_eq!(envelope["world"], "unknown");
+    assert!(
+        logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr edit"))
+    );
+}
+
+fn edited_with(before: &str, after: &str) -> (Result<serde_json::Value, Failure>, Vec<String>) {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = crate::test_env::answers(&[
+        serde_json::json!({"matches": "pr list", "stdout": "[{\"number\":7}]"}),
+        serde_json::json!({"matches": "number,title,body,state,headRefName", "stdout": after}),
+        serde_json::json!({"matches": "pr view", "stdout": before}),
+        serde_json::json!({"matches": "pr edit", "stdout": ""}),
+    ]);
+    let body = rig.body("Revised description.");
+    let outcome = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        edit_metadata(
+            &rig.context,
+            &EditMetadata {
+                branch: "issue-12",
+                title: "A revised title",
+                body_file: &body,
+            },
+        )
+    });
+    (outcome, logged(&rig, &log))
+}
+
+const OPEN_HERE: &str = r#"{"number":7,"state":"OPEN","headRefName":"issue-12"}"#;
+
+fn read_back(title: &str, state: &str) -> String {
+    serde_json::json!({
+        "number": 7,
+        "state": state,
+        "headRefName": "issue-12",
+        "title": title,
+        "body": "Revised description.",
+    })
+    .to_string()
+}
+
+#[test]
+fn editing_an_assisted_pr_edits_the_branchs_own_and_reads_it_back() {
+    let (outcome, calls) = edited_with(OPEN_HERE, &read_back("A revised title", "OPEN"));
+    let answer = outcome.expect("the edit read back");
+    assert_eq!(answer["pr"], 7);
+    assert_eq!(answer["read_back"], true);
+    assert!(
+        calls
+            .iter()
+            .any(|call| call.starts_with("pr edit 7 --title A revised title --body-file")),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn editing_an_assisted_pr_that_reads_back_otherwise_is_unknown() {
+    for after in [
+        read_back("Somebody else's title", "OPEN"),
+        read_back("A revised title", "CLOSED"),
+    ] {
+        let envelope = edited_with(OPEN_HERE, &after)
+            .0
+            .expect_err("the read-back differs")
+            .envelope();
+        assert_eq!(envelope["reason"], "edit-pr-not-read-back");
+        assert_eq!(envelope["world"], "unknown");
+    }
+}
+
+#[test]
+fn editing_a_closed_or_foreign_pr_edits_nothing() {
+    for before in [
+        r#"{"number":7,"state":"CLOSED","headRefName":"issue-12"}"#,
+        r#"{"number":7,"state":"OPEN","headRefName":"issue-13"}"#,
+        r#"{"number":8,"state":"OPEN","headRefName":"issue-12"}"#,
+    ] {
+        let (outcome, calls) = edited_with(before, "{}");
+        assert_eq!(
+            reason(&outcome.expect_err("not this run's open pull request")),
+            "edit-pr-not-open"
+        );
+        assert!(
+            !calls.iter().any(|call| call.starts_with("pr edit")),
+            "{calls:?}"
+        );
+    }
+}
+
+#[test]
+fn editing_with_no_pr_or_several_edits_nothing() {
+    for (listed, code) in [
+        ("[]", "edit-pr-no-open-pull-request"),
+        ("[{\"number\":7},{\"number\":8}]", "ambiguous-open-prs"),
+    ] {
+        let rig = rig();
+        let bin = crate::test_env::scripted_gh();
+        let log = rig.root.path().join("gh.log");
+        let answers = crate::test_env::answers(&[
+            serde_json::json!({"matches": "pr list", "stdout": listed}),
+        ]);
+        let body = rig.body("Revised description.");
+        let outcome = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+            edit_metadata(
+                &rig.context,
+                &EditMetadata {
+                    branch: "issue-12",
+                    title: "A revised title",
+                    body_file: &body,
+                },
+            )
+        });
+        assert_eq!(reason(&outcome.expect_err("no single PR")), code);
+        assert!(
+            !logged(&rig, &log)
+                .iter()
+                .any(|call| call.starts_with("pr edit"))
+        );
+    }
+}

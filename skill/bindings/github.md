@@ -175,6 +175,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | assisted checkout | `SCRIPT assist` |
 | pull request review | the `pr_review` tool, whose `action` names one step of the review-only claim |
 | draft pull request | `SCRIPT draft-pr` |
+| edit pull request metadata | `SCRIPT edit-pr` |
 | ready pull request | `SCRIPT ready-pr` |
 | review stages | `SCRIPT review-stages` |
 | review thread | `SCRIPT review-thread` |
