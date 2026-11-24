@@ -59,21 +59,21 @@ fn the_required_headings_are_the_templates_own() {
         .map(str::to_owned)
         .collect();
     assert_eq!(from_the_file, TEMPLATE_HEADINGS);
-    assert_eq!(TEMPLATE_HEADINGS[0], "## Description for dumb humans");
+    assert_eq!(TEMPLATE_HEADINGS[0], "## Summary");
     assert!(TEMPLATE_HEADINGS.contains(&"## Out of scope"));
 }
 
 #[test]
 fn a_body_without_the_fixed_first_heading_is_refused_naming_it() {
-    let body = filled().replacen("## Description for dumb humans", "## Summary", 1);
-    assert_eq!(problem_of(&body).0, "## Description for dumb humans");
+    let body = filled().replacen("## Summary", "## Description for dumb humans", 1);
+    assert_eq!(problem_of(&body).0, "## Summary");
 }
 
 #[test]
 fn a_body_whose_first_heading_is_another_is_refused() {
     let body = format!("## Problem\n\nx\n\n{}", filled());
     let (heading, problem) = problem_of(&body);
-    assert_eq!(heading, "## Description for dumb humans");
+    assert_eq!(heading, "## Summary");
     assert_eq!(problem, "not the first heading");
 }
 
@@ -85,11 +85,7 @@ fn a_summary_without_the_note_alert_is_refused() {
 
 #[test]
 fn blank_lines_between_the_heading_and_the_alert_are_allowed() {
-    let body = filled().replacen(
-        "## Description for dumb humans\n\n",
-        "## Description for dumb humans\n\n\n\n",
-        1,
-    );
+    let body = filled().replacen("## Summary\n\n", "## Summary\n\n\n\n", 1);
     check(&body).expect("blank lines before the alert are allowed");
 }
 

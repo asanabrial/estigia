@@ -234,7 +234,7 @@ fn a_missing_argument_says_which_one() {
 /// check and this reddens, because `gh label create` runs before the refusal.
 #[test]
 fn findings_without_a_receipt_are_refused_before_any_label_is_created() {
-    const BODY: &str = "## Description for dumb humans\n\n> [!NOTE]\n> A probe.\n\n\
+    const BODY: &str = "## Summary\n\n> [!NOTE]\n> A probe.\n\n\
         ## Problem\nA probe.\n\n\
         ## Why it matters\nA probe.\n\n\
         ## Proposed approach\nA probe.\n\n\

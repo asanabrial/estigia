@@ -118,7 +118,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 
   Twenty `Population` consts in the source (`src/harness/population.rs` holds the type) name each legitimate population and what falls outside it, and that number is checked here.
 - **An issue is refused from a shell line, and the template is checked in one place.** `create` refuses a
-  body whose first `##` heading outside a code fence is not `## Description for dumb humans` followed by a
+  body whose first `##` heading outside a code fence is not `## Summary` followed by a
   `> [!NOTE]` alert, or that lacks a required heading or has them out of order, before it calls `gh`. The
   required headings are the `##` lines of the fenced block in `skill/assets/analyst-issue-template.md`
   (extracted by `build.rs`, so the file is the only list); the `###` sub-sections are not enforced (a

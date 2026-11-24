@@ -5,7 +5,7 @@ use crate::transport::{Context, Failure, dispatch::dispatch, outbox};
 
 const NOW: &str = "2026-01-01T20:00:00Z";
 
-const BODY: &str = "## Description for dumb humans\n\n> [!NOTE]\n> A probe.\n\n\
+const BODY: &str = "## Summary\n\n> [!NOTE]\n> A probe.\n\n\
     ## Problem\nA probe.\n\n\
     ## Why it matters\nA probe.\n\n\
     ## Proposed approach\nA probe.\n\n\
