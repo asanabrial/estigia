@@ -100,6 +100,9 @@ from both totals.
   The `deliver` that `review_status` names carries `wait_seconds: 50` (`ROUTED_DELIVER_WAIT_SECONDS`),
   the ceiling every host had before, so a caller following the route asks two and a half times less
   often than at the 20 s default without asking any host to hold a call longer than it already did.
+- **`collect_review_input` with `checks: true`** has the same 900 s ceiling since it stopped at 50, which
+  asked a run of three and a half minutes to call four or five times. A passing answer carries no output
+  tails.
 - **No path is needed for the kept rows.** Each is a decision the model or a person makes, or a wait the
   runtime already holds.
 

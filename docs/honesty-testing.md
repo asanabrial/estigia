@@ -485,8 +485,9 @@ citation added in a form the test does not parse is prose held by review alone.
     environment variable or the network can change a check's result without changing either digest. A
     receipt that failed is never rerun for the same digest; a new publication is the way to ask again.
   - **The checks run on the published head, not on the merge result CI tests.**
-  - **Host MCP timeouts are not measured.** The wait is capped at 50 seconds and each call returns inside
-    it, on the reading that some hosts give up near 60 seconds; no host was run to confirm.
+  - **Host MCP timeouts are not measured.** The wait is capped at 900 seconds, as a lens's is, and the
+    default answers at once. Whether a host holds a call that long is the caller's question; the claim is
+    verified again before the result is recorded.
   - **A timed-out job records nothing**, so a check that always overruns 30 minutes never yields a
     receipt, and the runner's cause of death is not read back (`checks-runner-lost`).
   - **Which checkout ran them is not in the key.** A receipt names the target digest, not the directory

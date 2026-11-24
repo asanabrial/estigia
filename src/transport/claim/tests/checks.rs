@@ -177,6 +177,7 @@ fn a_failing_check_records_passed_false_and_the_verdict_refuses_checks_failed() 
     assert_eq!(answer["passed"], false, "{answer}");
     assert_eq!(answer["digest"], receipt.digest, "{answer}");
     assert_eq!(answer["checks"][0]["exit"], 0);
+    assert!(answer["checks"][0]["tail"].is_string(), "{answer}");
     assert_eq!(answer["checks"][1]["exit"], 7);
     assert!(
         answer["checks"][1]["tail"]
@@ -210,6 +211,11 @@ fn a_passing_check_records_a_receipt_and_the_verdict_clears() {
     )
     .expect("the job finishes inside the wait");
     assert_eq!(answer["passed"], true, "{answer}");
+    assert_eq!(answer["checks"][0]["exit"], 0, "{answer}");
+    assert!(
+        answer["checks"][0].get("tail").is_none(),
+        "a pass carried its output: {answer}"
+    );
 
     let cleared = verdict(&context, &comments, &receipt).expect("the verdict clears");
     assert_eq!(cleared["outcome"], "approved", "{cleared}");
@@ -283,12 +289,39 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
 }
 
 #[test]
-fn no_wait_is_longer_than_fifty_seconds() {
+fn no_wait_is_longer_than_fifteen_minutes() {
     assert_eq!(patience_for(0), Duration::ZERO);
     assert_eq!(patience_for(7), Duration::from_secs(7));
-    assert_eq!(patience_for(50), Duration::from_secs(50));
-    assert_eq!(patience_for(51), Duration::from_secs(50));
-    assert_eq!(patience_for(u64::MAX), Duration::from_secs(50));
+    assert_eq!(patience_for(900), Duration::from_secs(900));
+    assert_eq!(patience_for(901), Duration::from_secs(900));
+    assert_eq!(patience_for(u64::MAX), Duration::from_secs(900));
+}
+
+#[test]
+fn a_claim_lost_while_the_job_ran_records_nothing() {
+    crate::transport::store::forget_scratch_store();
+    let (_root, context, receipt) =
+        checked_change(Some(&declaration_for(&[("fmt", "echo formatted")])));
+    let comments = timeline_of(&receipt);
+    let released = |dir: &Path| {
+        crate::transport::check_job::run(dir).expect("the job runs");
+        let unassign = markers::render(
+            "unassign",
+            &[
+                ("run-id", "claude-a"),
+                ("runtime", "claude"),
+                ("op-id", &"b".repeat(32)),
+                ("target-op", &"a".repeat(32)),
+            ],
+        )
+        .expect("renders");
+        Ledger::open(&context, 42, NOW)?.append(&format!("Released.\n\n{unassign}\n"), NOW)?;
+        Ok(std::process::id())
+    };
+    let failure = ask(&context, &comments, &request(30, &receipt.base), &released)
+        .expect_err("a receipt was recorded without the claim");
+    assert_ne!(reason(failure), "checks-target-moved");
+    assert_eq!(recorded_receipts(), 0);
 }
 
 #[test]

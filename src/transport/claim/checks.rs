@@ -11,10 +11,12 @@ use crate::transport::generated::checks::{Check, commands_digest, declared_at};
 use crate::transport::{markers, target};
 
 /// The longest a single `run_checks` call waits for a running job.
-const MAX_WAIT_SECONDS: u64 = 50;
+const MAX_WAIT_SECONDS: u64 = 900;
 
 const ASK_AFTER_SECONDS: u64 = 30;
 const POLL: Duration = Duration::from_millis(100);
+const SLOW_POLL: Duration = Duration::from_secs(1);
+const POLLS_FAST_FOR: Duration = Duration::from_secs(10);
 
 /// What `run_checks` is asked.
 #[derive(Debug, Clone)]
@@ -284,17 +286,20 @@ fn collected(
     declared: usize,
     outcome: &Outcome,
 ) -> Result<serde_json::Value, Failure> {
-    let tails = |outcome: &Outcome| -> Vec<serde_json::Value> {
+    let report = |tails: bool| -> Vec<serde_json::Value> {
         outcome
             .runs
             .iter()
             .map(|run| {
-                serde_json::json!({
+                let mut check = serde_json::json!({
                     "name": run.name,
                     "exit": run.exit,
                     "seconds": run.seconds,
-                    "tail": run.tail,
-                })
+                });
+                if tails {
+                    check["tail"] = serde_json::json!(run.tail);
+                }
+                check
             })
             .collect()
     };
@@ -310,7 +315,7 @@ fn collected(
             "recorded": false,
             "digest": digest,
             "commands": commands,
-            "checks": tails(outcome),
+            "checks": report(true),
             "action": "the job ran past its deadline and its process group was killed; nothing \
                        was recorded, so `collect_review_input` with `checks: true` starts the \
                        checks afresh",
@@ -329,6 +334,16 @@ fn collected(
         return Err(target_moved(digest));
     }
     let passed = outcome.passed(declared);
+    // The wait can be long: the claim that authorised it may be gone.
+    verify_held(
+        context,
+        ledger,
+        request.issue,
+        request.run_id,
+        "review",
+        request.now,
+        None,
+    )?;
     record(ledger, request, digest, commands, passed, &outcome.runs)?;
     check_job::discard_result(dir)?;
     let _ = std::fs::remove_dir_all(dir);
@@ -337,7 +352,7 @@ fn collected(
         commands,
         passed,
         false,
-        tails(outcome),
+        report(!passed),
     ))
 }
 
@@ -508,7 +523,11 @@ pub(super) fn run_checks_with(
                     "ask_after": ASK_AFTER_SECONDS,
                 }));
             }
-            JobStatus::Running => std::thread::sleep(POLL),
+            JobStatus::Running => std::thread::sleep(if began.elapsed() < POLLS_FAST_FOR {
+                POLL
+            } else {
+                SLOW_POLL
+            }),
         }
         status = check_job::status(&dir)?;
     }
