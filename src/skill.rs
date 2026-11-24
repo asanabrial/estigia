@@ -716,7 +716,7 @@ pub fn selected_documents(config: &Config) -> String {
     // The same rule again, and this pair earned it the hard way. There was one
     // row, `Task body language`, and the only thing in the whole skill that
     // consulted it was one sentence of `analyst-issue-template.md` — the
-    // `Description for dumb humans` callout. So the row was named for the body
+    // summary callout. So the row was named for the body
     // and reached the summary: a setting widened by being renamed rather than
     // by anything reading it.
     //

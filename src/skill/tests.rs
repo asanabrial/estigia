@@ -1171,7 +1171,7 @@ fn a_row_set_to_ask_tells_the_agent_what_asking_obliges() {
 fn the_two_language_rows_are_two_rows_everywhere_they_are_read() {
     // There was one row, `Task body language`, and the only thing in the
     // whole skill that consulted it was one sentence of the analyst
-    // template — the `Description for dumb humans` callout. So the row was
+    // template — the summary callout. So the row was
     // named for the body and reached the summary: a setting widened by
     // being renamed rather than by anything reading it. The split is only
     // real if **both** rows reach the agent, so both are crossed here

@@ -12,7 +12,7 @@ code, commits and logs are in English wants exactly that pair, and a single row 
 
 | Part of the issue | Row that governs it |
 |---|---|
-| The `## Description for dumb humans` sentence | `Summary language` |
+| The `## Summary` sentence | `Summary language` |
 | Every section from `## Problem` down, and the title | `Issue body language` |
 
 **Headings are never translated.** They are the contract's own vocabulary: `## Problem` is
@@ -20,7 +20,7 @@ code, commits and logs are in English wants exactly that pair, and a single row 
 written under them.
 
 ```markdown
-## Description for dumb humans
+## Summary
 
 > [!NOTE]
 > One or two sentences, plain language, no jargon, no file paths, no metrics — what this issue is
