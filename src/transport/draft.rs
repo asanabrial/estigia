@@ -12,8 +12,8 @@
 //! no review to wait for, so the draft is marked ready and read back again.
 
 use super::claim::{
-    PUBLISH_READBACK_ATTEMPTS, Push, open_prs, pr_number, publish_schedule, push_to_origin,
-    readback_delay_secs, stage,
+    PUBLISH_READBACK_ATTEMPTS, Push, edit_pr, open_prs, pr_number, publish_schedule,
+    push_to_origin, readback_delay_secs, stage,
 };
 use super::{Context, Failure, How, run};
 use crate::config::Corrections;
@@ -59,6 +59,133 @@ pub struct Ready<'a> {
     pub self_review: bool,
     /// The head the run states it reviewed, in a context that did not write it.
     pub reviewed_head: Option<&'a str>,
+}
+
+/// The metadata an assisted run wants to replace on its open pull request.
+#[derive(Debug, Clone, Copy)]
+pub struct EditMetadata<'a> {
+    /// The branch recorded by `assist`.
+    pub branch: &'a str,
+    /// The replacement title.
+    pub title: &'a str,
+    /// A file containing the replacement body.
+    pub body_file: &'a std::path::Path,
+}
+
+/// Edits the open pull request for `branch` and confirms its title and body.
+pub fn edit_metadata(
+    context: &Context,
+    what: &EditMetadata<'_>,
+) -> Result<serde_json::Value, Failure> {
+    publish_schedule(context)?;
+    let body = std::fs::read_to_string(what.body_file).map_err(|error| {
+        Failure::Read(format!("the pull request body could not be read: {error}"))
+    })?;
+    let mut keywords = super::closing::keywords_any(what.title);
+    keywords.extend(super::closing::keywords_any(&body));
+    if !keywords.is_empty() {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "closing-keyword-live",
+            "keyword_sources": keywords,
+            "action": "remove closing keywords from the title and body before editing the pull request",
+        })));
+    }
+    let prs = open_prs(context, what.branch)?;
+    let open = match prs.as_slice() {
+        [open] => open,
+        [] => {
+            return Err(stop(
+                "edit-pr-no-open-pull-request",
+                "this branch has no open pull request".to_owned(),
+            ));
+        }
+        _ => {
+            return Err(stop(
+                "ambiguous-open-prs",
+                "this branch has multiple open pull requests".to_owned(),
+            ));
+        }
+    };
+    let number = pr_number(open);
+    let before = run(
+        &[
+            "gh",
+            "pr",
+            "view",
+            &number.to_string(),
+            "--json",
+            "number,state,headRefName",
+        ],
+        Some(&context.repo_dir),
+        How::read(),
+    )?;
+    let before: serde_json::Value = serde_json::from_str(&before.stdout).map_err(|error| {
+        Failure::Read(format!(
+            "pull request #{number} state was not JSON: {error}"
+        ))
+    })?;
+    if before.get("number").and_then(serde_json::Value::as_u64) != Some(number)
+        || before.get("state").and_then(serde_json::Value::as_str) != Some("OPEN")
+        || before
+            .get("headRefName")
+            .and_then(serde_json::Value::as_str)
+            != Some(what.branch)
+    {
+        return Err(stop(
+            "edit-pr-not-open",
+            "the branch's pull request is not confirmed open with the expected branch".to_owned(),
+        ));
+    }
+    edit_pr(context, open, what.title, Some(&body)).map_err(|failure| {
+        Failure::Write(format!(
+            "editing pull request #{number} may have landed: {}",
+            failure.detail()
+        ))
+    })?;
+    let answer = run(
+        &[
+            "gh",
+            "pr",
+            "view",
+            &number.to_string(),
+            "--json",
+            "number,title,body,state,headRefName",
+        ],
+        Some(&context.repo_dir),
+        How::read(),
+    )
+    .map_err(|failure| edit_unconfirmed(number, &failure.detail()))?;
+    let value: serde_json::Value = serde_json::from_str(&answer.stdout)
+        .map_err(|error| edit_unconfirmed(number, &format!("readback was not JSON: {error}")))?;
+    if value.get("number").and_then(serde_json::Value::as_u64) != Some(number)
+        || value.get("state").and_then(serde_json::Value::as_str) != Some("OPEN")
+        || value.get("headRefName").and_then(serde_json::Value::as_str) != Some(what.branch)
+        || value.get("title").and_then(serde_json::Value::as_str) != Some(what.title)
+        || value.get("body").and_then(serde_json::Value::as_str) != Some(body.as_str())
+    {
+        return Err(edit_unconfirmed(
+            number,
+            "the readback did not match the requested title and body on the open pull request",
+        ));
+    }
+    Ok(serde_json::json!({
+        "ok": true,
+        "pr": number,
+        "title_and_body_applied": true,
+        "read_back": true,
+    }))
+}
+
+fn edit_unconfirmed(number: u64, detail: &str) -> Failure {
+    Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "edit-pr-not-read-back",
+        "world": "unknown",
+        "pr": number,
+        "detail": detail,
+        "action": "read the pull request before deciding whether to retry the edit",
+    }))
 }
 
 /// `ready-pr` — mark an assisted run's open draft ready for review, where
