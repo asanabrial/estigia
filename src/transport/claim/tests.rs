@@ -1029,6 +1029,135 @@ fn a_reclaim_is_recorded_in_the_store_and_posts_no_comment() {
 }
 
 #[test]
+fn a_hand_over_is_recorded_in_the_store_and_posts_no_comment() {
+    let directory = tempfile::tempdir().expect("a directory for the log");
+    let log = directory.path().join("gh.log");
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+    let script = claim_script(12, &[foreign_claim()]);
+
+    let (answer, timeline) = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        let answer = hand_over(
+            &context,
+            &HandOver {
+                issue: 12,
+                to: "claude-a",
+                reason: "the operator moves the work",
+                now: RECLAIM_NOW,
+            },
+        )
+        .expect("the confirmation lands");
+        (answer, store_timeline(&context, 12))
+    });
+
+    assert_eq!(answer["to"], "claude-a", "{answer}");
+    assert_eq!(answer["from"], "claude-b", "{answer}");
+    assert_eq!(answer["reused_existing"], false, "{answer}");
+    assert_eq!(
+        holding(&timeline, RECLAIM_NOW).holder.as_deref(),
+        Some("claude-b"),
+        "a confirmation is not a takeover: the live holder keeps the issue until the takeover lands"
+    );
+    let confirmations: Vec<_> = timeline
+        .iter()
+        .flat_map(|comment| super::super::markers::parse(&comment.body))
+        .filter(|marker| marker.get("kind").map(String::as_str) == Some("hand-over"))
+        .collect();
+    assert_eq!(
+        confirmations.len(),
+        1,
+        "the store does not hold one confirmation"
+    );
+    assert_eq!(
+        confirmations[0].get("run-id").map(String::as_str),
+        Some("claude-a")
+    );
+    assert_eq!(
+        confirmations[0].get("from").map(String::as_str),
+        Some("claude-b")
+    );
+    assert_eq!(
+        confirmations[0].get("reason").map(String::as_str),
+        Some("the operator moves the work")
+    );
+    let calls = std::fs::read_to_string(&log).expect("the fake gh logged its calls");
+    assert!(
+        !calls.contains("issue comment"),
+        "a hand-over posts no comment to GitHub: {calls}"
+    );
+}
+
+#[test]
+fn a_hand_over_refuses_what_it_cannot_confirm() {
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+
+    // No live holder at all: a stale one is taken without a person.
+    let empty = claim_script(12, &[]);
+    crate::test_env::with_scripted_gh(bin.path(), &empty, || {
+        let refused = hand_over(
+            &context,
+            &HandOver {
+                issue: 12,
+                to: "claude-a",
+                reason: "why not",
+                now: RECLAIM_NOW,
+            },
+        )
+        .expect_err("nothing is live to hand over");
+        assert_eq!(
+            refused
+                .envelope()
+                .get("reason")
+                .and_then(serde_json::Value::as_str),
+            Some("nothing-to-hand-over")
+        );
+    });
+
+    crate::transport::store::forget_scratch_store();
+    let live = claim_script(12, &[foreign_claim()]);
+    crate::test_env::with_scripted_gh(bin.path(), &live, || {
+        // Naming the live holder is not a hand-over.
+        let refused = hand_over(
+            &context,
+            &HandOver {
+                issue: 12,
+                to: "claude-b",
+                reason: "why not",
+                now: RECLAIM_NOW,
+            },
+        )
+        .expect_err("the holder already holds it");
+        assert_eq!(
+            refused
+                .envelope()
+                .get("reason")
+                .and_then(serde_json::Value::as_str),
+            Some("already-holds-it")
+        );
+        // A blank reason confirms nothing.
+        let refused = hand_over(
+            &context,
+            &HandOver {
+                issue: 12,
+                to: "claude-a",
+                reason: "   ",
+                now: RECLAIM_NOW,
+            },
+        )
+        .expect_err("a blank reason");
+        assert_eq!(
+            refused
+                .envelope()
+                .get("reason")
+                .and_then(serde_json::Value::as_str),
+            Some("blank-hand-over-reason")
+        );
+    });
+}
+
+#[test]
 fn a_claim_names_no_runtime_on_github() {
     let directory = tempfile::tempdir().expect("a directory for the store");
     let log = directory.path().join("gh.log");
@@ -1910,7 +2039,15 @@ fn a_takeover_separates_the_five_ways_it_can_be_wrong() {
     // Nothing at all to take.
     assert_eq!(
         reason(
-            plan_takeover(&holding(Vec::new(), Vec::new()), "claude-a", true, None).unwrap_err()
+            plan_takeover(
+                &holding(Vec::new(), Vec::new()),
+                "claude-a",
+                true,
+                None,
+                12,
+                &[]
+            )
+            .unwrap_err()
         ),
         "nothing-to-reclaim"
     );
@@ -1925,6 +2062,8 @@ fn a_takeover_separates_the_five_ways_it_can_be_wrong() {
         "claude-a",
         true,
         None,
+        12,
+        &[],
     )
     .unwrap_err();
     let envelope = stale_self.envelope();
@@ -1952,7 +2091,9 @@ fn a_takeover_separates_the_five_ways_it_can_be_wrong() {
                 &holding(vec![event("claude-a", 0, None)], Vec::new()),
                 "claude-a",
                 true,
-                None
+                None,
+                12,
+                &[]
             )
             .unwrap_err()
         ),
@@ -1962,34 +2103,118 @@ fn a_takeover_separates_the_five_ways_it_can_be_wrong() {
     // never do.
     let live_other = holding(vec![event("claude-b", 0, None)], Vec::new());
     assert_eq!(
-        reason(plan_takeover(&live_other, "claude-a", false, None).unwrap_err()),
+        reason(plan_takeover(&live_other, "claude-a", false, None, 12, &[]).unwrap_err()),
         "holder-not-stale"
     );
-    // Forced, it becomes a discovery.
-    assert!(matches!(
-        plan_takeover(&live_other, "claude-a", true, None).expect("forced discovery"),
-        Takeover::Confirm { .. }
-    ));
+    // Forced, the discovery answers and says a person is owed.
+    match plan_takeover(&live_other, "claude-a", true, None, 12, &[]).expect("forced discovery") {
+        Takeover::Confirm {
+            holder,
+            needs_person,
+            ..
+        } => {
+            assert_eq!(holder, "claude-b");
+            assert!(needs_person, "a live target needs a person's confirmation");
+        }
+        other => panic!("a forced live discovery answered {other:?}"),
+    }
 
     // A stale foreign holder needs no force, and the two phases bind one epoch.
     let stale_other = holding(Vec::new(), vec![event("claude-b", 0, Some("op9"))]);
     assert_eq!(
-        plan_takeover(&stale_other, "claude-a", false, None).expect("discovery"),
+        plan_takeover(&stale_other, "claude-a", false, None, 12, &[]).expect("discovery"),
         Takeover::Confirm {
             target_operation: "op9".to_owned(),
-            holder: "claude-b".to_owned()
+            holder: "claude-b".to_owned(),
+            needs_person: false,
         }
     );
     assert_eq!(
-        plan_takeover(&stale_other, "claude-a", false, Some("op9")).expect("the write"),
+        plan_takeover(&stale_other, "claude-a", false, Some("op9"), 12, &[]).expect("the write"),
         Takeover::Write {
             target_operation: "op9".to_owned(),
             holder: "claude-b".to_owned()
         }
     );
     assert_eq!(
-        reason(plan_takeover(&stale_other, "claude-a", false, Some("op1")).unwrap_err()),
+        reason(plan_takeover(&stale_other, "claude-a", false, Some("op1"), 12, &[]).unwrap_err()),
         "target-operation-mismatch"
+    );
+}
+
+#[test]
+fn a_forced_live_takeover_needs_a_persons_confirmation_for_that_run_and_epoch() {
+    let live = ownership::Holding {
+        holder: Some("claude-b".to_owned()),
+        event: Some(event("claude-b", 0, Some("op7"))),
+        live: vec![event("claude-b", 0, Some("op7"))],
+        stale: Vec::new(),
+    };
+    let refusal = plan_takeover(&live, "claude-a", true, Some("op7"), 603, &[])
+        .expect_err("a live holder is not taken on an agent's word");
+    assert_eq!(reason(refusal.clone()), "takeover-needs-a-person");
+    let envelope = refusal.envelope();
+    let command = envelope
+        .get("command")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    assert!(
+        command.contains("hand-over 603") && command.contains("--to claude-a"),
+        "the refusal must name the command a person runs; got {command:?}"
+    );
+
+    // A confirmation for another run, or for an epoch that has moved, matches nothing.
+    for confirmation in [
+        Confirmation {
+            to: "claude-f".to_owned(),
+            operation: "op7".to_owned(),
+        },
+        Confirmation {
+            to: "claude-a".to_owned(),
+            operation: "op6".to_owned(),
+        },
+    ] {
+        assert_eq!(
+            reason(
+                plan_takeover(&live, "claude-a", true, Some("op7"), 603, &[confirmation])
+                    .unwrap_err()
+            ),
+            "takeover-needs-a-person"
+        );
+    }
+    // The one naming this run and this epoch is the one it takes.
+    assert_eq!(
+        plan_takeover(
+            &live,
+            "claude-a",
+            true,
+            Some("op7"),
+            603,
+            &[Confirmation {
+                to: "claude-a".to_owned(),
+                operation: "op7".to_owned(),
+            }]
+        )
+        .expect("the confirmed write"),
+        Takeover::Write {
+            target_operation: "op7".to_owned(),
+            holder: "claude-b".to_owned()
+        }
+    );
+    // A stale holder is taken with no confirmation at all.
+    let stale = ownership::Holding {
+        holder: None,
+        event: None,
+        live: Vec::new(),
+        stale: vec![event("claude-b", 0, Some("op8"))],
+    };
+    assert_eq!(
+        plan_takeover(&stale, "claude-a", false, Some("op8"), 603, &[])
+            .expect("a stale takeover needs no person"),
+        Takeover::Write {
+            target_operation: "op8".to_owned(),
+            holder: "claude-b".to_owned()
+        }
     );
 }
 
@@ -2350,6 +2575,56 @@ fn assert_reclaim_after_scoped_releases(releases: usize) {
                 .holder
                 .as_deref(),
             Some(holder)
+        );
+        // The reason file is the agent's own word, so the write is refused
+        // until a person confirms this exact takeover.
+        let refused = reclaim(
+            &context,
+            &Reclaim {
+                target_operation: Some(operation),
+                ..request.clone()
+            },
+        )
+        .expect_err("a live holder is not taken on an agent's word");
+        assert_eq!(
+            refused
+                .envelope()
+                .get("reason")
+                .and_then(serde_json::Value::as_str),
+            Some("takeover-needs-a-person")
+        );
+        assert_eq!(
+            holding(&store_timeline(&context, 12), RECLAIM_NOW)
+                .holder
+                .as_deref(),
+            Some(holder),
+            "a refused takeover left the holder in place"
+        );
+        let confirmed = hand_over(
+            &context,
+            &HandOver {
+                issue: 12,
+                to: "claude-a",
+                reason: TAKEOVER_EVIDENCE,
+                now: RECLAIM_NOW,
+            },
+        )
+        .expect("a person confirms this takeover");
+        assert_eq!(confirmed["from"], holder);
+        assert_eq!(confirmed["from_operation"], operation);
+        assert_eq!(
+            hand_over(
+                &context,
+                &HandOver {
+                    issue: 12,
+                    to: "claude-a",
+                    reason: TAKEOVER_EVIDENCE,
+                    now: RECLAIM_NOW,
+                },
+            )
+            .expect("the same confirmation again")["reused_existing"],
+            true,
+            "a repeated confirmation wrote a second record"
         );
         let answer = reclaim(
             &context,

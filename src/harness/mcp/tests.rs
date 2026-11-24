@@ -4209,6 +4209,83 @@ fn discovering_a_takeover_does_not_make_the_run_its_holder() {
 }
 
 #[test]
+fn a_landed_takeover_tells_the_displaced_run_to_stop_and_a_retry_does_not_repeat_it() {
+    use crate::transport::store::{SessionSeen, Store, beside};
+
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, root.path());
+    let store = Store::open(&beside(&context.state_root)).expect("the store opens");
+    for run_id in ["claude-taker0", "claude-taken0"] {
+        store
+            .session_seen(
+                &SessionSeen {
+                    run_id,
+                    runtime: "claude",
+                    session_id: "host-session",
+                    repo_dir: None,
+                    wake: None,
+                    pane: None,
+                },
+                1_000,
+            )
+            .expect("a session registers");
+    }
+
+    let mut body = json!({
+        "ok": true,
+        "issue": 603,
+        "reclaimed_from": "claude-taken0",
+        "reused_existing_reclaim": false,
+    });
+    super::note_displaced_run(Some(&mut body), &context.state_root, "claude-taker0", 603);
+    assert_eq!(body["notified"], true, "{body}");
+    let delivered = crate::harness::mailbox::deliver(&context.state_root, "claude-taken0")
+        .expect("the displaced run is told");
+    assert!(delivered.contains("#603"), "{delivered}");
+    assert!(delivered.contains("claude-taker0"), "{delivered}");
+    assert!(delivered.contains("Stop work"), "{delivered}");
+
+    // A retried takeover wrote nothing new, so it sends nothing.
+    let mut retry = json!({
+        "ok": true,
+        "issue": 603,
+        "reclaimed_from": "claude-taken0",
+        "reused_existing_reclaim": true,
+    });
+    super::note_displaced_run(Some(&mut retry), &context.state_root, "claude-taker0", 603);
+    assert!(retry.get("notified").is_none(), "{retry}");
+    assert!(
+        crate::harness::mailbox::deliver(&context.state_root, "claude-taken0").is_none(),
+        "a retried takeover sent a second message"
+    );
+}
+
+#[test]
+fn a_takeover_stands_when_the_displaced_run_cannot_be_told() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, root.path());
+    let mut body = json!({
+        "ok": true,
+        "issue": 603,
+        "reclaimed_from": "claude-gone0",
+        "reused_existing_reclaim": false,
+    });
+    super::note_displaced_run(Some(&mut body), &context.state_root, "claude-taker0", 603);
+    assert_eq!(body["notified"], false, "{body}");
+    assert!(
+        body["notify_refused"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("message-recipient-unknown"),
+        "{body}"
+    );
+    assert_eq!(
+        body["reclaimed_from"], "claude-gone0",
+        "the takeover was undone: {body}"
+    );
+}
+
+#[test]
 fn reclaiming_review_leaves_the_pointer_reading_review() {
     let root = tempfile::tempdir().expect("a state root");
     let repo = root.path().join("repo");
@@ -7047,7 +7124,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 45_407;
+const TOOLS_LIST_CEILING: usize = 45_475;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -9862,7 +9939,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 10_865;
+const ALWAYS_LOADED_CEILING: usize = 10_921;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {

@@ -41,7 +41,9 @@ the surviving executable or document owner changes.
 4. Record who was displaced and the server-timestamped evidence before repository work. Replace the
    dead runtime projection, retain every branch, diagnosis, ruled-out hypothesis, and partial result,
    then move to the state supported by that evidence rather than restarting from the displayed label.
-   A live prior holder will receive the takeover through its next renewal and must stand down.
+   A displaced holder is sent a mailbox message naming the issue and the taker and must stand down;
+   taking over a **live** holder additionally needs a person's `estigia hand-over` confirmation for
+   that run and that epoch.
 5. A run ending deliberately uses `unassign`, persists its state and evidence, and needs no reclaim.
 
 ## Repository isolation and immutable evidence

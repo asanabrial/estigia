@@ -917,6 +917,76 @@ fn the_recovery_refusal_gives_the_person_the_command_and_names_the_bang() {
     assert!(text.contains("maintainer"), "{text}");
 }
 
+const HAND_OVER: &str = "estigia hand-over";
+const HAND_OVER_CODE: &str = "hand-over-is-for-a-person";
+
+fn hands_over(line: &str) -> bool {
+    named_in(&line.to_ascii_lowercase()).is_some_and(|command| command.verb == "hand-over")
+}
+
+#[test]
+fn every_spelling_that_runs_the_hand_over_is_named() {
+    for line in [
+        "estigia hand-over 603 --to claude-a --reason x",
+        "estigia --json hand-over 603 --to claude-a",
+        "cd repo && estigia hand-over 603 --to claude-a",
+        "/usr/local/bin/estigia hand-over 603 --to claude-a",
+        "ESTIGIA.EXE hand-over 603",
+        "true; estigia hand-over 603",
+        "sudo estigia hand-over 603",
+        "echo ok && (estigia hand-over 603)",
+        "cd repo;estigia hand-over 603",
+        "FOO=bar estigia hand-over 603",
+        "timeout 5 estigia hand-over 603",
+        "env X=1 estigia hand-over 603",
+        "xargs -0 estigia hand-over 603",
+        "if estigia hand-over 603; then :; fi",
+        "bash -c \"estigia hand-over 603\"",
+        "sh -lc 'estigia hand-over 603'",
+        "a&&estigia hand-over 603",
+        "x=$(estigia hand-over 603)",
+        "`estigia` hand-over 603",
+        "estigia hand\\-over 603 --to claude-a",
+    ] {
+        assert!(
+            hands_over(line),
+            "`{line}` runs the hand-over and was not named"
+        );
+    }
+}
+
+#[test]
+fn a_hand_over_lookalike_is_not_named() {
+    for line in [
+        "estigia handover 603",
+        "estigia hand-over-issue 603",
+        "estigia status --note hand-over",
+        "estigia doctor hand-over",
+        "git log --grep hand-over",
+        "echo hand-over",
+        "cat estigia/hand-over",
+        "cd estigia/hand-over",
+    ] {
+        assert!(!hands_over(line), "`{line}` does not run the hand-over");
+    }
+}
+
+#[test]
+fn the_hand_over_refusal_gives_the_person_the_command_and_names_the_bang() {
+    let refusal = refusal(&Action::Write {
+        target: HAND_OVER.to_owned(),
+    })
+    .expect("refused");
+    assert_eq!(refusal.code, HAND_OVER_CODE);
+    let text = refusal.to_string();
+    assert!(
+        text.contains("estigia hand-over <issue> --to <run-id> --reason \"<why>\""),
+        "{text}"
+    );
+    assert!(text.contains("`!`"), "{text}");
+    assert!(text.contains("person"), "{text}");
+}
+
 #[test]
 fn the_lift_refinement_never_reaches_the_recovery() {
     let action = classified("estigia recover 7 --epoch e --reason x --lift");

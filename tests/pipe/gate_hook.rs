@@ -3257,6 +3257,52 @@ fn the_gate_door_denies_a_sub_agents_recovery_through_an_unreadable_definition()
     );
 }
 
+const HAND_OVER: &str = "estigia hand-over 7 --to claude-b --reason r";
+
+#[test]
+fn the_hook_denies_an_agents_hand_over_and_names_the_persons_command() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    let cwd = home.path().display().to_string().replace('\\', "\\\\");
+    let payload = format!(
+        "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"Bash\",\
+         \"tool_input\":{{\"command\":{HAND_OVER:?}}}}}"
+    );
+    let (out, _, _) = run(home.path(), &["hook", "pre-tool-use"], &payload);
+    assert!(
+        out.contains("\"permissionDecision\":\"deny\"")
+            && out.contains("hand-over-is-for-a-person"),
+        "{out}"
+    );
+    assert!(out.contains("estigia hand-over"), "{out}");
+    assert!(out.contains("`!`"), "{out}");
+}
+
+#[test]
+fn the_gate_door_denies_an_agents_hand_over() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    let cwd = home.path().display().to_string().replace('\\', "\\\\");
+    let payload = format!("{{\"command\":{HAND_OVER:?},\"cwd\":\"{cwd}\"}}");
+    let (said, error, ok) = run_in(
+        home.path(),
+        home.path(),
+        &[
+            "gate",
+            "Bash",
+            "--run-id",
+            "claude-aaaa1111",
+            "--input",
+            &payload,
+        ],
+        "",
+    );
+    assert!(
+        !ok && format!("{said}{error}").contains("hand-over-is-for-a-person"),
+        "{said}{error}"
+    );
+}
+
 #[test]
 fn gate_reads_an_input_larger_than_the_argument_limit_from_standard_input() {
     let home = tempfile::tempdir().expect("a temporary home");

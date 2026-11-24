@@ -318,7 +318,8 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "claim",
         description: "Swear to an issue. Adjudicated by the local store; the earliest live \
                       claim wins, and a repository write the gate sees is then measured \
-                      against it. `takeover` answers twice: repeat with `target_operation`.",
+                      against it. `takeover` answers twice: repeat with `target_operation`, \
+                      and a live holder needs a person's `hand-over` before the write.",
         operation: "claim",
         arguments: &[
             ISSUE,
@@ -374,7 +375,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "force",
                 "boolean",
-                "Take a live claim; with `takeover` and `reason_file`.",
+                "Take a live claim; with `takeover`, `reason_file` and a person's `hand-over`.",
             ),
             Argument::optional(
                 "reason_file",

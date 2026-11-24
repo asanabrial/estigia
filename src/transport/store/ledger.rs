@@ -675,6 +675,38 @@ impl Tx<'_> {
     pub(crate) fn append(&self, body: &str, now: &str) -> Result<(), Failure> {
         insert(self.transaction, self.repo_id, self.issue, body, now)
     }
+
+    /// Every marker of `kind` this machine wrote on the issue, oldest first.
+    ///
+    /// Only `source = 'local'`: an imported comment is the tracker's, and a
+    /// record that decides a takeover has to be one a person made here, not
+    /// one somebody could post to the issue.
+    pub(crate) fn local_markers(&self, kind: &str) -> Result<Vec<markers::Marker>, Failure> {
+        let mut statement = self
+            .transaction
+            .prepare(
+                "SELECT body FROM entries
+                 WHERE repo_id = ?1 AND issue = ?2 AND kind = ?3 AND source = 'local'
+                 ORDER BY seq",
+            )
+            .map_err(unreadable("prepare local markers"))?;
+        let rows = statement
+            .query_map(
+                rusqlite::params![self.repo_id, int(self.issue), kind],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(unreadable("read local markers"))?;
+        let mut found = Vec::new();
+        for row in rows {
+            let body = row.map_err(unreadable("read local markers"))?;
+            found.extend(
+                markers::parse(&body)
+                    .into_iter()
+                    .filter(|marker| marker.get("kind").map(String::as_str) == Some(kind)),
+            );
+        }
+        Ok(found)
+    }
 }
 
 fn repo_id(transaction: &Connection, repo: &Repo) -> Result<i64, Failure> {

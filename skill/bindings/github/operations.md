@@ -52,6 +52,29 @@ pointer back as it was. Releasing the active issue keeps the parked ones. When t
 the order they were claimed: take each one back, commit it with `Refs` to its real number, and
 publish it, before taking back the next.
 
+## Taking a live claim from another run
+
+A takeover of a **stale** holder is the caller's: discovery answers the epoch, and the write displaces
+it with no further word. A takeover of a **live** holder is not. `force` with `reason_file` declares the
+intention, but the reason file is the agent's own writing, so the write is refused
+`takeover-needs-a-person` until a person confirms this exact pair — the run taking the issue and the
+epoch being displaced:
+
+    estigia hand-over <issue> --to <run-id> --reason "<why>"
+
+It is a person's command, refused to an agent's shell line as `estigia recover` is. It records the
+confirmation on the issue's local timeline and writes nothing to the tracker. The confirmation is bound
+to the live epoch it displaces and to the run named, so a holder whose claim lapses, a second hand-over,
+or a takeover that waits all leave it matching nothing; a repeat for the same pair answers without
+writing a second record. Discovery is unchanged and stays read-only: when the holder is live its answer
+carries `needs_person` and `hand_over` naming that command, and the repeat with `target_operation`
+still answers `target-operation-mismatch` before any confirmation is read if ownership moved.
+
+Every takeover that lands — forced or stale — sends the displaced run a mailbox message naming the
+issue and the taker, and telling it to stop. The takeover's answer carries `notified`; a message that
+cannot be sent carries `notified: false` and `notify_refused`, and never undoes the takeover. A retried
+takeover wrote nothing new, so it sends nothing.
+
 ## Handing an issue to another runtime
 
 `handoff` states where an unheld issue is going, so a session of that runtime in that repository can

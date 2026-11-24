@@ -206,6 +206,24 @@ impl Rig {
         crate::test_env::logged_writes(&self.log)
     }
 
+    /// Records a person's confirmation for a live takeover, as the operator's
+    /// own shell would.
+    pub(super) fn hand_over(&self, issue: u64, to: &str) {
+        let bin = crate::test_env::scripted_gh();
+        crate::test_env::with_logging_gh(bin.path(), &self.script, &self.log, || {
+            crate::transport::claim::hand_over(
+                &self.context,
+                &crate::transport::claim::HandOver {
+                    issue,
+                    to,
+                    reason: "the operator moves the work",
+                    now: NOW,
+                },
+            )
+            .expect("a person confirms the takeover");
+        });
+    }
+
     pub(super) fn queue(&self) -> Vec<(OutboxKind, u64)> {
         self.queue_for(&repo())
     }
@@ -862,6 +880,7 @@ fn a_release_after_a_takeover_is_refused_before_it_closes_anything() {
         takeover.extend(["--takeover", "--force", "--reason-file", &reason]);
         let discovered = rig.closed("claim", &takeover).expect("a discovery");
         let target = discovered["target_operation"].as_str().expect("an epoch");
+        rig.hand_over(12, run);
         takeover.extend(["--target-operation", target]);
         rig.closed("claim", &takeover).expect("a takeover");
     }
@@ -904,6 +923,7 @@ fn a_takeover_while_closed_queues_its_projection() {
     takeover.extend(["--takeover", "--force", "--reason-file", &note]);
     let found = rig.closed("claim", &takeover).expect("a discovery");
     let target = found["target_operation"].as_str().expect("an epoch");
+    rig.hand_over(12, "claude-b");
     takeover.extend(["--target-operation", target]);
     let taken = rig.closed("claim", &takeover).expect("a takeover");
 

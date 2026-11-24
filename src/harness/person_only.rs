@@ -35,6 +35,14 @@ pub const COMMANDS: &[PersonOnly] = &[
           is not one: the gate refuses it on every host",
         command: "estigia recover <issue> --reason \"<why>\"",
     },
+    PersonOnly {
+        verb: "hand-over",
+        target: "estigia hand-over",
+        code: "hand-over-is-for-a-person",
+        why: "confirming that one run may take a live claim from another is a person's decision, \
+          and an agent's shell line is not one: the gate refuses it on every host",
+        command: "estigia hand-over <issue> --to <run-id> --reason \"<why>\"",
+    },
 ];
 
 /// The record a stand-down is read from, which an agent may not write either.
@@ -60,16 +68,18 @@ pub const LIFT: PersonOnly = PersonOnly {
 };
 
 /// The row a line whose verb position cannot be read is refused under: the gate cannot tell
-/// which person-only command was meant, so the refusal names both.
+/// which person-only command was meant, so the refusal names all of them.
 pub const UNREADABLE: PersonOnly = PersonOnly {
     verb: "",
-    target: "estigia stand-down or estigia recover",
+    target: "estigia stand-down, estigia recover or estigia hand-over",
     code: "stand-down-is-for-a-person",
     why: "a shell expansion or a glob where `estigia`'s command word belongs leaves the gate \
           unable to read whether the line runs `estigia stand-down`, which lifts every refusal \
-          this gate makes, or `estigia recover`, which puts an escalated review back in play; \
-          both are a person's decision, so the line is refused",
-    command: "estigia stand-down --reason \"<why>\" or estigia recover <issue> --reason \"<why>\"",
+          this gate makes, `estigia recover`, which puts an escalated review back in play, or \
+          `estigia hand-over`, which confirms taking a live claim from another run; all three \
+          are a person's decision, so the line is refused",
+    command: "estigia stand-down --reason \"<why>\", estigia recover <issue> --reason \"<why>\" \
+        or estigia hand-over <issue> --to <run-id> --reason \"<why>\"",
 };
 
 /// The row a line the classifier matched to `command` is refused under: [`LIFT`] when any word
@@ -193,7 +203,8 @@ pub const PERSON_ONLY_POPULATION: Population = Population {
     disposition: super::Disposition::TooTight,
     subject: "named_in",
     text: "the shell spellings of the commands only a person may run, `estigia stand-down`, which lifts every \
-           refusal the gate makes, and `estigia recover`, which puts an escalated review back in play. \
+           refusal the gate makes, `estigia recover`, which puts an escalated review back in play, and \
+           `estigia hand-over`, which confirms taking a live claim from another run. \
            Legitimate population: every command line that runs one, with options allowed between the \
            two words, and every line whose command word is left to the shell by an expansion or a \
            glob, which the gate cannot read. Boundary: matched on any word whose basename is \

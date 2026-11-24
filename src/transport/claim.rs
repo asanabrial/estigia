@@ -12473,6 +12473,8 @@ pub enum Takeover {
         target_operation: String,
         /// Who currently holds it.
         holder: String,
+        /// Whether taking the live holder needs a person's confirmation first.
+        needs_person: bool,
     },
     /// Displace exactly this epoch, held by this run.
     Write {
@@ -12483,9 +12485,38 @@ pub enum Takeover {
     },
 }
 
+/// One person's confirmation that a named run may displace a live claim.
+///
+/// Bound to both the run that takes and the exact epoch it displaces: once
+/// ownership moves the epoch no longer matches, so a confirmation spends
+/// itself and covers no later takeover.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Confirmation {
+    /// The run the person named as the taker.
+    pub to: String,
+    /// The ownership epoch the confirmation is bound to.
+    pub operation: String,
+}
+
+/// The confirmations a timeline's `hand-over` markers carry.
+///
+/// A marker without both halves is not a confirmation of anything, and reading
+/// it as one would let a partial write authorise a takeover.
+fn confirmations_of(markers: &[super::markers::Marker]) -> Vec<Confirmation> {
+    markers
+        .iter()
+        .filter_map(|marker| {
+            Some(Confirmation {
+                to: marker.get("run-id")?.clone(),
+                operation: marker.get("from-op")?.clone(),
+            })
+        })
+        .collect()
+}
+
 /// Decides what a takeover does, before anything is written.
 ///
-/// **Pure and fed.** Five refusals, and the distinctions between them are the
+/// **Pure and fed.** Six refusals, and the distinctions between them are the
 /// point — each one sends the caller somewhere different:
 ///
 /// - **`nothing-to-reclaim`** — the timeline holds no acquisition at all. There
@@ -12498,6 +12529,9 @@ pub enum Takeover {
 ///   a live holder quietly is the one thing a reclaim must never do; saying
 ///   `--force` is what makes it declarable, and evidence is what makes it
 ///   answerable for.
+/// - **`takeover-needs-a-person`** — the holder is alive and no person confirmed
+///   this exact takeover. An agent's reason file is its own word, and taking a
+///   live claim on it is the thing this rule exists to refuse.
 /// - **`target-operation-mismatch`** — the epoch named is not the one that would
 ///   be displaced. Ownership moved between the discovery and the write.
 pub fn plan_takeover(
@@ -12505,6 +12539,8 @@ pub fn plan_takeover(
     run_id: &str,
     forced: bool,
     requested_target: Option<&str>,
+    issue: u64,
+    confirmed: &[Confirmation],
 ) -> Result<Takeover, Failure> {
     let stop = |reason: &str| Failure::Stop(serde_json::json!({ "ok": false, "reason": reason }));
 
@@ -12550,22 +12586,50 @@ pub fn plan_takeover(
         &target.comment.created_at,
         &target.comment.body,
     );
+    if let Some(requested) = requested_target {
+        if requested != epoch {
+            return Err(Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "target-operation-mismatch",
+                "expected": epoch,
+                "provided": requested,
+            })));
+        }
+        let confirmed_here = confirmed
+            .iter()
+            .any(|confirmation| confirmation.to == run_id && confirmation.operation == epoch);
+        if !target_is_stale && !confirmed_here {
+            return Err(Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "takeover-needs-a-person",
+                "issue": issue,
+                "holder": target.run_id,
+                "target_operation": epoch,
+                "command": hand_over_command(issue, run_id),
+                "detail": "a live holder is not displaced on an agent's word, and the reason \
+                           file is the agent's own: only a person can confirm this exact \
+                           takeover",
+                "action": "tell the person to run that command in their own shell, then repeat \
+                           this call with the same target operation",
+            })));
+        }
+    }
     match requested_target {
         None => Ok(Takeover::Confirm {
             target_operation: epoch,
             holder: target.run_id,
+            needs_person: !target_is_stale,
         }),
-        Some(requested) if requested != epoch => Err(Failure::Stop(serde_json::json!({
-            "ok": false,
-            "reason": "target-operation-mismatch",
-            "expected": epoch,
-            "provided": requested,
-        }))),
         Some(_) => Ok(Takeover::Write {
             target_operation: epoch,
             holder: target.run_id,
         }),
     }
+}
+
+/// The exact command a person runs to confirm one takeover.
+pub fn hand_over_command(issue: u64, run_id: &str) -> String {
+    format!("estigia hand-over {issue} --to {run_id} --reason \"<why>\"")
 }
 
 /// Everything one takeover needs to say about itself.
@@ -12630,15 +12694,25 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
         reject_operation_kind_conflict(&comments, &operation_id, &["reclaim"])?;
         require_horizon(what.horizon, Some(what.now))?;
         let before = holding(&comments, what.now);
-        let plan = plan_takeover(&before, what.run_id, what.force, what.target_operation)?;
+        let confirmed = confirmations_of(&tx.local_markers("hand-over")?);
+        let plan = plan_takeover(
+            &before,
+            what.run_id,
+            what.force,
+            what.target_operation,
+            what.issue,
+            &confirmed,
+        )?;
         let (target_operation, holder) = match plan {
             Takeover::Confirm {
                 target_operation,
                 holder,
+                needs_person,
             } => {
                 return Ok(Reclaimed::Discovered {
                     target_operation,
                     holder,
+                    needs_person,
                 });
             }
             Takeover::Write {
@@ -12746,15 +12820,25 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
         Reclaimed::Discovered {
             target_operation,
             holder,
+            needs_person,
         } => {
-            return Ok(serde_json::json!({
+            let mut answer = serde_json::json!({
                 "ok": true,
                 "issue": what.issue,
                 "write_performed": false,
                 "target_operation": target_operation,
                 "holder": holder,
+                "needs_person": needs_person,
                 "next": "repeat claim with --takeover --target-operation and the same operation ID",
-            }));
+            });
+            if needs_person {
+                answer["hand_over"] = serde_json::json!(hand_over_command(what.issue, what.run_id));
+                answer["next_person"] = serde_json::json!(
+                    "the holder is live: a person confirms the takeover with that command \
+                     before the repeat can write"
+                );
+            }
+            return Ok(answer);
         }
         Reclaimed::Resumed { holder, forced } => {
             return Ok(serde_json::json!({
@@ -12802,6 +12886,7 @@ enum Reclaimed {
     Discovered {
         target_operation: String,
         holder: String,
+        needs_person: bool,
     },
     Resumed {
         holder: String,
@@ -12810,6 +12895,110 @@ enum Reclaimed {
     Written {
         holder: String,
     },
+}
+
+/// What a person's hand-over asks.
+pub struct HandOver<'a> {
+    /// The issue whose live claim is handed over.
+    pub issue: u64,
+    /// The run a person names as the taker.
+    pub to: &'a str,
+    /// Why the live holder is being displaced.
+    pub reason: &'a str,
+    /// The moment the timeline is read.
+    pub now: &'a str,
+}
+
+/// Records a person's confirmation that `to` may displace the live claim.
+///
+/// A person's operation: it runs from `estigia hand-over`, which the gate
+/// refuses an agent's shell line for, and it is not an MCP tool. The record is
+/// local and posts nothing to the tracker; it is bound to the exact ownership
+/// epoch that stands when it is written and to the run named, so once
+/// ownership moves it matches nothing. A repeat for the same pair answers
+/// without writing a second record.
+pub fn hand_over(context: &Context, request: &HandOver<'_>) -> Result<serde_json::Value, Failure> {
+    let to = request.to.trim();
+    if to.is_empty() || to.split_whitespace().count() != 1 {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "hand-over-run-unreadable",
+            "action": "name one run id, the one `SessionStart` reported for the run that takes \
+                       the issue",
+        })));
+    }
+    let reason = request.reason.trim();
+    if reason.is_empty() {
+        return Err(self::stop(
+            "blank-hand-over-reason",
+            "a hand-over with no reason is a confirmation of nothing".to_owned(),
+            "state why the live holder is being displaced",
+        ));
+    }
+    let ledger = Ledger::open(context, request.issue, request.now)?;
+    if !ledger.is_open() {
+        return Err(Failure::Stop(
+            serde_json::json!({ "ok": false, "reason": "issue-not-open" }),
+        ));
+    }
+    let recorded = ledger.transact(|tx| {
+        let comments = tx.timeline()?;
+        let before = holding(&comments, request.now);
+        let Some(event) = before.event else {
+            return Err(self::stop(
+                "nothing-to-hand-over",
+                "no live claim stands on this issue".to_owned(),
+                "a stale holder is taken without a person, and a released issue has nobody to \
+                 displace: discover the takeover, and a live holder is the one case that asks \
+                 for this command",
+            ));
+        };
+        if event.run_id == to {
+            return Err(Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "already-holds-it",
+                "run_id": to,
+                "detail": "that run is the live holder, so there is nobody for the confirmation to displace",
+                "action": "name the run that should take the issue from the live holder, not the \
+                           holder itself",
+            })));
+        }
+        let epoch = ownership::ownership_epoch(
+            event.operation_id.as_deref(),
+            event.comment.id.as_deref(),
+            &event.comment.created_at,
+            &event.comment.body,
+        );
+        if confirmations_of(&tx.local_markers("hand-over")?)
+            .iter()
+            .any(|confirmation| confirmation.to == to && confirmation.operation == epoch)
+        {
+            return Ok((event.run_id, epoch, true));
+        }
+        let marker = super::markers::render(
+            "hand-over",
+            &[
+                ("run-id", to),
+                ("from", &event.run_id),
+                ("from-op", &epoch),
+                ("reason", reason),
+            ],
+        )
+        .ok_or_else(|| {
+            Failure::Stop(serde_json::json!({ "ok": false, "reason": "invalid-marker-attribute" }))
+        })?;
+        tx.append(&format!("\n{marker}\n"), request.now)?;
+        Ok((event.run_id, epoch, false))
+    })?;
+    let (holder, epoch, reused) = recorded;
+    Ok(serde_json::json!({
+        "ok": true,
+        "issue": request.issue,
+        "to": to,
+        "from": holder,
+        "from_operation": epoch,
+        "reused_existing": reused,
+    }))
 }
 
 /// What a **retried** unassign means: the comment is already on the issue.

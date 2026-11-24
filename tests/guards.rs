@@ -869,7 +869,13 @@ const AFFIRMED: &[(&str, u64)] = &[
     // declaration's boundary says so; a quoted span is one word of data, so
     // `git commit -m 'estigia $(x) stand-down'` is still not an invocation, and
     // the literal commit-message over-refusal is unchanged. Affirmed.
-    ("person-only-shell", 1173913667760716498),
+    //
+    // Re-read on 2026-11-25. The population gained a third command, `estigia
+    // hand-over`, which confirms taking a live claim from another run. It is
+    // matched exactly as the other two are, so the boundary is unchanged: an
+    // alias, a wrapper script or a renamed binary is still not matched, and a
+    // quoted span is still data. Affirmed.
+    ("person-only-shell", 6450570850165452283),
     // Read on 2026-08-04 and affirmed. The fragments name the files this
     // harness reads its own answers from, and every one is crossed against
     // what `resolve_paths` produces per adapter — five of eleven were wrong

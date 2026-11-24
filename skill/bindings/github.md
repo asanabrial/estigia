@@ -199,7 +199,7 @@ Each name below has no tool of its own; the call on the right answers it.
 - `handoff` → the `handoff` command, `estigia handoff <issue> --to <runtime>`.
 - `list_sessions` → the `sessions` command, `estigia sessions`, with the same selectors and `--address`.
 - `judge_workspaces` → the `judge-workspaces` command, `estigia judge-workspaces`.
-- `reclaim` → `claim` with `takeover`, plus `target_operation`, and `force` with `reason_file`.
+- `reclaim` → `claim` with `takeover`, plus `target_operation`, and `force` with `reason_file`. A live holder needs a person's `estigia hand-over <issue> --to <run-id> --reason "<why>"` before the write lands.
 - `list_identities` → `list_state` with `identities`.
 - `review_findings`, `review_transaction`, `review_payload_membership`, `inspect_candidate`, `computed_verdict`, `spend_summary` → `review_read` with `view` `findings`, `transaction`, `membership`, `inspect`, `verdict`, `spend`.
 - `repair_rounds`, `publication_lane` → `review_status`, which answers `lane` and `corrections`.
