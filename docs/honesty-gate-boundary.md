@@ -168,9 +168,19 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   assisted holder and the refused `release` tool name that command. What it does not hold:
   - **A shell GitHub write is refused `assisted-remote-write-unverified`**, whether alone or beside a write in
     the worktree (`an_assisted_run_reaches_a_pull_request_only_through_the_typed_tools`,
-    `a_write_in_the_worktree_does_not_carry_a_remote_write_past_the_claim`). `gh pr edit` and `gh pr comment` have
-    no typed tool, so in an assisted run they are a person's. Only a call deciding on this run's pointer is held: a
+    `a_write_in_the_worktree_does_not_carry_a_remote_write_past_the_claim`). `gh pr comment` has no typed tool,
+    so in an assisted run it is a person's. Only a call deciding on this run's pointer is held: a
     call with no session id goes through `guard::adjudicate_command`, which still passes it.
+  - **A title or body edit is admitted with no claim, under any claim and under `Issue required`**
+    (`harness::text_edit`): one plain `gh issue edit` or `gh pr edit` carrying only `--title`, `--body`,
+    `--body-file` and `--repo`, or a `gh api` `PATCH` of one issue or pull request whose fields are only `title`
+    and `body`. A label, an assignee, a base, a state, a comment, GraphQL, `--input`, an expansion or a second
+    command on the line keeps the answer it had, and a closed window holds it
+    (`a_plain_title_or_body_edit_is_one`, `anything_more_than_a_title_or_a_body_is_not`,
+    `a_title_or_body_edit_passes_under_an_assisted_claim`, `an_unclaimed_title_or_body_edit_passes_under_on`,
+    `a_closed_window_holds_a_title_or_body_edit_under_an_assisted_claim`). The gate reads neither the text nor
+    whose issue it is: a run may rewrite the body of an issue another run holds, and a closing keyword in a
+    pull request body is not seen here. A body written with a shell expansion or a heredoc is not admitted.
   - **`git push origin HEAD` is refused**: the hook reads `HEAD` as the local ref
     (`git_hands_the_hook_head_and_not_the_branch_for_a_push_of_head`). A push is admitted only when every
     line has the run's branch as both refs; `branch:main`, a tag and a deletion are refused

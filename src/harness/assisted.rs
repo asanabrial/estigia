@@ -190,6 +190,14 @@ pub(super) fn remote_write(action: &Action, observed: &Observed) -> Option<Strin
     }
 }
 
+fn edits_text(action: &Action, observed: &Observed) -> bool {
+    let Some(command) = observed.command.as_ref() else {
+        return false;
+    };
+    matches!(action, Action::Remote { .. })
+        && matches!(&command.literal, Established::Known(line) if super::text_edit::is_text_edit(line))
+}
+
 fn remote_write_in_the_line(observed: &Observed) -> Option<String> {
     let command = observed.command.as_ref()?;
     let Established::Known(literal) = &command.literal else {
@@ -207,8 +215,9 @@ fn remote_write_unverified(command: &str) -> Refusal {
         ),
         way_out(
             "the typed tools: `review_thread` for replies and resolutions, `ready_pr` to mark \
-             ready, `draft_pr` to publish and `edit_pr` to update this run's pull request title \
-             and body; anything else by a person",
+             ready, `draft_pr` to publish and `edit_pr` to update this run's pull request; a title \
+             or a body alone as one plain `gh issue edit` or `gh pr edit` with `--title` or \
+             `--body-file`; anything else by a person",
         ),
     )
 }
@@ -408,6 +417,9 @@ pub(super) fn decision(
     }
     if let Some(refusal) = super::operation_window::check_protected(context, action) {
         return deny(refusal);
+    }
+    if edits_text(action, observed) {
+        return Decision::Outside(Aside::NotWatched);
     }
     if let Some(command) = remote_write(action, observed) {
         return deny(remote_write_unverified(&command));

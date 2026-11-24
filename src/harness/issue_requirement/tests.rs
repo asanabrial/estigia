@@ -278,6 +278,37 @@ fn a_leftover_unclaimed_github_writes_row_does_not_let_an_unclaimed_merge_throug
     );
 }
 
+fn line_decided(context: &GateContext, line: &str) -> Decision {
+    unclaimed_edit(context, "Bash", serde_json::json!({ "command": line }))
+}
+
+#[test]
+fn an_unclaimed_title_or_body_edit_passes_under_on() {
+    let (_repo, _root, context) = rig(IssueRequirement::On);
+    for line in crate::harness::text_edit::tests::ADMITTED {
+        let decision = line_decided(&context, line);
+        assert!(
+            matches!(decision, Decision::Outside(_)),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn an_unclaimed_api_mutation_that_is_more_than_text_is_still_held_under_on() {
+    let (_repo, _root, context) = rig(IssueRequirement::On);
+    let api = crate::harness::text_edit::tests::EXCLUDED
+        .iter()
+        .filter(|line| line.starts_with("gh api"));
+    for line in api {
+        let decision = line_decided(&context, line);
+        assert!(
+            matches!(decision, Decision::Deny(_)),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
 #[test]
 fn off_changes_nothing() {
     let (_repo, _root, context) = rig(IssueRequirement::Off);

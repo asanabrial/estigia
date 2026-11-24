@@ -2878,6 +2878,17 @@ fn the_session_start_text_names_a_dirty_orphan_checkout_and_the_command_that_lis
 }
 
 #[test]
+fn a_run_with_no_issue_is_told_a_text_edit_needs_no_claim() {
+    let sentence = "A title or body edit of an issue or a pull request needs no claim.";
+    let mut run = session::Run::new("claude-abcd1234".to_owned());
+    let text = session_start_text(&nowhere(), &run, None);
+    assert!(text.contains(sentence), "{text}");
+    run.issue = Some(12.into());
+    let text = session_start_text(&nowhere(), &run, None);
+    assert!(!text.contains(sentence), "{text}");
+}
+
+#[test]
 fn an_empty_queue_leaves_the_session_start_text_as_it_was() {
     at_minutes(20 * 60, || {
         let text = announced(&closed_context());
