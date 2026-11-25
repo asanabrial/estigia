@@ -896,7 +896,13 @@ fn strip_leading_options(command: &str) -> String {
     while let Some(word) = words.next() {
         kept.push(word);
         let program = without_substitution_openers(word);
-        if program != "git" && program != "gh" && binary_name(program) != "estigia" {
+        let starts_a_command =
+            kept.len() == 1 || kept[kept.len() - 2].ends_with([';', '&', '|', '(']);
+        let named = program == "git"
+            || program == "gh"
+            || binary_name(program) == "estigia"
+            || (starts_a_command && matches!(binary_name(program), "git" | "gh"));
+        if !named {
             continue;
         }
         // Its own options, up to the subcommand. A word that does not start
@@ -1108,7 +1114,8 @@ fn names_gh_command(text: &str, words: &[&str]) -> bool {
         let start = from + at;
         from = start + 1;
         let before = text[..start].chars().next_back();
-        if before.is_some_and(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '/')) {
+        // A `/` or `\` before `gh` is a path, not the middle of a word.
+        if before.is_some_and(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.')) {
             continue;
         }
         if !ends_a_command(text, start + 2) {
@@ -3371,8 +3378,10 @@ pub fn gate_observing(
 /// `$HOME` is expanded but not placed by this reader.
 fn with_home(target: &str, literal: Option<&str>) -> Option<String> {
     let unquoted = literal.is_some_and(|line| {
-        line.match_indices(target)
-            .any(|(at, _)| !line[..at].ends_with(['\'', '"']))
+        line.match_indices(target).any(|(at, _)| {
+            let before = &line[..at];
+            !before.ends_with(['\'', '"']) && before.trim_end().ends_with('>')
+        })
     });
     if !unquoted {
         return None;
@@ -3394,18 +3403,18 @@ fn with_home(target: &str, literal: Option<&str>) -> Option<String> {
     })
 }
 
+/// The same answer for a write with no line to read.
+#[cfg(test)]
+fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
+    writes_outside_the_claim_in(run, action, None)
+}
+
 /// Whether this write lands where no checkout the claim covers can reach.
 ///
 /// Narrow on purpose, because standing aside is a statement and an unknown is
 /// not one: the target must be an **absolute** path (a shell write cannot be
 /// placed, and one that cannot be placed stays gated), and a run covering
 /// nothing has no claim to be outside of.
-/// Whether this write lands where no checkout the claim covers can reach, with
-/// no command line to read: a home-relative target is not placed.
-fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
-    writes_outside_the_claim_in(run, action, None)
-}
-
 fn writes_outside_the_claim_in(run: &Run, action: &Action, literal: Option<&str>) -> bool {
     let Action::Write { target } = action else {
         return false;
@@ -3628,11 +3637,7 @@ fn decide_observing(
     // lands, so placing it outside must never be what waves it through. Above
     // the window so a write outside the claim is `Outside` at every age of the
     // verification, not `Allow` while it is fresh.
-    let outside_the_claim = match literal {
-        Some(line) => writes_outside_the_claim_in(run, action, Some(line)),
-        None => writes_outside_the_claim(run, action),
-    };
-    if how == Sensitivity::Routine && outside_the_claim {
+    if how == Sensitivity::Routine && writes_outside_the_claim_in(run, action, literal) {
         return Decision::Outside(Aside::OutsideTheClaim);
     }
 

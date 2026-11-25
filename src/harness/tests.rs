@@ -6493,8 +6493,10 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
         }
     ));
 
-    // A home-relative target is placed by what it resolves to, when the line
-    // spells it unquoted; a quoted `~` is a directory literally named `~`.
+    // A home-relative target is placed by what it resolves to when the line
+    // spells it as an unquoted redirect target; a quoted `~` is a directory
+    // literally named `~`, and a target quoted at the redirect is not placed
+    // even when the same text appears unquoted elsewhere on the line.
     let home = crate::paths::home_dir().expect("a home directory in the test environment");
     let absolute = writes_outside_the_claim(
         &run,
@@ -6505,28 +6507,37 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
                 .to_string(),
         },
     );
-    let placed = |line: &'static str| {
-        writes_outside_the_claim_in(
-            &run,
-            &Action::Write {
-                target: line.trim_start_matches("echo x > ").to_owned(),
-            },
-            Some(line),
-        )
-    };
     for line in [
         "echo x > ~/estigia-outside-the-claim.md",
         "echo x > $HOME/estigia-outside-the-claim.md",
     ] {
+        let target = crate::harness::shell::redirect_destination(line).expect("a redirect target");
         assert_eq!(
-            placed(line),
+            writes_outside_the_claim_in(&run, &Action::Write { target }, Some(line)),
             absolute,
             "`{line}` was not placed where it lands"
         );
     }
+    for line in [
+        "echo x > \"~/estigia-outside-the-claim.md\"",
+        "echo x > '~/estigia-outside-the-claim.md'",
+        "cat ~/estigia-outside-the-claim.md > \"~/estigia-outside-the-claim.md\"",
+    ] {
+        let target = crate::harness::shell::redirect_destination(line).expect("a redirect target");
+        assert_eq!(target, "~/estigia-outside-the-claim.md");
+        assert!(
+            !writes_outside_the_claim_in(&run, &Action::Write { target }, Some(line)),
+            "`{line}` was placed at the home directory although the redirect target is quoted"
+        );
+    }
     assert!(
-        !placed("echo x > \"~/estigia-outside-the-claim.md\""),
-        "a quoted `~` was placed at the home directory"
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: "~/estigia-outside-the-claim.md".to_owned(),
+            },
+        ),
+        "a home target with no line to read was placed"
     );
 }
 

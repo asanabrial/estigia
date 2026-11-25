@@ -1338,17 +1338,23 @@ fn reader_head(command: &str) -> Option<usize> {
 /// options listed here. `None` for `-e`, `-f`, a bundle or any other option:
 /// a script this cannot locate is one whose quoted text is not blanked.
 fn sed_script<'a>(words: &[&'a str]) -> Option<&'a str> {
-    for word in words {
+    let mut script = None;
+    for &word in words {
         if word.starts_with('-') {
-            match *word {
+            // GNU sed permutes options with getopt, so one after the first
+            // operand is still a script this reader would have to order.
+            if script.is_some() {
+                return None;
+            }
+            match word {
                 "-n" | "-r" | "-E" | "-s" | "-u" | "-z" | "--quiet" | "--silent" | "--posix"
                 | "--regexp-extended" | "--separate" | "--unbuffered" | "--null-data" => continue,
                 _ => return None,
             }
         }
-        return Some(word);
+        script.get_or_insert(word);
     }
-    None
+    script
 }
 
 /// The byte ranges of `command` a single simple command reads rather than runs,

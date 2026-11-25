@@ -1309,6 +1309,7 @@ fn the_table_the_issue_measured_answers_as_the_gate_decides() {
         ("git log --grep \"git commit -m\"", false),
         ("grep -rn \"git push origin\" src 2>&1", false),
         ("grep -rn \"git push origin\" src 2>/dev/null", false),
+        ("/usr/bin/git -c user.name=\"Bot Name\" commit -m x", true),
     ] {
         assert_eq!(
             crate::harness::unclaimed::names_any(line, &fragments),
@@ -1331,6 +1332,15 @@ fn an_option_between_gh_and_its_verb_still_names_the_delivery() {
         &[],
     );
     assert_eq!(before, after, "the two spellings read differently");
+    let (path_spelled, _) = crate::harness::classify_with(
+        "bash",
+        &serde_json::json!({ "command": "/usr/bin/gh pr -R o/r merge 12" }),
+        &[],
+    );
+    assert_eq!(
+        path_spelled, before,
+        "a path-spelled gh was not the same delivery"
+    );
     assert!(
         matches!(
             &before,
@@ -1437,6 +1447,8 @@ fn a_line_an_executor_owns_is_left_whole() {
         "sed -n \"s/a/git push/e\" f",
         "sed -n -e \"1e git push origin main\" f",
         "sed -n -f script.sed f",
+        "sed -n p -e \"1e git push origin main\" f",
+        "sed -n p f --expression=\"1e git push\"",
         "gh codespace ssh -c box -- 'git push'",
         "gh cs ssh -c box -- 'git push'",
         "gh extension exec 'git push'",
