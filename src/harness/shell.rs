@@ -1307,6 +1307,7 @@ fn reader_head(command: &str) -> Option<usize> {
                             let bundled = word.starts_with('-')
                                 && !word.starts_with("--")
                                 && word[1..].contains('O');
+                            // `--op` is the shortest prefix `git grep` takes unambiguously.
                             let named =
                                 word.split_once('=').map_or(word.as_str(), |(name, _)| name);
                             bundled

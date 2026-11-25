@@ -1386,6 +1386,10 @@ fn a_read_only_line_has_its_data_blanked() {
         ("rg -n \"git push origin\" src", "git push origin"),
         ("git log --grep \"git commit -m\"", "git commit -m"),
         ("git grep \"git push origin\"", "git push origin"),
+        (
+            "git grep --only-matching \"git push origin\" f",
+            "git push origin",
+        ),
         ("sed -n \"s/git push/x/p\" f", "git push"),
         ("sed -nu \"git push\" f", "git push"),
         ("sed -nE \"git push origin\" f", "git push origin"),
@@ -1404,6 +1408,21 @@ fn a_read_only_line_has_its_data_blanked() {
 }
 
 #[test]
+fn a_search_word_that_looks_like_a_bundled_option_stays_whole() {
+    for command in [
+        "git grep \"-Open item\" f",
+        "git log --grep \"-Only\"",
+        "git grep \"-iOgit push origin main;:\" x",
+    ] {
+        assert_eq!(
+            super::data_view(command),
+            command,
+            "`{command}` was blanked as if its search text were an option"
+        );
+    }
+}
+
+#[test]
 fn a_blanked_reader_does_not_hide_the_command_after_it() {
     for (command, fragment) in [
         ("rg -n \"x\" src && git push", "git push"),
@@ -1411,6 +1430,8 @@ fn a_blanked_reader_does_not_hide_the_command_after_it() {
         ("git show \"HEAD:x\"; git push", "git push"),
         ("sed -n \"s/x/y/p\" f && git push", "git push"),
         ("sed -n \"p\" f && git push", "git push"),
+        ("sed -nu \"x\" f && git push", "git push"),
+        ("sed -nE \"x\" f; git tag v1", "git tag v1"),
         ("git grep \"x\" f && git push", "git push"),
         ("rg -n \"x\" src | head -1; git push", "git push"),
         ("grep -rn \"git push\" src 2>&1; git tag v1", "git tag v1"),
@@ -1462,7 +1483,7 @@ fn a_line_an_executor_owns_is_left_whole() {
         "sed -ni \"p\" f",
         "sed -nl \"p\" f",
         "git grep \"-iOgit push origin main;:\" x",
-        "git grep \"-Open item\" f",
+        "git grep --open-files-in-pag \"git push origin main;:\" x",
         "sed -n \"s/a/b/w /tmp/x\" f",
         "sed -n -e \"1e git push origin main\" f",
         "sed -n -f script.sed f",
