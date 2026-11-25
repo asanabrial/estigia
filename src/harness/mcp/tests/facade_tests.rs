@@ -313,6 +313,7 @@ fn checks_forward_with_their_wait_and_nothing_else() {
     for refused in [
         json!({"issue": 5, "run_id": "claude-abcd1234", "checks": true, "name": "review-risk"}),
         json!({"issue": 5, "run_id": "claude-abcd1234", "checks": true, "record_verdict": true}),
+        json!({"issue": 5, "run_id": "claude-abcd1234", "checks": true, "launch": true, "names": ["review-risk"]}),
     ] {
         assert!(
             matches!(
@@ -328,7 +329,7 @@ fn checks_forward_with_their_wait_and_nothing_else() {
 fn checks_with_launch_forward_to_one_row_that_runs_them_and_starts_the_slots() {
     let (row, rest) = super::super::collect_step(&json!({
         "issue": 5, "run_id": "claude-abcd1234",
-        "checks": true, "launch": true, "wait_seconds": 40,
+        "checks": true, "launch": true, "wait_seconds": 40, "rerun": true,
     }))
     .expect("well formed")
     .expect("forwarded");
@@ -337,7 +338,7 @@ fn checks_with_launch_forward_to_one_row_that_runs_them_and_starts_the_slots() {
         rest,
         json!({
             "issue": 5, "run_id": "claude-abcd1234",
-            "launch": true, "wait_seconds": 40,
+            "launch": true, "wait_seconds": 40, "rerun": true,
         })
     );
 }

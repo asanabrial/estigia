@@ -612,6 +612,117 @@ fn running_check(world: &World) -> std::fs::File {
 }
 
 #[cfg(unix)]
+fn passing_checks(world: &World) {
+    let checks = declared_at(&world.context.repo_dir, &world.receipt.base)
+        .expect("the base's declared checks");
+    let commands = commands_digest(&checks);
+    let marker = crate::transport::markers::render(
+        "checks-receipt",
+        &[
+            ("run-id", "claude-a"),
+            ("digest", &world.receipt.digest),
+            ("commands", &commands),
+            ("passed", "true"),
+            ("results", "stub=0:1"),
+        ],
+    )
+    .expect("a checks marker");
+    open_ledger(world)
+        .append(&format!("Checks passed.\n\n{marker}\n"), NOW)
+        .expect("the passing receipt is recorded");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_passing_checks_answer_starts_the_slot_the_status_offers() {
+    let world = declared_world();
+    passing_checks(&world);
+    let bin = crate::test_env::scripted_gh();
+    let script = script_for(&world, lane_read_answers());
+    let context = named(&world.context);
+    let mut answer = serde_json::json!({"ok": true, "state": "finished", "passed": true});
+    let asked = std::cell::RefCell::new(Vec::new());
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        crate::transport::dispatch::launch_after_checks_with(
+            &context,
+            (42, "claude-a"),
+            NOW,
+            &mut answer,
+            &|_context, _ids, names, _now| {
+                asked
+                    .borrow_mut()
+                    .extend(names.iter().map(|name| (*name).to_owned()));
+                (
+                    vec![serde_json::json!({"name": names[0], "job": "job-1"})],
+                    None,
+                )
+            },
+        );
+    });
+    assert_eq!(*asked.borrow(), [RELIABILITY_LENS]);
+    assert_eq!(answer["launched"][0]["job"], "job-1", "{answer}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_launch_failure_after_the_checks_is_named_on_the_answer() {
+    let world = declared_world();
+    passing_checks(&world);
+    let bin = crate::test_env::scripted_gh();
+    let script = script_for(&world, lane_read_answers());
+    let context = named(&world.context);
+    let mut answer = serde_json::json!({"ok": true, "state": "finished", "passed": true});
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        crate::transport::dispatch::launch_after_checks_with(
+            &context,
+            (42, "claude-a"),
+            NOW,
+            &mut answer,
+            &|_context, _ids, _names, _now| {
+                (
+                    Vec::new(),
+                    Some((
+                        RELIABILITY_LENS.to_owned(),
+                        crate::transport::Failure::Read("no reviewer".to_owned()),
+                    )),
+                )
+            },
+        );
+    });
+    assert_eq!(
+        answer["launch_failure"]["name"], RELIABILITY_LENS,
+        "{answer}"
+    );
+    assert!(
+        answer["launched"].as_array().is_some_and(Vec::is_empty),
+        "{answer}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_status_the_answer_cannot_read_is_named_on_the_answer() {
+    let world = declared_world();
+    passing_checks(&world);
+    let bin = crate::test_env::scripted_gh();
+    let context = named(&world.context);
+    let mut answer = serde_json::json!({"ok": true, "state": "finished", "passed": true});
+    crate::test_env::with_scripted_gh(bin.path(), "", || {
+        crate::transport::dispatch::launch_after_checks_with(
+            &context,
+            (42, "claude-a"),
+            NOW,
+            &mut answer,
+            &|_context, _ids, _names, _now| (Vec::new(), None),
+        );
+    });
+    assert_eq!(
+        answer["launch_skipped"]["cause"], "review-status-unavailable",
+        "{answer}"
+    );
+}
+
+#[cfg(unix)]
 fn next_step(world: &World) -> serde_json::Value {
     let bin = crate::test_env::scripted_gh();
     let script = script_for(world, lane_read_answers());

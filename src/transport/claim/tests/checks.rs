@@ -243,6 +243,7 @@ fn a_second_run_for_the_same_digest_runs_nothing() {
     let second = ask(&context, &comments, &request(30, &receipt.base), &never)
         .expect("the second run reads the receipt");
     assert_eq!(second["cached"], true, "{second}");
+    assert_eq!(second["state"], "finished", "{second}");
     assert_eq!(second["passed"], true, "{second}");
     assert_eq!(ran_times(&file), 1);
     assert_eq!(recorded_receipts(), 1);
@@ -269,7 +270,7 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
         .expect("a running job is an answer");
     let waited = began.elapsed();
     assert_eq!(running["state"], "running", "{running}");
-    assert!(running["ask_after"].as_u64().is_some(), "{running}");
+    assert_eq!(running["ask_after"], 30, "{running}");
     assert!(waited >= Duration::from_secs(1), "{waited:?}");
     assert!(waited < Duration::from_secs(20), "{waited:?}");
 
@@ -290,6 +291,13 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
 
 #[test]
 fn a_running_checks_job_names_the_collect_that_waits_on_it() {
+    struct Release(std::path::PathBuf);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            let _ = crate::paths::replace_atomically(&self.0, "");
+        }
+    }
+
     crate::transport::store::forget_scratch_store();
     let held = tempfile::tempdir().expect("a directory");
     let release = held.path().join("release");
@@ -305,6 +313,7 @@ fn a_running_checks_job_names_the_collect_that_waits_on_it() {
         &on_a_thread,
     )
     .expect("a running job is an answer");
+    let _release = Release(release);
     assert_eq!(running["state"], "running", "{running}");
 
     let held_back = super::super::checks::holding(&context, &comments, 42, &receipt)
@@ -317,8 +326,6 @@ fn a_running_checks_job_names_the_collect_that_waits_on_it() {
         "{held_back}"
     );
     assert_eq!(held_back["arguments"]["checks"], true, "{held_back}");
-
-    put(&release, "");
 }
 
 #[test]

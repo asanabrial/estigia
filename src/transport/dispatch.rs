@@ -376,11 +376,28 @@ fn launch_each(
     Ok(())
 }
 
+type Launched = (Vec<serde_json::Value>, Option<(String, Failure)>);
+type LaunchAfterChecks<'a> = dyn Fn(&Context, (u64, &str), &[&str], &str) -> Launched + 'a;
+
 fn launch_after_checks(
+    context: &Context,
+    ids: (u64, &str),
+    now: &str,
+    answer: &mut serde_json::Value,
+) {
+    launch_after_checks_with(context, ids, now, answer, &|context, ids, names, now| {
+        let mut launched = Vec::new();
+        let outcome = launch_each(context, ids, names, true, now, &mut launched);
+        (launched, outcome.err())
+    });
+}
+
+pub(crate) fn launch_after_checks_with(
     context: &Context,
     (issue, run_id): (u64, &str),
     now: &str,
     answer: &mut serde_json::Value,
+    launch: &LaunchAfterChecks<'_>,
 ) {
     if answer["state"] != "finished" || answer["passed"] != true {
         return;
@@ -405,10 +422,9 @@ fn launch_after_checks(
     if names.is_empty() {
         return;
     }
-    let mut launched = Vec::new();
-    let outcome = launch_each(context, (issue, run_id), &names, true, now, &mut launched);
+    let (launched, failure) = launch(context, (issue, run_id), &names, now);
     answer["launched"] = serde_json::Value::Array(launched);
-    if let Err((name, failure)) = outcome {
+    if let Some((name, failure)) = failure {
         answer["launch_failure"] = serde_json::json!({
             "name": name,
             "failure": failure.envelope(),
