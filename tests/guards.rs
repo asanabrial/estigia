@@ -740,7 +740,12 @@ const AFFIRMED: &[(&str, u64)] = &[
     // creates a ref exactly as `git switch -c` does, and the claim is unchanged
     // by adding one more gated spelling.
     ("repository-shell", 2698723702781307116),
-    ("issue-creation-shell", 3013093601863561019),
+    // Re-read on 2026-11-25: the matcher now walks the words after `gh` and
+    // skips the options that take a value, rather than searching for `gh issue
+    // create` as a substring. The population already claimed "with options
+    // allowed between the words", so the code caught up with the text; the
+    // legitimate population and the escapes named are unchanged.
+    ("issue-creation-shell", 11655613431459157684),
     // `exit-code` — genuinely fail-closed. `0` to `5`
     // is the whole contract the transport implements, and the `_` arm sends
     // anything else to `Unknown`, never to the stop arm. Moved onto the item

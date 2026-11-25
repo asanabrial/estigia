@@ -435,7 +435,7 @@ pub fn is_branch_creation(normalized: &str) -> bool {
         let words: Vec<&str> = command.split_whitespace().collect();
         let mut at = 0;
         while at + 1 < words.len() {
-            if words[at] != "git" || words[at + 1] != "branch" {
+            if !crate::harness::is_git_word(words[at]) || words[at + 1] != "branch" {
                 at += 1;
                 continue;
             }
@@ -531,7 +531,7 @@ fn git_invocations(text: &str) -> Vec<(String, Vec<String>)> {
     for command in shell_commands(text) {
         let words: Vec<&str> = command.split_whitespace().collect();
         for (at, word) in words.iter().enumerate() {
-            if *word != "git" {
+            if !crate::harness::is_git_word(word) {
                 continue;
             }
             let Some(subcommand) = words.get(at + 1) else {
@@ -539,7 +539,7 @@ fn git_invocations(text: &str) -> Vec<(String, Vec<String>)> {
             };
             let rest = words[at + 2..]
                 .iter()
-                .take_while(|word| !SEPARATORS.contains(word) && **word != "git")
+                .take_while(|word| !SEPARATORS.contains(word) && !crate::harness::is_git_word(word))
                 .map(|word| (*word).to_owned())
                 .collect();
             found.push(((*subcommand).to_owned(), rest));
@@ -555,7 +555,10 @@ pub fn worktree_add_creates_branch(normalized: &str) -> bool {
         let words: Vec<&str> = command.split_whitespace().collect();
         let mut at = 0;
         while at + 2 < words.len() {
-            if words[at] != "git" || words[at + 1] != "worktree" || words[at + 2] != "add" {
+            if !crate::harness::is_git_word(words[at])
+                || words[at + 1] != "worktree"
+                || words[at + 2] != "add"
+            {
                 at += 1;
                 continue;
             }
