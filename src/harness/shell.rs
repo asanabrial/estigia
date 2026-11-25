@@ -1292,17 +1292,25 @@ fn reader_head(command: &str) -> Option<usize> {
             let mut at = index;
             loop {
                 let (word, next) = raw_word(command, at)?;
-                if !word.starts_with('-') {
-                    if !GIT_READS.contains(&word) {
+                let plain = unquoted(word);
+                if !plain.starts_with('-') {
+                    if !GIT_READS.contains(&plain.as_str()) {
                         return None;
                     }
-                    // `git grep -O` runs its value through the shell.
-                    let runs_a_pager = command[next..].split_whitespace().any(|word| {
-                        word.starts_with("-O") || word.starts_with("--open-files-in-pager")
-                    });
-                    return (!runs_a_pager).then_some(next);
+                    // `git grep -O` runs its value through the shell, and `git log
+                    // --output` writes one; a quoted spelling is the same option.
+                    let runs_or_writes = words(command.get(next..).unwrap_or_default())?
+                        .iter()
+                        .any(|word| {
+                            let word = unquoted(word);
+                            word.starts_with("-O")
+                                || word.starts_with("--open")
+                                || word.starts_with("--op")
+                                || word.starts_with("--output")
+                        });
+                    return (!runs_or_writes).then_some(next);
                 }
-                at = if GIT_GLOBAL_WITH_A_VALUE.contains(&word) {
+                at = if GIT_GLOBAL_WITH_A_VALUE.contains(&plain.as_str()) {
                     raw_word(command, next)?.1
                 } else {
                     next
@@ -1312,13 +1320,16 @@ fn reader_head(command: &str) -> Option<usize> {
         "rg" => {
             let words = words(command.get(index..).unwrap_or_default())?;
             let runs_a_program = words.iter().any(|word| {
-                let word = word.trim_matches(['\'', '"']);
+                let word = unquoted(word);
                 word == "--pre" || word.starts_with("--pre=")
             });
             (!runs_a_program).then_some(index)
         }
         "sed" => {
-            let words = words(command.get(index..).unwrap_or_default())?;
+            let words: Vec<String> = words(command.get(index..).unwrap_or_default())?
+                .into_iter()
+                .map(unquoted)
+                .collect();
             // A quiet sed filters; one short bundle may hold it (`-n`, `-nu`).
             let quiet = words.iter().any(|word| {
                 word.starts_with('-') && !word.starts_with("--") && word[1..].contains('n')
@@ -1334,24 +1345,29 @@ fn reader_head(command: &str) -> Option<usize> {
 /// The script `sed` runs, when it is the first word that is not one of the
 /// options listed here. `None` for `-e`, `-f`, a bundle or any other option:
 /// a script this cannot locate is one whose quoted text is not blanked.
-fn sed_script<'a>(words: &[&'a str]) -> Option<&'a str> {
+fn sed_script(words: &[String]) -> Option<&str> {
     let mut script = None;
-    for &word in words {
+    for word in words {
         if word.starts_with('-') {
             // GNU sed permutes options with getopt, so one after the first
             // operand is still a script this reader would have to order.
             if script.is_some() {
                 return None;
             }
-            match word {
+            match word.as_str() {
                 "-n" | "-r" | "-E" | "-s" | "-u" | "-z" | "--quiet" | "--silent" | "--posix"
                 | "--regexp-extended" | "--separate" | "--unbuffered" | "--null-data" => continue,
                 _ => return None,
             }
         }
-        script.get_or_insert(word);
+        script.get_or_insert(word.as_str());
     }
     script
+}
+
+/// The word as the shell hands it over, so `"-O"` is still the option `-O`.
+fn unquoted(word: &str) -> String {
+    word.replace(['\'', '"'], "")
 }
 
 /// The byte ranges of `command` a single simple command reads rather than runs,

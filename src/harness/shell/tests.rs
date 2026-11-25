@@ -1408,6 +1408,7 @@ fn a_blanked_reader_does_not_hide_the_command_after_it() {
         ("git log --grep \"x\"; git push", "git push"),
         ("git show \"HEAD:x\"; git push", "git push"),
         ("sed -n \"s/x/y/p\" f && git push", "git push"),
+        ("sed -n \"p\" f && git push", "git push"),
         ("grep -rn \"git push\" src 2>&1; git tag v1", "git tag v1"),
     ] {
         let view = super::data_view(command);
@@ -1457,8 +1458,14 @@ fn a_line_an_executor_owns_is_left_whole() {
         "sed -n -f script.sed f",
         "sed -n p -e \"1e git push origin main\" f",
         "sed -n p f --expression=\"1e git push\"",
+        "sed -n p f \"-e\" \"1e git push origin main\"",
+        "sed -n p \"--expression=1e git push\" f",
         "git grep -O \"git push origin main;:\" x",
         "git grep --open-files-in-pager=\"git push origin main;:\" x",
+        "git grep \"-Ogit push origin main;:\" x",
+        "git grep \"-O\" \"git push origin main;:\" x",
+        "git grep \"--open-files-in-pag=git push origin main;:\" x",
+        "git log --output=\"git push\" f",
         "git -c \"core.x=y log \" commit -m \" \" -a",
         "gh codespace ssh -c box -- 'git push'",
         "gh cs ssh -c box -- 'git push'",

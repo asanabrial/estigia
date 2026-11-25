@@ -64,10 +64,11 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   (`PATH`, `alias`, `function`, `hash`, `case`) that could change what a command resolves to or hide a
   boundary — and nothing inside `$(…)` or backticks is blanked. `gh api` has no verb, so a quoted endpoint
   after it is data. A reader whose own options decide whether it runs something is read by those options:
-  `rg` without `--pre` (quoted or not), `git log`/`grep`/`show` (whose global `-c`, `-C` and the rest take
-  their value as one word, and whose `git grep -O`/`--open-files-in-pager` runs its value through the
-  shell), and `sed -n` when its script is on the command line, carries no option this reader does not
-  know, and holds no `e`, `w` or `W` — those run a command or write a file in GNU sed. `sort`, `printf` and
+  `rg` without `--pre`, `git log`/`grep`/`show` (whose global `-c`, `-C` and the rest take their value as
+  one word, and whose `git grep -O`/`--open…` runs its value through the shell or whose `git log --output`
+  writes it), and `sed -n` when its script is on the command line, carries no option this reader does not
+  know, and holds no `e`, `w` or `W` — those run a command or write a file in GNU sed. An option is read
+  with its quotes removed, so `git grep "-O…"` and `sed -n p "-e" …` are the options they spell. `sort`, `printf` and
   `test` are absent because they run what they
   are handed (`sort --compress-program`, array subscripts), and `gh repo`/`gist` because `clone`, `fork`
   and `create` forward words after `--` to `git`. **Not closed:** an unquoted argument, so `echo git push`
