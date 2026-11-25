@@ -1307,7 +1307,11 @@ fn reader_head(command: &str) -> Option<usize> {
                             let bundled = word.starts_with('-')
                                 && !word.starts_with("--")
                                 && word[1..].contains('O');
-                            bundled || word.starts_with("--op") || word.starts_with("--output")
+                            let named =
+                                word.split_once('=').map_or(word.as_str(), |(name, _)| name);
+                            bundled
+                                || named == "--output"
+                                || (named.len() >= 4 && "--open-files-in-pager".starts_with(named))
                         });
                     return (!runs_or_writes).then_some(next);
                 }
