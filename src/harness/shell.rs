@@ -1247,23 +1247,23 @@ const GIT_GLOBAL_WITH_A_VALUE: &[&str] = &[
     "--config-env",
 ];
 
-/// The word after `from` and where it ends, whitespace only.
+/// The word after `from` and where it ends, with a quoted value kept whole.
 fn raw_word(command: &str, from: usize) -> Option<(&str, usize)> {
     let bytes = command.as_bytes();
-    let start = from
-        + bytes[from..]
-            .iter()
-            .take_while(|byte| matches!(byte, b' ' | b'\t'))
-            .count();
-    if start >= bytes.len() {
-        return None;
+    let mut at = from;
+    while matches!(bytes.get(at), Some(b' ' | b'\t')) {
+        at += 1;
     }
-    let end = start
-        + bytes[start..]
-            .iter()
-            .take_while(|byte| !is_blank(**byte))
-            .count();
-    Some((&command[start..end], end))
+    let start = at;
+    while at < bytes.len() && !is_blank(bytes[at]) {
+        at = match bytes[at] {
+            b'\'' => single_quoted_end(bytes, at)?,
+            b'"' => double_quoted_end(bytes, at)?,
+            b'\\' => (at + 2).min(bytes.len()),
+            _ => at + 1,
+        };
+    }
+    Some((&command[start..at], at))
 }
 
 /// The byte after the program and the subcommand that decides whether its
@@ -1293,7 +1293,14 @@ fn reader_head(command: &str) -> Option<usize> {
             loop {
                 let (word, next) = raw_word(command, at)?;
                 if !word.starts_with('-') {
-                    return GIT_READS.contains(&word).then_some(next);
+                    if !GIT_READS.contains(&word) {
+                        return None;
+                    }
+                    // `git grep -O` runs its value through the shell.
+                    let runs_a_pager = command[next..].split_whitespace().any(|word| {
+                        word.starts_with("-O") || word.starts_with("--open-files-in-pager")
+                    });
+                    return (!runs_a_pager).then_some(next);
                 }
                 at = if GIT_GLOBAL_WITH_A_VALUE.contains(&word) {
                     raw_word(command, next)?.1
@@ -1303,11 +1310,12 @@ fn reader_head(command: &str) -> Option<usize> {
             }
         }
         "rg" => {
-            let rest = command.get(index..).unwrap_or_default();
-            (!rest
-                .split_whitespace()
-                .any(|word| word == "--pre" || word.starts_with("--pre=")))
-            .then_some(index)
+            let words = words(command.get(index..).unwrap_or_default())?;
+            let runs_a_program = words.iter().any(|word| {
+                let word = word.trim_matches(['\'', '"']);
+                word == "--pre" || word.starts_with("--pre=")
+            });
+            (!runs_a_program).then_some(index)
         }
         "sed" => {
             let words = words(command.get(index..).unwrap_or_default())?;
@@ -1315,19 +1323,8 @@ fn reader_head(command: &str) -> Option<usize> {
             let quiet = words.iter().any(|word| {
                 word.starts_with('-') && !word.starts_with("--") && word[1..].contains('n')
             });
-            // `-i` writes in place, with a suffix (`-i.bak`) or in a bundle
-            // (`-ni`), and an in-place script is code like any other writer's.
-            let in_place = words.iter().any(|word| {
-                word.starts_with("--in-place")
-                    || word.strip_prefix('-').is_some_and(|flags| {
-                        !flags.starts_with('-')
-                            && (flags.starts_with('i')
-                                || (flags.chars().all(|c| c.is_ascii_alphabetic())
-                                    && flags.contains('i')))
-                    })
-            });
             let script = sed_script(&words)?;
-            (quiet && !in_place && !script.contains('e')).then_some(index)
+            (quiet && !script.contains(['e', 'w', 'W'])).then_some(index)
         }
         _ if READS_ONLY.contains(&head) => Some(index),
         _ => None,

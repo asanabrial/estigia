@@ -1310,6 +1310,12 @@ fn the_table_the_issue_measured_answers_as_the_gate_decides() {
         ("grep -rn \"git push origin\" src 2>&1", false),
         ("grep -rn \"git push origin\" src 2>/dev/null", false),
         ("/usr/bin/git -c user.name=\"Bot Name\" commit -m x", true),
+        ("git -c \"core.x=y log \" commit -m \" \" -a", true),
+        ("git grep -O \"git push origin main;:\" x", true),
+        (
+            "git grep --open-files-in-pager=\"git push origin main;:\" x",
+            true,
+        ),
     ] {
         assert_eq!(
             crate::harness::unclaimed::names_any(line, &fragments),
@@ -1355,6 +1361,8 @@ fn rg_pre_still_runs_a_program_and_is_never_blanked() {
     for command in [
         "rg --pre /bin/rm \"git push\" src",
         "rg --pre=/bin/rm \"git push\" src",
+        "rg \"--pre\" /bin/rm \"git push\" src",
+        "rg \"--pre=/bin/rm\" \"git push\" src",
     ] {
         assert_eq!(
             super::data_view(command),
@@ -1449,6 +1457,9 @@ fn a_line_an_executor_owns_is_left_whole() {
         "sed -n -f script.sed f",
         "sed -n p -e \"1e git push origin main\" f",
         "sed -n p f --expression=\"1e git push\"",
+        "git grep -O \"git push origin main;:\" x",
+        "git grep --open-files-in-pager=\"git push origin main;:\" x",
+        "git -c \"core.x=y log \" commit -m \" \" -a",
         "gh codespace ssh -c box -- 'git push'",
         "gh cs ssh -c box -- 'git push'",
         "gh extension exec 'git push'",
