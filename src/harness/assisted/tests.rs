@@ -377,7 +377,8 @@ fn an_assisted_run_reaches_a_pull_request_only_through_the_typed_tools() {
         "gh pr review 3 --approve",
         "gh pr review 3 --request-changes --body x",
         "gh pr comment 3 --body x",
-        "gh pr edit 3 --title x",
+        "gh pr edit 3 --add-label x",
+        "gh issue edit 3 --title x --add-assignee @me",
         "gh pr close 3",
         "gh pr ready 3",
         "gh --repo o/r pr review 3 --approve",
@@ -388,6 +389,44 @@ fn an_assisted_run_reaches_a_pull_request_only_through_the_typed_tools() {
             denied_as(&decision),
             "assisted-remote-write-unverified",
             "{line}"
+        );
+    }
+}
+
+#[test]
+fn a_title_or_body_edit_passes_under_an_assisted_claim() {
+    for line in crate::harness::text_edit::tests::ADMITTED {
+        let mut rig = new_rig();
+        let decision = decide_line(&mut rig, line);
+        assert!(
+            matches!(decision, Decision::Outside(_)),
+            "{line}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn a_closed_window_holds_a_title_or_body_edit_under_an_assisted_claim() {
+    for line in crate::harness::text_edit::tests::ADMITTED {
+        let mut rig = new_rig();
+        rig.context.operation_window = crate::config::GitOperationWindow::Unreadable;
+        let decision = decide_line(&mut rig, line);
+        assert_eq!(
+            denied_as(&decision),
+            "git-operation-window-denied",
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn more_than_a_title_or_a_body_does_not_pass_under_an_assisted_claim() {
+    for line in crate::harness::text_edit::tests::EXCLUDED {
+        let mut rig = new_rig();
+        let decision = decide_line(&mut rig, line);
+        assert!(
+            matches!(decision, Decision::Deny(_)),
+            "{line}: {decision:?}"
         );
     }
 }

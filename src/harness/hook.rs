@@ -780,9 +780,11 @@ fn unclaimed_hold(context: &GateContext, requirement: crate::config::IssueRequir
     }
 }
 
+const TEXT_EDITS: &str = " A title or body edit of an issue or a pull request needs no claim.";
+
 fn session_start_body(context: &GateContext, run: &session::Run, with_count: bool) -> Value {
     // Unreadable is not absent: what the run holds is unknown, not nothing.
-    let held = if run.unreadable {
+    let mut held = if run.unreadable {
         format!(
             "This run's record exists and cannot be read, so whether it holds an issue is \
              unknown. Estigia refuses every repository write from this run until that is \
@@ -828,6 +830,9 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
             }
         }
     };
+    if run.issue.is_none() && !run.unreadable {
+        held.push_str(TEXT_EDITS);
+    }
 
     // The base checkout stays read-only by convention; Estigia measures writes
     // in both and refuses neither, but says so once, in the message the agent

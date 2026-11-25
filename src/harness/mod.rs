@@ -68,6 +68,7 @@ pub mod session;
 pub mod shell;
 pub mod standdown;
 pub(crate) mod status;
+pub(crate) mod text_edit;
 pub mod tracker;
 pub mod unclaimed;
 
@@ -2206,7 +2207,9 @@ pub fn classify_observing(
                 },
             );
         }
-        if mutates_through_the_api(&normalized) {
+        let edits_text =
+            matches!(&literal, Established::Known(line) if text_edit::is_text_edit(line));
+        if !edits_text && mutates_through_the_api(&normalized) {
             return (
                 Action::Boundary {
                     command: "gh api".to_owned(),

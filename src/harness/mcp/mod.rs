@@ -336,7 +336,7 @@ fn initialize(params: &Value) -> Value {
             "version": crate::build_info::VERSION,
         },
         "instructions": "Estigia holds the workflow authority. Call `claim` before any repository \
-                         write; every write afterwards is verified against that claim, and every \
+                         write (a title or body edit of an issue or a pull request is not one); every write afterwards is verified against that claim, and every \
                          irreversible boundary re-verifies it against the local store. A refusal here \
                          is the store answering, not a suggestion.",
     })
