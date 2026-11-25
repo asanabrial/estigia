@@ -2331,11 +2331,12 @@ fn an_uninstall_takes_back_the_gate_with_or_without_the_failure_field() {
             "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [handler]}]},
         });
         fs::write(&hooks, seeded.to_string()).expect("their file");
+        assert!(seeded.to_string().contains("hook pre-tool-use"));
 
         uninstall(adapter, &options).expect("uninstall succeeds");
         let after = fs::read_to_string(&hooks).unwrap_or_default();
         assert!(
-            !after.contains("pre-tool-use"),
+            !after.contains("hook pre-tool-use"),
             "a gate with `onFailure: {on_failure:?}` survived the uninstall: {after}"
         );
         assert!(
@@ -2351,7 +2352,7 @@ fn only_claude_code_is_given_lifecycle_hooks() {
     // `SessionStart` into a file for an agent that does not have it is an entry
     // nobody runs, in somebody else's settings.
     let (_home, options) = sandbox();
-    for slug in ["codex", "cursor"] {
+    for (slug, given) in [("claude-code", true), ("codex", false), ("cursor", false)] {
         let adapter = agent(slug);
         let hooks = resolve_paths(adapter, &options)
             .expect("paths resolve")
@@ -2359,9 +2360,10 @@ fn only_claude_code_is_given_lifecycle_hooks() {
             .expect("a gated agent has a hooks file");
         setup(adapter, &Config::default(), &options).expect("setup succeeds");
         let written = fs::read_to_string(&hooks).expect("readable");
-        assert!(
-            !written.contains("session-start"),
-            "{slug} was given a lifecycle hook it does not have: {written}"
+        assert_eq!(
+            written.contains("hook session-start"),
+            given,
+            "{slug} has the wrong lifecycle hooks: {written}"
         );
     }
 }
@@ -10898,6 +10900,23 @@ cases.stop_after = await scenario("stop_after", {
     }),
   ],
 });
+cases.stop_after_waiting = await scenario("stop_after_waiting", {
+  start: started,
+  turns: [
+    {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        run_id: "opencode-abc",
+        live: true,
+        issue: 42,
+        standing: "passed",
+        completed: 0,
+        waiting: "a person: published",
+        stop_after: "the operator asked to stop after the current task",
+      }),
+    },
+  ],
+});
 cases.stop_after_live = await scenario("stop_after_live", {
   start: started,
   turns: [
@@ -11253,6 +11272,21 @@ fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
         stop_after["clears"], 1,
         "the stop-after request was not consumed: {stop_after}"
     );
+
+    let stop_after_waiting = &cases["stop_after_waiting"];
+    assert_eq!(
+        stop_after_waiting["prompts"], 1,
+        "a request to stop was not honoured while a person was waited on: {stop_after_waiting}"
+    );
+    let reason = stop_after_waiting["stopped"]["reason"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        reason.contains("stop after the current task")
+            && reason.contains("waits on a person: published"),
+        "{stop_after_waiting}"
+    );
+    assert_eq!(stop_after_waiting["clears"], 1, "{stop_after_waiting}");
 
     let stop_after_live = &cases["stop_after_live"];
     assert_eq!(
@@ -19651,6 +19685,20 @@ const out = {};
 }
 
 {
+  use({ answer: LIVE });
+  const s = await scenario();
+  await start(s, "x");
+  use({ answer: { ...LIVE, waiting: "a person: published", stop_after: "finish the current task" } });
+  const before = held.length;
+  await turn(s);
+  out.stop_after_waiting = {
+    ...snapshot(s),
+    calls: s.asked().map((call) => call.args),
+    timers: held.length - before,
+  };
+}
+
+{
   use({ answer: { ...LIVE, stop_after: "left over from before" } });
   const s = await scenario();
   await start(s, "x");
@@ -20237,6 +20285,30 @@ fn the_pi_loop_stops_on_a_requested_stop_and_clears_the_request_once() {
     );
     assert_eq!(midloop["afterStop"]["asked"], midloop["asked"], "{midloop}");
     assert_eq!(midloop["afterStop"]["prompts"], 1, "{midloop}");
+
+    let waiting = &cases["stop_after_waiting"];
+    assert_eq!(waiting["prompts"], 1, "{waiting}");
+    assert!(
+        strings(&waiting["said"])
+            .iter()
+            .any(|line| line.contains("finish the current task")
+                && line.contains("waits on a person: published")),
+        "{waiting}"
+    );
+    assert_eq!(
+        waiting["calls"]
+            .as_array()
+            .expect("the calls")
+            .iter()
+            .filter(|call| **call == clear("sess-1"))
+            .count(),
+        1,
+        "{waiting}"
+    );
+    assert_eq!(
+        waiting["timers"], 0,
+        "a stopped loop armed a timer: {waiting}"
+    );
 
     let empty = &cases["stop_after_empty"];
     assert_eq!(
