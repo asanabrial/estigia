@@ -22,13 +22,12 @@ pub const ISSUE_CREATION_POPULATION: Population = Population {
 };
 
 /// The `gh` options that take a value, skipped when reading the words after `gh`.
-pub(crate) const OPTIONS_WITH_A_VALUE: &[&str] = &["-r", "--repo", "--hostname"];
+pub(crate) const OPTIONS_WITH_A_VALUE: &[&str] = super::GH_OPTIONS_WITH_A_VALUE;
 
 /// Whether a lowercased, option-stripped command line files an issue.
 pub fn names_issue_creation(normalized: &str) -> bool {
-    super::contains_whole_command(normalized, "gh issue create")
-        || super::contains_whole_command(normalized, "gh issue new")
-        || gh_reaches_issue_creation(normalized)
+    super::names_gh_command(normalized, &["issue", "create"])
+        || super::names_gh_command(normalized, &["issue", "new"])
         || api_files_an_issue(normalized)
 }
 
@@ -45,39 +44,6 @@ fn api_files_an_issue(normalized: &str) -> bool {
             .any(|candidate| candidate.trim_end_matches('/').ends_with("/issues"))
     });
     !reads && (issues_path || normalized.contains("createissue"))
-}
-
-fn gh_reaches_issue_creation(normalized: &str) -> bool {
-    let mut from = 0;
-    while let Some(at) = normalized[from..].find("gh ") {
-        let start = from + at;
-        from = start + 1;
-        let before = normalized[..start].chars().next_back();
-        if before.is_some_and(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '/')) {
-            continue;
-        }
-        let mut words = normalized[start + 3..]
-            .split_whitespace()
-            .map(|word| word.trim_end_matches([';', ')', '&', '|', '"', '\'']));
-        if skip_options(&mut words) == Some("issue")
-            && skip_options(&mut words).is_some_and(|w| w == "create" || w == "new")
-        {
-            return true;
-        }
-    }
-    false
-}
-
-fn skip_options<'a>(words: &mut impl Iterator<Item = &'a str>) -> Option<&'a str> {
-    loop {
-        let word = words.next()?;
-        if !word.starts_with('-') {
-            return Some(word);
-        }
-        if OPTIONS_WITH_A_VALUE.contains(&word) {
-            words.next()?;
-        }
-    }
 }
 
 /// The refusal for a shell line that files an issue, whoever holds the checkout.

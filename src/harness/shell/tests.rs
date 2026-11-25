@@ -488,6 +488,20 @@ fn an_in_place_edit_is_a_write_and_the_same_filter_streaming_is_not() {
     // Without `-i` the same program is a filter, and filtering is reading.
     assert_eq!(writes_a_file("sed s/a/b/ src/main.rs"), None);
     assert_eq!(writes_a_file("perl -pe s/a/b/ x"), None);
+
+    // An in-place edit is left whole even when it carries `-n` too: its script
+    // is code the reader must not blank, `-i` alone or combined.
+    for command in [
+        "sed -i \"s/a/git push/e\" f",
+        "sed -ni \"s/a/git push/e\" f",
+        "sed -n -i \"s/a/git push/e\" f",
+    ] {
+        assert_eq!(
+            super::data_view(command),
+            command,
+            "`{command}` was blanked"
+        );
+    }
 }
 
 #[test]
@@ -1277,6 +1291,88 @@ fn a_redirect_names_the_file_it_opens() {
 }
 
 #[test]
+fn the_table_the_issue_measured_answers_as_the_gate_decides() {
+    let fragments = [
+        "git commit",
+        "git cherry-pick",
+        "git revert",
+        "git merge",
+        "git am",
+        "git rebase",
+        "git push",
+    ];
+    for (line, refused) in [
+        ("git commit -m x", true),
+        ("git -c user.name=\"Bot Name\" commit -m x", true),
+        ("git -C \"/Users/me/My Repo\" commit -m x", true),
+        ("rg -n \"git push origin\" src", false),
+        ("git log --grep \"git commit -m\"", false),
+        ("grep -rn \"git push origin\" src 2>&1", false),
+        ("grep -rn \"git push origin\" src 2>/dev/null", false),
+        ("/usr/bin/git -c user.name=\"Bot Name\" commit -m x", true),
+        ("git -c \"core.x=y log \" commit -m \" \" -a", true),
+        ("git grep -O \"git push origin main;:\" x", true),
+        (
+            "git grep --open-files-in-pager=\"git push origin main;:\" x",
+            true,
+        ),
+    ] {
+        assert_eq!(
+            crate::harness::unclaimed::names_any(line, &fragments),
+            refused,
+            "`{line}` was answered the other way"
+        );
+    }
+}
+
+#[test]
+fn an_option_between_gh_and_its_verb_still_names_the_delivery() {
+    let (before, _) = crate::harness::classify_with(
+        "bash",
+        &serde_json::json!({ "command": "gh pr -R o/r merge 12" }),
+        &[],
+    );
+    let (after, _) = crate::harness::classify_with(
+        "bash",
+        &serde_json::json!({ "command": "gh pr merge 12 -R o/r" }),
+        &[],
+    );
+    assert_eq!(before, after, "the two spellings read differently");
+    let (path_spelled, _) = crate::harness::classify_with(
+        "bash",
+        &serde_json::json!({ "command": "/usr/bin/gh pr -R o/r merge 12" }),
+        &[],
+    );
+    assert_eq!(
+        path_spelled, before,
+        "a path-spelled gh was not the same delivery"
+    );
+    assert!(
+        matches!(
+            &before,
+            crate::harness::Action::Boundary { command, .. } if command == "gh pr merge"
+        ),
+        "the option between `pr` and `merge` hid the delivery: {before:?}"
+    );
+}
+
+#[test]
+fn rg_pre_still_runs_a_program_and_is_never_blanked() {
+    for command in [
+        "rg --pre /bin/rm \"git push\" src",
+        "rg --pre=/bin/rm \"git push\" src",
+        "rg \"--pre\" /bin/rm \"git push\" src",
+        "rg \"--pre=/bin/rm\" \"git push\" src",
+    ] {
+        assert_eq!(
+            super::data_view(command),
+            command,
+            "`{command}` was blanked although `--pre` runs a program"
+        );
+    }
+}
+
+#[test]
 fn a_read_only_line_has_its_data_blanked() {
     for (command, fragment) in [
         ("echo 'git push'", "git push"),
@@ -1287,11 +1383,63 @@ fn a_read_only_line_has_its_data_blanked() {
             "split",
         ),
         ("grep 'git tag v1' f", "git tag"),
+        ("rg -n \"git push origin\" src", "git push origin"),
+        ("git log --grep \"git commit -m\"", "git commit -m"),
+        ("git grep \"git push origin\"", "git push origin"),
+        (
+            "git grep --only-matching \"git push origin\" f",
+            "git push origin",
+        ),
+        ("sed -n \"s/git push/x/p\" f", "git push"),
+        ("sed -nu \"git push\" f", "git push"),
+        ("sed -nE \"git push origin\" f", "git push origin"),
+        ("grep -rn \"git push origin\" src 2>&1", "git push origin"),
+        (
+            "cd repo && grep \"git push origin\" src | head",
+            "git push origin",
+        ),
     ] {
         let view = super::data_view(command);
         assert!(
             !view.contains(fragment),
             "`{command}` kept `{fragment}` in `{view}`"
+        );
+    }
+}
+
+#[test]
+fn a_search_word_that_looks_like_a_bundled_option_stays_whole() {
+    for command in [
+        "git grep \"-Open item\" f",
+        "git log --grep \"-Only\"",
+        "git grep \"-iOgit push origin main;:\" x",
+    ] {
+        assert_eq!(
+            super::data_view(command),
+            command,
+            "`{command}` was blanked as if its search text were an option"
+        );
+    }
+}
+
+#[test]
+fn a_blanked_reader_does_not_hide_the_command_after_it() {
+    for (command, fragment) in [
+        ("rg -n \"x\" src && git push", "git push"),
+        ("git log --grep \"x\"; git push", "git push"),
+        ("git show \"HEAD:x\"; git push", "git push"),
+        ("sed -n \"s/x/y/p\" f && git push", "git push"),
+        ("sed -n \"p\" f && git push", "git push"),
+        ("sed -nu \"x\" f && git push", "git push"),
+        ("sed -nE \"x\" f; git tag v1", "git tag v1"),
+        ("git grep \"x\" f && git push", "git push"),
+        ("rg -n \"x\" src | head -1; git push", "git push"),
+        ("grep -rn \"git push\" src 2>&1; git tag v1", "git tag v1"),
+    ] {
+        let view = super::data_view(command);
+        assert!(
+            view.contains(fragment),
+            "`{command}` hid `{fragment}` in `{view}`"
         );
     }
 }
@@ -1329,6 +1477,28 @@ fn a_line_an_executor_owns_is_left_whole() {
         "x=$(case a in a) echo 'git push';; esac); $x",
         "rg --pre 'git push' f",
         "sort --compress-program 'git push' f",
+        "sed -n \"1e git push origin main\" f",
+        "sed -n \"s/a/git push/e\" f",
+        "sed -n \"w /tmp/x\" f",
+        "sed -ni \"p\" f",
+        "sed -nl \"p\" f",
+        "git grep \"-iOgit push origin main;:\" x",
+        "git grep --open-files-in-pag \"git push origin main;:\" x",
+        "sed -n \"s/a/b/w /tmp/x\" f",
+        "sed -n -e \"1e git push origin main\" f",
+        "sed -n -f script.sed f",
+        "sed -n p -e \"1e git push origin main\" f",
+        "sed -n p f --expression=\"1e git push\"",
+        "sed -n p f \"-e\" \"1e git push origin main\"",
+        "sed -n p \"--expression=1e git push\" f",
+        "git grep -O \"git push origin main;:\" x",
+        "git grep --open-files-in-pager=\"git push origin main;:\" x",
+        "git grep \"-Ogit push origin main;:\" x",
+        "git grep \"-O\" \"git push origin main;:\" x",
+        "git grep -nO \"git push origin main;:\" x",
+        "git grep \"--open-files-in-pag=git push origin main;:\" x",
+        "git log --output=\"git push\" f",
+        "git -c \"core.x=y log \" commit -m \" \" -a",
         "gh codespace ssh -c box -- 'git push'",
         "gh cs ssh -c box -- 'git push'",
         "gh extension exec 'git push'",
