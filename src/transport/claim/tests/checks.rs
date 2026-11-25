@@ -289,6 +289,39 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
 }
 
 #[test]
+fn a_running_checks_job_names_the_collect_that_waits_on_it() {
+    crate::transport::store::forget_scratch_store();
+    let held = tempfile::tempdir().expect("a directory");
+    let release = held.path().join("release");
+    let (_root, context, receipt) = checked_change(Some(&declaration_for(&[(
+        "slow",
+        &format!("while [ ! -e {} ]; do sleep 0.05; done", release.display()),
+    )])));
+    let comments = timeline_of(&receipt);
+    let running = ask(
+        &context,
+        &comments,
+        &request(1, &receipt.base),
+        &on_a_thread,
+    )
+    .expect("a running job is an answer");
+    assert_eq!(running["state"], "running", "{running}");
+
+    let held_back = super::super::checks::holding(&context, &comments, 42, &receipt)
+        .expect("reads")
+        .expect("the running job holds the review");
+    assert_eq!(held_back["kind"], "collect", "{held_back}");
+    assert_eq!(held_back["reason_code"], "checks-running", "{held_back}");
+    assert_eq!(
+        held_back["operation"], "collect_review_input",
+        "{held_back}"
+    );
+    assert_eq!(held_back["arguments"]["checks"], true, "{held_back}");
+
+    put(&release, "");
+}
+
+#[test]
 fn no_wait_is_longer_than_fifteen_minutes() {
     assert_eq!(patience_for(0), Duration::ZERO);
     assert_eq!(patience_for(7), Duration::from_secs(7));

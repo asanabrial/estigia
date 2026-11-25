@@ -500,6 +500,52 @@ impl<H: Hands> Deliver<'_, H> {
                 "collect" if all_running(&next) => {
                     self.wait("review", "inputs-running", next["ask_after"].as_u64())?;
                 }
+                "collect" if reason == "checks-running" => {
+                    let seconds = self
+                        .deadline
+                        .saturating_duration_since(self.hands.instant())
+                        .as_secs()
+                        .clamp(1, MAX_WAIT_SECONDS);
+                    let answer = self.call(
+                        "review",
+                        "collect_review_input",
+                        json!({
+                            "issue": self.request.issue,
+                            "run_id": self.request.run_id,
+                            "checks": true,
+                            "launch": true,
+                            "wait_seconds": seconds,
+                            "compact": true,
+                        }),
+                    )?;
+                    self.done.push("collect_review_input");
+                    let relays: Vec<Value> = answer["launched"]
+                        .as_array()
+                        .map(|launched| {
+                            launched
+                                .iter()
+                                .filter(|entry| entry["relay"] == true)
+                                .cloned()
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !relays.is_empty() {
+                        return Err(stop(
+                            "review",
+                            "relay-launch",
+                            json!({
+                                "launched": relays,
+                                "detail": "start these reviewers through this host, then call \
+                                           `deliver` again",
+                            }),
+                        ));
+                    }
+                    if answer["state"] == "running" {
+                        let ask = self.hands.now()
+                            + answer["ask_after"].as_u64().unwrap_or(ASK_AFTER_SECONDS);
+                        self.wait("review", "checks-running", Some(ask))?;
+                    }
+                }
                 _ => {
                     let mut detail = json!({"next": next});
                     if let Some(verdict) = &self.verdict {

@@ -120,14 +120,15 @@ authority nor independence.
    epoch, PR, head, base and clean-target digest, then transition to `review`; read the publication
    lane before acquiring reviewers, and use `republish_review` for a rewritten history —
    [repository delivery](references/repository-delivery.md) owns the lane reading, the cooperative
-   CI ordering and the force-push rule. Ask for `start_review` on the publication to transition, read
-   `review_status` and launch every slot it offers in one call, unless
-   the lane is red; `with_review` brings the tier and status alone. Then follow `review_status`'s
-   `next` until it stops: `collect_review_input` for every slot it offers, with `launch: true` to
-   start its reviewer and without it to record the answer (`names` batches either; `record_verdict`
-   on the collect records the verdict once `review_status` names it); then `deliver`, with `until`
-   where it names that; it collects finished slots itself. Call `escalate_review` when a spent correction leaves the decision
-   to a person, and `handoff_review` when this run cannot obtain the required distinct context.
+   CI ordering and the force-push rule. Ask `start_review` on the publication. Where the base
+   declares checks it starts them and launches no lens until they pass; `deliver` then holds the
+   wait, starts every slot the passing receipt offers, collects them and records the verdict.
+   Otherwise launch every slot `review_status` offers, unless the lane is red. Follow
+   its `next` until it stops: `collect_review_input` per slot, with `launch: true` to start a
+   reviewer, without to record the answer (`names` batches either; `record_verdict` records the
+   verdict); then `deliver`, with `until` where it names that. Call `escalate_review` when a spent
+   correction leaves the decision to a person, and `handoff_review` when this run cannot obtain the
+   required distinct context.
    [Blind judges](policies/blind-judges.md) owns the settlement order, the refutation batch, the
    targeted validator, the one-correction rule, the classification of findings and the release
    rule; [runtime notes](references/runtime-notes.md) owns when a launch failed and a handoff is

@@ -923,13 +923,12 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "collect_review_input",
         contract_name: "collect_review_input",
-        description: "Record what started reviewers answered: `name` or `names`, by the run that \
-                      launched them, for slots `review_status` offers. A running job is refused \
-                      unless `wait_seconds` is given; a batch reports it and goes on. A bad answer \
-                      or a repeat call writes nothing. `launch: true` starts each named slot's \
-                      reviewer as a detached job and returns at once; nothing launches without it. \
-                      `checks: true` runs the declared checks and records a receipt bound to the \
-                      published digest. Requires a live review claim.",
+        description: "Record what started reviewers answered: `name`/`names`, by the launching run, for \
+                      slots it offers. A running job is refused unless `wait_seconds` is given; a \
+                      batch reports it and continues. A bad or repeated answer writes nothing. \
+                      `launch: true` starts each named reviewer detached; `checks: true` runs the \
+                      declared checks for the published digest, and with `launch: true` starts \
+                      every slot they held back once they pass. Requires a live review claim.",
         operation: "collect-review-input",
         arguments: &[
             ISSUE,
@@ -958,13 +957,14 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "launch",
                 "boolean",
-                "Start each named slot's reviewer instead of collecting. Takes only `name` or \
-                 `names`.",
+                "Start the named slot's reviewer instead of collecting; with `checks`, start every \
+                 slot a passing receipt held back.",
             ),
             Argument::optional(
                 "checks",
                 "boolean",
-                "Run the declared checks instead of collecting. Takes only `wait_seconds`, `rerun`.",
+                "Run the declared checks instead of collecting; takes `wait_seconds`, `rerun`, \
+                 `launch`.",
             ),
             Argument::optional("rerun", "boolean", "With `checks`: rerun a failed receipt, once."),
         ],
@@ -1782,7 +1782,8 @@ pub const INTERNAL: &[Tool] = &[
                       job in this run's clean checkout and record a receipt bound to the \
                       published digest. Answers `declared: false`, `cached`, or `running` with \
                       `ask_after`: call again to collect. A failing answer carries output tails, the \
-                      receipt none. The verdict and `release_ci` refuse without a passing receipt. \
+                      receipt none. With `launch`, a passing receipt starts every slot it held back. \
+                      The verdict and `release_ci` refuse without a passing receipt. \
                       Requires a live review claim.",
         operation: "run-checks",
         arguments: &[
@@ -1799,6 +1800,12 @@ pub const INTERNAL: &[Tool] = &[
                 "rerun",
                 "boolean",
                 "Run again over a failed receipt for these bytes; admitted once.",
+            ),
+            Argument::optional(
+                "launch",
+                "boolean",
+                "Once a passing receipt stands, start every slot `review_status` held back for it \
+                 and report them under `launched`; a red or running receipt starts none.",
             ),
         ],
         effect: PointerEffect::Renew,

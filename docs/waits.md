@@ -102,7 +102,9 @@ from both totals.
   often than at the 20 s default without asking any host to hold a call longer than it already did.
 - **`collect_review_input` with `checks: true`** has the same 900 s ceiling since it stopped at 50, which
   asked a run of three and a half minutes to call four or five times. A passing answer carries no output
-  tails.
+  tails. With `launch: true` it starts every slot the passing receipt held back, and `deliver` asks for
+  that combination, so the call after a publication whose checks are running carries the wait and the
+  launch together.
 - **No path is needed for the kept rows.** Each is a decision the model or a person makes, or a wait the
   runtime already holds.
 

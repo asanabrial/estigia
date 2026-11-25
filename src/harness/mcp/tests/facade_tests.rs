@@ -325,6 +325,24 @@ fn checks_forward_with_their_wait_and_nothing_else() {
 }
 
 #[test]
+fn checks_with_launch_forward_to_one_row_that_runs_them_and_starts_the_slots() {
+    let (row, rest) = super::super::collect_step(&json!({
+        "issue": 5, "run_id": "claude-abcd1234",
+        "checks": true, "launch": true, "wait_seconds": 40,
+    }))
+    .expect("well formed")
+    .expect("forwarded");
+    assert_eq!(row, "run_checks");
+    assert_eq!(
+        rest,
+        json!({
+            "issue": 5, "run_id": "claude-abcd1234",
+            "launch": true, "wait_seconds": 40,
+        })
+    );
+}
+
+#[test]
 fn a_status_that_offers_a_slot_to_start_says_to_collect_with_launch() {
     let offered = json!([
         {"name": "review-risk", "capture": "launch_review_input"},

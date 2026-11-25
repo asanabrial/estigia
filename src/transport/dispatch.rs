@@ -28,6 +28,7 @@ use super::{Context, Failure};
 const SWITCHES: &[&str] = &[
     "force",
     "rerun",
+    "launch",
     "full",
     "held-by-other",
     "manifest",
@@ -373,6 +374,46 @@ fn launch_each(
         }
     }
     Ok(())
+}
+
+fn launch_after_checks(
+    context: &Context,
+    (issue, run_id): (u64, &str),
+    now: &str,
+    answer: &mut serde_json::Value,
+) {
+    if answer["state"] != "finished" || answer["passed"] != true {
+        return;
+    }
+    let status = match super::claim::review_status(context, issue) {
+        Ok(status) => status,
+        Err(failure) => {
+            answer["launch_skipped"] = serde_json::json!({
+                "cause": "review-status-unavailable",
+                "detail": failure.envelope(),
+            });
+            return;
+        }
+    };
+    let names: Vec<&str> = status["next"]["inputs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|input| input["capture"] == "launch_review_input")
+        .filter_map(|input| input["name"].as_str())
+        .collect();
+    if names.is_empty() {
+        return;
+    }
+    let mut launched = Vec::new();
+    let outcome = launch_each(context, (issue, run_id), &names, true, now, &mut launched);
+    answer["launched"] = serde_json::Value::Array(launched);
+    if let Err((name, failure)) = outcome {
+        answer["launch_failure"] = serde_json::json!({
+            "name": name,
+            "failure": failure.envelope(),
+        });
+    }
 }
 
 fn checks_clear(
@@ -1592,29 +1633,37 @@ fn run_operation(
                 }))),
             }
         }
-        "run-checks" => super::claim::run_checks(
-            context,
-            &super::claim::RunChecks {
-                issue: issue()?,
-                run_id: run_id()?,
-                base: f.get("base"),
-                worktree: f.path("worktree"),
-                wait_seconds: match f.get("wait-seconds") {
-                    Some(text) => text.trim().parse::<u64>().map_err(|_| {
-                        Failure::ConfigDefect(serde_json::json!({
-                            "ok": false,
-                            "reason": "malformed-argument",
-                            "operation": operation,
-                            "argument": "--wait-seconds",
-                            "value": text,
-                        }))
-                    })?,
-                    None => 0,
+        "run-checks" => {
+            let issue = issue()?;
+            let run_id = run_id()?;
+            let mut answer = super::claim::run_checks(
+                context,
+                &super::claim::RunChecks {
+                    issue,
+                    run_id,
+                    base: f.get("base"),
+                    worktree: f.path("worktree"),
+                    wait_seconds: match f.get("wait-seconds") {
+                        Some(text) => text.trim().parse::<u64>().map_err(|_| {
+                            Failure::ConfigDefect(serde_json::json!({
+                                "ok": false,
+                                "reason": "malformed-argument",
+                                "operation": operation,
+                                "argument": "--wait-seconds",
+                                "value": text,
+                            }))
+                        })?,
+                        None => 0,
+                    },
+                    now,
+                    rerun: f.on("rerun"),
                 },
-                now,
-                rerun: f.on("rerun"),
-            },
-        ),
+            )?;
+            if f.on("launch") {
+                launch_after_checks(context, (issue, run_id), now, &mut answer);
+            }
+            Ok(answer)
+        }
         "release-ci" => super::claim::release_ci(
             context,
             &super::claim::CiRelease {
