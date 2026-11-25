@@ -869,12 +869,37 @@ const TAKES_THE_NEXT_WORD: &[&str] = &[
 /// leading option — and so a global option between `estigia` and its verb
 /// cannot hide a listed `estigia` fragment the same way.
 fn without_leading_options(command: &str) -> String {
+    let Some(spans) = shell::nested_commands(command) else {
+        return command.to_owned();
+    };
+    if spans.is_empty() {
+        return strip_leading_options(command);
+    }
+    let mut rewritten = String::with_capacity(command.len());
+    let mut at = 0;
+    for (start, end) in spans {
+        rewritten.push_str(&command[at..start]);
+        rewritten.push_str(&without_leading_options(&command[start..end]));
+        at = end;
+    }
+    rewritten.push_str(&command[at..]);
+    strip_leading_options(&rewritten)
+}
+
+/// The same reading with the command substitutions inside already rewritten.
+fn strip_leading_options(command: &str) -> String {
+    let Some(words) = shell::words(command) else {
+        return command.to_owned();
+    };
     let mut kept: Vec<&str> = Vec::new();
-    let mut words = command.split_whitespace().peekable();
+    let mut words = words.into_iter().peekable();
     while let Some(word) = words.next() {
         kept.push(word);
         let program = without_substitution_openers(word);
-        if program != "git" && program != "gh" && binary_name(program) != "estigia" {
+        if binary_name(program) != "git"
+            && binary_name(program) != "gh"
+            && binary_name(program) != "estigia"
+        {
             continue;
         }
         // Its own options, up to the subcommand. A word that does not start
@@ -1073,6 +1098,94 @@ fn whole_command_tails<'a>(text: &'a str, fragment: &str) -> impl Iterator<Item 
 
 fn contains_whole_command(text: &str, fragment: &str) -> bool {
     whole_command_tails(text, fragment).next().is_some()
+}
+
+/// The `gh` options that take a value, skipped when reading the words after `gh`.
+pub(crate) const GH_OPTIONS_WITH_A_VALUE: &[&str] = &["-r", "--repo", "--hostname"];
+
+/// Whether `text` runs `gh` with exactly `words` in order, an option and its
+/// value allowed between any two of them.
+fn names_gh_command(text: &str, words: &[&str]) -> bool {
+    let mut from = 0;
+    while let Some(at) = text[from..].find("gh") {
+        let start = from + at;
+        from = start + 1;
+        let before = text[..start].chars().next_back();
+        if before.is_some_and(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '/')) {
+            continue;
+        }
+        if !ends_a_command(text, start + 2) {
+            continue;
+        }
+        let mut index = start + 2;
+        let mut matched = true;
+        for expected in words {
+            let Some((found, next)) = next_positional(text, index) else {
+                matched = false;
+                break;
+            };
+            if found != *expected {
+                matched = false;
+                break;
+            }
+            index = next;
+        }
+        if matched {
+            return true;
+        }
+    }
+    false
+}
+
+/// The next word that is not an option, and where it ends. An option in
+/// [`GH_OPTIONS_WITH_A_VALUE`] takes the word after it with it.
+fn next_positional(text: &str, mut index: usize) -> Option<(&str, usize)> {
+    let bytes = text.as_bytes();
+    loop {
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            index += 1;
+        }
+        let start = index;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| !byte.is_ascii_whitespace())
+        {
+            index += 1;
+        }
+        if start == index {
+            return None;
+        }
+        let word = text[start..index].trim_end_matches([';', ')', '&', '|', '"', '\'']);
+        if word.is_empty() {
+            return None;
+        }
+        if word.starts_with('-') {
+            if GH_OPTIONS_WITH_A_VALUE.contains(&word) {
+                while bytes
+                    .get(index)
+                    .is_some_and(|byte| byte.is_ascii_whitespace())
+                {
+                    index += 1;
+                }
+                while bytes
+                    .get(index)
+                    .is_some_and(|byte| !byte.is_ascii_whitespace())
+                {
+                    index += 1;
+                }
+            }
+            continue;
+        }
+        return Some((word, start + word.len()));
+    }
+}
+
+/// Whether this word runs `git`, however its program is spelled.
+pub(crate) fn is_git_word(word: &str) -> bool {
+    binary_name(word) == "git"
 }
 
 fn git_tag_needs_boundary(normalized: &str) -> bool {
@@ -1285,9 +1398,8 @@ fn pr_merge_names_a_repository(command: &str) -> bool {
     if !command.bytes().all(allowed_pr_merge_byte) {
         return false;
     }
-    let words: Vec<&str> = command.split_ascii_whitespace().collect();
-    words.get(..3) == Some(&["gh", "pr", "merge"][..])
-        && words.iter().any(|word| names_a_repository(word))
+    names_gh_command(&command.to_ascii_lowercase(), &["pr", "merge"])
+        && command.split_ascii_whitespace().any(names_a_repository)
 }
 
 /// The one PR target that can be retained without becoming a shell parser: the
@@ -2241,6 +2353,8 @@ pub fn classify_observing(
             .filter(|(index, fragment)| {
                 if *fragment == "git tag" && *index < IRREVERSIBLE.len() {
                     git_tag_needs_boundary(&code)
+                } else if let Some(words) = fragment.strip_prefix("gh ") {
+                    names_gh_command(&code, &words.split(' ').collect::<Vec<_>>())
                 } else {
                     contains_whole_command(&code, fragment)
                 }
@@ -3254,6 +3368,26 @@ pub fn gate_observing(
     )
 }
 
+/// A home-relative target with the home resolved, or `None` when it names no
+/// home or the home cannot be read.
+fn with_home(target: &str) -> Option<String> {
+    let rest = ["~/", "${HOME}/", "$HOME/"]
+        .into_iter()
+        .find_map(|prefix| target.strip_prefix(prefix))
+        .or_else(|| {
+            ["~", "${HOME}", "$HOME"]
+                .into_iter()
+                .find(|bare| target == *bare)
+                .map(|_| "")
+        })?;
+    let home = crate::paths::home_dir().ok()?;
+    Some(if rest.is_empty() {
+        home.display().to_string()
+    } else {
+        home.join(rest).display().to_string()
+    })
+}
+
 /// Whether this write lands where no checkout the claim covers can reach.
 ///
 /// Narrow on purpose, because standing aside is a statement and an unknown is
@@ -3264,7 +3398,8 @@ fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
     let Action::Write { target } = action else {
         return false;
     };
-    let path = std::path::Path::new(target);
+    let expanded = with_home(target);
+    let path = std::path::Path::new(expanded.as_deref().unwrap_or(target));
     if !path.is_absolute() {
         return false;
     }

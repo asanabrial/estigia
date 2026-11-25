@@ -6492,6 +6492,41 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
             target: scratch.display().to_string()
         }
     ));
+
+    // A home-relative target is placed by what it resolves to, so `~/note.md`
+    // and the absolute path it names are the same answer.
+    let home = crate::paths::home_dir().expect("a home directory in the test environment");
+    let note = home.join("estigia-outside-the-claim.md");
+    assert_eq!(
+        writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: "~/estigia-outside-the-claim.md".to_owned()
+            }
+        ),
+        writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: note.display().to_string()
+            }
+        ),
+        "`~/estigia-outside-the-claim.md` was not placed where it lands"
+    );
+    assert_eq!(
+        writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: "$HOME/estigia-outside-the-claim.md".to_owned()
+            }
+        ),
+        writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: note.display().to_string()
+            }
+        ),
+        "`$HOME/estigia-outside-the-claim.md` was not placed where it lands"
+    );
 }
 
 #[test]
@@ -8661,6 +8696,8 @@ fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
         "git branch -f -D x",
         "git checkout HEAD -- src/x.rs",
         "git checkout -f",
+        "/usr/bin/git reset --hard HEAD~3",
+        "\\git checkout -b x",
     ] {
         let (action, _) = classify("Bash", &json!({ "command": line }));
         assert!(
@@ -8671,6 +8708,7 @@ fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
     for line in [
         "git stash list",
         "grep \"git reset --hard\" notes.md",
+        "echo \"/usr/bin/git reset --hard\"",
         "git log --hard",
     ] {
         let (action, _) = classify("Bash", &json!({ "command": line }));

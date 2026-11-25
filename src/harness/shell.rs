@@ -866,11 +866,12 @@ pub fn redirect_targets(command: &str) -> Option<Vec<String>> {
 /// The commands a data span may hide behind: a program with no code flag, no
 /// `--exec`-shaped option, and no subcommand that runs its argument.
 ///
-/// Every entry reads the bytes it is handed. `rg` and `sort` are deliberately
-/// absent — `rg --pre` and `sort --compress-program` run the program they are
-/// given — and so is every interpreter, wrapper, scheduler and package manager,
-/// which is the whole point of the list being an allowlist rather than a
-/// denylist.
+/// Every entry reads the bytes it is handed. `sort` is deliberately absent —
+/// `sort --compress-program` runs the program it is given — and so is every
+/// interpreter, wrapper, scheduler and package manager, which is the whole
+/// point of the list being an allowlist rather than a denylist. The readers
+/// that run code only for some flags or subcommands — `rg` without `--pre`,
+/// `git log`/`grep`/`show`, `sed -n` — are named in [`reader_head`] instead.
 const READS_ONLY: &[&str] = &[
     "gh", "cat", "grep", "head", "tail", "wc", "jq", "ls", "uniq", "cut", "tr", "echo", "date",
     "pwd", "true", "false", "basename", "dirname", "realpath", "stat", "file", "which", "type",
@@ -1054,8 +1055,7 @@ fn compound_spans(command: &str) -> Option<Vec<(usize, usize)>> {
         return None;
     }
     let bytes = command.as_bytes();
-    let mut pieces = Vec::new();
-    let mut piped = false;
+    let mut pieces: Vec<(usize, usize, bool)> = Vec::new();
     let mut depth = 0usize;
     let mut start = 0;
     let mut index = 0;
@@ -1104,34 +1104,42 @@ fn compound_spans(command: &str) -> Option<Vec<(usize, usize)>> {
             }
             b';' | b'\n' => 1,
             b'&' | b'|' => {
-                if byte == b'|' && bytes.get(index + 1) != Some(&b'|') {
-                    piped = true;
-                }
-                1 + usize::from(matches!(bytes.get(index + 1), Some(b'&' | b'|')))
+                let pipe = byte == b'|' && bytes.get(index + 1) != Some(&b'|');
+                pieces.push((start, index, pipe));
+                index += 1 + usize::from(matches!(bytes.get(index + 1), Some(b'&' | b'|')));
+                start = index;
+                continue;
             }
             _ => {
                 index += 1;
                 continue;
             }
         };
-        pieces.push((start, index));
+        pieces.push((start, index, false));
         index += separator;
         start = index;
     }
     if depth != 0 {
         return None;
     }
-    pieces.push((start, bytes.len()));
+    pieces.push((start, bytes.len(), false));
     let mut spans = Vec::new();
-    for (start, end) in pieces {
+    for (at, (start, end, followed_by_pipe)) in pieces.iter().copied().enumerate() {
         let piece = &command[start..end];
+        if followed_by_pipe {
+            let next = pieces
+                .get(at + 1)
+                .map(|(next_start, next_end, _)| &command[*next_start..*next_end])
+                .unwrap_or_default();
+            if reader_head(piece.trim_start()).is_none() || reader_head(next.trim_start()).is_none()
+            {
+                return None;
+            }
+        }
         let body = piece.len() - without_reserved_words(piece).len();
         let text = &piece[body..];
         if text.trim().is_empty() {
             continue;
-        }
-        if piped && !bare_word(text, 0).is_some_and(|(head, _)| READS_ONLY.contains(&head)) {
-            return None;
         }
         if let Some(found) = read_only_spans(text.trim_end(), true) {
             let offset = start + body;
@@ -1224,6 +1232,108 @@ fn dollar_end(bytes: &[u8], at: usize) -> Option<usize> {
     }
 }
 
+/// The `git` subcommands whose quoted arguments are data.
+const GIT_READS: &[&str] = &["log", "grep", "show"];
+
+/// `git` options that take the next word with them, before its subcommand.
+const GIT_GLOBAL_WITH_A_VALUE: &[&str] = &[
+    "-c",
+    "-C",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--super-prefix",
+    "--exec-path",
+    "--config-env",
+];
+
+/// The word after `from` and where it ends, whitespace only.
+fn raw_word(command: &str, from: usize) -> Option<(&str, usize)> {
+    let bytes = command.as_bytes();
+    let start = from
+        + bytes[from..]
+            .iter()
+            .take_while(|byte| matches!(byte, b' ' | b'\t'))
+            .count();
+    if start >= bytes.len() {
+        return None;
+    }
+    let end = start
+        + bytes[start..]
+            .iter()
+            .take_while(|byte| !is_blank(**byte))
+            .count();
+    Some((&command[start..end], end))
+}
+
+/// The byte after the program and the subcommand that decides whether its
+/// quoted arguments are data, or `None` when this line is not one of those
+/// readers.
+fn reader_head(command: &str) -> Option<usize> {
+    let (head, index) = bare_word(command, 0)?;
+    match head {
+        "gh" => {
+            let (subcommand, next) = bare_word(command, index)?;
+            if !GH_READS.contains(&subcommand) {
+                return None;
+            }
+            let bytes = command.as_bytes();
+            let verb = next
+                + bytes[next..]
+                    .iter()
+                    .take_while(|byte| is_blank(**byte))
+                    .count();
+            if subcommand != "api" && matches!(bytes.get(verb), Some(b'\'' | b'"')) {
+                return None;
+            }
+            Some(next)
+        }
+        "git" => {
+            let mut at = index;
+            loop {
+                let (word, next) = raw_word(command, at)?;
+                if !word.starts_with('-') {
+                    return GIT_READS.contains(&word).then_some(next);
+                }
+                at = if GIT_GLOBAL_WITH_A_VALUE.contains(&word) {
+                    raw_word(command, next)?.1
+                } else {
+                    next
+                };
+            }
+        }
+        "rg" => {
+            let rest = command.get(index..).unwrap_or_default();
+            (!rest
+                .split_whitespace()
+                .any(|word| word == "--pre" || word.starts_with("--pre=")))
+            .then_some(index)
+        }
+        "sed" => {
+            let words: Vec<&str> = command
+                .get(index..)
+                .unwrap_or_default()
+                .split_whitespace()
+                .collect();
+            let quiet = words.iter().any(|word| {
+                word.starts_with('-') && !word.starts_with("--") && word[1..].contains('n')
+            });
+            let in_place = words.iter().any(|word| {
+                word.starts_with("--in-place")
+                    || word.strip_prefix('-').is_some_and(|flags| {
+                        !flags.starts_with('-')
+                            && (flags.starts_with('i')
+                                || (flags.chars().all(|c| c.is_ascii_alphabetic())
+                                    && flags.contains('i')))
+                    })
+            });
+            (quiet && !in_place).then_some(index)
+        }
+        _ if READS_ONLY.contains(&head) => Some(index),
+        _ => None,
+    }
+}
+
 /// The byte ranges of `command` a single simple command reads rather than runs,
 /// or `None` when the line is not in the grammar `docs/honesty.md` records.
 ///
@@ -1237,25 +1347,7 @@ fn read_only_spans(command: &str, piece: bool) -> Option<Vec<(usize, usize)>> {
         return None;
     }
     let bytes = command.as_bytes();
-    let (head, mut index) = bare_word(command, 0)?;
-    if !READS_ONLY.contains(&head) {
-        return None;
-    }
-    if head == "gh" {
-        let (subcommand, next) = bare_word(command, index)?;
-        if !GH_READS.contains(&subcommand) {
-            return None;
-        }
-        index = next;
-        let verb = index
-            + bytes[index..]
-                .iter()
-                .take_while(|byte| is_blank(**byte))
-                .count();
-        if subcommand != "api" && matches!(bytes.get(verb), Some(b'\'' | b'"')) {
-            return None;
-        }
-    }
+    let mut index = reader_head(command)?;
     let mut spans = Vec::new();
     let mut pending: Vec<(String, bool, bool)> = Vec::new();
     while index < bytes.len() {
@@ -1302,6 +1394,11 @@ fn read_only_spans(command: &str, piece: bool) -> Option<Vec<(usize, usize)>> {
                 }
                 return (index == bytes.len()).then_some(spans);
             }
+            b'&' if (index > 0 && bytes[index - 1] == b'>')
+                || bytes.get(index + 1) == Some(&b'>') =>
+            {
+                index += 1;
+            }
             _ if byte.is_ascii_alphanumeric() || SAFE_BYTES.contains(&byte) => index += 1,
             _ => return None,
         }
@@ -1331,6 +1428,92 @@ fn piece_quoted_end(bytes: &[u8], open: usize) -> Option<usize> {
 
 fn is_blank(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n')
+}
+
+/// The byte ranges inside each command substitution of `command` — `$(…)` and
+/// backticks, quoted or not — outermost only. `None` when one never closes.
+pub(crate) fn nested_commands(command: &str) -> Option<Vec<(usize, usize)>> {
+    let bytes = command.as_bytes();
+    let mut spans = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 2,
+            b'\'' => index = single_quoted_end(bytes, index)?,
+            b'"' => index = double_quoted_nested(bytes, index, &mut spans)?,
+            b'$' if bytes.get(index + 1) == Some(&b'(') && bytes.get(index + 2) != Some(&b'(') => {
+                let end = dollar_end(bytes, index)?;
+                spans.push((index + 2, end - 1));
+                index = end;
+            }
+            b'`' => {
+                let end = backticks_end(bytes, index)?;
+                spans.push((index + 1, end - 1));
+                index = end;
+            }
+            _ => index += 1,
+        }
+    }
+    Some(spans)
+}
+
+fn double_quoted_nested(
+    bytes: &[u8],
+    open: usize,
+    spans: &mut Vec<(usize, usize)>,
+) -> Option<usize> {
+    let mut index = open + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => return Some(index + 1),
+            b'\\' => index += 2,
+            b'$' if bytes.get(index + 1) == Some(&b'(') && bytes.get(index + 2) != Some(&b'(') => {
+                let end = dollar_end(bytes, index)?;
+                spans.push((index + 2, end - 1));
+                index = end;
+            }
+            b'`' => {
+                let end = backticks_end(bytes, index)?;
+                spans.push((index + 1, end - 1));
+                index = end;
+            }
+            _ => index += 1,
+        }
+    }
+    None
+}
+
+/// The words of a command line, split at unquoted whitespace so a quoted value
+/// holding a blank stays one word. `None` when a quote never closes.
+pub(crate) fn words(command: &str) -> Option<Vec<&str>> {
+    let bytes = command.as_bytes();
+    let mut words = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            index += 1;
+        }
+        if index == bytes.len() {
+            break;
+        }
+        let start = index;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| !byte.is_ascii_whitespace())
+        {
+            index = match bytes[index] {
+                b'\'' => single_quoted_end(bytes, index)?,
+                b'"' => double_quoted_end(bytes, index)?,
+                b'\\' => (index + 2).min(bytes.len()),
+                _ => index + 1,
+            };
+        }
+        words.push(&command[start..index]);
+    }
+    Some(words)
 }
 
 /// The `[a-z]+` word after any spaces and tabs from `from`, and where it ends,
