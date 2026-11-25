@@ -259,11 +259,11 @@ fn a_label_readback_that_fails_after_the_edit_landed_reports_the_write_and_names
         !text.contains("do not repeat this call"),
         "the refusal still forbids the call, and the repair is a call: {text}"
     );
-    // And the repair is named. `transition --to <state>` with `from` omitted is
-    // what the tool's own contract documents as removing whatever stale state
-    // labels are found, and it is what restored the issue.
+    // And the repair is named. `transition` with `to: "<state>"` and `from`
+    // omitted is what the tool's own contract documents as removing whatever
+    // stale state labels are found, and it is what restored the issue.
     assert!(
-        text.contains("transition --to done") && text.contains("`from` omitted"),
+        text.contains("transition to done") && text.contains("`from` omitted"),
         "the refusal does not name the call that repairs it: {text}"
     );
 }
@@ -272,8 +272,8 @@ fn a_label_readback_that_fails_after_the_edit_landed_reports_the_write_and_names
 ///
 /// `CLAUDE.md`: never name a command in a message unless running it clears the
 /// block, because naming a dead end is worse than naming nothing. The refusal
-/// next door now names `transition --to <state>` with `from` omitted, so what
-/// that call does to a two-state item is no longer somebody else's test.
+/// next door now names `transition` with `to: "<state>"` and `from` omitted, so
+/// what that call does to a two-state item is no longer somebody else's test.
 ///
 /// It also holds the arm this change did **not** touch: `from` omitted removes
 /// every stale state label except the one being added, and leaves every label

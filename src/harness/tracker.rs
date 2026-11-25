@@ -308,6 +308,44 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
     Some(refusal.classed(class))
 }
 
+/// Rewrites the `--flag` spellings of the tool's own arguments into the
+/// parameter names that surface takes.
+///
+/// The transport writes what a person types at a terminal, because that is the
+/// surface its source lives beside. The MCP caller sends JSON parameters, where
+/// `--target-operation` is `target_operation` and typing the flag is a call
+/// that refuses. Only the tool's declared arguments are rewritten, so a flag
+/// this tool does not take keeps its spelling.
+pub(crate) fn mcp_parameters(tool: &str, text: &str) -> String {
+    let Some(tool) = crate::harness::mcp::tools::find(tool) else {
+        return text.to_owned();
+    };
+    let mut rewritten = text.to_owned();
+    for argument in tool.arguments {
+        rewritten = replace_flag(&rewritten, &argument.as_flag(), argument.name);
+    }
+    rewritten
+}
+
+/// Replaces one flag where it stands alone, not where it is the prefix of a
+/// longer flag the tool does not take.
+fn replace_flag(text: &str, flag: &str, name: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(flag) {
+        let after = &rest[at + flag.len()..];
+        let stands_alone = after
+            .chars()
+            .next()
+            .is_none_or(|next| !(next.is_ascii_alphanumeric() || next == '-' || next == '_'));
+        out.push_str(&rest[..at]);
+        out.push_str(if stands_alone { name } else { flag });
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
 /// The fields the envelope carries beside the ones the refusal is built from,
 /// as text; a value that is a null or an object is dropped rather than named.
 fn envelope_detail(answer: &Answer, context: &str) -> String {
@@ -366,6 +404,44 @@ mod tests {
             code,
             body: Some(body),
         }
+    }
+
+    #[test]
+    fn the_mcp_text_names_the_parameter_of_the_surface_that_received_it() {
+        let text = mcp_parameters("claim", "pass --worktree-root with an absolute directory");
+        assert!(
+            text.contains("worktree_root"),
+            "the text did not name the parameter the MCP caller sends: {text}"
+        );
+        assert!(
+            !text.contains("--worktree-root"),
+            "the text named a command-line flag to an agent that cannot type it: {text}"
+        );
+
+        let text = mcp_parameters("publish_review", "declare --topology, or leave it out");
+        assert!(text.contains("topology"), "{text}");
+        assert!(!text.contains("--topology"), "{text}");
+    }
+
+    #[test]
+    fn a_flag_that_prefixes_another_is_not_rewritten_in_its_middle() {
+        let text = mcp_parameters("publish_review", "pass --worktree-root");
+        assert!(
+            text.contains("--worktree-root"),
+            "a shorter flag rewrote the prefix of one this tool does not take: {text}"
+        );
+    }
+
+    #[test]
+    fn a_shell_flag_quoted_in_a_refusal_is_not_renamed() {
+        let text = mcp_parameters(
+            "publish_review",
+            "read it with `gh run view 17 --log-failed`",
+        );
+        assert!(
+            text.contains("--log-failed"),
+            "a shell flag was rewritten as though it were a tool parameter: {text}"
+        );
     }
 
     #[test]

@@ -4303,17 +4303,14 @@ fn a_claim_moves_the_issue_to_the_state_it_names() {
     let issue_open = serde_json::json!({
         "state": "OPEN",
         "assignees": [{ "login": login }],
-        "labels": [{ "name": "status:in-progress" }],
+        "labels": [{ "name": "status:ready" }],
         "comments": [claim_comment],
     });
 
     let label_dir = tempfile::tempdir().expect("a directory for the label store");
     let labels = label_dir.path().join("labels.json");
-    std::fs::write(
-        &labels,
-        serde_json::json!(["status:in-progress"]).to_string(),
-    )
-    .expect("the issue's labels are written");
+    std::fs::write(&labels, serde_json::json!(["status:ready"]).to_string())
+        .expect("the issue's labels are written");
 
     let trace = tempfile::tempdir().expect("a trace directory");
     let count = trace.path().join("count.json");
@@ -4339,7 +4336,7 @@ fn a_claim_moves_the_issue_to_the_state_it_names() {
             "--horizon",
             horizon,
             "--transition-to",
-            "done",
+            "in-progress",
             "--json",
         ])
         .env("ESTIGIA_FAKE_LABELS", &labels)
@@ -4358,18 +4355,26 @@ fn a_claim_moves_the_issue_to_the_state_it_names() {
         std::fs::read_to_string(&log).unwrap_or_default()
     );
 
+    let answered: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|_| panic!("the merged claim's --json answer is JSON: {said}"));
+    let transport = &answered["transport"];
+    assert!(
+        transport.get("next").is_none(),
+        "a claim that carried its own transition still asked for one: {transport}"
+    );
+
     let labels_after: Vec<String> = serde_json::from_str(
         &std::fs::read_to_string(&labels).expect("the label store is readable"),
     )
     .expect("the label store is a JSON array");
     assert!(
-        labels_after.iter().any(|label| label == "status:done"),
-        "the merged claim did not move the issue to done: {labels_after:?}"
-    );
-    assert!(
-        !labels_after
+        labels_after
             .iter()
             .any(|label| label == "status:in-progress"),
+        "the merged claim did not move the issue to in-progress: {labels_after:?}"
+    );
+    assert!(
+        !labels_after.iter().any(|label| label == "status:ready"),
         "the merged claim left the old state label on the issue: {labels_after:?}"
     );
 
@@ -4381,7 +4386,7 @@ fn a_claim_moves_the_issue_to_the_state_it_names() {
         serde_json::from_str(&std::fs::read_to_string(&pointer).expect("the pointer is readable"))
             .expect("the pointer is JSON");
     assert_eq!(
-        pointer["state"], "done",
+        pointer["state"], "in-progress",
         "the merged claim recorded a state other than the one it moved to: {pointer}"
     );
 }

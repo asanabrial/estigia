@@ -1610,7 +1610,7 @@ fn a_never_ran_lane_is_told_apart_from_one_that_ran_and_failed() {
                  cannot exist: {text}"
             );
             assert!(
-                text.contains("--never-ran-evidence-file"),
+                text.contains("never_ran_evidence_file"),
                 "{label}: the never-ran refusal does not name what to supply instead: {text}"
             );
             assert!(

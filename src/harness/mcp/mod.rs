@@ -368,12 +368,17 @@ fn call(
         .and_then(Value::as_str)
         .ok_or_else(|| "tools/call needs a name".to_owned())?;
     if let Some(replacement) = tools::retired(name) {
-        return Ok(refusal_result(&tool_retired(name, replacement)));
+        return Ok(refusal_result(&tool_retired(name, replacement), None));
     }
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
     match run_tool_asking(name, &arguments, context, consent) {
-        Ok(result) => Ok(result),
-        Err(ToolFailure::Refused(refusal)) => Ok(refusal_result(&refusal)),
+        Ok(mut result) => {
+            if let Some(text) = result["content"][0]["text"].as_str() {
+                result["content"][0]["text"] = json!(super::tracker::mcp_parameters(name, text));
+            }
+            Ok(result)
+        }
+        Err(ToolFailure::Refused(refusal)) => Ok(refusal_result(&refusal, Some(name))),
         Err(ToolFailure::Malformed(message)) => Err(message),
     }
 }
@@ -2638,11 +2643,16 @@ fn review_claim_refusal(
 /// A refusal as a tool result, carrying the same four things the hook's
 /// denial carries: the code, what happened to the world, whether a replay is
 /// safe, and the resolution.
-fn refusal_result(refusal: &Refusal) -> Value {
+fn refusal_result(refusal: &Refusal, tool: Option<&str>) -> Value {
+    let text = refusal.agent_text("call");
+    let text = match tool {
+        Some(tool) => super::tracker::mcp_parameters(tool, &text),
+        None => text,
+    };
     json!({
         "content": [{
             "type": "text",
-            "text": refusal.agent_text("call"),
+            "text": text,
         }],
         "isError": true,
     })

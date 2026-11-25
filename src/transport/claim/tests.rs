@@ -200,6 +200,26 @@ fn a_claim_is_won_on_the_timeline_and_not_by_posting() {
 }
 
 #[test]
+fn a_past_horizon_refusal_names_the_floor_it_had_to_clear() {
+    let now = "2026-07-28T06:00:00Z";
+    let refused = require_horizon("2026-07-28T05:59Z", Some(now))
+        .expect_err("a horizon behind the floor is refused");
+    let text = crate::harness::tracker::translate(
+        &crate::harness::tracker::Answer {
+            code: refused.code(),
+            body: Some(refused.envelope()),
+        },
+        "claim",
+    )
+    .expect("a refusal")
+    .message;
+    assert!(
+        text.contains(&format!("after: {now}")),
+        "the refusal does not name the instant the horizon had to be later than: {text}"
+    );
+}
+
+#[test]
 fn a_lost_race_reports_the_marker_it_already_left() {
     let world = |failure: Failure| {
         crate::harness::tracker::translate(
@@ -965,6 +985,17 @@ fn an_unassign_releases_the_epoch_in_the_store_and_its_discovery_writes_nothing(
         });
 
     assert_eq!(discovered["write_performed"], false, "{discovered}");
+    let next = discovered["next"]
+        .as_str()
+        .expect("the discovery says what is next");
+    assert!(
+        next.contains("release") && next.contains("target_operation"),
+        "the discovery names a surface other than the one that received it: {next}"
+    );
+    assert!(
+        !next.contains("--"),
+        "an MCP answer names a command-line flag: {next}"
+    );
     assert_eq!(before, 1, "the discovery wrote an entry");
     released.expect("the release lands");
     assert_eq!(after.len(), 2);
@@ -2570,6 +2601,17 @@ fn assert_reclaim_after_scoped_releases(releases: usize) {
         let discovery = reclaim(&context, &request).expect("discovery succeeds");
         assert_eq!(discovery["target_operation"], operation);
         assert_eq!(discovery["write_performed"], false);
+        let next = discovery["next"]
+            .as_str()
+            .expect("the discovery says what is next");
+        assert!(
+            next.contains("takeover: true") && next.contains("target_operation"),
+            "the discovery names a surface other than the one that received it: {next}"
+        );
+        assert!(
+            !next.contains("--"),
+            "an MCP answer names a command-line flag: {next}"
+        );
         assert_eq!(
             holding(&store_timeline(&context, 12), RECLAIM_NOW)
                 .holder

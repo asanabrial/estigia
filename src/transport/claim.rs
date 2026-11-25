@@ -10972,9 +10972,11 @@ pub fn require_horizon(value: &str, after: Option<&str>) -> Result<String, Failu
         _ => true,
     };
     if !well_formed || !ahead {
-        return Err(Failure::Stop(
-            serde_json::json!({ "ok": false, "reason": "invalid-horizon" }),
-        ));
+        let mut refusal = serde_json::json!({ "ok": false, "reason": "invalid-horizon" });
+        if let Some(floor) = after {
+            refusal["after"] = serde_json::json!(floor);
+        }
+        return Err(Failure::Stop(refusal));
     }
     Ok(value.to_owned())
 }
@@ -11636,8 +11638,19 @@ pub fn adjudicate(
         "reused_existing_claim": reused,
         "claimed_at": active.created_at,
         "horizon": active.horizon,
-        "next": "transition to in-progress before any repository write",
     }))
+}
+
+/// What a claim's answer still has to say about the workflow state.
+///
+/// `None` once the issue is at or past `in-progress`: the step the sentence
+/// names is already behind the caller, and a claim that carries its own
+/// transition drops the sentence where the transition is merged.
+fn claim_next(state: Option<&str>) -> Option<&'static str> {
+    match state {
+        Some("in-progress" | "review" | "done") => None,
+        _ => Some("transition to in-progress before any repository write"),
+    }
 }
 
 /// Everything one acquisition needs to say about itself.
@@ -11839,6 +11852,11 @@ pub(crate) fn claim_on(
     let closed = super::outbox::is_closed(context);
     let (adjudication, event) = (decided.adjudication, decided.event);
     let mut answer = adjudication?;
+    if let Ok(state) = ledger.state()
+        && let Some(next) = claim_next(state.as_deref())
+    {
+        answer["next"] = serde_json::json!(next);
+    }
 
     // The projection, and not one step earlier: `adjudicate` is what says this
     // run holds the issue, and projecting for a run that lost the race would
@@ -12269,7 +12287,7 @@ pub(crate) fn unassign_on(
                 "issue": what.issue,
                 "write_performed": false,
                 "target_operation": target_operation,
-                "next": "repeat unassign with --target-operation and the same operation ID",
+                "next": "repeat release with target_operation and the same operation ID",
             }));
         }
         Released::Written {
@@ -12829,7 +12847,8 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
                 "target_operation": target_operation,
                 "holder": holder,
                 "needs_person": needs_person,
-                "next": "repeat claim with --takeover --target-operation and the same operation ID",
+                "next": "repeat claim with takeover: true and target_operation, and the same \
+                         operation ID",
             });
             if needs_person {
                 answer["hand_over"] = serde_json::json!(hand_over_command(what.issue, what.run_id));
