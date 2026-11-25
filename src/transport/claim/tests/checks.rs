@@ -266,11 +266,15 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
     };
 
     let began = std::time::Instant::now();
+    let clock = crate::harness::session::now_seconds().expect("a clock");
     let running = ask(&context, &comments, &request(1, &receipt.base), &counting)
         .expect("a running job is an answer");
     let waited = began.elapsed();
     assert_eq!(running["state"], "running", "{running}");
-    assert_eq!(running["ask_after"], 30, "{running}");
+    assert!(
+        running["ask_after"].as_u64().unwrap_or_default() > clock,
+        "a running job answered a moment that has already passed: {running}"
+    );
     assert!(waited >= Duration::from_secs(1), "{waited:?}");
     assert!(waited < Duration::from_secs(20), "{waited:?}");
 

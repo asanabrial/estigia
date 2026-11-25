@@ -10,6 +10,19 @@ fn reason(failure: Failure) -> String {
 }
 
 #[test]
+fn the_fresh_worktree_reminder_is_absent_on_a_resumed_one() {
+    assert!(
+        fresh_worktree_reminder(false).is_some_and(|said| said.contains("NOT in a fresh worktree")),
+        "a checkout made from scratch no longer warns about gitignored files"
+    );
+    assert_eq!(
+        fresh_worktree_reminder(true),
+        None,
+        "a resumed checkout claims it is fresh and warns about files nothing copied"
+    );
+}
+
+#[test]
 fn a_child_ref_is_never_mistaken_for_the_parent() {
     // Verified against git 2.55: with only `foo/bar` present, the pattern
     // `refs/heads/foo` prints `refs/heads/foo/bar`. Reporting that object id

@@ -514,6 +514,8 @@ pub(super) fn run_checks_with(
                 return Err(runner_lost(detail.trim()));
             }
             JobStatus::Running if began.elapsed() >= patience => {
+                let clock = crate::harness::session::now_seconds()
+                    .ok_or_else(|| Failure::Read("the clock is unreadable".to_owned()))?;
                 return Ok(serde_json::json!({
                     "ok": true,
                     "declared": true,
@@ -521,7 +523,7 @@ pub(super) fn run_checks_with(
                     "job": id,
                     "digest": digest,
                     "commands": commands,
-                    "ask_after": ASK_AFTER_SECONDS,
+                    "ask_after": clock + ASK_AFTER_SECONDS,
                 }));
             }
             JobStatus::Running => std::thread::sleep(if began.elapsed() < POLLS_FAST_FOR {

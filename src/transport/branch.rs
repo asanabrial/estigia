@@ -1277,13 +1277,22 @@ pub fn start_branch(
         // decision and which one.
         "base_advance": base_advance,
         "identity": verdict,
-        "reminder": "gitignored files (.env, credentials, local settings) are NOT in a fresh \
-                     worktree",
     });
+    if let Some(reminder) = fresh_worktree_reminder(resuming) {
+        answer["reminder"] = serde_json::json!(reminder);
+    }
     if let Some(queued) = develop.get("queued") {
         answer["link_queued"] = queued.clone();
     }
     Ok(answer)
+}
+
+/// The warning a checkout made from scratch earns and a resumed one does not:
+/// nothing was copied out of a working tree that was never made.
+fn fresh_worktree_reminder(resuming: bool) -> Option<&'static str> {
+    (!resuming).then_some(
+        "gitignored files (.env, credentials, local settings) are NOT in a fresh worktree",
+    )
 }
 
 fn settle_identity(

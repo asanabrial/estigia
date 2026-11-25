@@ -545,6 +545,19 @@ fn with_review_start(
         }
     }
     answer["review_start"] = report;
+    if let Some(fields) = answer.as_object_mut() {
+        fields.remove("next");
+    }
+    if let Ok(status) = super::claim::review_status(context, start.issue) {
+        answer["review_status"] = status;
+    } else if answer.get("review_status").is_some() {
+        // The status read before the launch still offers slots this answer
+        // started. A failed re-read is not proof they are running, and a stale
+        // offer costs the caller a refusal; drop it rather than keep it.
+        if let Some(fields) = answer.as_object_mut() {
+            fields.remove("review_status");
+        }
+    }
     answer
 }
 
@@ -1171,7 +1184,11 @@ fn run_operation(
                         super::commands::require_state(to)?;
                         let moved =
                             super::commands::transition_on(context, &ledger, issue, to, None, now)?;
-                        merged_step(answer, "transition", moved)
+                        let mut answer = merged_step(answer, "transition", moved);
+                        if let Some(fields) = answer.as_object_mut() {
+                            fields.remove("next");
+                        }
+                        answer
                     }
                     None => super::claim::claim(context, &acquisition)?,
                 };

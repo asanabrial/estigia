@@ -5222,7 +5222,7 @@ fn a_tool_whose_operation_answers_in_two_calls_says_how_to_finish_it() {
     for operation in &two_step {
         let tool = tools::TOOLS
             .iter()
-            .find(|tool| tool.operation == operation)
+            .find(|tool| tool.name == operation || tool.operation == operation)
             .unwrap_or_else(|| panic!("`{operation}` answers in two calls and no tool offers it"));
         assert!(
             tool.description.contains("target_operation"),

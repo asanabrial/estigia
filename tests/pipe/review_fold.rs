@@ -379,6 +379,21 @@ fn publication_with_start_review_moves_the_issue_and_launches_every_offered_slot
         "{published}"
     );
     assert!(start.get("launch_skipped").is_none(), "{published}");
+    assert!(
+        published.get("next").is_none(),
+        "start_review did both steps the publication's next still asked for: {published}"
+    );
+    let offered = published["review_status"]["next"]["inputs"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|input| input["capture"] == "launch_review_input")
+        .count();
+    assert_eq!(
+        offered, 0,
+        "the embedded status still offers a launch for slots this answer launched: {published}"
+    );
     let pointer = std::fs::read_to_string(
         rig.home
             .path()
