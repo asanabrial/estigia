@@ -1032,8 +1032,8 @@ fn read_view_step(
 }
 
 /// The row a `collect_review_input` with `launch` or `checks` is carried out by, with its
-/// arguments; `None` for a plain collect. Nothing launches without `launch: true` and a
-/// named slot.
+/// arguments; `None` for a plain collect. A launch names the slots it starts, or waits on the
+/// declared checks and starts every slot they have held back.
 fn collect_step(arguments: &Value) -> Result<Option<(&'static str, Value)>, ToolFailure> {
     let on = |key: &str| arguments.get(key) == Some(&json!(true));
     if on("rerun") && !on("checks") {
@@ -1043,9 +1043,13 @@ fn collect_step(arguments: &Value) -> Result<Option<(&'static str, Value)>, Tool
     }
     match (on("launch"), on("checks")) {
         (false, false) => Ok(None),
-        (true, true) => Err(ToolFailure::Malformed(
-            "`launch` and `checks` are two different calls; give one".to_owned(),
-        )),
+        (true, true) => forwarded(
+            "`collect_review_input` with `checks: true` and `launch: true`",
+            "run_checks",
+            arguments,
+            &["checks"],
+        )
+        .map(Some),
         (true, false) => {
             if arguments.get("name").is_none() && arguments.get("names").is_none() {
                 return Err(ToolFailure::Malformed(

@@ -404,7 +404,8 @@ pub(super) fn holding(
     Ok(Some(serde_json::json!({
         "kind": "collect",
         "reason_code": "checks-running",
-        "operation": null,
+        "operation": "collect_review_input",
+        "arguments": {"issue": issue, "checks": true},
         "inputs": [],
         "ask_after": clock + ASK_AFTER_SECONDS,
     })))

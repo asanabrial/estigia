@@ -171,7 +171,7 @@ or a bad `cwd` is refused as `checks-declaration-malformed`, never read as no ch
 one with no `[[check]]` table declares none. The declaration is read from the **base** commit only, as
 [above](#only-the-base-declares), so a change cannot rewrite the checks it must pass.
 
-**The tool.** `run_checks` (`issue`, `run_id`, optional `wait_seconds`) verifies the live `review` claim,
+**The tool.** `run_checks` (`issue`, `run_id`, optional `wait_seconds`, `rerun` and `launch`) verifies the live `review` claim,
 derives the clean target of the run's checkout against the base its published receipt names, and refuses
 a dirty tree. A pointer that names no checkout runs in this repository's own checkout only while that
 checkout reproduces the published target; when it reproduces another one the call refuses
@@ -179,7 +179,7 @@ checkout reproduces the published target; when it reproduces another one the cal
 It never runs a check inside the call: it starts the hidden `estigia __check-job <dir>`
 detached (the same lock, liveness and detaching `__review-job` uses, and the same
 `review-job-detach-refused` where the platform refuses), then waits up to `wait_seconds`, never more than
-50, so no call outlasts the 60 seconds some hosts allow. In order:
+900. In order:
 
 1. Nothing declared: `{"ok": true, "declared": false}`, and nothing is recorded.
 2. A `checks-receipt` already stands for this target digest and these commands: the answer is that
@@ -193,7 +193,7 @@ stopping the rest, under a 30 minute deadline for the whole job after which its 
 and the answer is `timed-out`. Each check records its `name`, `exit` (`null` when killed or never
 started), `seconds` and `tail`, the last 2,000 bytes of its combined stdout and stderr.
 
-**When it runs.** `start_review` on a publication calls it before launching any lens, waiting no time, so the first lens is never paid for bytes the declared checks reject. Running or failed, it launches none (`launch_skipped` `checks-running` / `checks-failed`; an unreadable declaration or a refused call is `checks-unavailable`), and `review_status` answers the same in place of a lens offer. Nothing declared launches as before.
+**When it runs.** `start_review` on a publication calls it before launching any lens, waiting no time, so the first lens is never paid for bytes the declared checks reject. Running or failed, it launches none (`launch_skipped` `checks-running` / `checks-failed`; an unreadable declaration or a refused call is `checks-unavailable`), and `review_status` answers the same in place of a lens offer. With `launch`, a passing receipt starts every slot the status held back and reports them under `launched`; a red or running receipt starts none. `deliver` asks for that combination, so one call after a publication with checks carries the wait and the launch. Nothing declared launches as before.
 
 **The receipt.** A finished job is recorded as a `checks-receipt` marker in the issue's local ledger,
 carrying `run-id`, `digest` (the target digest), `commands` (a SHA-256 over the declared checks in order,

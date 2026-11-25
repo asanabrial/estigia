@@ -1437,6 +1437,30 @@ fn a_declared_check_holds_the_lenses_back_unless_it_passed() {
 }
 
 #[test]
+fn only_a_passing_checks_answer_starts_the_slots_it_held_back() {
+    use super::launch_after_checks;
+    let root = tempfile::tempdir().expect("a directory");
+    let context = context(root.path());
+    for answer in [
+        serde_json::json!({"ok": true, "state": "running", "ask_after": 30}),
+        serde_json::json!({"ok": true, "declared": true, "state": "finished", "passed": false}),
+        serde_json::json!({"ok": true, "declared": true, "state": "timed-out", "passed": false}),
+        serde_json::json!({"ok": true, "declared": false}),
+    ] {
+        let mut answer = answer;
+        launch_after_checks(
+            &context,
+            (42, "claude-a"),
+            "2026-01-01T00:00:00Z",
+            &mut answer,
+        );
+        assert!(answer.get("launched").is_none(), "{answer}");
+        assert!(answer.get("launch_skipped").is_none(), "{answer}");
+        assert!(answer.get("launch_failure").is_none(), "{answer}");
+    }
+}
+
+#[test]
 fn only_a_red_or_unreadable_lane_holds_the_lenses_back() {
     use super::lane_hold;
     use serde_json::json;

@@ -682,6 +682,121 @@ fn running_inputs_answer_pending_and_write_nothing() {
     assert_eq!(called(&fake), ["verify_claim", "review_status"]);
 }
 
+fn checks_running() -> Value {
+    json!({
+        "kind": "collect", "reason_code": "checks-running",
+        "operation": "collect_review_input",
+        "arguments": {"checks": true},
+        "inputs": [],
+        "ask_after": NOW + 30,
+    })
+}
+
+#[test]
+fn a_running_checks_job_is_held_as_pending_not_answered_with_a_stop() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let receipt = receipt_of(&world);
+    fake.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![status(&receipt, checks_running())],
+    );
+    fake.scripts.borrow_mut().insert(
+        "collect_review_input".into(),
+        vec![Ok(json!({"ok": true, "state": "running", "ask_after": 30}))],
+    );
+    let ran = drive(&fake, &[], &request());
+    assert_eq!(ran.answer["delivered"], false, "{}", ran.answer);
+    assert_eq!(ran.answer["pending"]["step"], "review", "{}", ran.answer);
+    assert_eq!(
+        ran.answer["pending"]["reason"], "checks-running",
+        "{}",
+        ran.answer
+    );
+    assert_eq!(
+        ran.answer["pending"]["ask_after"],
+        NOW + 30,
+        "{}",
+        ran.answer
+    );
+    let sent = fake.sent.borrow();
+    let collect = sent
+        .iter()
+        .find(|(name, _)| name == "collect_review_input")
+        .expect("the checks wait was asked for");
+    assert_eq!(collect.1["checks"], true, "{:?}", collect.1);
+    assert_eq!(collect.1["launch"], true, "{:?}", collect.1);
+}
+
+#[test]
+fn a_passing_checks_receipt_launches_the_slots_it_held_back_and_delivery_goes_on() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let receipt = receipt_of(&world);
+    fake.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![
+            status(&receipt, checks_running()),
+            status(&receipt, execute("deliver", "verdict-computable")),
+            status(&receipt, execute("deliver", "approved")),
+        ],
+    );
+    fake.scripts.borrow_mut().insert(
+        "collect_review_input".into(),
+        vec![Ok(json!({
+            "ok": true, "state": "finished", "passed": true,
+            "launched": [{"name": "review-risk", "job": "j"}],
+        }))],
+    );
+    let ran = drive(&fake, &green_script(&world), &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    let sent = fake.sent.borrow();
+    let collect = sent
+        .iter()
+        .find(|(name, _)| name == "collect_review_input")
+        .expect("the checks were waited on");
+    assert_eq!(collect.1["checks"], true, "{:?}", collect.1);
+    assert_eq!(collect.1["launch"], true, "{:?}", collect.1);
+    assert!(
+        collect.1["wait_seconds"].as_u64().is_some_and(|s| s >= 1),
+        "{:?}",
+        collect.1
+    );
+}
+
+#[test]
+fn a_relay_reviewer_started_after_the_checks_is_handed_back_to_the_host() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let receipt = receipt_of(&world);
+    fake.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![status(&receipt, checks_running())],
+    );
+    let launch = json!({"agent": "general", "prompt": "<!-- estigia:review name=review-risk -->"});
+    fake.scripts.borrow_mut().insert(
+        "collect_review_input".into(),
+        vec![Ok(json!({
+            "ok": true, "state": "finished", "passed": true,
+            "launched": [{
+                "name": "review-risk", "job": "j",
+                "relay": true, "launch": launch,
+            }],
+        }))],
+    );
+    let ran = drive(&fake, &[], &request());
+    assert_eq!(stopped(&ran), ("review", "relay-launch"));
+    assert_eq!(
+        ran.answer["stopped"]["launched"][0]["launch"], launch,
+        "{}",
+        ran.answer
+    );
+    assert!(
+        !called(&fake).contains(&"record_computed_verdict".to_owned()),
+        "a relay launch recorded the verdict without the lens answering"
+    );
+}
+
 #[test]
 fn a_collect_that_needs_a_context_is_handed_back_not_waited_on() {
     let world = world("b.txt", "two\n");
