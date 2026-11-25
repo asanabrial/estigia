@@ -1303,10 +1303,11 @@ fn reader_head(command: &str) -> Option<usize> {
                         .iter()
                         .any(|word| {
                             let word = unquoted(word);
-                            word.starts_with("-O")
-                                || word.starts_with("--open")
-                                || word.starts_with("--op")
-                                || word.starts_with("--output")
+                            // getopt bundles short flags: `-nO` still holds `-O`.
+                            let bundled = word.starts_with('-')
+                                && !word.starts_with("--")
+                                && word[1..].contains('O');
+                            bundled || word.starts_with("--op") || word.starts_with("--output")
                         });
                     return (!runs_or_writes).then_some(next);
                 }
@@ -1342,9 +1343,10 @@ fn reader_head(command: &str) -> Option<usize> {
     }
 }
 
-/// The script `sed` runs, when it is the first word that is not one of the
-/// options listed here. `None` for `-e`, `-f`, a bundle or any other option:
-/// a script this cannot locate is one whose quoted text is not blanked.
+/// The script `sed` runs, when it is the first word that is not an option of
+/// the filter set — `-nrEsuz`, alone or bundled — or its long spelling. `None`
+/// for `-e`, `-f`, `-i` or any other option: a script this cannot locate is one
+/// whose quoted text is not blanked.
 fn sed_script(words: &[String]) -> Option<&str> {
     let mut script = None;
     for word in words {
@@ -1355,10 +1357,17 @@ fn sed_script(words: &[String]) -> Option<&str> {
                 return None;
             }
             match word.as_str() {
-                "-n" | "-r" | "-E" | "-s" | "-u" | "-z" | "--quiet" | "--silent" | "--posix"
-                | "--regexp-extended" | "--separate" | "--unbuffered" | "--null-data" => continue,
-                _ => return None,
+                "--quiet" | "--silent" | "--posix" | "--regexp-extended" | "--separate"
+                | "--unbuffered" | "--null-data" => continue,
+                _ => {}
             }
+            let filter = word.strip_prefix('-').is_some_and(|flags| {
+                !flags.is_empty() && flags.chars().all(|flag| "nrEsuz".contains(flag))
+            });
+            if !filter {
+                return None;
+            }
+            continue;
         }
         script.get_or_insert(word.as_str());
     }

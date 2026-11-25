@@ -1409,6 +1409,8 @@ fn a_blanked_reader_does_not_hide_the_command_after_it() {
         ("git show \"HEAD:x\"; git push", "git push"),
         ("sed -n \"s/x/y/p\" f && git push", "git push"),
         ("sed -n \"p\" f && git push", "git push"),
+        ("git grep \"x\" f && git push", "git push"),
+        ("rg -n \"x\" src | head -1; git push", "git push"),
         ("grep -rn \"git push\" src 2>&1; git tag v1", "git tag v1"),
     ] {
         let view = super::data_view(command);
@@ -1454,6 +1456,8 @@ fn a_line_an_executor_owns_is_left_whole() {
         "sort --compress-program 'git push' f",
         "sed -n \"1e git push origin main\" f",
         "sed -n \"s/a/git push/e\" f",
+        "sed -n \"w /tmp/x\" f",
+        "sed -n \"s/a/b/w /tmp/x\" f",
         "sed -n -e \"1e git push origin main\" f",
         "sed -n -f script.sed f",
         "sed -n p -e \"1e git push origin main\" f",
@@ -1464,6 +1468,7 @@ fn a_line_an_executor_owns_is_left_whole() {
         "git grep --open-files-in-pager=\"git push origin main;:\" x",
         "git grep \"-Ogit push origin main;:\" x",
         "git grep \"-O\" \"git push origin main;:\" x",
+        "git grep -nO \"git push origin main;:\" x",
         "git grep \"--open-files-in-pag=git push origin main;:\" x",
         "git log --output=\"git push\" f",
         "git -c \"core.x=y log \" commit -m \" \" -a",

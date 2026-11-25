@@ -3412,8 +3412,8 @@ fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
 /// Whether this write lands where no checkout the claim covers can reach.
 ///
 /// Narrow on purpose, because standing aside is a statement and an unknown is
-/// not one: the target must be an **absolute** path (a shell write cannot be
-/// placed, and one that cannot be placed stays gated), and a run covering
+/// not one: the target must be placed — an **absolute** path, or a `~`/`$HOME`
+/// target the line spells unquoted right after the redirect — and a run covering
 /// nothing has no claim to be outside of.
 fn writes_outside_the_claim_in(run: &Run, action: &Action, literal: Option<&str>) -> bool {
     let Action::Write { target } = action else {
