@@ -6493,39 +6493,40 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
         }
     ));
 
-    // A home-relative target is placed by what it resolves to, so `~/note.md`
-    // and the absolute path it names are the same answer.
+    // A home-relative target is placed by what it resolves to, when the line
+    // spells it unquoted; a quoted `~` is a directory literally named `~`.
     let home = crate::paths::home_dir().expect("a home directory in the test environment");
-    let note = home.join("estigia-outside-the-claim.md");
-    assert_eq!(
-        writes_outside_the_claim(
-            &run,
-            &Action::Write {
-                target: "~/estigia-outside-the-claim.md".to_owned()
-            }
-        ),
-        writes_outside_the_claim(
-            &run,
-            &Action::Write {
-                target: note.display().to_string()
-            }
-        ),
-        "`~/estigia-outside-the-claim.md` was not placed where it lands"
+    let absolute = writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: home
+                .join("estigia-outside-the-claim.md")
+                .display()
+                .to_string(),
+        },
     );
-    assert_eq!(
-        writes_outside_the_claim(
+    let placed = |line: &'static str| {
+        writes_outside_the_claim_in(
             &run,
             &Action::Write {
-                target: "$HOME/estigia-outside-the-claim.md".to_owned()
-            }
-        ),
-        writes_outside_the_claim(
-            &run,
-            &Action::Write {
-                target: note.display().to_string()
-            }
-        ),
-        "`$HOME/estigia-outside-the-claim.md` was not placed where it lands"
+                target: line.trim_start_matches("echo x > ").to_owned(),
+            },
+            Some(line),
+        )
+    };
+    for line in [
+        "echo x > ~/estigia-outside-the-claim.md",
+        "echo x > $HOME/estigia-outside-the-claim.md",
+    ] {
+        assert_eq!(
+            placed(line),
+            absolute,
+            "`{line}` was not placed where it lands"
+        );
+    }
+    assert!(
+        !placed("echo x > \"~/estigia-outside-the-claim.md\""),
+        "a quoted `~` was placed at the home directory"
     );
 }
 
@@ -8698,6 +8699,9 @@ fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
         "git checkout -f",
         "/usr/bin/git reset --hard HEAD~3",
         "\\git checkout -b x",
+        "git checkout release/git -- src/x.rs",
+        "git checkout dev/git -f",
+        "git.exe reset --hard HEAD~1",
     ] {
         let (action, _) = classify("Bash", &json!({ "command": line }));
         assert!(

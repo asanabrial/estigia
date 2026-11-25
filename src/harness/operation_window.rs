@@ -539,7 +539,7 @@ fn git_invocations(text: &str) -> Vec<(String, Vec<String>)> {
             };
             let rest = words[at + 2..]
                 .iter()
-                .take_while(|word| !SEPARATORS.contains(word) && !crate::harness::is_git_word(word))
+                .take_while(|word| !SEPARATORS.contains(word) && **word != "git")
                 .map(|word| (*word).to_owned())
                 .collect();
             found.push(((*subcommand).to_owned(), rest));

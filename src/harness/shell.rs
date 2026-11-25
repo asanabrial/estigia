@@ -1310,14 +1310,13 @@ fn reader_head(command: &str) -> Option<usize> {
             .then_some(index)
         }
         "sed" => {
-            let words: Vec<&str> = command
-                .get(index..)
-                .unwrap_or_default()
-                .split_whitespace()
-                .collect();
+            let words = words(command.get(index..).unwrap_or_default())?;
+            // A quiet sed filters; one short bundle may hold it (`-n`, `-nu`).
             let quiet = words.iter().any(|word| {
                 word.starts_with('-') && !word.starts_with("--") && word[1..].contains('n')
             });
+            // `-i` writes in place, with a suffix (`-i.bak`) or in a bundle
+            // (`-ni`), and an in-place script is code like any other writer's.
             let in_place = words.iter().any(|word| {
                 word.starts_with("--in-place")
                     || word.strip_prefix('-').is_some_and(|flags| {
@@ -1327,11 +1326,29 @@ fn reader_head(command: &str) -> Option<usize> {
                                     && flags.contains('i')))
                     })
             });
-            (quiet && !in_place).then_some(index)
+            let script = sed_script(&words)?;
+            (quiet && !in_place && !script.contains('e')).then_some(index)
         }
         _ if READS_ONLY.contains(&head) => Some(index),
         _ => None,
     }
+}
+
+/// The script `sed` runs, when it is the first word that is not one of the
+/// options listed here. `None` for `-e`, `-f`, a bundle or any other option:
+/// a script this cannot locate is one whose quoted text is not blanked.
+fn sed_script<'a>(words: &[&'a str]) -> Option<&'a str> {
+    for word in words {
+        if word.starts_with('-') {
+            match *word {
+                "-n" | "-r" | "-E" | "-s" | "-u" | "-z" | "--quiet" | "--silent" | "--posix"
+                | "--regexp-extended" | "--separate" | "--unbuffered" | "--null-data" => continue,
+                _ => return None,
+            }
+        }
+        return Some(word);
+    }
+    None
 }
 
 /// The byte ranges of `command` a single simple command reads rather than runs,
@@ -1441,17 +1458,14 @@ pub(crate) fn nested_commands(command: &str) -> Option<Vec<(usize, usize)>> {
             b'\\' => index += 2,
             b'\'' => index = single_quoted_end(bytes, index)?,
             b'"' => index = double_quoted_nested(bytes, index, &mut spans)?,
-            b'$' if bytes.get(index + 1) == Some(&b'(') && bytes.get(index + 2) != Some(&b'(') => {
-                let end = dollar_end(bytes, index)?;
-                spans.push((index + 2, end - 1));
-                index = end;
+            _ => {
+                if let Some((inner, after)) = substitution_end(bytes, index) {
+                    spans.push((inner, after - 1));
+                    index = after;
+                } else {
+                    index += 1;
+                }
             }
-            b'`' => {
-                let end = backticks_end(bytes, index)?;
-                spans.push((index + 1, end - 1));
-                index = end;
-            }
-            _ => index += 1,
         }
     }
     Some(spans)
@@ -1467,20 +1481,35 @@ fn double_quoted_nested(
         match bytes[index] {
             b'"' => return Some(index + 1),
             b'\\' => index += 2,
-            b'$' if bytes.get(index + 1) == Some(&b'(') && bytes.get(index + 2) != Some(&b'(') => {
-                let end = dollar_end(bytes, index)?;
-                spans.push((index + 2, end - 1));
-                index = end;
+            _ => {
+                if let Some((inner, after)) = substitution_end(bytes, index) {
+                    spans.push((inner, after - 1));
+                    index = after;
+                } else {
+                    index += 1;
+                }
             }
-            b'`' => {
-                let end = backticks_end(bytes, index)?;
-                spans.push((index + 1, end - 1));
-                index = end;
-            }
-            _ => index += 1,
         }
     }
     None
+}
+
+/// The inner range of the command substitution starting at `index` and the
+/// index after it closes.
+fn substitution_end(bytes: &[u8], index: usize) -> Option<(usize, usize)> {
+    match bytes.get(index) {
+        Some(b'$')
+            if bytes.get(index + 1) == Some(&b'(') && bytes.get(index + 2) != Some(&b'(') =>
+        {
+            let after = dollar_end(bytes, index)?;
+            Some((index + 2, after))
+        }
+        Some(b'`') => {
+            let after = backticks_end(bytes, index)?;
+            Some((index + 1, after))
+        }
+        _ => None,
+    }
 }
 
 /// The words of a command line, split at unquoted whitespace so a quoted value

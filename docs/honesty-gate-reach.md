@@ -56,20 +56,25 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   here-documents. A **compound line** is read one top-level simple command at a time by the same grammar,
   which there also accepts a plain `$name`: a single-quoted `--jq` program inside a `for` loop is data. A
   pipe is judged at the boundary it crosses — both commands it joins must be readers — so `cd x && grep
-  "git push origin" y | head` blanks while `cat x | sh` does not; `2>&1` is a redirect to a descriptor
-  rather than a background operator, so it blanks like `2>/dev/null`. The
+  "git push origin" y | head` blanks while `cat x | sh` does not. For a lone simple command, `2>&1` is a
+  redirect to a descriptor rather than a background operator, so it blanks like `2>/dev/null`; a compound
+  line holding any redirect is still left whole. The
   whole line keeps the whole-text scan when data could reach execution through it — a pipe into anything
   outside the list, a redirect, a here-document, `<(`, `${`, `$'`, a comment, a backslash, or a name
   (`PATH`, `alias`, `function`, `hash`, `case`) that could change what a command resolves to or hide a
   boundary — and nothing inside `$(…)` or backticks is blanked. `gh api` has no verb, so a quoted endpoint
   after it is data. A reader whose own options decide whether it runs something is read by those options:
   `rg` without `--pre`, `git log`/`grep`/`show` (whose global `-c`, `-C` and the rest take their value as
-  one word), and `sed -n` without `-i`. `sort`, `printf` and `test` are absent because they run what they
+  one word), and `sed -n` when its script is on the command line, carries no `-e` or `-f` option, and holds
+  no `e` — the `e` command and the `s///e` flag run what they are handed in GNU sed. `sort`, `printf` and
+  `test` are absent because they run what they
   are handed (`sort --compress-program`, array subscripts), and `gh repo`/`gist` because `clone`, `fork`
   and `create` forward words after `--` to `git`. **Not closed:** an unquoted argument, so `echo git push`
   still reads as a boundary; a here-document beside a redirect target the reader cannot place (`> $file`,
-  `> "out file"`) is left whole; what a user's shell profile or an alias changes about the allowlisted
-  names is unproved. **A differential test holds the property against bash itself**:
+  `> "out file"`) is left whole; a `~` or `$HOME` redirect target is placed at the home the hook was
+  launched with when it is unquoted, so a line that reassigns `HOME` before the redirect is not modelled
+  and a quoted `~` stays a directory named `~`; what a user's shell profile or an alias changes about the
+  allowlisted names is unproved. **A differential test holds the property against bash itself**:
   `nothing_bash_executes_is_blanked_as_data` runs the measured inputs and 4000 generated cases under `bash
   --noprofile --norc -c` and fails when a marker command bash executed (`touch ran_N_`) is not still in
   `data_view`'s line. It cannot pass vacuously (a timeout fails, every measured input must run its marker on a

@@ -895,10 +895,7 @@ fn strip_leading_options(command: &str) -> String {
     while let Some(word) = words.next() {
         kept.push(word);
         let program = without_substitution_openers(word);
-        if binary_name(program) != "git"
-            && binary_name(program) != "gh"
-            && binary_name(program) != "estigia"
-        {
+        if program != "git" && program != "gh" && binary_name(program) != "estigia" {
             continue;
         }
         // Its own options, up to the subcommand. A word that does not start
@@ -3366,8 +3363,17 @@ pub fn gate_observing(
 }
 
 /// A home-relative target with the home resolved, or `None` when it names no
-/// home or the home cannot be read.
-fn with_home(target: &str) -> Option<String> {
+/// home, the home cannot be read, or the line spells it quoted — a quoted `~`
+/// is a directory literally named `~` in the working directory, and a quoted
+/// `$HOME` is expanded but not placed by this reader.
+fn with_home(target: &str, literal: Option<&str>) -> Option<String> {
+    let unquoted = literal.is_some_and(|line| {
+        line.match_indices(target)
+            .any(|(at, _)| !line[..at].ends_with(['\'', '"']))
+    });
+    if !unquoted {
+        return None;
+    }
     let rest = ["~/", "${HOME}/", "$HOME/"]
         .into_iter()
         .find_map(|prefix| target.strip_prefix(prefix))
@@ -3391,11 +3397,17 @@ fn with_home(target: &str) -> Option<String> {
 /// not one: the target must be an **absolute** path (a shell write cannot be
 /// placed, and one that cannot be placed stays gated), and a run covering
 /// nothing has no claim to be outside of.
+/// Whether this write lands where no checkout the claim covers can reach, with
+/// no command line to read: a home-relative target is not placed.
 fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
+    writes_outside_the_claim_in(run, action, None)
+}
+
+fn writes_outside_the_claim_in(run: &Run, action: &Action, literal: Option<&str>) -> bool {
     let Action::Write { target } = action else {
         return false;
     };
-    let expanded = with_home(target);
+    let expanded = with_home(target, literal);
     let path = std::path::Path::new(expanded.as_deref().unwrap_or(target));
     if !path.is_absolute() {
         return false;
@@ -3613,7 +3625,11 @@ fn decide_observing(
     // lands, so placing it outside must never be what waves it through. Above
     // the window so a write outside the claim is `Outside` at every age of the
     // verification, not `Allow` while it is fresh.
-    if how == Sensitivity::Routine && writes_outside_the_claim(run, action) {
+    let outside_the_claim = match literal {
+        Some(line) => writes_outside_the_claim_in(run, action, Some(line)),
+        None => writes_outside_the_claim(run, action),
+    };
+    if how == Sensitivity::Routine && outside_the_claim {
         return Decision::Outside(Aside::OutsideTheClaim);
     }
 
