@@ -2331,11 +2331,12 @@ fn an_uninstall_takes_back_the_gate_with_or_without_the_failure_field() {
             "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [handler]}]},
         });
         fs::write(&hooks, seeded.to_string()).expect("their file");
+        assert!(seeded.to_string().contains("hook pre-tool-use"));
 
         uninstall(adapter, &options).expect("uninstall succeeds");
         let after = fs::read_to_string(&hooks).unwrap_or_default();
         assert!(
-            !after.contains("pre-tool-use"),
+            !after.contains("hook pre-tool-use"),
             "a gate with `onFailure: {on_failure:?}` survived the uninstall: {after}"
         );
         assert!(
@@ -2351,7 +2352,7 @@ fn only_claude_code_is_given_lifecycle_hooks() {
     // `SessionStart` into a file for an agent that does not have it is an entry
     // nobody runs, in somebody else's settings.
     let (_home, options) = sandbox();
-    for slug in ["codex", "cursor"] {
+    for (slug, given) in [("claude-code", true), ("codex", false), ("cursor", false)] {
         let adapter = agent(slug);
         let hooks = resolve_paths(adapter, &options)
             .expect("paths resolve")
@@ -2359,9 +2360,10 @@ fn only_claude_code_is_given_lifecycle_hooks() {
             .expect("a gated agent has a hooks file");
         setup(adapter, &Config::default(), &options).expect("setup succeeds");
         let written = fs::read_to_string(&hooks).expect("readable");
-        assert!(
-            !written.contains("session-start"),
-            "{slug} was given a lifecycle hook it does not have: {written}"
+        assert_eq!(
+            written.contains("hook session-start"),
+            given,
+            "{slug} has the wrong lifecycle hooks: {written}"
         );
     }
 }
