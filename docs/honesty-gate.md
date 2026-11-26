@@ -98,11 +98,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   read. In the refusal it is text, not a field. Claude Code's loop only tells the turn to schedule its
   own wake and lets the second stop for one opening through, so a turn that schedules nothing is not
   woken. Codex's `Stop` keeps no loop record, so it is told on every stop. Pi's and OpenCode's loops hold
-  the timer themselves (`windowWait`), and lose it when the host process ends; they wait at the first
-  closed-window stop even while another issue is claimable, where Claude Code's and Codex's `Stop` keep
-  the turn going and name `park: true`. The tests are
+  the timer themselves (`windowWait`), and lose it when the host process ends. While another issue is
+  claimable all four keep the turn going and name `park: true`, so the timer is armed only once
+  nothing is left to claim; every loop on the machine waits for the same `opens_at`, so they all wake
+  together. The tests are
   `next_opening` in `src/harness/operation_window/tests.rs`, the closed-window cases in
-  `src/cli/tests.rs`, and the `window` scenarios of both loop drivers in `src/setup/tests.rs`.
+  `src/cli/tests.rs`, and the `window` and `windowWork` scenarios of both loop drivers in
+  `src/setup/tests.rs`.
 - **A parked claim is the pointer's note, and nothing renews it.** `claim` with `park: true` keeps
   several claims under one run id, so the store's adjudication is untouched. Only the active one is
   covered and verified. Nothing checks that a parked issue's work is built, only that the window

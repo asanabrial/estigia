@@ -12045,6 +12045,30 @@ for (const [name, directories] of [
   clean();
 }
 
+{
+  const opens = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  const closed = {
+    exitCode: 0,
+    stdout: JSON.stringify({
+      run_id: "opencode-abc", live: true, issue: 42, standing: "passed", opens_at: opens, claimable: 1, dischargeable: 0,
+    }),
+  };
+  const w = await world({ answers: [started, closed, closed] });
+  await w.run(0, "flow-loop", "do the thing");
+  await until(() => w.prompts.length >= 1, "windowWork: the first prompt");
+  w.turn(DIRECTORY);
+  await until(() => w.prompts.length >= 2, "windowWork: the first closed-window order");
+  w.turn(DIRECTORY);
+  await until(() => w.prompts.length >= 3, "windowWork: the second closed-window order");
+  cases.windowWork = {
+    opens,
+    texts: w.prompts.map((prompt) => prompt.text),
+    goal: w.storage.get(KEY),
+    timers: live().map((timer) => timer.ms),
+  };
+  clean();
+}
+
 console.log(JSON.stringify(cases));
 process.exit(0);
 "#;
@@ -12173,6 +12197,27 @@ fn the_loop_plugin_waits_on_held_or_pending_work_and_asks_again() {
     assert!(
         window["goal"].get("window").is_none(),
         "the wait outlived the opening: {window}"
+    );
+
+    let work = &cases["windowWork"];
+    let opens = work["opens"].as_str().expect("an opening");
+    for text in &work["texts"].as_array().expect("texts")[1..] {
+        assert!(
+            text.as_str()
+                .is_some_and(|text| text.contains("issue #42 is still held")
+                    && text.contains(&format!("closed until {opens}"))
+                    && text.contains("`park: true`")),
+            "a closed window with claimable work was not kept working: {work}"
+        );
+    }
+    assert!(
+        work["goal"].get("waiting").is_none() && work["goal"].get("window").is_none(),
+        "a closed window with claimable work was recorded as a wait: {work}"
+    );
+    assert_eq!(
+        work["timers"],
+        serde_json::json!([]),
+        "a closed window with claimable work armed a timer: {work}"
     );
 
     for (standing, prompts) in [("assisted-held", 2), ("passed", 1)] {
@@ -19793,6 +19838,19 @@ for (const standing of ["assisted-held", "passed"]) {
 }
 
 {
+  const opens = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  use({ answer: { ...LIVE, opens_at: opens, claimable: 1, dischargeable: 0 } });
+  const s = await scenario();
+  await start(s, "x");
+  await turn(s);
+  await until(() => s.sent.length === 2);
+  await turn(s);
+  await until(() => s.sent.length === 3);
+  out.windowWork = { opens, ...snapshot(s), timers: held.filter((entry) => entry.delay !== 30000).length };
+  await s.handlers.session_shutdown({ type: "session_shutdown" }, s.ctx);
+}
+
+{
   use({ answer: LIVE });
   const s = await scenario();
   await start(s, "x");
@@ -20125,6 +20183,22 @@ fn the_pi_loop_waits_on_held_or_pending_work_and_asks_again() {
             |text| text.contains("window is open") && text.contains("`estigia flush` first")
         ),
         "the woken attempt was not told to flush first: {window}"
+    );
+
+    let work = &cases["windowWork"];
+    let opens = work["opens"].as_str().expect("an opening");
+    for text in &work["texts"].as_array().expect("texts")[1..] {
+        assert!(
+            text.as_str()
+                .is_some_and(|text| text.contains("issue #42 is still held")
+                    && text.contains(&format!("closed until {opens}"))
+                    && text.contains("`park: true`")),
+            "a closed window with claimable work was not kept working: {work}"
+        );
+    }
+    assert_eq!(
+        work["timers"], 0,
+        "a closed window with claimable work armed a timer: {work}"
     );
 
     for (standing, prompts) in [("assisted-held", 2), ("passed", 1)] {
