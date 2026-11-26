@@ -112,10 +112,10 @@ Load a reference when its condition holds; each owns its subject once.
 | [repository delivery](references/repository-delivery.md) | The repository leaves isolation, integration, review sizing, base movement or cleanup unsettled, or step 5 sends a run to its lane and force-push rules. |
 | [analyst](references/analyst.md) | The role is analyst, or the run is the combined analyst-developer. |
 | [decision gates](references/decision-gates.md) | A Decision Gates row above names it. |
-| [safety incidents](references/safety-incidents.md) | Claim, reclaim, handoff, failure or incident evidence. |
+| [safety incidents](references/safety-incidents.md) | Claim, reclaim, handoff or failure rationale. |
 | [github recovery](bindings/github/recovery.md) | A lock, a migration, or a quiet failure fired. |
 | [github setup](bindings/github/setup.md) | `estigia setup` or `sync` is running. |
-| [github delivery](bindings/github/delivery.md) | `deliver` answered `stopped`, step 6's topology check applies, or a version tag is due. |
+| [github delivery](bindings/github/delivery.md) | `deliver` answered `stopped`, step 6's topology check applies, or a tag is due. |
 | [github operations](bindings/github/operations.md) and its [guarantees](bindings/github/operations-guarantees.md) | An operation's full guarantee, or a refusal only it raises, is needed. |
 | [github refusals](bindings/github/refusals.md) | A refusal is not self-explanatory. |
 | [linear binding](bindings/linear.md) | The `Tracker` row names `linear`. |
