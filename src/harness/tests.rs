@@ -6492,6 +6492,53 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
             target: scratch.display().to_string()
         }
     ));
+
+    // A home-relative target is placed by what it resolves to when the line
+    // spells it as an unquoted redirect target; a quoted `~` is a directory
+    // literally named `~`, and a target quoted at the redirect is not placed
+    // even when the same text appears unquoted elsewhere on the line.
+    let home = crate::paths::home_dir().expect("a home directory in the test environment");
+    let absolute = writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: home
+                .join("estigia-outside-the-claim.md")
+                .display()
+                .to_string(),
+        },
+    );
+    for line in [
+        "echo x > ~/estigia-outside-the-claim.md",
+        "echo x > $HOME/estigia-outside-the-claim.md",
+    ] {
+        let target = crate::harness::shell::redirect_destination(line).expect("a redirect target");
+        assert_eq!(
+            writes_outside_the_claim_in(&run, &Action::Write { target }, Some(line)),
+            absolute,
+            "`{line}` was not placed where it lands"
+        );
+    }
+    for line in [
+        "echo x > \"~/estigia-outside-the-claim.md\"",
+        "echo x > '~/estigia-outside-the-claim.md'",
+        "cat ~/estigia-outside-the-claim.md > \"~/estigia-outside-the-claim.md\"",
+    ] {
+        let target = crate::harness::shell::redirect_destination(line).expect("a redirect target");
+        assert_eq!(target, "~/estigia-outside-the-claim.md");
+        assert!(
+            !writes_outside_the_claim_in(&run, &Action::Write { target }, Some(line)),
+            "`{line}` was placed at the home directory although the redirect target is quoted"
+        );
+    }
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: "~/estigia-outside-the-claim.md".to_owned(),
+            },
+        ),
+        "a home target with no line to read was placed"
+    );
 }
 
 #[test]
@@ -8661,6 +8708,11 @@ fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
         "git branch -f -D x",
         "git checkout HEAD -- src/x.rs",
         "git checkout -f",
+        "/usr/bin/git reset --hard HEAD~3",
+        "\\git checkout -b x",
+        "git checkout release/git -- src/x.rs",
+        "git checkout dev/git -f",
+        "git.exe reset --hard HEAD~1",
     ] {
         let (action, _) = classify("Bash", &json!({ "command": line }));
         assert!(
@@ -8671,6 +8723,7 @@ fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
     for line in [
         "git stash list",
         "grep \"git reset --hard\" notes.md",
+        "echo \"/usr/bin/git reset --hard\"",
         "git log --hard",
     ] {
         let (action, _) = classify("Bash", &json!({ "command": line }));

@@ -866,11 +866,12 @@ pub fn redirect_targets(command: &str) -> Option<Vec<String>> {
 /// The commands a data span may hide behind: a program with no code flag, no
 /// `--exec`-shaped option, and no subcommand that runs its argument.
 ///
-/// Every entry reads the bytes it is handed. `rg` and `sort` are deliberately
-/// absent — `rg --pre` and `sort --compress-program` run the program they are
-/// given — and so is every interpreter, wrapper, scheduler and package manager,
-/// which is the whole point of the list being an allowlist rather than a
-/// denylist.
+/// Every entry reads the bytes it is handed. `sort` is deliberately absent —
+/// `sort --compress-program` runs the program it is given — and so is every
+/// interpreter, wrapper, scheduler and package manager, which is the whole
+/// point of the list being an allowlist rather than a denylist. The readers
+/// that run code only for some flags or subcommands — `rg` without `--pre`,
+/// `git log`/`grep`/`show`, `sed -n` — are named in [`reader_head`] instead.
 const READS_ONLY: &[&str] = &[
     "gh", "cat", "grep", "head", "tail", "wc", "jq", "ls", "uniq", "cut", "tr", "echo", "date",
     "pwd", "true", "false", "basename", "dirname", "realpath", "stat", "file", "which", "type",
@@ -1054,8 +1055,7 @@ fn compound_spans(command: &str) -> Option<Vec<(usize, usize)>> {
         return None;
     }
     let bytes = command.as_bytes();
-    let mut pieces = Vec::new();
-    let mut piped = false;
+    let mut pieces: Vec<(usize, usize, bool)> = Vec::new();
     let mut depth = 0usize;
     let mut start = 0;
     let mut index = 0;
@@ -1104,34 +1104,42 @@ fn compound_spans(command: &str) -> Option<Vec<(usize, usize)>> {
             }
             b';' | b'\n' => 1,
             b'&' | b'|' => {
-                if byte == b'|' && bytes.get(index + 1) != Some(&b'|') {
-                    piped = true;
-                }
-                1 + usize::from(matches!(bytes.get(index + 1), Some(b'&' | b'|')))
+                let pipe = byte == b'|' && bytes.get(index + 1) != Some(&b'|');
+                pieces.push((start, index, pipe));
+                index += 1 + usize::from(matches!(bytes.get(index + 1), Some(b'&' | b'|')));
+                start = index;
+                continue;
             }
             _ => {
                 index += 1;
                 continue;
             }
         };
-        pieces.push((start, index));
+        pieces.push((start, index, false));
         index += separator;
         start = index;
     }
     if depth != 0 {
         return None;
     }
-    pieces.push((start, bytes.len()));
+    pieces.push((start, bytes.len(), false));
     let mut spans = Vec::new();
-    for (start, end) in pieces {
+    for (at, (start, end, followed_by_pipe)) in pieces.iter().copied().enumerate() {
         let piece = &command[start..end];
+        if followed_by_pipe {
+            let next = pieces
+                .get(at + 1)
+                .map(|(next_start, next_end, _)| &command[*next_start..*next_end])
+                .unwrap_or_default();
+            if reader_head(piece.trim_start()).is_none() || reader_head(next.trim_start()).is_none()
+            {
+                return None;
+            }
+        }
         let body = piece.len() - without_reserved_words(piece).len();
         let text = &piece[body..];
         if text.trim().is_empty() {
             continue;
-        }
-        if piped && !bare_word(text, 0).is_some_and(|(head, _)| READS_ONLY.contains(&head)) {
-            return None;
         }
         if let Some(found) = read_only_spans(text.trim_end(), true) {
             let offset = start + body;
@@ -1224,6 +1232,158 @@ fn dollar_end(bytes: &[u8], at: usize) -> Option<usize> {
     }
 }
 
+/// The `git` subcommands whose quoted arguments are data.
+const GIT_READS: &[&str] = &["log", "grep", "show"];
+
+/// `git` options that take the next word with them, before its subcommand.
+const GIT_GLOBAL_WITH_A_VALUE: &[&str] = &[
+    "-c",
+    "-C",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--super-prefix",
+    "--exec-path",
+    "--config-env",
+];
+
+/// The word after `from` and where it ends, with a quoted value kept whole.
+fn raw_word(command: &str, from: usize) -> Option<(&str, usize)> {
+    let bytes = command.as_bytes();
+    let mut at = from;
+    while matches!(bytes.get(at), Some(b' ' | b'\t')) {
+        at += 1;
+    }
+    let start = at;
+    while at < bytes.len() && !is_blank(bytes[at]) {
+        at = match bytes[at] {
+            b'\'' => single_quoted_end(bytes, at)?,
+            b'"' => double_quoted_end(bytes, at)?,
+            b'\\' => (at + 2).min(bytes.len()),
+            _ => at + 1,
+        };
+    }
+    Some((&command[start..at], at))
+}
+
+/// The byte after the program and the subcommand that decides whether its
+/// quoted arguments are data, or `None` when this line is not one of those
+/// readers.
+fn reader_head(command: &str) -> Option<usize> {
+    let (head, index) = bare_word(command, 0)?;
+    match head {
+        "gh" => {
+            let (subcommand, next) = bare_word(command, index)?;
+            if !GH_READS.contains(&subcommand) {
+                return None;
+            }
+            let bytes = command.as_bytes();
+            let verb = next
+                + bytes[next..]
+                    .iter()
+                    .take_while(|byte| is_blank(**byte))
+                    .count();
+            if subcommand != "api" && matches!(bytes.get(verb), Some(b'\'' | b'"')) {
+                return None;
+            }
+            Some(next)
+        }
+        "git" => {
+            let mut at = index;
+            loop {
+                let (word, next) = raw_word(command, at)?;
+                let plain = unquoted(word);
+                if !plain.starts_with('-') {
+                    if !GIT_READS.contains(&plain.as_str()) {
+                        return None;
+                    }
+                    // `git grep -O` runs its value through the shell, and `git log
+                    // --output` writes one; a quoted spelling is the same option.
+                    let runs_or_writes = words(command.get(next..).unwrap_or_default())?
+                        .iter()
+                        .any(|word| {
+                            let word = unquoted(word);
+                            // getopt bundles short flags: `-nO` still holds `-O`.
+                            let bundled = word.starts_with('-')
+                                && !word.starts_with("--")
+                                && word[1..].contains('O');
+                            // `--op` is the shortest prefix `git grep` takes unambiguously.
+                            let named =
+                                word.split_once('=').map_or(word.as_str(), |(name, _)| name);
+                            bundled
+                                || named == "--output"
+                                || (named.len() >= 4 && "--open-files-in-pager".starts_with(named))
+                        });
+                    return (!runs_or_writes).then_some(next);
+                }
+                at = if GIT_GLOBAL_WITH_A_VALUE.contains(&plain.as_str()) {
+                    raw_word(command, next)?.1
+                } else {
+                    next
+                };
+            }
+        }
+        "rg" => {
+            let words = words(command.get(index..).unwrap_or_default())?;
+            let runs_a_program = words.iter().any(|word| {
+                let word = unquoted(word);
+                word == "--pre" || word.starts_with("--pre=")
+            });
+            (!runs_a_program).then_some(index)
+        }
+        "sed" => {
+            let words: Vec<String> = words(command.get(index..).unwrap_or_default())?
+                .into_iter()
+                .map(unquoted)
+                .collect();
+            // A quiet sed filters; one short bundle may hold it (`-n`, `-nu`).
+            let quiet = words.iter().any(|word| {
+                word.starts_with('-') && !word.starts_with("--") && word[1..].contains('n')
+            });
+            let script = sed_script(&words)?;
+            (quiet && !script.contains(['e', 'w', 'W'])).then_some(index)
+        }
+        _ if READS_ONLY.contains(&head) => Some(index),
+        _ => None,
+    }
+}
+
+/// The script `sed` runs, when it is the first word that is not an option of
+/// the filter set — `-nrEsuz`, alone or bundled — or its long spelling. `None`
+/// for `-e`, `-f`, `-i` or any other option: a script this cannot locate is one
+/// whose quoted text is not blanked.
+fn sed_script(words: &[String]) -> Option<&str> {
+    let mut script = None;
+    for word in words {
+        if word.starts_with('-') {
+            // GNU sed permutes options with getopt, so one after the first
+            // operand is still a script this reader would have to order.
+            if script.is_some() {
+                return None;
+            }
+            match word.as_str() {
+                "--quiet" | "--silent" | "--posix" | "--regexp-extended" | "--separate"
+                | "--unbuffered" | "--null-data" => continue,
+                _ => {}
+            }
+            let filter = word.strip_prefix('-').is_some_and(|flags| {
+                !flags.is_empty() && flags.chars().all(|flag| "nrEsuz".contains(flag))
+            });
+            if !filter {
+                return None;
+            }
+            continue;
+        }
+        script.get_or_insert(word.as_str());
+    }
+    script
+}
+
+/// The word as the shell hands it over, so `"-O"` is still the option `-O`.
+fn unquoted(word: &str) -> String {
+    word.replace(['\'', '"'], "")
+}
+
 /// The byte ranges of `command` a single simple command reads rather than runs,
 /// or `None` when the line is not in the grammar `docs/honesty.md` records.
 ///
@@ -1237,25 +1397,7 @@ fn read_only_spans(command: &str, piece: bool) -> Option<Vec<(usize, usize)>> {
         return None;
     }
     let bytes = command.as_bytes();
-    let (head, mut index) = bare_word(command, 0)?;
-    if !READS_ONLY.contains(&head) {
-        return None;
-    }
-    if head == "gh" {
-        let (subcommand, next) = bare_word(command, index)?;
-        if !GH_READS.contains(&subcommand) {
-            return None;
-        }
-        index = next;
-        let verb = index
-            + bytes[index..]
-                .iter()
-                .take_while(|byte| is_blank(**byte))
-                .count();
-        if subcommand != "api" && matches!(bytes.get(verb), Some(b'\'' | b'"')) {
-            return None;
-        }
-    }
+    let mut index = reader_head(command)?;
     let mut spans = Vec::new();
     let mut pending: Vec<(String, bool, bool)> = Vec::new();
     while index < bytes.len() {
@@ -1302,6 +1444,11 @@ fn read_only_spans(command: &str, piece: bool) -> Option<Vec<(usize, usize)>> {
                 }
                 return (index == bytes.len()).then_some(spans);
             }
+            b'&' if (index > 0 && bytes[index - 1] == b'>')
+                || bytes.get(index + 1) == Some(&b'>') =>
+            {
+                index += 1;
+            }
             _ if byte.is_ascii_alphanumeric() || SAFE_BYTES.contains(&byte) => index += 1,
             _ => return None,
         }
@@ -1331,6 +1478,104 @@ fn piece_quoted_end(bytes: &[u8], open: usize) -> Option<usize> {
 
 fn is_blank(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n')
+}
+
+/// The byte ranges inside each command substitution of `command` — `$(…)` and
+/// backticks, quoted or not — outermost only. `None` when one never closes.
+pub(crate) fn nested_commands(command: &str) -> Option<Vec<(usize, usize)>> {
+    let bytes = command.as_bytes();
+    let mut spans = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 2,
+            b'\'' => index = single_quoted_end(bytes, index)?,
+            b'"' => index = double_quoted_nested(bytes, index, &mut spans)?,
+            _ => {
+                if let Some((inner, after)) = substitution_end(bytes, index) {
+                    spans.push((inner, after - 1));
+                    index = after;
+                } else {
+                    index += 1;
+                }
+            }
+        }
+    }
+    Some(spans)
+}
+
+fn double_quoted_nested(
+    bytes: &[u8],
+    open: usize,
+    spans: &mut Vec<(usize, usize)>,
+) -> Option<usize> {
+    let mut index = open + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => return Some(index + 1),
+            b'\\' => index += 2,
+            _ => {
+                if let Some((inner, after)) = substitution_end(bytes, index) {
+                    spans.push((inner, after - 1));
+                    index = after;
+                } else {
+                    index += 1;
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The inner range of the command substitution starting at `index` and the
+/// index after it closes.
+fn substitution_end(bytes: &[u8], index: usize) -> Option<(usize, usize)> {
+    match bytes.get(index) {
+        Some(b'$')
+            if bytes.get(index + 1) == Some(&b'(') && bytes.get(index + 2) != Some(&b'(') =>
+        {
+            let after = dollar_end(bytes, index)?;
+            Some((index + 2, after))
+        }
+        Some(b'`') => {
+            let after = backticks_end(bytes, index)?;
+            Some((index + 1, after))
+        }
+        _ => None,
+    }
+}
+
+/// The words of a command line, split at unquoted whitespace so a quoted value
+/// holding a blank stays one word. `None` when a quote never closes.
+pub(crate) fn words(command: &str) -> Option<Vec<&str>> {
+    let bytes = command.as_bytes();
+    let mut words = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            index += 1;
+        }
+        if index == bytes.len() {
+            break;
+        }
+        let start = index;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| !byte.is_ascii_whitespace())
+        {
+            index = match bytes[index] {
+                b'\'' => single_quoted_end(bytes, index)?,
+                b'"' => double_quoted_end(bytes, index)?,
+                b'\\' => (index + 2).min(bytes.len()),
+                _ => index + 1,
+            };
+        }
+        words.push(&command[start..index]);
+    }
+    Some(words)
 }
 
 /// The `[a-z]+` word after any spaces and tabs from `from`, and where it ends,

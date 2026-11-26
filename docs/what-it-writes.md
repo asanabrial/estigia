@@ -1615,7 +1615,12 @@ Gating every session would be a lock, not workflow authority.
 `unclaimed-commit`; the `pre-push` hook refuses the same push when git runs it. The way out is to
 claim an issue and work through `claim` with `branch` and `base`, whose isolated checkout the claim covers. Reads stay
 ungated, edits and tests are not held by it, and a checkout without the guard
-has no commit refusal, as does one with no tracker transport or no installed contract.
+has no commit refusal, as does one with no tracker transport or no installed contract. A read is read
+by its arguments, not by the words in them: `rg -n "git push origin" src`, `git log --grep "git commit
+-m"` and `grep -rn "git push origin" src 2>&1` are not refused, because the quoted pattern is blanked
+before the commit and push fragments are looked for. A reader that can run what it is handed is not
+blanked — `rg --pre cmd "git push" src` still names the push — and the reach of the blanking, reader by
+reader, is in [`honesty-gate-reach.md`](honesty-gate-reach.md).
 
 **The other exception is a repository setting, and it is off by default.** `Issue required`
 (`on` or `off`, answered only by `<repo>/.git/estigia/estigia.local.md`; a `required`, `watch` or `ask`

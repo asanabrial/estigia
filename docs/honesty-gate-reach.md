@@ -54,16 +54,29 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   rounds, each to one more spelling bash reads differently): a bare first word from a bounded list of
   read-only commands, a restricted byte set outside quotes, quotes opened at a word start and plain
   here-documents. A **compound line** is read one top-level simple command at a time by the same grammar,
-  which there also accepts a plain `$name`: a single-quoted `--jq` program inside a `for` loop is data. The
+  which there also accepts a plain `$name`: a single-quoted `--jq` program inside a `for` loop is data. A
+  pipe is judged at the boundary it crosses — both commands it joins must be readers — so `cd x && grep
+  "git push origin" y | head` blanks while `cat x | sh` does not. For a lone simple command, `2>&1` is a
+  redirect to a descriptor rather than a background operator, so it blanks like `2>/dev/null`; a compound
+  line holding any redirect is still left whole. The
   whole line keeps the whole-text scan when data could reach execution through it — a pipe into anything
   outside the list, a redirect, a here-document, `<(`, `${`, `$'`, a comment, a backslash, or a name
   (`PATH`, `alias`, `function`, `hash`, `case`) that could change what a command resolves to or hide a
   boundary — and nothing inside `$(…)` or backticks is blanked. `gh api` has no verb, so a quoted endpoint
-  after it is data. `rg`, `sort`, `printf` and `test` are absent because they run what they are handed
-  (`rg --pre`, `sort --compress-program`, array subscripts), and `gh repo`/`gist` because `clone`, `fork` and
-  `create` forward words after `--` to `git`. **Not closed:** an unquoted argument, so `echo git push` still
-  reads as a boundary; what a user's shell profile or an alias changes about the allowlisted names is
-  unproved. **A differential test holds the property against bash itself**:
+  after it is data. A reader whose own options decide whether it runs something is read by those options:
+  `rg` without `--pre`, `git log`/`grep`/`show` (whose global `-c`, `-C` and the rest take their value as
+  one word, and whose `git grep -O`/`--open…` runs its value through the shell or whose `git log --output`
+  writes it), and `sed -n` when its script is on the command line, carries no option this reader does not
+  know, and holds no `e`, `w` or `W` — those run a command or write a file in GNU sed. An option is read
+  with its quotes removed, so `git grep "-O…"` and `sed -n p "-e" …` are the options they spell. `sort`, `printf` and
+  `test` are absent because they run what they
+  are handed (`sort --compress-program`, array subscripts), and `gh repo`/`gist` because `clone`, `fork`
+  and `create` forward words after `--` to `git`. **Not closed:** an unquoted argument, so `echo git push`
+  still reads as a boundary; a here-document beside a redirect target the reader cannot place (`> $file`,
+  `> "out file"`) is left whole; a `~` or `$HOME` redirect target is placed at the home the hook was
+  launched with when it is unquoted, so a line that reassigns `HOME` before the redirect is not modelled
+  and a quoted `~` stays a directory named `~`; what a user's shell profile or an alias changes about the
+  allowlisted names is unproved. **A differential test holds the property against bash itself**:
   `nothing_bash_executes_is_blanked_as_data` runs the measured inputs and 4000 generated cases under `bash
   --noprofile --norc -c` and fails when a marker command bash executed (`touch ran_N_`) is not still in
   `data_view`'s line. It cannot pass vacuously (a timeout fails, every measured input must run its marker on a
@@ -75,12 +88,14 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   non-plain content (`git "pu\sh"`).
 
   **What exact-literal matching leaves** (traced by reading on 2026-09-07, re-read on 2026-11-16, not run):
-  *not matched at all* are a backslash line continuation, a `.exe` suffix and a full path carrying a global
-  option, `git update-ref refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh
-  repo sync`, `git branch <name>` and `git filter-repo`. A subcommand that writes only with a deciding
-  option (`checkout -b`/`--`/`-f`, `switch -c`, `branch -d`, and every `reset`) is read per invocation,
-  so an option between the subcommand and the deciding one no longer hides it
-  (`a_git_write_is_a_write_whatever_order_its_options_come_in`); a
+  *not matched at all* are a backslash line continuation, an `.exe` suffix on a spelling the substring
+  lists would otherwise catch (`git.exe commit`), `git update-ref refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh
+  repo sync` and `git filter-repo`. A subcommand that writes only with a deciding
+  option (`checkout -b`/`--`/`-f`, `switch -c`, `branch -d`, and every `reset`) is read per invocation
+  by its program word however it is spelled — `/usr/bin/git reset --hard`, `\git checkout -b x` and
+  `git.exe reset --hard` count — so an option between the subcommand and the deciding one no longer
+  hides it (`a_git_write_is_a_write_whatever_order_its_options_come_in`), and plain `git branch <name>`
+  is a protected write through `is_branch_creation`; a
   quoted argument of a command that writes is read as code, because `data_view` blanks quoted spans only for
   commands that read and that same breadth is what refuses a stand-down named in a commit message, so `git
   commit -m "git merge origin"` is a merge while a `;`, `&`, `|`, `)` or a backtick inside the quotes does
@@ -88,7 +103,10 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   backslash, `"…"` with backslash escapes and the ANSI-C `$'…'`, where a backslash escapes the next
   byte (`a_quote_scan_reads_an_ansi_c_span_and_an_escaped_double_quote_as_bash_does`), and no other
   quoting style; *matched but never read as a delivery* are `gh api`
-  against the merge, release and tag-ref endpoints and the pull spelling.
+  against the merge, release and tag-ref endpoints and the pull spelling. The `gh` delivery match skips
+  an option and its value between `gh`, its verb and the delivery word, so `gh pr -R owner/repo merge 12`
+  reads as the same `gh pr merge` as `gh pr merge 12 -R owner/repo` (and the same unidentified PR, since
+  the line names a repository); whether `gh` accepts that order was not run.
 
   **The gate also measures its own disarmament.** `estigia stand-down`, `guard --uninstall`, `uninstall` and
   writes to the files those decisions are read from (its state, the contract, each agent's settings entry)
@@ -96,7 +114,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   crossing over the parser's own tree holds every leaf below a listed verb to that list or to `DISARM_READS`
   (`config list`, `config repos`), so a third writing subcommand fails a test, while a new **top-level** verb
   is a review decision. `without_leading_options` moves a global option out from between the binary and the
-  verb (`estigia --json config edit` is refused) and the binary is recognised by basename.
+  verb (`estigia --json config edit` is refused), reads a quoted value as one word so `git -c
+  user.name="Bot Name" commit -m x` still names the commit, and the binary is recognised by basename.
 
   **Declaring a stand-down is a person's act, and that covers the record as well as the command.**
   `harness::person_only` is decided first by `gate`, `gate_observing`, the push guard and the role road, so
