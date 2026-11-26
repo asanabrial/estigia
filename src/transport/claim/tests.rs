@@ -9029,6 +9029,11 @@ fn the_contract_states_flow_its_budget_and_test_first() {
         "At most 3 calls and about 10k tokens stays inline",
         "More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff",
         "test-first",
+        "`collect_review_input` with `checks`",
+        "no lens launches while the receipt is red or running",
+        "`republish_review`'s force-push rule from [repository delivery]",
+        "step 5 sends a run to its lane and force-push rules",
+        "step 6's topology check applies",
     ] {
         assert!(
             flat.contains(needle),
