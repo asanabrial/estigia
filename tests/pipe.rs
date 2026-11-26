@@ -514,20 +514,21 @@ fn fenced_ambient_diff(at: &std::path::Path, base: &str, head: &str) -> Vec<u8> 
         .stdout
 }
 
-/// The **value** column of one `config list` row, cut at its `accepts:` column.
+/// The **value** column of one `config list` row, cut at its `[scope:` column.
 ///
-/// The line is not the row. Every row ends with `accepts:` and the full list of
-/// what it accepts, so a needle matched anywhere on the line is answered by the
-/// help text whatever the value column holds — `Change size` accepts a sentence
-/// naming `800`, and a bare `contains("800")` is satisfied by it.
+/// The line is not the row. A row ends with its scope and where the value came
+/// from, and `--accepts` would put the help text before it, so a needle matched
+/// anywhere on the line could be answered by prose rather than by the value —
+/// `Change size` accepts a sentence naming `800`, and a bare `contains("800")`
+/// is satisfied by it.
 fn listed_value(out: &str, label: &str) -> String {
     let row = out
         .lines()
         .find(|line| line.starts_with(label))
         .unwrap_or_else(|| panic!("no {label:?} row in:\n{out}"));
     let (value, _) = row
-        .split_once("accepts:")
-        .unwrap_or_else(|| panic!("no accepts column to cut at: {row}"));
+        .split_once("[scope:")
+        .unwrap_or_else(|| panic!("no scope column to cut at: {row}"));
     value.trim_start_matches(label).trim().to_owned()
 }
 

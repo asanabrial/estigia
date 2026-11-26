@@ -741,13 +741,13 @@ fn what_config_set_repo_writes_config_list_reads_back() {
     // the contract, so the assertion below is about the write and not about the
     // command printing the word at all.
     let (before, _, _) = run_in(home.path(), repo.path(), &["config", "list"], "");
-    // Everything between the row's label and its trailing `accepts:` column —
+    // Everything between the row's label and its trailing `[scope:` column —
     // the whole value, not only its first word, because `github <owner>/<name>`
     // is two words and the first alone would read back the same as the default.
     let tracker = |out: &str| {
         out.lines()
             .find(|line| line.starts_with("Tracker "))
-            .and_then(|line| line.split_once("accepts:"))
+            .and_then(|line| line.split_once("[scope:"))
             .map(|(before, _)| before.trim_start_matches("Tracker").trim().to_owned())
             .unwrap_or_default()
     };
@@ -2302,13 +2302,12 @@ fn setting_one_row_for_a_checkout_leaves_the_others_to_the_machine() {
     run_in(
         home.path(),
         &repo,
-        &["config", "set", "Integration", "trunk", "--repo"],
+        &["config", "set", "Renewal window", "30s", "--repo"],
         "",
     );
     let written = std::fs::read_to_string(&file).expect("the checkout's file");
     assert!(
-        written.contains("| Change size | 400 |")
-            && written.contains("| Integration mode | trunk |"),
+        written.contains("| Change size | 400 |") && written.contains("| Renewal window | 30s |"),
         "a second row replaced the first instead of joining it:\n{written}"
     );
 }
@@ -2367,28 +2366,24 @@ fn setting_one_row_for_an_agent_leaves_the_others_to_the_contract() {
 
     // The shared answer moves, and both adapters move with it — the one with a
     // file of its own included, because that file says nothing about this row.
-    let (_, _, ok) = run(
-        home.path(),
-        &[
-            "config",
-            "set",
-            "Delivery authorisation",
-            "ask",
-            "--agent",
-            "zcode",
-        ],
-        "",
-    );
-    assert!(ok, "the shared table would not take the row");
+    // The shared layer these two can both write without an adapter's own file
+    // is the operator's `estigia.local.md`: an agent-scoped row is written by
+    // `--agent`, and for an adapter on the neutral root that is its own file.
+    std::fs::write(
+        home.path()
+            .join(".agents")
+            .join("skills")
+            .join(estigia::skill::DIRECTORY)
+            .join(estigia::config::LOCAL_FILE),
+        "| Setting | Value here |\n|---|---|\n| Delivery authorisation | ask |\n",
+    )
+    .expect("the operator's own file");
     for agent in ["zcode", "cursor"] {
         let (listed, _, _) = run(home.path(), &["config", "list", "--agent", agent], "");
-        let row = listed
-            .lines()
-            .find(|line| line.starts_with("Delivery authorisation"))
-            .unwrap_or_default();
-        assert!(
-            row.contains("ask"),
-            "{agent} did not follow the shared answer for a row it never set: {row}"
+        assert_eq!(
+            listed_value(&listed, "Delivery authorisation"),
+            "ask",
+            "{agent} did not follow the shared answer for a row it never set:\n{listed}"
         );
     }
     // And cursor's own answer is still its own.

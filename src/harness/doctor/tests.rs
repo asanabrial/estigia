@@ -4154,3 +4154,70 @@ fn a_program_that_stalls_is_broken_within_its_limit() {
         other => panic!("a stalled program was reported as {other:?}"),
     }
 }
+
+#[test]
+fn a_repository_row_that_resolves_to_no_setting_is_reported() {
+    let skill = tempfile::tempdir().expect("a skill root");
+    std::fs::write(skill.path().join(crate::skill::CONTRACT), "the contract\n")
+        .expect("the contract is installed");
+    let repo = tempfile::tempdir().expect("a checkout");
+    std::fs::create_dir_all(repo.path().join(".git")).expect("a git directory");
+    let path = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("the directory");
+
+    // No file of its own is the ordinary case, not a fault.
+    assert!(matches!(
+        super::repository_config(skill.path(), repo.path()),
+        Health::Skipped { .. }
+    ));
+
+    std::fs::write(&path, "| Issue required | yes |\n").expect("a hand-written row");
+    let Health::Broken { detail, .. } = super::repository_config(skill.path(), repo.path()) else {
+        panic!("a row that does not parse left the check fine");
+    };
+    assert!(detail.contains("Issue required"), "{detail}");
+    assert!(detail.contains(&path.display().to_string()), "{detail}");
+
+    std::fs::write(
+        &path,
+        "| Issue required | yes |\n| Workflow mode | assisted |\n",
+    )
+    .expect("two rows, one of them unknown");
+    let Health::Broken { detail, .. } = super::repository_config(skill.path(), repo.path()) else {
+        panic!("a label that resolves to nothing left the check fine");
+    };
+    assert!(detail.contains("Workflow mode"), "{detail}");
+
+    std::fs::write(
+        &path,
+        "| Issue required | on |\n| Tracker | github acme/x |\n",
+    )
+    .expect("rows this build reads");
+    assert!(
+        matches!(
+            super::repository_config(skill.path(), repo.path()),
+            Health::Fine { .. }
+        ),
+        "a readable file was reported broken"
+    );
+}
+
+#[test]
+fn a_checkout_whose_machine_rows_cannot_be_read_is_not_judged_against_defaults() {
+    let skill = tempfile::tempdir().expect("a skill root");
+    std::fs::write(
+        skill.path().join(crate::skill::CONTRACT),
+        "| Irreversible commands | terraform apply |\n| Renewal window | 30 days |\n",
+    )
+    .expect("a contract with one unreadable row");
+    let repo = tempfile::tempdir().expect("a checkout");
+    std::fs::create_dir_all(repo.path().join(".git")).expect("a git directory");
+    let path = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("the directory");
+    std::fs::write(&path, "| Irreversible commands | none |\n").expect("a loosening row");
+
+    let Health::Skipped { detail } = super::repository_config(skill.path(), repo.path()) else {
+        panic!("a machine nobody can read was judged anyway");
+    };
+    assert!(detail.contains("could not be read"), "{detail}");
+}

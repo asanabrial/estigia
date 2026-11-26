@@ -132,6 +132,19 @@ fn inventory() -> Vec<Refusal> {
                 "a git checkout with a remote, and an authenticated `gh`",
             ),
         ),
+        Refusal::not_started(
+            "prune-incomplete",
+            "something the sweep listed stayed where it was",
+            Resolution::run("estigia prune --confirm"),
+        ),
+        // The value check `config set` runs before it writes, by its real
+        // constructor: the reader would cut this cell at ` (prod)`.
+        Setting::Boundaries
+            .apply(
+                &mut crate::config::Config::default(),
+                "terraform apply (prod), npm publish",
+            )
+            .expect_err("a value the reader cuts is refused"),
         // The bulk import's read failure, by its real constructor.
         super::store_import_unreadable(crate::transport::Failure::Read(
             "the open issues and the local store could not be read".to_owned(),
@@ -3835,7 +3848,7 @@ fn setting_a_row_on_the_repository_writes_its_own_file_and_refuses_an_agents_row
     // A folder that is not a checkout gets no `.git` invented for it. Found by
     // running this for real in a directory that deliberately has none: it made
     // one.
-    let refusal = super::repository_set(Setting::Evidence, "measuring", repo.path(), &options)
+    let refusal = super::repository_set(Setting::CorrectionsPerLineage, "1", repo.path(), &options)
         .expect_err("a folder that is not a checkout is not a repository");
     assert_eq!(refusal.code, "not-a-repository");
     assert!(
@@ -3844,11 +3857,11 @@ fn setting_a_row_on_the_repository_writes_its_own_file_and_refuses_an_agents_row
     );
     std::fs::create_dir_all(repo.path().join(".git")).expect("now it is one");
 
-    super::repository_set(Setting::Evidence, "measuring", repo.path(), &options)
+    super::repository_set(Setting::CorrectionsPerLineage, "1", repo.path(), &options)
         .expect("the repository takes it");
     let written = std::fs::read_to_string(&path).expect("the file was created");
     assert!(
-        written.contains("measuring"),
+        written.contains("| Corrections per lineage | 1 |"),
         "the answer is not in the file it was written to: {written}"
     );
 
@@ -3857,7 +3870,7 @@ fn setting_a_row_on_the_repository_writes_its_own_file_and_refuses_an_agents_row
         .expect("the repository takes it");
     let written = std::fs::read_to_string(&path).expect("the file is still there");
     assert!(
-        written.contains("measuring"),
+        written.contains("| Corrections per lineage | 1 |"),
         "a second `--repo` undid the first one's row: {written}"
     );
 
@@ -3880,12 +3893,12 @@ fn setting_a_row_on_the_repository_from_a_subdirectory_writes_the_checkouts_file
         ..SetupOptions::default()
     };
 
-    super::repository_set(Setting::Evidence, "measuring", &deep, &options)
+    super::repository_set(Setting::CorrectionsPerLineage, "1", &deep, &options)
         .expect("a subdirectory of a checkout is inside it");
 
     let written = std::fs::read_to_string(crate::skill::repository_config_path(repo.path()))
         .expect("the checkout's own file was written");
-    assert!(written.contains("measuring"));
+    assert!(written.contains("| Corrections per lineage | 1 |"));
     assert!(!deep.join(".git").exists());
     assert_eq!(
         crate::skill::known_repositories(home.path()),
@@ -3916,7 +3929,7 @@ fn the_screen_writes_the_checkout_it_was_pointed_at() {
     // Two checkouts that answer for themselves, both saying the same thing, so
     // that whichever one moves is the one the write chose.
     let rows = "| Setting | Value here | Skill default |\n|---|---|---|\n\
-                | Integration | trunk | branch |\n";
+                | Irreversible commands | npm publish | unset |\n";
     let named = tempfile::tempdir().expect("the checkout the page names");
     let standing = tempfile::tempdir().expect("the checkout the process stands in");
     for dir in [named.path(), standing.path()] {
@@ -3934,7 +3947,7 @@ fn the_screen_writes_the_checkout_it_was_pointed_at() {
         rows: [(
             "claude-code",
             Config {
-                evidence: crate::config::Evidence::Measuring,
+                boundaries: vec!["npm publish".to_owned(), "terraform apply".to_owned()],
                 ..Config::default()
             },
         )]
@@ -3949,7 +3962,7 @@ fn the_screen_writes_the_checkout_it_was_pointed_at() {
             .expect("the checkout's rows are still there")
     };
     assert!(
-        read(named.path()).contains("measuring"),
+        read(named.path()).contains("terraform apply"),
         "the checkout the page named did not get the answer: {}",
         read(named.path())
     );
@@ -4819,14 +4832,14 @@ fn a_tui_save_unions_only_the_repository_row_changed_in_this_session() {
     let adapter = crate::setup::find_agent("opencode").expect("OpenCode is an adapter");
     crate::setup::setup(adapter, &Config::default(), &options).expect("the initial setup");
     let mut repository_config = Config::default();
-    Setting::Evidence
-        .apply(&mut repository_config, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut repository_config, "1")
+        .expect("Corrections per lineage is accepted");
     let repository_path = crate::skill::repository_config_path(repository.path());
     crate::setup::write_repository_configuration(
         &repository_path,
         &repository_config,
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the one-row repository layer exists");
     let root = crate::setup::resolve_paths(adapter, &options)
@@ -4837,9 +4850,12 @@ fn a_tui_save_unions_only_the_repository_row_changed_in_this_session() {
     let opened = crate::skill::layer_repository(&bare, repository.path())
         .expect("the repository layer reads");
     let mut selected = opened.clone();
-    Setting::Integration
-        .apply(&mut selected, "trunk")
-        .expect("the integration route is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut selected, "2")
+        .expect("the correction limit is accepted");
+    Setting::Boundaries
+        .apply(&mut selected, "npm publish")
+        .expect("a declared boundary is accepted");
     let plan = crate::tui::Plan {
         agents: vec![adapter],
         opened: [(adapter.slug, opened)].into_iter().collect(),
@@ -4856,7 +4872,10 @@ fn a_tui_save_unions_only_the_repository_row_changed_in_this_session() {
         .collect::<Vec<_>>();
     assert_eq!(
         rows,
-        vec![Setting::Integration.label(), Setting::Evidence.label()],
+        vec![
+            Setting::Boundaries.label(),
+            Setting::CorrectionsPerLineage.label()
+        ],
         "the save either lost the owned row or claimed inherited Tracker/Worktree/Window rows:\n{written}"
     );
 }
@@ -4879,14 +4898,14 @@ fn a_one_row_repository_receipt_updates_only_that_row_across_divergent_baselines
     crate::setup::setup(codex, &codex_config, &options).expect("Codex installs");
 
     let mut repository_config = Config::default();
-    Setting::Evidence
-        .apply(&mut repository_config, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut repository_config, "1")
+        .expect("Corrections per lineage is accepted");
     let repository_path = crate::skill::repository_config_path(repository.path());
     crate::setup::write_repository_configuration(
         &repository_path,
         &repository_config,
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the one-row repository layer exists");
     let layer = |adapter: &'static crate::setup::AgentAdapter| {
@@ -4900,17 +4919,14 @@ fn a_one_row_repository_receipt_updates_only_that_row_across_divergent_baselines
     };
     let claude_opened = layer(claude);
     let codex_opened = layer(codex);
-    let mut selected = claude_opened.clone();
-    Setting::Evidence
-        .apply(&mut selected, "measuring")
-        .expect("Evidence is accepted");
+    let selected = claude_opened.clone();
     let mut before_the_edit = claude_opened.clone();
-    Setting::Evidence
+    Setting::CorrectionsPerLineage
         .apply(
             &mut before_the_edit,
-            &Setting::Evidence.value_of(&Config::default()),
+            &Setting::CorrectionsPerLineage.value_of(&Config::default()),
         )
-        .expect("the default Evidence is accepted");
+        .expect("the default correction limit is accepted");
     let plan = crate::tui::Plan {
         agents: vec![claude],
         opened: [(claude.slug, before_the_edit)].into_iter().collect(),
@@ -4921,7 +4937,10 @@ fn a_one_row_repository_receipt_updates_only_that_row_across_divergent_baselines
     let (receipt, _) =
         super::install_planned(&plan, &options, false).expect("the one-row repository save lands");
 
-    assert_eq!(receipt.repository_settings, vec![Setting::Evidence]);
+    assert_eq!(
+        receipt.repository_settings,
+        vec![Setting::CorrectionsPerLineage]
+    );
     let mut app = crate::tui::app::App::with_configs(
         &std::collections::BTreeMap::from([
             (claude.slug, claude_opened),
@@ -4931,12 +4950,12 @@ fn a_one_row_repository_receipt_updates_only_that_row_across_divergent_baselines
     );
     app.installed_now(receipt);
     assert_eq!(
-        Setting::Evidence.value_of(&app.installed[claude.slug]),
-        "measuring"
+        Setting::CorrectionsPerLineage.value_of(&app.installed[claude.slug]),
+        "1"
     );
     assert_eq!(
-        Setting::Evidence.value_of(&app.installed[codex.slug]),
-        "measuring"
+        Setting::CorrectionsPerLineage.value_of(&app.installed[codex.slug]),
+        "1"
     );
     assert_eq!(
         Setting::Tracker.value_of(&app.installed[claude.slug]),
@@ -4957,13 +4976,13 @@ fn repository_receipt_values_and_ownership_share_one_disk_snapshot() {
     let adapter = crate::setup::find_agent("claude-code").expect("Claude Code is an adapter");
     crate::setup::setup(adapter, &Config::default(), &options).expect("Claude installs");
     let mut first = Config::default();
-    Setting::Evidence
-        .apply(&mut first, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut first, "1")
+        .expect("Corrections per lineage is accepted");
     crate::setup::write_repository_configuration(
         &crate::skill::repository_config_path(repository.path()),
         &first,
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the first repository snapshot exists");
     let mut second = Config::default();
@@ -4999,10 +5018,18 @@ fn repository_receipt_values_and_ownership_share_one_disk_snapshot() {
     )
     .expect("the receipt reads one repository snapshot");
 
-    assert_eq!(receipt.repository_settings, vec![Setting::Evidence]);
     assert_eq!(
-        Setting::Evidence.value_of(receipt.repository.as_ref().expect("repository evidence")),
-        "measuring"
+        receipt.repository_settings,
+        vec![Setting::CorrectionsPerLineage]
+    );
+    assert_eq!(
+        Setting::CorrectionsPerLineage.value_of(
+            receipt
+                .repository
+                .as_ref()
+                .expect("repository correction limit")
+        ),
+        "1"
     );
 }
 
@@ -5026,7 +5053,7 @@ fn a_failure_after_proven_repository_write_carries_only_that_repository_row() {
     crate::setup::write_repository_configuration(
         &repository_path,
         &Config::default(),
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the one-row repository layer exists");
     let layer = |adapter: &'static crate::setup::AgentAdapter| {
@@ -5041,9 +5068,9 @@ fn a_failure_after_proven_repository_write_carries_only_that_repository_row() {
     let claude_opened = layer(claude);
     let codex_opened = layer(codex);
     let mut selected = claude_opened.clone();
-    Setting::Evidence
-        .apply(&mut selected, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut selected, "1")
+        .expect("Corrections per lineage is accepted");
     let plan = crate::tui::Plan {
         agents: vec![claude],
         opened: [(claude.slug, claude_opened.clone())].into_iter().collect(),
@@ -5055,7 +5082,10 @@ fn a_failure_after_proven_repository_write_carries_only_that_repository_row() {
     let failure = super::install_planned(&plan, &options, false)
         .expect_err("the injected post-repository failure was reported as success");
 
-    assert_eq!(failure.receipt.repository_settings, vec![Setting::Evidence]);
+    assert_eq!(
+        failure.receipt.repository_settings,
+        vec![Setting::CorrectionsPerLineage]
+    );
     let mut app = crate::tui::app::App::with_configs(
         &std::collections::BTreeMap::from([
             (claude.slug, claude_opened),
@@ -5065,12 +5095,12 @@ fn a_failure_after_proven_repository_write_carries_only_that_repository_row() {
     );
     app.installed_partially(*failure.receipt);
     assert_eq!(
-        Setting::Evidence.value_of(&app.installed[claude.slug]),
-        "measuring"
+        Setting::CorrectionsPerLineage.value_of(&app.installed[claude.slug]),
+        "1"
     );
     assert_eq!(
-        Setting::Evidence.value_of(&app.installed[codex.slug]),
-        "measuring"
+        Setting::CorrectionsPerLineage.value_of(&app.installed[codex.slug]),
+        "1"
     );
     assert_eq!(
         Setting::Tracker.value_of(&app.installed[claude.slug]),
@@ -5093,7 +5123,7 @@ fn a_proven_repository_write_that_disappears_before_readback_is_unknown() {
     crate::setup::write_repository_configuration(
         &repository_path,
         &Config::default(),
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the one-row repository layer exists");
     let root = crate::setup::resolve_paths(adapter, &options)
@@ -5104,9 +5134,9 @@ fn a_proven_repository_write_that_disappears_before_readback_is_unknown() {
     let opened = crate::skill::layer_repository(&bare, repository.path())
         .expect("the repository layer reads");
     let mut selected = opened.clone();
-    Setting::Evidence
-        .apply(&mut selected, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut selected, "1")
+        .expect("Corrections per lineage is accepted");
     let plan = crate::tui::Plan {
         agents: vec![adapter],
         opened: [(adapter.slug, opened)].into_iter().collect(),
@@ -5138,7 +5168,7 @@ fn a_proven_repository_write_that_is_unreadable_at_readback_is_unknown() {
     crate::setup::write_repository_configuration(
         &repository_path,
         &Config::default(),
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the one-row repository layer exists");
     let root = crate::setup::resolve_paths(adapter, &options)
@@ -5149,9 +5179,9 @@ fn a_proven_repository_write_that_is_unreadable_at_readback_is_unknown() {
     let opened = crate::skill::layer_repository(&bare, repository.path())
         .expect("the repository layer reads");
     let mut selected = opened.clone();
-    Setting::Evidence
-        .apply(&mut selected, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut selected, "1")
+        .expect("Corrections per lineage is accepted");
     let plan = crate::tui::Plan {
         agents: vec![adapter],
         opened: [(adapter.slug, opened)].into_iter().collect(),
@@ -5191,7 +5221,7 @@ fn after_repository_failure_keeps_missing_readback_as_the_controlling_unknown() 
     crate::setup::write_repository_configuration(
         &repository_path,
         &Config::default(),
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the one-row repository layer exists");
     let root = crate::setup::resolve_paths(adapter, &options)
@@ -5202,9 +5232,9 @@ fn after_repository_failure_keeps_missing_readback_as_the_controlling_unknown() 
     let opened = crate::skill::layer_repository(&bare, repository.path())
         .expect("the repository layer reads");
     let mut selected = opened.clone();
-    Setting::Evidence
-        .apply(&mut selected, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut selected, "1")
+        .expect("Corrections per lineage is accepted");
     let plan = crate::tui::Plan {
         agents: vec![adapter],
         opened: [(adapter.slug, opened)].into_iter().collect(),
@@ -5245,7 +5275,7 @@ fn after_repository_failure_keeps_unreadable_readback_as_the_controlling_unknown
     crate::setup::write_repository_configuration(
         &repository_path,
         &Config::default(),
-        &[Setting::Evidence],
+        &[Setting::CorrectionsPerLineage],
     )
     .expect("the one-row repository layer exists");
     let root = crate::setup::resolve_paths(adapter, &options)
@@ -5256,9 +5286,9 @@ fn after_repository_failure_keeps_unreadable_readback_as_the_controlling_unknown
     let opened = crate::skill::layer_repository(&bare, repository.path())
         .expect("the repository layer reads");
     let mut selected = opened.clone();
-    Setting::Evidence
-        .apply(&mut selected, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut selected, "1")
+        .expect("Corrections per lineage is accepted");
     let plan = crate::tui::Plan {
         agents: vec![adapter],
         opened: [(adapter.slug, opened)].into_iter().collect(),
@@ -5918,9 +5948,9 @@ fn interactive_dry_run_and_real_run_share_one_complete_unique_manifest() {
         .apply(&mut second_config, "ask")
         .expect("Transitions is accepted");
     let mut repository_config = first_config.clone();
-    Setting::Evidence
-        .apply(&mut repository_config, "measuring")
-        .expect("Evidence is accepted");
+    Setting::CorrectionsPerLineage
+        .apply(&mut repository_config, "1")
+        .expect("Corrections per lineage is accepted");
     let plan = crate::tui::Plan {
         agents: vec![first, second],
         opened: [
@@ -9219,9 +9249,30 @@ fn the_workflow_is_written_to_the_repository_file_and_nowhere_else() {
 #[test]
 fn an_unreadable_contract_names_no_workflow_at_all() {
     for installed in crate::config::Workflow::all() {
-        assert_eq!(super::effective_workflow(false, installed), Some(installed));
-        assert_eq!(super::effective_workflow(true, installed), None);
+        assert_eq!(
+            super::effective_workflow(false, false, installed),
+            Some(installed)
+        );
+        assert_eq!(super::effective_workflow(true, false, installed), None);
+        assert_eq!(super::effective_workflow(true, true, installed), None);
     }
+}
+
+#[test]
+fn a_repository_row_that_did_not_parse_keeps_the_workflow_its_file_carried() {
+    assert_eq!(
+        super::effective_workflow(false, false, crate::config::Workflow::Autonomous),
+        Some(crate::config::Workflow::Autonomous)
+    );
+    assert_eq!(
+        super::effective_workflow(false, false, crate::config::Workflow::Assisted),
+        Some(crate::config::Workflow::Assisted)
+    );
+    assert_eq!(
+        super::effective_workflow(false, true, crate::config::Workflow::Autonomous),
+        Some(crate::config::Workflow::Assisted),
+        "a repository file nobody can read let the tracker writers run"
+    );
 }
 
 #[test]
@@ -10406,7 +10457,7 @@ fn config_set_edit_and_list_refuse_every_retired_agent_and_write_nothing() {
         let edit = super::config_edit(Some(adapter.slug), &options)
             .expect_err("config edit reached a retired agent");
         assert_retired_refusal(&edit, adapter.slug, "config edit");
-        let list = super::config_list(Some(adapter.slug), &options, false)
+        let list = super::config_list(&[], Some(adapter.slug), &options, false, false)
             .expect_err("config list reached a retired agent");
         assert_retired_refusal(&list, adapter.slug, "config list");
 
@@ -11632,4 +11683,181 @@ fn a_blocked_autonomous_claim_waits_on_a_person() {
         assert!(reading.live, "{}", super::goal_line(&run_id, &reading));
         assert_eq!(reading.waiting.is_some(), waits, "{state}");
     }
+}
+
+#[test]
+fn a_repository_cannot_drop_a_boundary_the_operator_declared() {
+    let rig = authorisation_rig(&Config {
+        boundaries: vec!["terraform apply".to_owned()],
+        ..Config::default()
+    });
+    let contract = rig.root.join(crate::skill::CONTRACT);
+    let refusal = super::repository_set(Setting::Boundaries, "none", rig.repo.path(), &rig.options)
+        .expect_err("a repository dropped a boundary the contract declares");
+    assert_eq!(refusal.code, "repository-cannot-loosen");
+    assert!(
+        refusal.message.contains("Irreversible commands"),
+        "the refusal does not name the row: {refusal}"
+    );
+    assert!(
+        refusal.message.contains(&contract.display().to_string()),
+        "the refusal does not name the file holding the boundary: {refusal}"
+    );
+    assert!(
+        !crate::skill::repository_config_path(rig.repo.path()).exists(),
+        "a refused write left a file behind"
+    );
+
+    // One more boundary is a tightening, and is taken.
+    super::repository_set(
+        Setting::Boundaries,
+        "terraform apply, npm publish",
+        rig.repo.path(),
+        &rig.options,
+    )
+    .expect("a repository added a boundary");
+}
+
+#[test]
+fn config_list_answers_one_row_without_the_rest_of_the_table() {
+    let rig = authorisation_rig(&Config::default());
+    let asked = super::rows_asked_for(&["Renewal window".to_owned()]).expect("a row");
+    assert_eq!(asked, vec![Setting::Window]);
+    let (_, layers, _) = super::layers_of(Some("claude-code"), &rig.options, Some(rig.repo.path()))
+        .expect("the layers read");
+    let lines = super::config_list_lines(&layers, &asked, false, false);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].contains("Renewal window"), "{lines:?}");
+    assert!(
+        !lines[0].contains("accepts"),
+        "the row printed what it accepts without being asked: {lines:?}"
+    );
+
+    // The same listing, with `--accepts`, is the only form that carries it.
+    let with_accepts = super::config_list_lines(&layers, &asked, true, false);
+    assert!(with_accepts[0].contains("accepts:"), "{with_accepts:?}");
+
+    // An alias names the row it became.
+    assert_eq!(
+        super::rows_asked_for(&["Workflow".to_owned()]).expect("an alias"),
+        vec![Setting::Workflow]
+    );
+    let unknown = super::rows_asked_for(&["Workflow mode".to_owned()])
+        .expect_err("a label this build does not read was answered as a row");
+    assert_eq!(unknown.code, "setting-unknown");
+
+    // The default listing keeps its headings.
+    let all = super::config_list_lines(&layers, &super::rows_asked_for(&[]).unwrap(), false, true);
+    assert!(all.iter().any(String::is_empty), "no heading separator");
+}
+
+#[test]
+fn a_repository_write_reports_the_value_that_was_stored() {
+    let rig = authorisation_rig(&Config::default());
+    let stored = super::repository_set_stored(
+        Setting::Boundaries,
+        "npm  publish",
+        rig.repo.path(),
+        &rig.options,
+    )
+    .expect("a value the reader keeps");
+    assert_eq!(
+        stored.value, "npm publish",
+        "the write reported the typed value rather than the stored one"
+    );
+    assert!(stored.changed);
+}
+
+#[test]
+fn a_repository_write_reads_back_over_the_machine_its_rows_tighten() {
+    // The read-back used to be layered over `Config::default()`, so a row that
+    // tightens a machine answer was reverted as a loosening and the command
+    // reported the default instead of the stored value; the same base made a
+    // second `--repo` drop the first row.
+    let mut machine = Config::default();
+    Setting::Integration
+        .apply(&mut machine, "trunk")
+        .expect("trunk is accepted");
+    let rig = authorisation_rig(&machine);
+    let stored = super::repository_set_stored(
+        Setting::Integration,
+        "trunk-based",
+        rig.repo.path(),
+        &rig.options,
+    )
+    .expect("a row the machine already holds");
+    assert_eq!(
+        stored.value, "trunk",
+        "the write reported a value other than the one stored"
+    );
+    super::repository_set_stored(Setting::Tracker, "github", rig.repo.path(), &rig.options)
+        .expect("a second row joins the first");
+    let written = std::fs::read_to_string(&stored.path).expect("the repository's file");
+    assert!(
+        written.contains("| Integration mode | trunk |"),
+        "the file lost the row or holds another value: {written}"
+    );
+}
+
+#[test]
+fn prune_confirm_names_what_it_removed_and_reports_a_deletion_that_failed() {
+    // Built through the producers' own `to_json`, because the keys are the
+    // contract: a hand-made shape here would agree with the reader while the
+    // sweep's own answer disagreed.
+    let mut gone = crate::transport::branch::Retired {
+        worktree: std::path::PathBuf::from("/tmp/estigia-gone"),
+        worktree_removed: true,
+        branch: Some("fix/estigia-gone".to_owned()),
+        branch_deleted: true,
+        reason: None,
+    }
+    .to_json();
+    gone["kind"] = serde_json::json!("worktree");
+    let mut kept = crate::transport::branch::RemoteRetired {
+        branch: "fix/still-here".to_owned(),
+        deleted: false,
+        reason: Some("the lease moved".to_owned()),
+    }
+    .to_json();
+    kept["kind"] = serde_json::json!("remote-head");
+    let removed = [gone, kept];
+    let (lines, failed) = super::prune_removal_lines(&removed);
+    assert!(
+        lines[0].contains("removed") && lines[0].contains("/tmp/estigia-gone"),
+        "{lines:?}"
+    );
+    assert!(
+        lines[1].contains("KEPT") && lines[1].contains("fix/still-here"),
+        "{lines:?}"
+    );
+    assert!(failed, "a failed deletion was reported as success");
+
+    let (kept, failed) = super::prune_removal_lines(&removed[..1]);
+    assert_eq!(kept.len(), 1);
+    assert!(!failed);
+}
+
+#[test]
+fn doctor_problems_prints_only_what_is_not_ok() {
+    let fine = crate::harness::doctor::Check {
+        name: "skill",
+        about: "the contract",
+        health: crate::harness::doctor::Health::Fine {
+            detail: "installed".to_owned(),
+        },
+    };
+    let broken = crate::harness::doctor::Check {
+        name: "repository-config",
+        about: "this checkout's rows",
+        health: crate::harness::doctor::Health::Broken {
+            detail: "a row names no setting".to_owned(),
+            resolution: crate::outcome::Resolution::run("estigia config list"),
+        },
+    };
+    let checks = [fine, broken];
+    assert_eq!(super::reported_checks(&checks, false).count(), 2);
+    let shown: Vec<&str> = super::reported_checks(&checks, true)
+        .map(|check| check.name)
+        .collect();
+    assert_eq!(shown, vec!["repository-config"]);
 }

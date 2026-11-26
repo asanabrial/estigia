@@ -358,11 +358,11 @@ pub fn effective_in(repo_dir: &Path, fallback: &GitOperationWindow) -> GitOperat
 /// contract and the repository's own rows rather than taken from the context,
 /// which holds what was read when it was built.
 pub fn current(context: &GateContext) -> GitOperationWindow {
-    let (installed, _, _) = crate::skill::installed_config_in_keeping_what_parses_apart(
+    let kept = crate::skill::installed_config_in_keeping_what_parses_apart(
         &context.skill_root,
         &context.repo_dir,
     );
-    effective_in(&context.repo_dir, &installed.git_operation_window)
+    effective_in(&context.repo_dir, &kept.config.git_operation_window)
 }
 
 /// The protected write this lowercased command line carries, if any.

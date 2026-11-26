@@ -28,8 +28,8 @@ estigia config set "Integration mode" trunk
 | Tracker | `github`, `github <owner>/<name>`, or `linear <team-key>` — where issues live and claims are adjudicated. `linear` is **read-only** — save the workflow states `State names` maps, which follow the run — is read through the `linear` CLI, which holds the credential, and is admitted only under `Claim workflow: assisted`; under autonomous work it is refused, and it is set only in a repository's own file (`config set Tracker "linear <team-key>" --repo`): machine-wide and per-agent forms are refused (`linear-is-per-repository`), as is `config set Workflow autonomous --repo` while the repository's `Tracker` is `linear` (`autonomous-needs-github-tracker`). `estigia roles --issue` takes a number or a key. And `assist` refuses an issue whose shape does not match the tracker (`assist-issue-does-not-match-the-tracker`) | Repository & tracker | everywhere |
 | Repository host | `github`, or `github <owner>/<name>` — where the code lives and publications are verified (pull requests, tags, receipt-bound review). Defaults to GitHub matching the tracker when that tracker is GitHub, so an installation that only sets `Tracker` keeps one place to configure | Repository & tracker | everywhere |
 | Issue required | `on`, or `off`. Default `off`; `config set` refuses any other value, and a stored `required`, `watch` or `ask`, which earlier builds wrote, reads as `on` rather than `off`, so reading a file never loosens what it said. A table that still carries the label `Unclaimed write policy` or `Issue requirement` is read as this row. **Answered only by a repository's own file** (`<repo>/.git/estigia/estigia.local.md`, found from any directory inside the checkout) — there is no machine-wide or per-agent value, so `config set` refuses it without `--repo` and a row for it in the contract is read by nobody. It governs a run that holds **no claim**, in a checkout whose configured tracker can name an issue there and that has an installed contract: a GitHub tracker with no named repository needs a git remote, so a checkout with none is not governed — `on` holds no write there — while a failed remote read is not zero remotes and keeps the hold. `on` holds what puts work on the repository's default branch, with `issue-required` naming `claim` and `create`: a `git commit`, `git cherry-pick`, `git revert` or `git am`, or a `git merge`, while the checkout's current branch is the default branch; a push whose destination is the default branch; and `gh pr merge`. It holds as well the other boundaries: `gh release create` or `edit`, a `git tag` that creates or deletes, a `gh api` mutation and a command this repository declared irreversible. No second row loosens any of these, and `Merge by` is not read on this path. A leftover `Unclaimed GitHub writes` row in a repository file, which an earlier build wrote, is ignored: it neither makes the file unreadable nor loosens anything. The default branch is the one `refs/remotes/origin/HEAD` names, and a branch called `main` or `master` where that cannot be read; the current branch is read in the directory the command runs in (a literal absolute `cd <dir> &&` or `git -C <dir>` names another checkout), and a detached `HEAD` is not the default branch. A push destination comes from the refs git reports to the `pre-push` hook, or from the line: a refspec naming the default branch (`main`, `HEAD:main`, `refs/heads/main`, `+main`) is held, one naming another branch passes, and a push with no refspec (`git push`, `git push -u origin HEAD`) is read as the current branch. What the gate cannot establish is held, for this set only: a current branch it cannot read, a directory it cannot read from the line, a push destination the line does not spell out (`--all`, `--mirror`, a variable or a glob). Every other modification passes under `on`, claim or not: file-tool writes, shell writes whether the gate can place them or not, a commit on another branch, `git stash`, `git rm`, branch and worktree commands, `git pull`, a push to another branch, `gh pr create`, a `git merge` on another branch, a `gh api` read and a GitHub write that is no boundary (`gh pr review`, `gh pr comment`, `gh pr edit`). So a script can still commit to the default branch unreported, and the check reads the line, not what a script runs, nor the branch a line switches to ([what it costs](honesty-gate-boundary.md)). Nothing records or compares a checkout's `git status`. `off` holds none of these. A checkout with no installed contract, a checkout whose configured tracker cannot name an issue, reads, and a run that holds a claim are unaffected under every value. A repository file that exists and cannot be read reads as `on`: the rows it carries are unknown, so the gate denies the writes they could have denied and the refusal names the file and the read error | Repository & tracker | repository |
-| Integration mode | `branch`, or `trunk` | Repository & tracker | everywhere |
-| Worktree location | `unset`, or an absolute directory — `<repo>`, `<branch>`, `<run-id>` and `<issue>` are substituted, and a template naming neither `<branch>` nor `<run-id>` gains them both in memory, as siblings of the path you configured, so two checkouts do not share a directory | Repository & tracker | everywhere |
+| Integration mode | `branch`, or `trunk` (`trunk-based` is read as `trunk`) | Repository & tracker | everywhere |
+| Worktree location | `unset`, `auto` or an empty cell (all three mean automatic), or an absolute directory — `<repo>`, `<branch>`, `<run-id>` and `<issue>` are substituted, and a template naming neither `<branch>` nor `<run-id>` gains them both in memory, as siblings of the path you configured, so two checkouts do not share a directory | Repository & tracker | everywhere |
 | Delivery preset | `autonomous`, `assisted`, `team`, or `custom` when the rows below match no preset. Default `autonomous`. Stores nothing of its own, exactly as `Authorisation posture` does: naming a preset writes the five rows it stands for — `Claim workflow`, `Self review`, `Ready by`, `Corrections after ready` and `Merge by` — into this repository's own file as one write, and the row reads back as the preset those five match. `autonomous` is Estigia claiming, reviewing, marking ready and merging (`autonomous`, `on`, `agent`, `redraft`, `agent`); `assisted` stops the run at a draft pull request (`assisted`, `off`, `person`, `refuse`, `person`); `team` is the team flow — the run reviews its own draft, marks it ready, waits on the external reviewers and addresses their comments, and a person merges (`assisted`, `on`, `agent`, `push-ready`, `person`). `State names` and `External reviewers` are this repository's own lists, which no preset names. `config set "Delivery preset" custom --repo` is refused (`delivery-preset-custom-sets-nothing`): set the row you want instead | Delivery | repository |
 | Claim workflow | `autonomous`, or `assisted`. Default `autonomous`. **Answered only by a repository's own file**, like `Issue required`: `config set` requires `--repo`; a contract row is ignored. Under `assisted`, team coordination replaces tracker claims and tracker-writing tools refuse `workflow-assisted-writes-no-tracker`. The assisted-only tools are `assist`, `draft_pr` and `ready_pr`; elsewhere they refuse `workflow-not-assisted`. `review_stages` and `review_thread` are offered under both values: under `autonomous` they work from the receipt of the pull request the run published ([assisted review](assisted-review.md#following-up-on-an-autonomous-pull-request)). `assist` records a local claim confined to its worktree. Publication and review follow the other Delivery rows; see [the assisted follow-up loop](assisted-review.md). The review-only road `pr_review_*` is offered under both values ([assisted review](assisted-review.md)). `estigia goal` answers no claimable or dischargeable work and says the queues were not read. An unreadable contract gives the gate no workflow: assisted pointers fail closed, while tracker writers are not refused on that missing value. Remaining limits are in [honesty](honesty.md) | Delivery | repository |
 | State names | `none`, or comma-separated `<state>=<Name>` pairs for `in-progress`, `review` and `done`, such as `in-progress=In Progress, review=In Review`. Default `none`. The tracker's own name for each state Estigia moves an issue into. Admitted only where `Tracker` is `linear <team-key>` (`state-names-need-linear`), because a GitHub tracker's states are labels Estigia already writes; and fixed at `none` under `autonomous` | Delivery | repository |
@@ -38,9 +38,9 @@ estigia config set "Integration mode" trunk
 | External reviewers | Edited on the screen as a list, one line per stage, which it adds, removes, reorders and switches between blocking and advisory (the key table below); `config set` takes `none`, or comma-separated stages in the order they run. A stage is `check:<check name>` or `check:<check name>@<login>` — a CI check, whose run must complete before the next stage starts and whose author's review comments are read once it has, such as `check:cubic@cubic-dev-ai[bot]` — or `review:<login>`, `review:<org>/<team>` or `review:any`, a person whose review is requested only once every earlier stage is complete. Each stage is blocking unless it ends in `:advisory`: a blocking stage's comments are addressed before the next stage starts. Default `none`. A check name cannot hold a comma. Fixed at `none` under `autonomous` | Delivery | repository |
 | Corrections after ready | `refuse`, `redraft`, or `push-ready`. Follows `Claim workflow` until written: `redraft` under `autonomous` (what `republish_review` does: the pull request goes back to draft before the push), `refuse` under `assisted`. What the run does to a pull request that is already ready when it has a correction to publish: nothing, return it to draft first, or push to it as it stands so its CI and reviewers see it at once. Fixed at `redraft` under `autonomous` | Delivery | repository |
 | Merge by | `agent`, or `person`. Follows `Claim workflow` until written: `agent` under `autonomous`, `person` under `assisted`. Who merges the reviewed pull request; `deliver` hands back unless it is `agent`. Fixed at `agent` under `autonomous`, and refused as `agent` under `assisted` (`assisted-merge-is-the-persons`), where the run holds no tracker claim to deliver under | Delivery | repository |
-| Irreversible commands | `none`, or commands separated by commas — the options page suggests `git push --force`, `gh release create`, `gh repo delete` and `npm publish`, one at a time; a longer list is typed | Gate limits | everywhere |
-| Renewal window | `default`, or a shorter duration such as `30s` or `1m` | Gate limits | everywhere |
-| Git operation window | **Answered only by a repository's own file**, like `Issue required`: `config set` requires `--repo`, a row for it in the contract, an agent file or this machine's `estigia.local.md` is not read, and a repository with no row of its own reads `disabled`. `disabled`, or `enabled [days] HH:MM-HH:MM` with an optional ` inverted`, such as `enabled 09:00-17:00`, `enabled 22:00-06:00 inverted`, `enabled mon-fri 08:00-17:00 inverted` or `enabled sat,sun 10:00-14:00` — one daily range in this machine's local time, optionally on a set of weekdays (`mon` to `sun`, ranges such as `mon-fri`, commas, case-insensitive; a range may wrap the week, as `fri-mon` does; a repeated or empty day is invalid); no day set means every day; a start later than the end crosses midnight and the part after midnight belongs to the day the range started on; equal endpoints are invalid; half-open `[start, end)`; `inverted` permits exactly the rest of the week. A repository with no row of its own reads `disabled`; a file that exists and cannot be read reads `unreadable` and denies the protected operations | Gate limits | repository |
+| Irreversible commands | `none`, `unset` or an empty cell, or commands separated by commas — the options page suggests `git push --force`, `gh release create`, `gh repo delete` and `npm publish`, one at a time; a longer list is typed | Gate limits | everywhere |
+| Renewal window | `default` or an empty cell, or a shorter duration such as `30s` or `1m` | Gate limits | everywhere |
+| Git operation window | **Answered only by a repository's own file**, like `Issue required`: `config set` requires `--repo`, a row for it in the contract, an agent file or this machine's `estigia.local.md` is not read, and a repository with no row of its own reads `disabled`. `disabled` (or `off`, `none`, `unset`, or an empty cell), or `enabled [days] HH:MM-HH:MM` with an optional ` inverted`, such as `enabled 09:00-17:00`, `enabled 22:00-06:00 inverted`, `enabled mon-fri 08:00-17:00 inverted` or `enabled sat,sun 10:00-14:00` — one daily range in this machine's local time, optionally on a set of weekdays (`mon` to `sun`, ranges such as `mon-fri`, commas, case-insensitive; a range may wrap the week, as `fri-mon` does; a repeated or empty day is invalid); no day set means every day; a start later than the end crosses midnight and the part after midnight belongs to the day the range started on; equal endpoints are invalid; half-open `[start, end)`; `inverted` permits exactly the rest of the week. A repository with no row of its own reads `disabled`; a file that exists and cannot be read reads `unreadable` and denies the protected operations | Gate limits | repository |
 | Decision mode | `ask` or `auto`. Default `ask`: a run may put a question to the person. `auto`: a question tool is refused, the run applies the recommended answer, and the turn ends by listing every question and the decision taken — see *Decision mode* below. | Gate limits | everywhere |
 | Evidence standard | `reading`, or `measuring` | Review & change | everywhere |
 | Publication lane | `on` or `off`. Default `on`: accepted verdicts are gated on the head's check runs. `off` skips the check-run read and records `classification: not-consulted`. A `cancelled` conclusion still refuses when the gate is on. `deliver` reads the pull request's whole rollup whatever the lane says, since a `not-consulted` lane is no evidence that CI does not run: red and running checks still stop or wait it, but on that lane an empty rollup passes at once instead of waiting for a check to appear. Only a lane that reads `disabled` or `never-ran` skips the rollup. | Review & change | everywhere |
@@ -211,8 +211,41 @@ file, and `estigia config set --repo` is what changes that* — which is one sen
 shared by the two commands rather than written twice. `--json` carries the same facts as `source`
 and, only where a row is shadowed, `shadowed`: a list of `{value, source}` pairs.
 
+**A question about one row answers one row.** `estigia config list "Renewal window"` prints that row
+and nothing else — no group headings, no other rows — and several names may be given, in whatever
+order, answered in table order. A name may be the label or an alias the build still reads; a name
+that resolves to no setting is refused (`setting-unknown`) rather than answering an empty listing.
+What a row *accepts* is printed only with `--accepts`; without it a line is the label, the value, the
+scope and where the value came from. `--json` follows the same rule: `accepts` is present only when
+it was asked for, which is a change from the reading that always carried it, and a script that reads
+it must pass `--accepts`.
+
+`estigia doctor --problems` prints only the checks that are not `ok`, which is what a run wants when
+it is asking *what is wrong* rather than *is everything fine*. The refusal and its way out are
+unchanged, and `--json` still carries every check.
+
+`estigia prune --confirm` prints what it removed in text mode as well as in `--json`, one line per
+checkout or remote head, and exits non-zero (`prune-incomplete`) when something it listed stayed
+where it was, naming the reason on that line. The dry-run listing says what would go; the
+confirmation says what went.
+
 The listing is a read. Precedence is unchanged, and `config set` without `--repo` still refuses to
 edit the operator's own file.
+
+### What a written value has to read back as
+
+`config set` refuses a value whose cell would not read back as itself, before anything is written,
+whether it writes the machine's table or a repository's file (`config-value-would-be-cut`). The
+reader that turns a cell back into a value drops a trailing explanation — a backticked token wins, and
+a ` (` or a free ` — ` ends the value — which is what a hand-written row relies on and what
+`terraform apply (prod), npm publish` would lose: it would be stored as `terraform apply`, and the
+second boundary would be gone. Write `terraform apply, npm publish` instead. `config set --repo
+--json` answers the value that was stored, not the one typed (`trunk-based` is stored as `trunk`),
+and the text form prints the same stored value.
+
+A first cell is matched to a row by its label, an alias, or a label followed by a **punctuation**
+mark — `Delivery authorisation (per agent)` is that row — never by a label followed by another word,
+so `Workflow mode` is not `Claim workflow`.
 
 ### Which root the gate decides in
 
@@ -494,7 +527,8 @@ cumulative snapshots instead of flattening provenance: portable contract-only co
 own override, the operator's local override, and the repository layer. It also retains the explicit row
 ownership of each override document; `ConfigLayers::effective_over` applies only those owned rows over
 a new portable candidate. Ownership is scope-filtered before value validation: an agent file parses and
-owns only agent-scoped rows, a repository file only repository-scoped rows, and forbidden hand-edited
+owns only agent-scoped rows, a repository file only the rows it may answer (its own scope, and a
+machine-wide row no looser than the machine's), and forbidden hand-edited
 rows are ignored even when invalid rather than rejecting or pinning the layer. Invalid owned rows still
 refuse. One selected adapter owns each shared
 skill-root setup action; `SKILL.md` is
@@ -610,14 +644,48 @@ themselves, and `estigia config forget` takes one repository's rows away again.
 A write to that file through a write tool is a blanket boundary, not an ordinary write — see [*Which root the gate decides in*](#which-root-the-gate-decides-in): every such write re-reads the tracker rather than riding the renewal window,
 whichever row it names.
 
-**A repository may tighten the two authorisations.**
+**A repository's own file may answer repository-scoped rows freely, and a machine-wide row only
+tighter.**
 
-`Delivery authorisation` and `Transition authorisation` stay agent rows, and a repository's file may
-also carry them. Precedence is repository, then agent, then contract, with
-one rule: **the repository may only tighten**. Whether a merge or a tracker move may happen
-unattended is a property of the repository's risk as much as of which agent holds the tools, and the
-file lives in `.git/` and is written by `config set --repo` without adjudication — a layer that can
-only remove autonomy cannot reopen the shape that was closed, a row there that *granted* a capability.
+Precedence is repository, then the operator's file, then the agent's, then the contract. Which rows a
+repository may answer is one rule, not one per row: a row whose scope is `repository` is answered
+there and nowhere else, and a row the machine also answers may be carried only when the value removes
+nothing. A row that names *where something is* rather than *how much is allowed* — `Tracker`,
+`Repository host`, `Worktree location`, `Change size`, `Review budget` — has no looser direction and
+is taken as written. The rows where a looser answer exists are `Delivery authorisation`,
+`Transition authorisation`, `Evidence standard`, `Publication lane`, `Publication lanes`,
+`Publication lanes exclude`, `Decision mode`, `Integration mode`, `Renewal window`,
+`Irreversible commands` and `Corrections per lineage`; for those, a value no looser than the machine's
+is accepted and a looser one is refused (`repository-cannot-loosen`), naming the file that holds the
+stricter answer. A repository row is written into `.git/` and by `config set --repo` without an
+adjudication step, so the rule is the layer that keeps a repository from reopening a shape the
+operator closed.
+
+Between two `ask` rows the repository's wins, whatever the durations: a longer or shorter wait is not
+autonomy, so it is not compared. `Integration mode` is compared against `branch`; `Evidence standard`
+against `reading`; `Publication lane` against `on`; `Decision mode` against `ask`; `Renewal window`
+against the machine's duration; `Irreversible commands` must contain every command the machine holds;
+`Corrections per lineage` may only fall; `Publication lanes` may only start a subset of the machine's
+set, and `Publication lanes exclude` may only grow.
+
+A row that does not parse in a repository's file fails closed. `config set --repo` refuses it; the
+gate, which must not stop an agent mid-edit, reads the setting it decides on at its strictest value
+instead — `Issue required` as `on`, `Claim workflow` as `assisted`, `Evidence standard` as `reading`,
+`Decision mode` as `ask`, `Integration mode` as `branch`, the two authorisations as `ask`,
+`Renewal window` as one second — and reports the row. A row the gate does not decide on keeps the
+machine's answer, and the complaint still names the row and the file. A workflow row that did parse
+is kept when another row of the same file did not: a bad `Renewal window` does not turn an `assisted`
+repository into one where every tracker writer runs. A row that parses but would loosen is ignored on
+read the same way: the layer underneath stands, `config list` prints the complaint, and `doctor`'s
+`repository-config` check reports it. `Git operation window` and `Review voice` have fail-closed
+readers of their own.
+
+`doctor` scans a repository's file for labels that resolve to no setting, as it already did for the
+operator's file: a typo is indistinguishable from a deleted row to every reader, which drops both.
+An unknown label in a repository file is a broken `repository-config` check naming the file and the
+labels, never a silent skip. When the machine's own rows cannot be read the check is skipped and says
+what it could not read, because there is nothing to judge the checkout's rows against and the defaults
+are not that answer.
 
 The contract sends the agent to `estigia config list`, run from the repository, for the effective
 answer, and names the repository file only as `estigia/estigia.local.md` under the Git common
@@ -636,18 +704,17 @@ another directory read nothing.
   its skills, whose contract that form writes, and the same form on a shared root, where it writes the agent's
   own file. The operator's file is named with no command, because Estigia will not edit it. Nothing is written.
   `auto --repo` over an agent that is already `auto` is accepted as a no-op.
-- A hand-written `auto` over an `ask` is **not honoured when read**: the effective value stays `ask`
-  and the row is not reported as one the repository answers for.
-- Between two `ask` rows the repository's wins, whatever the durations: a longer or shorter wait is
-  not autonomy, so it is not compared.
+- A hand-written `auto` over an `ask` is **not honoured when read**: the effective value stays `ask`,
+  the row is not reported as one the repository answers for, and `config list` and `doctor` report it
+  as ignored.
 - `Profile cautious --repo` writes the two rows as `ask`. `Profile balanced --repo` is refused
   (`repository-cannot-loosen`) — it would be a grant; `estigia config forget` takes the repository's
   rows away if that is what is wanted.
 - `Model routing`, `Loop plugin` and `Goal loop plugin` remain agent-only, and `--repo` still refuses them
   (`setting-not-the-repositorys`).
-- The installed contract says the repository file may tighten these three rows, and that the
-  stricter answer wins, because the agent obeys the table it reads first.
+- The installed contract has no value for a repository-scoped row and says the repository answers it;
+  a stricter machine-wide answer wins because the agent obeys the table it reads first.
 
 What the write-time refusal cannot see: an agent installed after the repository row was written, or
-whose own row is changed to `ask` later, is not consulted then — read time is what holds, and it
+whose own row is made stricter later, is not consulted then — read time is what holds, and it
 puts the stricter answer back.

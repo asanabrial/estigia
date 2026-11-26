@@ -131,7 +131,8 @@ Load a reference when its condition holds; each owns its subject once.
 
 `estigia.local.md` beside this file overrides same-named rows, holds permissions and machine paths,
 and is ignored by Git: it may tighten only the two authorisations and MUST NOT be committed or
-published. `estigia config list` prints every row in force.
+published. A repository's own file answers the rows about that repository, and may narrow a
+machine-wide row, never widen it. `estigia config list` prints every row in force.
 
 | Setting | Value here | Skill default |
 |---|---|---|
