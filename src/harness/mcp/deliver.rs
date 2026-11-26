@@ -707,6 +707,34 @@ impl<H: Hands> Deliver<'_, H> {
         if tip == receipt.base {
             return Ok(());
         }
+        let ancestor = self
+            .hands
+            .exec(
+                &["git", "merge-base", "--is-ancestor", &receipt.base, &tip],
+                How::tolerated(),
+            )
+            .map_err(|failure| failed("base", "base-unreadable", &failure))?;
+        match ancestor.status {
+            0 => {}
+            1 => {
+                return Err(stop(
+                    "base",
+                    "base-moved",
+                    json!({
+                        "branch": branch,
+                        "tip": tip,
+                        "reviewed_base": receipt.base,
+                    }),
+                ));
+            }
+            status => {
+                return Err(stop(
+                    "base",
+                    "base-unreadable",
+                    json!({ "tip": tip, "reviewed_base": receipt.base, "status": status }),
+                ));
+            }
+        }
         let merge = self
             .hands
             .exec(

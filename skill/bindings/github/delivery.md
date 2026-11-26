@@ -403,7 +403,9 @@ duplicate is not green. Re-read both SHAs afterwards; if the head changed, or th
 **`merge`.** Require `reviewed head == CI head == current headRefOid`, and `baseRefOid` either the
 reviewed base or a descendant of it that GitHub reports `MERGEABLE` and not `DIRTY`: `review_status`
 answers `released` only then, and stops while GitHub is still computing it (unknown is never
-clean), so ask again. CI is not repeated on an advanced base. Then run
+clean), so ask again. CI is not repeated on an advanced base. The gate applies the same test to a
+hand `gh pr merge` and refuses one whose base is neither, so a retarget after the review cannot be
+delivered by hand either. Then run
 `gh pr merge <pr> --merge --match-head-commit <head-sha>`. Never use `--admin` or `--delete-branch`:
 deletion can fail after a successful API merge in a multi-worktree checkout and make the result look
 retryable. If a merge queue owns delivery, first prove its configured method preserves merge commits

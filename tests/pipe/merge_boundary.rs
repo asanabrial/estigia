@@ -74,7 +74,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     // moves off its own real head, which differs from the reviewed one.
     let allowed = merge(
         &serde_json::to_string(&serde_json::json!([
-            pr_view_entry(12, &reviewed),
+            pr_view_entry(12, &reviewed, &base),
             released_issue_view_entry("review", &"a".repeat(32), &reviewed, &base),
         ]))
         .expect("the script serialises"),
@@ -89,7 +89,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let moved = "d".repeat(40);
     let refused = merge(
         &serde_json::to_string(&serde_json::json!([
-            pr_view_entry(12, &moved),
+            pr_view_entry(12, &moved, &base),
             released_issue_view_entry("review", &"a".repeat(32), &reviewed, &base),
         ]))
         .expect("the script serialises"),
@@ -159,7 +159,7 @@ fn a_gh_pr_merge_without_a_ci_release_for_the_exact_receipt_is_refused() {
         )
         .expect("the pointer is written");
         let answers = serde_json::to_string(&serde_json::json!([
-            pr_view_entry(12, &reviewed),
+            pr_view_entry(12, &reviewed, &base),
             issue_view,
         ]))
         .expect("the script serialises");
@@ -231,11 +231,11 @@ fn a_finding_recorded_after_the_release_refuses_the_hand_merge() {
 
     let merge = |released: serde_json::Value| {
         forget_store(home);
-        let answers =
-            serde_json::to_string(&serde_json::json!(
-                [pr_view_entry(12, &reviewed), released,]
-            ))
-            .expect("the script serialises");
+        let answers = serde_json::to_string(&serde_json::json!([
+            pr_view_entry(12, &reviewed, &base),
+            released,
+        ]))
+        .expect("the script serialises");
         let input =
             format!(r#"{{"command":"gh pr merge 12 --merge --match-head-commit {reviewed}"}}"#);
         let (out, err, _) = run_with_tracker(
@@ -1735,7 +1735,7 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
             }).to_string(),
             "status": 0,
         },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": format!("commits/{head}/check-runs"), "stdout": "{\"total_count\":0,\"check_runs\":[]}", "status": 0 },
         { "matches": "pr view", "nth": 1, "stdout": pr_draft.to_string(), "status": 0 },
         { "matches": "pr view", "nth": 2, "stdout": pr_draft.to_string(), "status": 0 },
@@ -2009,7 +2009,7 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
                 }).to_string(),
                 "status": 0,
             },
-            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
             { "matches": format!("commits/{head}/check-runs"), "stdout": "{\"total_count\":0,\"check_runs\":[]}", "status": 0 },
             { "matches": "pr view", "nth": 1, "stdout": pr_draft.to_string(), "status": 0 },
             { "matches": "pr ready", "stdout": "", "status": 0 },

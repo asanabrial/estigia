@@ -243,7 +243,7 @@ fn a_repository_is_asked_who_it_is_once_per_checkout() {
     let bin = crate::test_env::scripted_gh();
     let script = crate::test_env::answers(&[serde_json::json!({
         "matches": "repo view",
-        "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+        "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
         "status": 0,
     })]);
 
@@ -275,7 +275,7 @@ fn a_failed_identity_read_is_not_remembered() {
     })]);
     let working = crate::test_env::answers(&[serde_json::json!({
         "matches": "repo view",
-        "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+        "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
         "status": 0,
     })]);
     let context = identity_context(directory.path(), None);

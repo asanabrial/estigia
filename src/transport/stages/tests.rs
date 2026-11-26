@@ -330,7 +330,7 @@ fn ci_wait_refuses_a_moved_head_or_checks_from_another_commit() {
         }
         let entries = crate::test_env::answers(&[
             serde_json::json!({ "matches": "pr list", "stdout": "[{\"number\":7}]" }),
-            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"example\"},\"name\":\"repo\"}" }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"example\"},\"name\":\"repo\",\"defaultBranchRef\":{\"name\":\"main\"}}" }),
             serde_json::json!({ "matches": "api graphql", "nth": 1, "stdout": graphql(&pending) }),
             serde_json::json!({ "matches": "api graphql", "stdout": serde_json::json!({"data":{"repository":{"pullRequest":moved}}}).to_string() }),
         ]);
@@ -441,7 +441,7 @@ impl ThreadRig {
     fn script(&self, readings: &[serde_json::Value]) -> String {
         let mut entries = vec![
             serde_json::json!({ "matches":"pr list", "stdout":"[{\"number\":7}]" }),
-            serde_json::json!({ "matches":"repo view", "stdout":"{\"owner\":{\"login\":\"example\"},\"name\":\"repo\"}" }),
+            serde_json::json!({ "matches":"repo view", "stdout":"{\"owner\":{\"login\":\"example\"},\"name\":\"repo\",\"defaultBranchRef\":{\"name\":\"main\"}}" }),
             serde_json::json!({ "matches":"query=mutation", "stdout":"{\"data\":{}}" }),
         ];
         for (index, pr) in readings.iter().enumerate() {

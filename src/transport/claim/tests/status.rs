@@ -2149,7 +2149,7 @@ fn merge_verdict(
             &action,
             run,
             &gate.repo_dir,
-            &crate::harness::live_pr_head_reader(gate),
+            &crate::harness::live_pr_reader(gate),
         )
     })
 }

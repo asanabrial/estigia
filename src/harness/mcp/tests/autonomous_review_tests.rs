@@ -104,7 +104,7 @@ impl Held {
 fn review_stages_under_an_autonomous_claim_answers_threads_and_no_position() {
     let held = held();
     let script = crate::test_env::answers(&[
-        json!({"matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r"}"#}),
+        json!({"matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r","defaultBranchRef":{"name":"main"}}"#}),
         json!({"matches": "api graphql", "stdout": held.reading(false)}),
     ]);
     let answer = crate::test_env::with_scripted_gh(held.bin.path(), &script, || {
@@ -215,7 +215,7 @@ fn another_open_pull_request_on_the_branch_is_not_the_receipts() {
         let script = crate::test_env::answers(&[
             crate::test_env::live_holder_issue(RUN, 12, "review"),
             json!({"matches": "pr list", "stdout": listed}),
-            json!({"matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r"}"#}),
+            json!({"matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r","defaultBranchRef":{"name":"main"}}"#}),
             json!({"matches": "query=mutation", "stdout": r#"{"data":{}}"#}),
             json!({"matches": "query=query", "stdout": held.reading(false)}),
         ]);
@@ -240,7 +240,7 @@ fn a_reply_under_an_autonomous_claim_renews_the_claim_and_reads_the_reply_back()
     let script = crate::test_env::answers(&[
         crate::test_env::live_holder_issue(RUN, 12, "review"),
         json!({"matches": "pr list", "stdout": r#"[{"number":7}]"#}),
-        json!({"matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r"}"#}),
+        json!({"matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r","defaultBranchRef":{"name":"main"}}"#}),
         json!({"matches": "query=mutation", "stdout": r#"{"data":{}}"#}),
         json!({"matches": "query=query", "nth": 1, "stdout": held.reading(false)}),
         json!({"matches": "query=query", "stdout": held.reading(true)}),

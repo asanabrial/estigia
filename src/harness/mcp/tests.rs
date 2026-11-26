@@ -6334,7 +6334,7 @@ fn several_rig() -> Several {
         context,
         bin: crate::test_env::scripted_gh(),
         answers: crate::test_env::answers(&[
-            json!({ "matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r"}"# }),
+            json!({ "matches": "repo view", "stdout": r#"{"owner":{"login":"o"},"name":"r","defaultBranchRef":{"name":"main"}}"# }),
             crate::test_env::issue_view_answer(11, json!({ "state": "OPEN", "title": "A" })),
             crate::test_env::issue_view_answer(12, json!({ "state": "OPEN", "title": "B" })),
         ]),
@@ -6783,7 +6783,7 @@ fn draft_pr_publishes_the_branch_and_checkout_the_assisted_pointer_names() {
     }]);
     let response = crate::test_env::answers(&[
         json!({"matches":"pr list","stdout":"[{\"number\":7}]"}),
-        json!({"matches":"repo view","stdout":"{\"owner\":{\"login\":\"example\"},\"name\":\"repo\"}"}),
+        json!({"matches":"repo view","stdout":"{\"owner\":{\"login\":\"example\"},\"name\":\"repo\",\"defaultBranchRef\":{\"name\":\"main\"}}"}),
         json!({"matches":"query=mutation","stdout":"{\"data\":{}}"}),
         json!({"matches":"query=query","nth":1,"stdout":json!({"data":{"repository":{"pullRequest":before}}}).to_string()}),
         json!({"matches":"query=query","stdout":json!({"data":{"repository":{"pullRequest":snapshot}}}).to_string()}),

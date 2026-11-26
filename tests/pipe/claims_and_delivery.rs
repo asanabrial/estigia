@@ -3302,7 +3302,7 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
             }).to_string(),
             "status": 0,
         },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "check-runs",
             "stdout": serde_json::json!({"total_count": 0, "check_runs": []}).to_string(),
@@ -3614,7 +3614,7 @@ fn a_high_tier_review_launches_and_collects_every_offered_slot_in_batched_calls(
             }).to_string(),
             "status": 0,
         },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "check-runs",
             "stdout": serde_json::json!({"total_count": 0, "check_runs": []}).to_string(),
@@ -3855,7 +3855,7 @@ fn a_quota_failure_on_a_lens_records_nothing_and_leaves_release_ci_refused() {
             }).to_string(),
             "status": 0,
         },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
         {
             "matches": "check-runs",
@@ -4132,7 +4132,7 @@ fn launch_and_collect_review_input_run_the_offered_refuter_and_record_the_batch_
             }).to_string(),
             "status": 0,
         },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "check-runs",
             "stdout": serde_json::json!({"total_count": 0, "check_runs": []}).to_string(),

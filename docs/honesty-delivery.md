@@ -4,19 +4,21 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 
 ## Delivery: the receipt, the base and the remote
 
-- **What the `gh pr view` read measures, and what it does not.** It measures the PR's `headRefOid` at
-  the moment `stale_verdict` asks, one read per merge attempt, and refuses a mismatch against the
-  receipt with the PR number, the reviewed head and the head found. It does not measure the base:
-  `release_ci` re-verified `baseRefOid` at ready time, and the only later reads of it are
-  `review_status` and the claim's restoration of a receipt, which accept a clean advance (next entry),
-  so a base that moves *between* that ready check and this merge attempt is not seen at this boundary.
-  It does not measure anything after the read: a push landing on the PR between the read and the merge
-  is refused by GitHub itself only because the merge call carries `--match-head-commit <head-sha>`, and
-  the gate now refuses a `gh pr merge` line that does not spell it. What that does not reach is the
-  shell reader's own misses: a line the classifier does not read as one literal `gh pr merge` — a
-  quoted, expanded or chained form, a `--repo` naming another repository — refuses under
-  `delivery-pr-unidentified` or `delivery-pr-repository-option` rather than passing, and a line the
-  reader never matches as a delivery is not watched by this check at all. It does not
+- **What the `gh pr view` read measures, and what it does not.** It measures the PR's `headRefOid`
+  and `baseRefOid` at the moment `stale_verdict` asks, one read per merge attempt, and refuses a head
+  mismatch against the receipt with the PR number, the reviewed head and the head found. The base is
+  measured against the receipt's: the pull request's base is admitted when it is the receipt's base or
+  descends from it — the same placement `review_status` allows — and a base that is neither refuses
+  `verdict-bound-to-other-base`, because a retarget changes what the merge lands. When the ancestry
+  cannot be read the merge refuses `review-base-unreadable` rather than guessing. It does not measure
+  anything after the read: a push landing on the PR between the read and the merge is refused by
+  GitHub itself only because the merge call carries `--match-head-commit <head-sha>`, and the gate now
+  refuses a `gh pr merge` line that does not spell it. A base retargeted between the read and the
+  merge is **not** caught by that flag, so the read and the merge are not atomic for the base. What
+  that does not reach is the shell reader's own misses: a line the classifier does not read as one
+  literal `gh pr merge` — a quoted, expanded or chained form, a `--repo` naming another repository —
+  refuses under `delivery-pr-unidentified` or `delivery-pr-repository-option` rather than passing, and
+  a line the reader never matches as a delivery is not watched by this check at all. It does not
   resolve which repository `gh` would ask: an unrelated clone is refused on `same_repository` (whether
   the covered checkout and this one share a Git common directory), never on what `gh pr view` would
   have answered for it.
@@ -53,10 +55,29 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   run that recorded the computed verdict can be the run that spends it; that was already the design
   (`PointerEffect::Renew` writes the restored receipt into the resuming run's pointer). Estigia still
   cannot prove who reviewed anything.
+- **A publication's base is the default branch, and what that still does not establish.** `publish_review`
+  reads the repository's default branch (`gh repo view --json defaultBranchRef`) and refuses any other
+  `base` with `publication-base-not-the-integration-branch`, so a stacked pull request is no longer
+  opened silently. The configuration has no row that re-enables one; a repository that needs stacked
+  pull requests cannot publish them through Estigia today. Three things are still outside this:
+  - **The merge gate re-reads the base rather than remembering anything.** A retarget after the gate's
+    `gh pr view` and before GitHub executes the merge is not caught, and `--match-head-commit` binds
+    the head only. `Deliver::base` refuses a base that does not descend from the receipt's
+    (`base-moved`), and `review_status` answers `pull-request-moved`, but both read at their own
+    moment.
+  - **An advanced base is admitted without asking CI again.** The ancestry test says the base moved
+    forward, not that the change still behaves the same on top of it; nothing re-runs the reviewed
+    head over the advanced base, and a semantic conflict between two independently green changes is
+    caught only by the CI that runs on `main` afterwards. `release_ci` stays strict: a draft whose base
+    moved is answered `pull-request-moved`.
+  - **The default branch itself can move and is not a setting Estigia reads back.** The read is `gh`'s
+    answer at publication time; a repository whose default branch changes afterwards is not compared
+    against what a receipt recorded, because the receipt holds the base's commit, not its name.
 - **A delivery can still merge onto a base the reviewed receipt did not name, and the remedy is a
   GitHub setting that Estigia neither sets nor reads back.** `release_ci` re-verifies every byte of
-  the reviewed head, and nothing asks whether `main` was still the receipt's base when the merge
-  happened. With `required_status_checks.strict: true`, GitHub requires the topic branch to be up to
+  the reviewed head, and the hand merge now compares the PR's base with the receipt's, so a retarget
+  is refused at this boundary. What remains is the gap between the gate's read and GitHub's merge,
+  above. With `required_status_checks.strict: true`, GitHub requires the topic branch to be up to
   date with the base, and an update is a push, which invalidates the receipt, so a moved base forces a
   fresh publish/review round. The forced round: the `compatible` classification still integrates, but
   the integrating republish is repair-shaped (the republish gate reads whether the base **advanced**
@@ -74,8 +95,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     not on, and the forced-integration shape was the contract's intended route rather than the
     platform's requirement.
   - **The delivered SHA's first parent is guaranteed by GitHub's strict check, not by Estigia.** The
-    gate's merge-identity checks (`stale_verdict`, `pr_merge_target`) compare the reviewed head, never
-    the base; the base's constancy is the repository setting's promise, taken on trust.
+    base's constancy is the repository setting's promise, taken on trust; the gate's own base test
+    refuses a divergent base but cannot see a concurrent first-parent rewrite.
   - **A strict setting does not make concurrent delivery converge.** A 2026-08-20 diagnosis measured
     `main` moving seven times under one branch while the delivery floor (integrate ~4 min, CI 14 min,
     merge: over 18 minutes at zero review time) exceeded the delivery interval (15 to 25 minutes);
