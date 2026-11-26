@@ -119,11 +119,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   The relay's two commands are not on that list. `estigia review prompt` and `estigia review admit`
   carry a reviewer's prompt and answer, not a way to stand the gate down; a run that holds a complete
   published receipt is refused them anyway (`review-relay-is-the-reviewers`), because the secret a
-  reviewer's answer must name is written into the prompt they materialise. The line is read after the
-  normalisation the other shell arms use — a path-qualified or wrapped binary is already the word
-  `estigia`, and an option before the verb is moved out — and so, like the disarm list, it refuses a
-  line that merely mentions the two words. The reviewer's own context holds no receipt and is not
-  refused, which is what keeps the relay working
+  reviewer's answer must name is written into the prompt they materialise. The reviewer's own context
+  holds no receipt and is not refused, which is what keeps the relay working
   ([what each road establishes](honesty-review-panels.md)).
 
   **Declaring a stand-down is a person's act, and that covers the record as well as the command.**

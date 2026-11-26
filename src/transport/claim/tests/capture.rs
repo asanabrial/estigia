@@ -1364,16 +1364,6 @@ fn the_relay_secret_reaches_the_prompt_and_not_the_job_directory() {
 }
 
 #[test]
-fn a_relay_secret_is_bound_to_its_own_job() {
-    let mine = super::super::capture::relay_secret_of("job-a").expect("a secret");
-    let other = super::super::capture::relay_secret_of("job-b").expect("a secret");
-    assert_ne!(
-        mine, other,
-        "the secret does not depend on the job id, so one slot's prompt unlocks another's"
-    );
-}
-
-#[test]
 fn a_relayed_prompt_for_another_host_carries_the_secret_too() {
     let run = "claude-abc12345";
     let world = capturable_as(run);

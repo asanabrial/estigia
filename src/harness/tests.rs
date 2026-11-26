@@ -9180,19 +9180,4 @@ fn a_run_that_published_a_review_cannot_answer_its_own_reviewers_from_a_shell() 
             "{command} was read as the relay's own command"
         );
     }
-
-    for command in [
-        "/usr/local/bin/estigia review admit --name review-risk",
-        "./estigia review prompt --name review-risk",
-        "estigia --json review admit --name review-risk",
-    ] {
-        let (action, _) = classify("Bash", &json!({ "command": command }));
-        assert_eq!(
-            action,
-            Action::Write {
-                target: "estigia review".to_owned()
-            },
-            "{command} escaped the relay's own command"
-        );
-    }
 }

@@ -988,12 +988,6 @@ const REVIEW_RELAY: &str = "estigia review";
 /// Whether a command line names `estigia review`, and not a longer verb such as
 /// `estigia review_status` that only reads, nor a different binary whose name
 /// ends in `estigia`.
-///
-/// The line is the normalised view: `as_estigia` has already replaced a
-/// path-qualified or wrapped binary with the word `estigia`, and
-/// `without_leading_options` has moved a pre-verb option out of the way, so this
-/// only has to read the two words. Like the person-only list it refuses a line
-/// that merely mentions them.
 fn names_the_review_relay(view: &str) -> bool {
     let words: Vec<&str> = view.split_whitespace().collect();
     words.windows(2).any(|pair| {
