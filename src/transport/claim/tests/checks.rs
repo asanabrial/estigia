@@ -65,9 +65,12 @@ fn checked_change(declaration: Option<&str>) -> (tempfile::TempDir, Context, Rev
     (root, context, receipt)
 }
 
-fn on_a_thread(dir: &Path) -> Result<u32, Failure> {
+fn on_a_thread(dir: &Path, token: &str) -> Result<u32, Failure> {
     let owned = dir.to_path_buf();
-    let handle = std::thread::spawn(move || crate::transport::check_job::run(&owned));
+    let token = token.to_owned();
+    let handle = std::thread::spawn(move || {
+        crate::transport::check_job::run_with_token(&owned, Some(&token))
+    });
     crate::reviewer::job::await_started(dir, || {
         handle.is_finished().then(|| "finished".to_owned())
     })?;
@@ -94,7 +97,7 @@ fn ask(
     context: &Context,
     comments: &[ownership::Comment],
     asking: &RunChecks<'_>,
-    spawn: &dyn Fn(&Path) -> Result<u32, Failure>,
+    spawn: &dyn Fn(&Path, &str) -> Result<u32, Failure>,
 ) -> Result<Value, Failure> {
     let bin = crate::test_env::scripted_gh();
     let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(
@@ -138,7 +141,7 @@ fn ran_times(counter: &Path) -> usize {
     std::fs::read_to_string(counter).map_or(0, |text| text.lines().count())
 }
 
-fn never(_: &Path) -> Result<u32, Failure> {
+fn never(_: &Path, _: &str) -> Result<u32, Failure> {
     panic!("a job was started");
 }
 
@@ -260,9 +263,9 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
     )])));
     let comments = timeline_of(&receipt);
     let starts = AtomicUsize::new(0);
-    let counting = |dir: &Path| {
+    let counting = |dir: &Path, token: &str| {
         starts.fetch_add(1, Ordering::SeqCst);
-        on_a_thread(dir)
+        on_a_thread(dir, token)
     };
 
     let began = std::time::Instant::now();
@@ -291,6 +294,66 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
     assert_eq!(done["state"], "finished", "{done}");
     assert_eq!(done["passed"], true, "{done}");
     assert_eq!(starts.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_checks_result_written_by_hand_is_not_read_as_the_runners() {
+    crate::transport::store::forget_scratch_store();
+    let (_root, context, receipt) =
+        checked_change(Some(&declaration_for(&[("fmt", "echo formatted")])));
+    let comments = timeline_of(&receipt);
+    let (release, gate) = std::sync::mpsc::channel();
+    let gate = std::sync::Arc::new(std::sync::Mutex::new(gate));
+    let forging = move |dir: &Path, _: &str| -> Result<u32, Failure> {
+        let lock =
+            crate::reviewer::job::begin(dir).map_err(|refusal| Failure::Read(refusal.message))?;
+        put(
+            &dir.join("result.json"),
+            &json!({
+                "format": 1,
+                "timed_out": false,
+                "checks": [{
+                    "name": "fmt",
+                    "exit": 0,
+                    "seconds": 0,
+                    "tail": "",
+                }],
+            })
+            .to_string(),
+        );
+        let gate = std::sync::Arc::clone(&gate);
+        std::thread::spawn(move || {
+            let _ = gate.lock().expect("the gate").recv();
+            drop(lock);
+        });
+        Ok(std::process::id())
+    };
+    let running = ask(&context, &comments, &request(0, &receipt.base), &forging)
+        .expect("a running job is an answer");
+    assert_eq!(running["state"], "running", "{running}");
+    assert_eq!(recorded_receipts(), 0);
+
+    release.send(()).expect("the runner may let go");
+    let began = std::time::Instant::now();
+    let refused = loop {
+        match ask(&context, &comments, &request(0, &receipt.base), &forging) {
+            Ok(answer) if answer["state"] == "running" => {
+                assert!(
+                    began.elapsed() < Duration::from_secs(10),
+                    "the runner never let the lock go"
+                );
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            answer => break answer,
+        }
+    }
+    .expect_err("the result is not the runner's");
+    assert_eq!(
+        refused.envelope()["reason"],
+        "capture-result-unbound",
+        "{refused:?}"
+    );
+    assert_eq!(recorded_receipts(), 0);
 }
 
 #[test]
@@ -347,8 +410,8 @@ fn a_claim_lost_while_the_job_ran_records_nothing() {
     let (_root, context, receipt) =
         checked_change(Some(&declaration_for(&[("fmt", "echo formatted")])));
     let comments = timeline_of(&receipt);
-    let released = |dir: &Path| {
-        crate::transport::check_job::run(dir).expect("the job runs");
+    let released = |dir: &Path, token: &str| {
+        crate::transport::check_job::run_with_token(dir, Some(token)).expect("the job runs");
         let unassign = markers::render(
             "unassign",
             &[
@@ -512,7 +575,7 @@ fn a_spawn_that_fails_is_the_answer_and_nothing_runs_in_the_foreground() {
         "once",
         &format!("echo ran >> {}", file.display()),
     )])));
-    let refusing = |_: &Path| -> Result<u32, Failure> {
+    let refusing = |_: &Path, _: &str| -> Result<u32, Failure> {
         Err(Failure::Read("this process may not detach".to_owned()))
     };
     let failure = ask(

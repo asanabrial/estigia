@@ -112,7 +112,7 @@ fn settled(dir: &std::path::Path) -> JobStatus {
 fn the_runner_leaves_the_answer_the_adapter_gave_byte_for_byte() {
     let (_root, dir) = prepared();
     OnThread(echo).start(&dir).expect("the runner starts");
-    let JobResult::Answer(bytes) = finished(&dir) else {
+    let JobResult::Answer { bytes, .. } = finished(&dir) else {
         panic!("a refusal where an answer was expected");
     };
     let mut wanted = b"review-risk|Some(\"a-model\")|".to_vec();
@@ -185,7 +185,13 @@ fn a_slow_reviewer_is_running_after_the_start_returns_and_finished_when_it_answe
 
     assert_eq!(job_status(&dir).expect("status"), JobStatus::Running);
     release.send(()).expect("released");
-    assert_eq!(finished(&dir), JobResult::Answer(b"late".to_vec()));
+    assert_eq!(
+        finished(&dir),
+        JobResult::Answer {
+            bytes: b"late".to_vec(),
+            token: None
+        }
+    );
 }
 
 #[test]
@@ -258,7 +264,13 @@ fn a_finished_job_preserves_the_usage_its_adapter_reported() {
         }
     };
     OnThread(select).start(&dir).expect("the runner starts");
-    assert_eq!(finished(&dir), JobResult::Answer(b"the answer".to_vec()));
+    assert_eq!(
+        finished(&dir),
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        }
+    );
     assert!(dir.join(USAGE).is_file(), "no usage artifact was written");
 
     let artifact: serde_json::Value =
@@ -366,7 +378,10 @@ fn a_usage_write_that_fails_leaves_the_answer_as_the_outcome() {
 
     assert_eq!(
         finished(&dir),
-        JobResult::Answer(b"the answer".to_vec()),
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        },
         "a failed usage write turned the review's answer into a refusal"
     );
     assert!(
@@ -395,7 +410,10 @@ fn the_writer_never_emits_the_empty_counter_map_the_reader_refuses() {
 
     assert_eq!(
         finished(&empty_dir),
-        JobResult::Answer(b"the answer".to_vec())
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        }
     );
     assert!(
         !empty_dir.join(USAGE).exists(),
@@ -412,7 +430,10 @@ fn the_writer_never_emits_the_empty_counter_map_the_reader_refuses() {
 
     assert_eq!(
         finished(&counted_dir),
-        JobResult::Answer(b"the answer".to_vec())
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        }
     );
     assert!(
         counted_dir.join(USAGE).is_file(),

@@ -51,6 +51,8 @@ pub struct Outcome {
     pub timed_out: bool,
     /// What each check that ran did, in declaration order.
     pub runs: Vec<CheckRun>,
+    /// The token the launcher handed the runner, absent when it handed none.
+    pub token: Option<String>,
 }
 
 impl Outcome {
@@ -247,17 +249,19 @@ fn execute(dir: &Path, tree: &Path, checks: &[Check], deadline: Duration) -> Out
             return Outcome {
                 timed_out: true,
                 runs,
+                token: None,
             };
         }
     }
     Outcome {
         timed_out: false,
         runs,
+        token: None,
     }
 }
 
 fn result_json(outcome: &Outcome) -> serde_json::Value {
-    serde_json::json!({
+    let mut result = serde_json::json!({
         "format": FORMAT,
         "timed_out": outcome.timed_out,
         "checks": outcome
@@ -270,7 +274,11 @@ fn result_json(outcome: &Outcome) -> serde_json::Value {
                 "tail": run.tail,
             }))
             .collect::<Vec<_>>(),
-    })
+    });
+    if let Some(token) = &outcome.token {
+        result["token"] = serde_json::Value::String(token.clone());
+    }
+    result
 }
 
 /// The runner: holds the job's lock while it runs each declared check in order
@@ -282,9 +290,22 @@ pub fn run(dir: &Path) -> Result<(), Refusal> {
 }
 
 pub(crate) fn run_within(dir: &Path, deadline: Duration) -> Result<(), Refusal> {
+    let token = job::token_of_environment();
+    run_token_within(dir, deadline, token.as_deref())
+}
+
+/// [`run`] with the token its launcher minted, for a runner a test drives
+/// without an environment of its own.
+#[cfg(test)]
+pub(crate) fn run_with_token(dir: &Path, token: Option<&str>) -> Result<(), Refusal> {
+    run_token_within(dir, DEADLINE, token)
+}
+
+fn run_token_within(dir: &Path, deadline: Duration, token: Option<&str>) -> Result<(), Refusal> {
     let _lock = job::begin(dir)?;
     let (tree, checks) = load(dir)?;
-    let outcome = execute(dir, &tree, &checks, deadline);
+    let mut outcome = execute(dir, &tree, &checks, deadline);
+    outcome.token = token.map(str::to_owned);
     replace_bytes_atomically(
         &dir.join(job::RESULT),
         result_json(&outcome).to_string().as_bytes(),
@@ -308,6 +329,10 @@ fn read_result(dir: &Path) -> Result<Option<Outcome>, Failure> {
         .get("timed_out")
         .and_then(serde_json::Value::as_bool)
         .ok_or_else(|| unreadable("does not say whether it timed out"))?;
+    let token = value
+        .get("token")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
     let listed = value
         .get("checks")
         .and_then(serde_json::Value::as_array)
@@ -331,7 +356,11 @@ fn read_result(dir: &Path) -> Result<Option<Outcome>, Failure> {
             tail: tail.to_owned(),
         });
     }
-    Ok(Some(Outcome { timed_out, runs }))
+    Ok(Some(Outcome {
+        timed_out,
+        runs,
+        token,
+    }))
 }
 
 /// Where a check job stands, read from its directory alone.
@@ -340,10 +369,11 @@ pub fn status(dir: &Path) -> Result<JobStatus<Outcome>, Failure> {
 }
 
 /// Starts the runner for `dir` detached from this process and returns once it
-/// holds the job's lock. A platform that refuses to detach answers
-/// `review-job-detach-refused`; the checks never run in the foreground instead.
-pub fn spawn(dir: &Path) -> Result<u32, Failure> {
-    Detached::current().start_as("__check-job", dir)
+/// holds the job's lock, handing it the token its launcher minted. A platform
+/// that refuses to detach answers `review-job-detach-refused`; the checks never
+/// run in the foreground instead.
+pub fn spawn(dir: &Path, token: &str) -> Result<u32, Failure> {
+    Detached::current().start_as_with("__check-job", dir, Some(token))
 }
 
 /// Deletes a job's `result.json`, once what it carried has been recorded.

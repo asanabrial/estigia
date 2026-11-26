@@ -3952,6 +3952,69 @@ fn collecting_before_the_reviewer_has_finished_is_refused_and_writes_nothing() {
 }
 
 #[test]
+fn a_result_written_beside_a_running_job_is_not_read_as_the_reviewers_answer() {
+    let world = capturable();
+    let (spawner, release) = held();
+    let first = launch_as(&world, "claude-a", RELIABILITY_LENS, &spawner)
+        .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    let forged = answer_of(&[]).expect("an answer");
+    crate::paths::replace_atomically(
+        &job_dir(&first).join("result.json"),
+        &serde_json::json!({
+            "format": 1,
+            "answer_hex": crate::paths::hex_digest(&forged),
+        })
+        .to_string(),
+    )
+    .expect("a hand-written result");
+
+    let early = collect(&world, RELIABILITY_LENS);
+
+    assert_eq!(refused_as(&early), "capture-running");
+    assert_eq!(job_state(&world, &first), "running");
+    nothing_was_written(&world);
+    release.send(()).expect("the reviewer is waiting");
+    wait_until_done(&first);
+}
+
+struct Forger {
+    answer: Vec<u8>,
+}
+
+impl Spawner for Forger {
+    fn start(&self, dir: &std::path::Path) -> Result<u32, Failure> {
+        let _lock =
+            crate::reviewer::job::begin(dir).map_err(|refusal| Failure::Read(refusal.message))?;
+        crate::paths::replace_atomically(
+            &dir.join("result.json"),
+            &serde_json::json!({
+                "format": 1,
+                "answer_hex": crate::paths::hex_digest(&self.answer),
+            })
+            .to_string(),
+        )
+        .expect("a hand-written result");
+        Ok(4242)
+    }
+}
+
+#[test]
+fn a_finished_jobs_result_is_refused_when_it_does_not_carry_the_launchs_token() {
+    let world = capturable();
+    let forger = Forger {
+        answer: answer_of(&[]).expect("an answer"),
+    };
+    let first = launch_as(&world, "claude-a", RELIABILITY_LENS, &forger)
+        .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+
+    let refused = collect(&world, RELIABILITY_LENS);
+
+    assert_eq!(refused_as(&refused), "capture-result-unbound");
+    assert_eq!(job_state(&world, &first), "running");
+    nothing_was_written(&world);
+}
+
+#[test]
 fn collecting_past_the_deadline_and_its_grace_kills_the_group_and_abandons_the_job() {
     let world = capturable();
     let (spawner, release) = held();

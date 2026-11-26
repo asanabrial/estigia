@@ -169,6 +169,7 @@ const UNKNOWN: &[&str] = &[
 ];
 const REFUSED: &[&str] = &[
     "ambiguous-issue",
+    "capture-result-unbound",
     "publication-checkout-not-on-branch",
     "where-reference-malformed",
     "feed-repo-unknown",
@@ -533,6 +534,7 @@ const REFUSED: &[&str] = &[
     "source-build-not-allowed",
     "spend-transaction-unknown",
     "stand-down-covers-no-time",
+    "state-directory-is-for-the-binary",
     "stand-down-is-for-a-person",
     "stand-down-needs-a-reason",
     "stand-down-not-lifted",

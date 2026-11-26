@@ -10,12 +10,25 @@ fn check(name: &str, script: &str) -> Check {
     }
 }
 
+fn settled(dir: &Path) -> JobStatus<Outcome> {
+    let until = Instant::now() + Duration::from_secs(10);
+    loop {
+        match status(dir).expect("status") {
+            JobStatus::Running => {
+                assert!(Instant::now() < until, "the job never let its lock go");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            settled => return settled,
+        }
+    }
+}
+
 fn ran(tree: &Path, checks: &[Check], deadline: Duration) -> Outcome {
     let root = tempfile::tempdir().expect("a directory");
     let dir = root.path().join("job");
     write_job(&dir, tree, &"d".repeat(64), &"c".repeat(64), checks).expect("the job is written");
     run_within(&dir, deadline).expect("the runner finishes");
-    match status(&dir).expect("status") {
+    match settled(&dir) {
         JobStatus::Finished(outcome) => outcome,
         other => panic!("{other:?}"),
     }

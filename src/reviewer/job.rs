@@ -26,6 +26,12 @@ use crate::transport::Failure;
 /// that wrote a job may not be the one that reads it.
 pub const FORMAT: u32 = 1;
 
+/// The variable a launcher hands its runner the job's token in. The token is
+/// written into the result and checked against the store, so a result a plain
+/// file tool left is not the runner's answer; it never reaches the directory
+/// beside the result.
+pub const TOKEN_VAR: &str = "ESTIGIA_JOB_TOKEN";
+
 const MANIFEST: &str = "manifest.json";
 const PROMPT: &str = "prompt.bin";
 const LOCK: &str = "lock";
@@ -54,10 +60,30 @@ pub struct RecordedRefusal {
 /// What a finished job left in `result.json`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JobResult {
-    /// The reviewer's raw answer, unread.
-    Answer(Vec<u8>),
+    /// The reviewer's raw answer, unread, and the token the runner stamped it
+    /// with when its launcher handed one out.
+    Answer {
+        /// The answer exactly as the reviewer wrote it.
+        bytes: Vec<u8>,
+        /// The token the runner wrote, absent when the launch handed out none.
+        token: Option<String>,
+    },
     /// The reviewer refused.
     Refused(RecordedRefusal),
+}
+
+/// The job token this process was launched with, if any.
+pub fn token_of_environment() -> Option<String> {
+    std::env::var(TOKEN_VAR)
+        .ok()
+        .filter(|token| !token.is_empty())
+}
+
+/// Whether a result names the token the launch minted for it. A job with no
+/// recorded token is one no launch of this binary bound, and its result is read
+/// as it was before there was a token to check.
+pub fn bound_to(named: Option<&str>, expected: Option<&str>) -> bool {
+    expected.is_none_or(|expected| named == Some(expected))
 }
 
 /// Where a job stands, read from its directory alone.
@@ -76,6 +102,15 @@ pub enum JobStatus<T = JobResult> {
 pub trait Spawner {
     /// Starts the runner for `dir` and returns once it holds the lock.
     fn start(&self, dir: &Path) -> Result<u32, Failure>;
+
+    /// [`Self::start`] with the token this launch minted for the job. The
+    /// default drops it, which is right for a spawner that runs nothing this
+    /// process can bind to — a relayed job has no result file to forge until the
+    /// host's own answer is recorded, and a rendering job no store row names.
+    fn start_with(&self, dir: &Path, token: &str) -> Result<u32, Failure> {
+        let _ = token;
+        self.start(dir)
+    }
 
     /// Whether the host runs the reviewer itself, so that nothing this process
     /// started will ever leave a result for the job.
@@ -149,11 +184,17 @@ pub(crate) fn awaits_relay(dir: &Path) -> bool {
 }
 
 /// Records the answer a host's relay produced as the job's result, in the form
-/// a runner leaves, so the job is read as finished by whoever collects it.
-pub(crate) fn record_relayed_answer(dir: &Path, answer: &[u8]) -> Result<(), Failure> {
+/// a runner leaves, so the job is read as finished by whoever collects it. The
+/// token the launch minted for the job is written with it, because the reading
+/// after the lock is released checks any result against it.
+pub(crate) fn record_relayed_answer(
+    dir: &Path,
+    answer: &[u8],
+    token: Option<&str>,
+) -> Result<(), Failure> {
     replace_atomically(
         &dir.join(RESULT),
-        &result_json(&Ok(answer.to_vec())).to_string(),
+        &result_json(&Ok(answer.to_vec()), token).to_string(),
     )
     .map_err(|e| unwritten("record a relayed review answer", e))
 }
@@ -258,9 +299,14 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-fn result_json(outcome: &Result<Vec<u8>, Refusal>) -> serde_json::Value {
+fn result_json(outcome: &Result<Vec<u8>, Refusal>, token: Option<&str>) -> serde_json::Value {
     match outcome {
-        Ok(answer) => serde_json::json!({ "format": FORMAT, "answer_hex": hex(answer) }),
+        Ok(answer) => match token {
+            Some(token) => {
+                serde_json::json!({ "format": FORMAT, "answer_hex": hex(answer), "token": token })
+            }
+            None => serde_json::json!({ "format": FORMAT, "answer_hex": hex(answer) }),
+        },
         Err(refusal) => serde_json::json!({
             "format": FORMAT,
             "refusal": {
@@ -338,6 +384,18 @@ pub fn run(
     dir: &Path,
     select: &dyn Fn() -> Result<Box<dyn Adapter>, Refusal>,
 ) -> Result<(), Refusal> {
+    let token = token_of_environment();
+    run_with(dir, select, token.as_deref())
+}
+
+/// [`run`] with the token its launcher handed over. A runner a test drives on a
+/// thread has no environment of its own, so the token is passed rather than
+/// read.
+pub fn run_with(
+    dir: &Path,
+    select: &dyn Fn() -> Result<Box<dyn Adapter>, Refusal>,
+    token: Option<&str>,
+) -> Result<(), Refusal> {
     let _lock = begin(dir)?;
     let outcome = load(dir).and_then(|invocation| {
         let review = select()?.review_with_usage(&invocation)?;
@@ -346,7 +404,7 @@ pub fn run(
         }
         Ok(review.answer)
     });
-    replace_atomically(&dir.join(RESULT), &result_json(&outcome).to_string())
+    replace_atomically(&dir.join(RESULT), &result_json(&outcome, token).to_string())
         .map_err(|e| refused(format!("the review job result could not be written: {e}")))
 }
 
@@ -363,8 +421,12 @@ fn read_result(dir: &Path) -> Result<Option<JobResult>, Failure> {
         return Err(unreadable("is a format this binary does not read"));
     }
     if let Some(answer) = value.get("answer_hex").and_then(serde_json::Value::as_str) {
+        let token = value
+            .get("token")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
         return unhex(answer)
-            .map(|bytes| Some(JobResult::Answer(bytes)))
+            .map(|bytes| Some(JobResult::Answer { bytes, token }))
             .ok_or_else(|| unreadable("carries an answer that is not hex"));
     }
     let refusal = value
@@ -427,10 +489,11 @@ pub fn read_usage(dir: &Path) -> Result<Option<Usage>, Failure> {
     }))
 }
 
-/// Reads where a job stands. A result file decides first. Otherwise a held lock
-/// is a live runner, and a free one with no result is a runner that died,
-/// checked once more after taking the lock so a runner that finished between
-/// the two reads is not called lost.
+/// Reads where a job stands. A held lock is a live runner, whatever file sits
+/// beside it: a result written while the runner still holds its lock is not the
+/// runner's answer, and reading it first is what let a hand-written file stand
+/// in for one. Otherwise the result decides, and a free lock with no result is
+/// a runner that died.
 pub fn job_status(dir: &Path) -> Result<JobStatus, Failure> {
     job_status_with(dir, read_result)
 }
@@ -440,21 +503,23 @@ pub(crate) fn job_status_with<T>(
     dir: &Path,
     read: impl Fn(&Path) -> Result<Option<T>, Failure>,
 ) -> Result<JobStatus<T>, Failure> {
-    if let Some(result) = read(dir)? {
-        return Ok(JobStatus::Finished(result));
-    }
+    let settled = || {
+        Ok(match read(dir)? {
+            Some(result) => JobStatus::Finished(result),
+            None => JobStatus::Lost,
+        })
+    };
     let lock = match File::options().read(true).write(true).open(dir.join(LOCK)) {
         Ok(lock) => lock,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(JobStatus::Lost),
+        // No lock was ever taken: a relayed job waits for its host's answer
+        // instead, and the result is the only evidence there is.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return settled(),
         Err(e) => return Err(unwritten("open a review job lock", e)),
     };
     match lock.try_lock() {
         Err(std::fs::TryLockError::WouldBlock) => Ok(JobStatus::Running),
         Err(std::fs::TryLockError::Error(e)) => Err(unwritten("test a review job lock", e)),
-        Ok(()) => Ok(match read(dir)? {
-            Some(result) => JobStatus::Finished(result),
-            None => JobStatus::Lost,
-        }),
+        Ok(()) => settled(),
     }
 }
 
@@ -528,12 +593,26 @@ impl Spawner for Detached {
     fn start(&self, dir: &Path) -> Result<u32, Failure> {
         self.start_as("__review-job", dir)
     }
+
+    fn start_with(&self, dir: &Path, token: &str) -> Result<u32, Failure> {
+        self.start_as_with("__review-job", dir, Some(token))
+    }
 }
 
 impl Detached {
     /// Starts `subcommand <dir>` of the re-executed binary, detached, and
     /// returns once it reports in.
     pub(crate) fn start_as(&self, subcommand: &str, dir: &Path) -> Result<u32, Failure> {
+        self.start_as_with(subcommand, dir, None)
+    }
+
+    /// [`Self::start_as`], handing the runner the token its launcher minted.
+    pub(crate) fn start_as_with(
+        &self,
+        subcommand: &str,
+        dir: &Path,
+        token: Option<&str>,
+    ) -> Result<u32, Failure> {
         let executable = match &self.executable {
             Some(named) => named.clone(),
             None => std::env::current_exe().map_err(|e| unwritten("find this executable", e))?,
@@ -553,6 +632,9 @@ impl Detached {
             .stdout(open(RUNNER_OUT)?)
             .stderr(open(RUNNER_ERR)?)
             .envs(self.environment.iter().map(|(k, v)| (k, v)));
+        if let Some(token) = token {
+            command.env(TOKEN_VAR, token);
+        }
         for name in &self.removed {
             command.env_remove(name);
         }
@@ -648,9 +730,14 @@ where
     F: Fn() -> Result<Box<dyn Adapter>, Refusal> + Clone + Send + 'static,
 {
     fn start(&self, dir: &Path) -> Result<u32, Failure> {
+        self.start_with(dir, "")
+    }
+
+    fn start_with(&self, dir: &Path, token: &str) -> Result<u32, Failure> {
         let select = self.0.clone();
         let owned = dir.to_path_buf();
-        let handle = std::thread::spawn(move || run(&owned, &select));
+        let token = (!token.is_empty()).then(|| token.to_owned());
+        let handle = std::thread::spawn(move || run_with(&owned, &select, token.as_deref()));
         await_started(dir, || handle.is_finished().then(|| "finished".to_owned()))?;
         Ok(std::process::id())
     }
