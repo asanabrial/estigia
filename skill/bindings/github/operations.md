@@ -640,6 +640,11 @@ completes instead of answering `nothing-to-unassign`, a spend record replays fro
 the steps before the marker are skipped once it exists. Call it from `review`; after `done` a new
 spend is `unexpected-state`.
 
+With neither, after a hand merge: under `autonomous`, with the window open, the merge verified as
+`done` verifies it and the issue still `OPEN`, the release closes it (`done` from `review`,
+`deliver`'s merge note, `gh issue close` read back) before releasing; `close_incomplete` as above.
+`assisted` writes no tracker.
+
 ## Delivering in one call
 
 `deliver` is the tool that runs the tail of a publication that needs no judgement: holding the declared

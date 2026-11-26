@@ -265,6 +265,17 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   handoff; `an_unassign_releases_the_epoch_in_the_store_and_its_discovery_writes_nothing` measures only that a release adds none. The run-id is not in the close note
   either: it survives only in the local store and in `deliver`'s `record`, which never leaves the machine.
 
+- **A release closes a hand merge only on the road a holding run takes.** `open_hand_merge` in
+  `src/transport/dispatch.rs` runs inside `merged_release`, which a release reaches with a
+  `target_operation`; the tool fills one for a run that holds the issue, and a release naming none
+  takes `claim::unassign` and closes nothing. Under a closed window it also closes nothing, since the
+  close is not queued, and the issue stays open until a later release or `deliver`. A close that stops
+  after its merge note landed answers `close_incomplete`; the repeat finds the issue still `OPEN` and
+  posts the note a second time. `an_autonomous_release_after_a_hand_merge_closes_the_issue_and_puts_the_checkout_down`
+  and `only_an_autonomous_repository_closes_a_hand_merged_delivery` measure the open-window road and
+  the workflow predicate; `an_assisted_repository_never_closes_the_issue_a_release_finds_open` is
+  answered by the tool's `workflow-assisted-writes-no-tracker` refusal before the transport is reached.
+
 ## Ownership
 
 - **The runtime is still folded into a forced takeover's evidence digest, and the retry that would read

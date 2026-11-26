@@ -1583,26 +1583,34 @@ fn closes_issue(pr: &serde_json::Value, number: u64) -> bool {
 /// `delete_branch_on_merge` never touches.
 fn record_started_branch(ledger: &Ledger, what: &Start<'_>) -> Result<(), Failure> {
     what.number()?;
+    record_branch(ledger, what.run_id, what.branch, what.now)
+}
+
+/// Records `branch` as one `run_id` started or published, once, so the release that delivers
+/// it knows every head the run may have left on the remote.
+pub(super) fn record_branch(
+    ledger: &Ledger,
+    run_id: &str,
+    branch: &str,
+    now: &str,
+) -> Result<(), Failure> {
     let already = ledger.timeline()?.iter().any(|comment| {
         super::markers::parse(&comment.body)
             .into_iter()
             .any(|marker| {
                 marker.get("kind").map(String::as_str) == Some("branch")
-                    && marker.get("run-id").map(String::as_str) == Some(what.run_id)
-                    && marker.get("branch").map(String::as_str) == Some(what.branch)
+                    && marker.get("run-id").map(String::as_str) == Some(run_id)
+                    && marker.get("branch").map(String::as_str) == Some(branch)
             })
     });
     if already {
         return Ok(());
     }
-    let marker = super::markers::render(
-        "branch",
-        &[("run-id", what.run_id), ("branch", what.branch)],
-    )
-    .ok_or_else(|| {
-        Failure::Stop(serde_json::json!({ "ok": false, "reason": "invalid-marker-attribute" }))
-    })?;
-    ledger.append(&format!("{marker}\n"), what.now)
+    let marker = super::markers::render("branch", &[("run-id", run_id), ("branch", branch)])
+        .ok_or_else(|| {
+            Failure::Stop(serde_json::json!({ "ok": false, "reason": "invalid-marker-attribute" }))
+        })?;
+    ledger.append(&format!("{marker}\n"), now)
 }
 
 /// What became of one remote head when a delivery tried to delete it.

@@ -266,7 +266,7 @@ Clean up only after delivery is verified or abandonment is explicitly recorded. 
 the isolated checkout this run created, and the local branch checked out there, once the tracker
 recognises the issue's close as the registered delivery — the newest confirmed publication's
 `published` marker, the closing
-pull request, and a merge whose second parent is the reviewed head and whose first parent descends from the reviewed base — and the checkout carries no
+pull request, and a merge whose second parent is the reviewed head and whose first parent descends from the reviewed base — or, for a pull request that only references the issue, once that merge alone is verified, and the checkout carries no
 unpublished work: its head is the delivered head and `git status --porcelain` is empty. Anything that
 does not clear that bar is kept, and the release answer names the check it failed. A delivery in
 slices starts one checkout per slice and the pointer names only the last, so `release` also puts
@@ -275,7 +275,7 @@ run, it is clean, and the delivering merge contains its head; the answer lists t
 `sibling_checkouts`, kept ones with their reason. A retried release
 that finds its own marker already on the issue attempts the same retirement, so a release that posted
 its marker and then failed before cleanup does not leave a delivered checkout behind. The delivering
-run also deletes every **remote** head it recorded starting: `claim` with `branch` and `base` writes a `branch` marker
+run also deletes every **remote** head it recorded: `claim` with `branch` and `base`, and every publication, writes a `branch` marker
 naming it, and `release` deletes each recorded head and reads the remote back, because GitHub's
 `delete_branch_on_merge` removes only the pull request's own head — a branch delivered through
 another, or pushed under a different name, is never touched by the host. Each deletion is read back:

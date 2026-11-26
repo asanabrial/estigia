@@ -48,6 +48,15 @@ pub(crate) fn verified_delivery(
     context: &Context,
     comments: &[ownership::Comment],
 ) -> Result<Option<serde_json::Value>, Failure> {
+    Ok(verified_delivery_close(context, comments)?.map(|(_, merge)| merge))
+}
+
+/// [`verified_delivery`] with the [`DeliveryClose`] it proved, for a release that puts down a
+/// checkout whose pull request only references the issue.
+pub(crate) fn verified_delivery_close(
+    context: &Context,
+    comments: &[ownership::Comment],
+) -> Result<Option<(DeliveryClose, serde_json::Value)>, Failure> {
     let Some(publication) = super::all_publications(comments)?
         .into_iter()
         .rfind(|p| p.confirmed)
@@ -86,7 +95,8 @@ pub(crate) fn verified_delivery(
         "merge_commit": sha,
         "parents": [first, second],
     });
-    if match_merge(&receipt, &sha, &second, base_is_ancestor_of_first_parent).is_none() {
+    let Some(delivered) = match_merge(&receipt, &sha, &second, base_is_ancestor_of_first_parent)
+    else {
         return Err(not_verified(
             merge_cause(&receipt, &sha, &second, base_is_ancestor_of_first_parent),
             format!(
@@ -95,8 +105,8 @@ pub(crate) fn verified_delivery(
             ),
             merge,
         ));
-    }
-    Ok(Some(merge))
+    };
+    Ok(Some((delivered, merge)))
 }
 
 fn is_full_sha(sha: &str) -> bool {
