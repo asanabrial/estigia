@@ -165,7 +165,7 @@ impl AgentAdapter {
                 // the dedicated Claude prelaunch check for the reserved reviewer.
                 // `AskUserQuestion` is read only under `Decision mode: auto`.
                 matcher: Some(
-                    "Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion",
+                    "Edit|Write|MultiEdit|NotebookEdit|Update|Bash|PowerShell|Agent|Task|AskUserQuestion",
                 ),
                 dialect: Dialect::ClaudeCode,
                 envelope: Envelope::Settings,

@@ -2711,6 +2711,22 @@ fn the_codex_matcher_covers_how_codex_writes_files() {
     }
 }
 
+#[test]
+fn the_claude_code_matcher_covers_the_powershell_tool() {
+    // Claude Code enables `PowerShell` on Windows without Git Bash and by
+    // default with it for claude.ai and Console accounts; its hooks reference
+    // says to match `Bash|PowerShell`. A matcher naming `Bash` alone leaves the
+    // default shell on Windows outside the gate.
+    let spec = agent("claude-code")
+        .gate_spec()
+        .expect("claude-code is gated");
+    let matcher = spec.matcher.expect("claude-code filters by tool");
+    assert!(
+        matcher.split('|').any(|name| name == "PowerShell"),
+        "claude-code's matcher misses PowerShell: {matcher}"
+    );
+}
+
 /// The entry's **first paragraph**, which is the part that states the claim.
 fn fires_on_every_tool() -> String {
     let section = crate::test_env::honesty_contract();
@@ -5689,6 +5705,7 @@ fn the_plugin_gates_the_tools_the_classifier_judges() {
     // The other way, minus the names that belong to other hosts.
     const SOMEBODY_ELSE_S: &[(&str, &str)] = &[
         ("apply_patch", "Codex"),
+        ("powershell", "Claude Code's Windows shell tool"),
         ("shell", "Codex's own name for its shell tool"),
         ("write_file", "Gemini CLI and Qwen"),
         ("replace", "Gemini CLI and Qwen"),

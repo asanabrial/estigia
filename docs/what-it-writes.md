@@ -567,11 +567,11 @@ tool's `Stop` entries, the loop's included, stay. Only Claude Code gets it; Code
 ## The Claude Code `PreToolUse` entry
 
 `estigia setup claude-code` registers the gate with the matcher
-`Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion`, a 10 s timeout, and the
+`Edit|Write|MultiEdit|NotebookEdit|Update|Bash|PowerShell|Agent|Task|AskUserQuestion`, a 10 s timeout, and the
 failure policy its hooks reference requires for a timeout to decide anything:
 
 ```json
-{"matcher": "Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion",
+{"matcher": "Edit|Write|MultiEdit|NotebookEdit|Update|Bash|PowerShell|Agent|Task|AskUserQuestion",
  "hooks": [{"type": "command",
             "command": "\"<estigia>\" hook pre-tool-use --agent claude-code --dialect claude-code",
             "timeout": 10,

@@ -219,7 +219,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   reached in this tree only by OpenCode's plugin, which sends no agent name, and whose documented limit is
   that `tool.execute.before` never sees a subagent's call, so it closes nothing today. Where the question
   *is* asked it sees exactly what the matcher wakes the hook for
-  (`Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion` for Claude Code; `Agent` and
+  (`Edit|Write|MultiEdit|NotebookEdit|Update|Bash|PowerShell|Agent|Task|AskUserQuestion` for Claude Code; `Agent` and
   `Task` take the reserved-reviewer prelaunch path first). Measured against a published `builder`
   sub-agent declaring `Read, Write, Edit, Glob, Grep, Bash`: three of the six are tools the gate can judge
   and `Read`, `Glob` and `Grep` are never seen. It can refuse a tool **in the matcher and not in the
@@ -344,6 +344,14 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   restricts only built-in tools (MCP tools stay unless an entry starts with `mcp__`), so what stops the
   analyst writing is the gate measuring the child against the parent's claim, and
   `harness::roles::definition_for` does not search this root.
+- **Claude Code's `PowerShell` tool is read as POSIX shell, and the forms that grammar cannot carry are
+  unread.** The matcher names it and `SHELL_TOOLS` holds `powershell`, so the reader Bash gets is the one
+  it gets: `git commit`, `git push`, `gh pr merge` and a redirect that writes a file are classified the
+  same through either tool. What the shared reader does not do for PowerShell: resolve its aliases (`sc`,
+  `ni`, `iex`), read a command assembled at run time (`Invoke-Expression`, a variable holding the line),
+  decode `-EncodedCommand`, or follow `cmd /c` and `wsl` indirection into another shell. A line written
+  that way reaches the gate and is read as the literal it is, which is not the command it runs; this list
+  is the statement of that gap, not a claim that it is closed.
 - **Pi's `powershell` is read as POSIX shell, other extensions' tools are gated only by input shape, and
   Pi's own settings are not covered.** The extension sends any tool whose input has a string `command` to the
   gate as `bash` and a string `path` with `content` or an `edits` array as `write`/`edit`; a PowerShell
