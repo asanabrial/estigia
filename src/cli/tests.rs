@@ -58,6 +58,7 @@ fn inventory() -> Vec<Refusal> {
             target: crate::harness::person_only::COMMANDS[2].target.to_owned(),
         })
         .expect("a person-only target is refused"),
+        crate::harness::review_relay_is_the_reviewers(),
         crate::harness::issue_requirement::refusal(
             false,
             crate::config::IssueRequirement::On,

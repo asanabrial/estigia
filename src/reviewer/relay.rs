@@ -12,8 +12,24 @@ use crate::outcome::Refusal;
 const OPEN: &str = "<estigia-review-result";
 const CLOSE: &str = "</estigia-review-result>";
 
-pub(crate) fn framed_prompt(mut prompt: Vec<u8>, job: &str) -> Vec<u8> {
-    prompt.extend_from_slice(
+/// The line of a relay prompt that carries the secret an answer must name back.
+///
+/// It is added when the prompt is materialised for the host, never written into
+/// the job directory, so reading the job buys no answer.
+pub(crate) fn secret_line(secret: &str) -> String {
+    format!("<!-- estigia-relay-secret: {secret} -->\n")
+}
+
+pub(crate) fn with_secret(mut prompt: Vec<u8>, secret: &str) -> Vec<u8> {
+    let mut prefixed = secret_line(secret).into_bytes();
+    prefixed.append(&mut prompt);
+    prefixed
+}
+
+pub(crate) fn framed_prompt(mut prompt: Vec<u8>, job: &str, secret: &str) -> Vec<u8> {
+    let mut framed = secret_line(secret).into_bytes();
+    framed.append(&mut prompt);
+    framed.extend_from_slice(
         format!(
             "\n\n## OpenCode relay output channel\n\n\
              The JSON-only requirement above applies to the result inside this channel, not to \
@@ -27,7 +43,7 @@ pub(crate) fn framed_prompt(mut prompt: Vec<u8>, job: &str) -> Vec<u8> {
         )
         .as_bytes(),
     );
-    prompt
+    framed
 }
 
 pub(crate) fn framed_result(raw: &[u8]) -> Result<(&str, &[u8]), Refusal> {

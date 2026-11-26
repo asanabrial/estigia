@@ -1128,7 +1128,7 @@ __EXIT_CLASS__
 // A failed delivery is swallowed because the relay may exit before it reads the
 // whole answer, and the reason it refused is on standard output, which is read
 // to EOF before anything is treated as the outcome.
-const ask = async (shell, cwd, action, name, session, stdin) => {
+const ask = async (shell, cwd, action, name, session, stdin, secret) => {
   const run = shellOf(shell);
   if (typeof run !== "function") {
     return {
@@ -1145,14 +1145,27 @@ const ask = async (shell, cwd, action, name, session, stdin) => {
   }
   const input = new Blob([stdin ?? ""]);
   const identified = typeof session === "string" && session.trim() !== "";
+  const sealed = typeof secret === "string" && secret.trim() !== "" ? secret.trim() : null;
   let command;
   try {
-    command = identified
-      ? run`${ESTIGIA} review ${action} --name ${name} --session-id ${session} --runtime ${RUNTIME} < ${input}`
-          .cwd(cwd)
-          .quiet()
-          .nothrow()
-      : run`${ESTIGIA} review ${action} --name ${name} < ${input}`.cwd(cwd).quiet().nothrow();
+    if (identified && sealed) {
+      command = run`${ESTIGIA} review ${action} --name ${name} --session-id ${session} --runtime ${RUNTIME} --secret ${sealed} < ${input}`
+        .cwd(cwd)
+        .quiet()
+        .nothrow();
+    } else if (identified) {
+      command = run`${ESTIGIA} review ${action} --name ${name} --session-id ${session} --runtime ${RUNTIME} < ${input}`
+        .cwd(cwd)
+        .quiet()
+        .nothrow();
+    } else if (sealed) {
+      command = run`${ESTIGIA} review ${action} --name ${name} --secret ${sealed} < ${input}`
+        .cwd(cwd)
+        .quiet()
+        .nothrow();
+    } else {
+      command = run`${ESTIGIA} review ${action} --name ${name} < ${input}`.cwd(cwd).quiet().nothrow();
+    }
   } catch (error) {
     return {
       code: "authority_unavailable",
@@ -1169,6 +1182,11 @@ const ask = async (shell, cwd, action, name, session, stdin) => {
   const parsed = parseCode(status, answer?.stderr);
   if (parsed.code) return parsed;
   return { code: null, stdout: String(answer?.stdout ?? "") };
+};
+
+const secretOf = (text) => {
+  const found = /<!-- estigia-relay-secret: ([0-9a-f]{64}) -->/.exec(String(text ?? ""));
+  return found ? found[1] : null;
 };
 
 const putPrompt = (event, prompt) => {
@@ -1250,14 +1268,16 @@ const before = async (event, cwd, shell) => {
     throw coded("authority_unavailable", "estigia: the review relay answered no prompt");
   }
   putPrompt(event, prompt);
-  if (event?.id !== undefined && event?.id !== null) slots.set(String(event.id), name);
+  if (event?.id !== undefined && event?.id !== null) {
+    slots.set(String(event.id), { name, secret: secretOf(asked.stdout) });
+  }
 };
 
 const after = async (event, cwd, shell) => {
   const key = event?.id !== undefined && event?.id !== null ? String(event.id) : null;
   const remembered = key === null ? undefined : slots.get(key);
   if (key !== null) slots.delete(key);
-  const name = remembered ?? reviewerEvent(event);
+  const name = remembered?.name ?? reviewerEvent(event);
   if (!name) return;
   let raw;
   try {
@@ -1268,7 +1288,7 @@ const after = async (event, cwd, shell) => {
     putResult(event, event.error);
     return;
   }
-  const asked = await ask(shell, cwd, "admit", name, event?.sessionID, raw);
+  const asked = await ask(shell, cwd, "admit", name, event?.sessionID, raw, remembered?.secret);
   if (asked.code) {
     const refusal = asked.message || `estigia refused the reviewer's answer (${asked.code})`;
     if (event && typeof event === "object") {
@@ -1433,15 +1453,23 @@ const run = (args, cwd, stdin) =>
     child.stdin.end(stdin ?? "");
   });
 
-const ask = async (cwd, action, name, session, stdin) => {
+const ask = async (cwd, action, name, session, stdin, secret) => {
   const args = ["review", action, "--name", name];
   if (typeof session === "string" && session.trim() !== "") {
     args.push("--session-id", session, "--runtime", RUNTIME);
+  }
+  if (typeof secret === "string" && secret.trim() !== "") {
+    args.push("--secret", secret.trim());
   }
   const ran = await run(args, cwd, stdin);
   const parsed = parseCode(ran.status, ran.stderr);
   if (parsed.code) return parsed;
   return { code: null, stdout: ran.stdout };
+};
+
+const secretOf = (text) => {
+  const found = /<!-- estigia-relay-secret: ([0-9a-f]{64}) -->/.exec(String(text ?? ""));
+  return found ? found[1] : null;
 };
 
 const fail = (asked, what) => {
@@ -1515,7 +1543,7 @@ const lens = async (params, signal, ctx) => {
   const modelled = await ask(cwd, "model", name, session, null);
   if (modelled.code) fail(modelled, "read the reviewer's model");
   const answer = await complete(ctx, modelOf(ctx, modelled.stdout.trim()), prompted.stdout, signal);
-  const admitted = await ask(cwd, "admit", name, session, answer);
+  const admitted = await ask(cwd, "admit", name, session, answer, secretOf(prompted.stdout));
   if (admitted.code) fail(admitted, "admit the reviewer's answer");
   return {
     content: [

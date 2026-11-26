@@ -8975,3 +8975,64 @@ fn an_autonomous_claim_still_allows_the_api_calls_that_touch_no_review_thread() 
         );
     }
 }
+
+#[test]
+fn a_run_that_published_a_review_cannot_answer_its_own_reviewers_from_a_shell() {
+    let root = tempfile::tempdir().expect("a gate root");
+    let context = context(root.path());
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
+
+    for command in [
+        "estigia review admit --name review-risk",
+        "estigia review prompt --name review-risk",
+    ] {
+        let (action, how) = classify("Bash", &json!({ "command": command }));
+        assert_eq!(
+            action,
+            Action::Write {
+                target: "estigia review".to_owned()
+            },
+            "{command} is not read as the relay's own command"
+        );
+
+        let mut published = sworn(42, &context.repo_dir);
+        published.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+            epoch: "a".repeat(32),
+            pr: 54,
+            head: "b".repeat(40),
+            base: "c".repeat(40),
+            digest: "d".repeat(64),
+        });
+        let Decision::Deny(refusal) = decide(&context, &mut published, &action, how) else {
+            panic!("{command} was allowed for the run that published the review");
+        };
+        assert_eq!(refusal.code, "review-relay-is-the-reviewers", "{command}");
+
+        let mut reading = sworn(42, &context.repo_dir);
+        let decision = decide(&context, &mut reading, &action, how);
+        assert!(
+            !format!("{decision:?}").contains("review-relay-is-the-reviewers"),
+            "{command} was refused for a run that published nothing: {decision:?}"
+        );
+    }
+
+    let (action, how) = classify("Bash", &json!({ "command": "estigia review_status" }));
+    let mut published = sworn(42, &context.repo_dir);
+    published.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: "b".repeat(40),
+        base: "c".repeat(40),
+        digest: "d".repeat(64),
+    });
+    let decision = decide(&context, &mut published, &action, how);
+    assert!(
+        !format!("{decision:?}").contains("review-relay-is-the-reviewers"),
+        "reading the review status was refused as the relay: {decision:?}"
+    );
+}

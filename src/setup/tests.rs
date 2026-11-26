@@ -18821,7 +18821,7 @@ const run = async (label, file, name, plan, completion, size = 0, shape = {}) =>
   return { label, ...outcome, completed, calls: calls().slice(before) };
 };
 
-const ok = { prompt: { stdout: "PROMPT BYTES\n" }, model: { stdout: "" }, admit: {} };
+const ok = { prompt: { stdout: "<!-- estigia-relay-secret: " + "a".repeat(64) + " -->\nPROMPT BYTES\n" }, model: { stdout: "" }, admit: {} };
 const tool = await load("relay.mjs");
 
 const out = [
@@ -18941,6 +18941,21 @@ fn review_args(action: &str, name: &str) -> serde_json::Value {
     ])
 }
 
+fn admitted_args(name: &str) -> serde_json::Value {
+    serde_json::json!([
+        "review",
+        "admit",
+        "--name",
+        name,
+        "--session-id",
+        "sess-0198",
+        "--runtime",
+        "pi",
+        "--secret",
+        "a".repeat(64)
+    ])
+}
+
 #[test]
 fn the_pi_review_relay_materialises_the_prompt_and_admits_the_answer() {
     let driven = run_pi_review_relay_driver();
@@ -18969,7 +18984,7 @@ fn the_pi_review_relay_materialises_the_prompt_and_admits_the_answer() {
         serde_json::json!([
             { "args": review_args("prompt", "review-risk"), "cwd": project, "stdin": "" },
             { "args": review_args("model", "review-risk"), "cwd": project, "stdin": "" },
-            { "args": review_args("admit", "review-risk"), "cwd": project, "stdin": "ANSWER" },
+            { "args": admitted_args("review-risk"), "cwd": project, "stdin": "ANSWER" },
         ])
     );
     let completed = inherit["completed"].as_array().expect("the completions");
@@ -18980,7 +18995,10 @@ fn the_pi_review_relay_materialises_the_prompt_and_admits_the_answer() {
     );
     assert_eq!(
         completed[0]["context"]["messages"][0]["content"][0]["text"],
-        "PROMPT BYTES\n"
+        format!(
+            "<!-- estigia-relay-secret: {} -->\nPROMPT BYTES\n",
+            "a".repeat(64)
+        )
     );
     assert!(
         completed[0]["context"].get("systemPrompt").is_none()
@@ -19062,7 +19080,7 @@ fn the_pi_review_relay_leaves_out_the_session_flags_it_cannot_fill_and_refuses_i
             serde_json::json!([
                 { "args": ["review", "prompt", "--name", "review-risk"], "cwd": project, "stdin": "" },
                 { "args": ["review", "model", "--name", "review-risk"], "cwd": project, "stdin": "" },
-                { "args": ["review", "admit", "--name", "review-risk"], "cwd": project, "stdin": "ANSWER" },
+                { "args": ["review", "admit", "--name", "review-risk", "--secret", "a".repeat(64)], "cwd": project, "stdin": "ANSWER" },
             ]),
             "{label}"
         );

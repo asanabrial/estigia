@@ -5816,7 +5816,7 @@ fn review(
             }
             Ok(())
         }
-        ReviewAction::Admit { name } => {
+        ReviewAction::Admit { name, secret } => {
             use std::io::Read as _;
             let mut bytes = Vec::new();
             std::io::stdin().read_to_end(&mut bytes).map_err(|error| {
@@ -5829,9 +5829,15 @@ fn review(
                     ),
                 )
             })?;
-            let answer =
-                crate::transport::claim::relay_admit(&context, &identity, name, &bytes, &stamp)
-                    .map_err(|failure| crate::transport::claim::failure_refusal(&failure))?;
+            let answer = crate::transport::claim::relay_admit(
+                &context,
+                &identity,
+                name,
+                &bytes,
+                secret.as_deref(),
+                &stamp,
+            )
+            .map_err(|failure| crate::transport::claim::failure_refusal(&failure))?;
             if json {
                 print_json(&answer);
             } else {
