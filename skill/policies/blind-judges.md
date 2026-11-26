@@ -163,7 +163,9 @@ only by deletion still settles, since no such hunk adds a new-side line to fall 
 
 **The identity is chosen from the affected behaviour and location**, never from the run or the
 wording. That is what lets two reviewers reporting the same defect count as one defect rather than as
-separate defects, and what lets a repair name what it answers.
+separate defects, and what lets a repair name what it answers. When two lenses still pick one id for
+different recordings, both recordings stand: each is weighed on its own and neither is hidden by the
+first one collected.
 
 ### What the ledger computes
 
@@ -175,12 +177,13 @@ The verdict is computed from the receipt's findings, never chosen by a reviewer:
 | A `severe` finding that stands — `deterministic`, or `inferential` and not refuted — and was introduced or worsened here | `rejected` |
 | Only warnings, suggestions, follow-ups and refuted findings | `approved`, once every lens the tier licenses has reported |
 
-Each severe finding, read by its first severe recording as the refutation batch reads it, is settled by
-the first row it matches: a missing `evidence_class` or `causal_disposition`, `insufficient` evidence or
-an `unknown` cause is **escalated**; a `pre-existing` or `base-only` cause is a **follow-up** and blocks
-nothing; a `deterministic` finding is **open**; an `inferential` one follows its refuter — `refuted` drops
-it, `corroborated` and `inconclusive` keep it open, and no refuter result escalates it. A finding that is
-not severe never blocks. `escalated` outranks `rejected`, and `rejected` outranks `approved`; a `rejected` verdict never rests
+Each severe **recording** is settled by the first row it matches: a missing `evidence_class` or
+`causal_disposition`, `insufficient` evidence or an `unknown` cause is **escalated**; a `pre-existing`
+or `base-only` cause is a **follow-up** and blocks nothing; a `deterministic` recording is **open**; an
+`inferential` one follows its refuter — `refuted` drops it, `corroborated` and `inconclusive` keep it
+open, and no refuter result escalates it. A finding that is not severe never blocks. One id may carry
+several recordings; the verdict keeps the strongest answer they give, so a refuted or `pre-existing`
+recording cannot settle a `deterministic` or `introduced` one under the same id. `escalated` outranks `rejected`, and `rejected` outranks `approved`; a `rejected` verdict never rests
 on a severe finding that declares `insufficient` evidence. The computation does not see
 what no finding records. A lens that finds a severe defect records it as a `severe` finding with its
 evidence class and cause, and that is the whole of its say: there is nothing to accept or reject, and
@@ -214,9 +217,11 @@ one out. Its distinctness is that of a fresh, isolated context, not of a separat
 There is no hand path: setup installs no `review-refuter` definition, the launch gate refuses a `Task`
 launch of it, and a refutation is recorded only by capture: no tool records one by hand.
 
-A batch never holds a `deterministic` severe finding — that class already qualifies a rejection with
-no confirmation owed, so naming one in the batch is refused, and so is omitting a standing
-`inferential` finding, naming one twice, or naming an id this receipt recorded no severe finding under.
+A batch never holds an id whose every recording is `deterministic` — that class already qualifies a
+rejection with no confirmation owed — and an id with one `inferential` recording among others may be
+named, because the refuter is handed every recording of it and its answer can only drop the ones that
+follow it. Naming one id twice, omitting a standing `inferential` finding, or naming an id this
+receipt recorded no severe finding under is refused.
 
 The computed verdict reads the batch. A `refuted` finding drops out of the ledger and no longer
 counts toward `rejected`. `corroborated` and `inconclusive` change nothing: the finding stays open

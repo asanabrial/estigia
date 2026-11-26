@@ -9,8 +9,8 @@ use super::validator::{
 };
 use super::{
     LaneClearance, OperationKind, ReviewTransaction, VISIBILITY_ATTEMPTS, approved_receipt_stands,
-    corrections_remain, first_protocol_markers, first_severe_findings, operation_marker,
-    protocol_body, receipt_write_failed, record_approved_receipt, refutation_outcomes,
+    corrections_remain, first_protocol_markers, operation_marker, protocol_body,
+    receipt_write_failed, record_approved_receipt, refutation_outcomes,
     reject_operation_kind_conflict, require_cleared_publication_lane, require_operation_id,
     require_recorded_receipt, review_receipt, timeline, verify_claim,
 };
@@ -368,12 +368,28 @@ pub fn computed_verdict(
     let mut open = Vec::new();
     let mut escalated = Vec::new();
     let mut follow_ups = Vec::new();
-    for (id, finding) in first_severe_findings(comments, receipt) {
-        match settle_severe(
+    let mut settled: std::collections::BTreeMap<String, Settled> =
+        std::collections::BTreeMap::new();
+    for finding in super::severe_findings(comments, receipt) {
+        let one = settle_severe(
             finding.evidence_class.as_deref(),
             finding.causal_disposition.as_deref(),
-            outcomes.get(&id).map(String::as_str),
-        ) {
+            outcomes.get(&finding.id).map(String::as_str),
+        );
+        let rank = one.rank();
+        match settled.entry(finding.id) {
+            std::collections::btree_map::Entry::Vacant(slot) => {
+                slot.insert(one);
+            }
+            std::collections::btree_map::Entry::Occupied(mut slot) => {
+                if rank > slot.get().rank() {
+                    slot.insert(one);
+                }
+            }
+        }
+    }
+    for (id, settled) in settled {
+        match settled {
             Settled::Open => open.push(id),
             Settled::Escalated(reason) => escalated.push(Escalation {
                 id,
@@ -458,6 +474,20 @@ pub(crate) enum Settled {
     Escalated(&'static str),
     FollowUp,
     Dropped,
+}
+
+impl Settled {
+    /// How strongly one recording settles its id, weakest first: a refuted
+    /// recording cannot outvote an unrefuted one, and an escalation outvotes
+    /// both.
+    fn rank(&self) -> u8 {
+        match self {
+            Settled::Dropped => 0,
+            Settled::FollowUp => 1,
+            Settled::Open => 2,
+            Settled::Escalated(_) => 3,
+        }
+    }
 }
 
 pub(crate) fn settle_severe(
