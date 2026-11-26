@@ -466,7 +466,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   | Surface | Bytes | How measured |
   |---|---:|---|
   | `skill/bindings/github.md` | 7,897 | file on disk |
-  | `skill/policies/blind-judges.md` | 42,909 | file on disk |
+  | `skill/policies/blind-judges.md` | 43,364 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
   | `skill/bindings/github/delivery.md` | 42,913 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
@@ -527,10 +527,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   reopens the claim when it changes. It errs the other way too: `none`, `same` and `unchanged` are
   refused as an `impact`, and a `suggestion` with no impact needs a round trip
   (`cosmetic only; no user-visible impact`). It deliberately does not refuse on length, so `nothing was
-  executed` survives. A finding's `id` keeps the plain blank check, but it is the key
-  `record_refutation` groups by, so two findings recorded as `id: "-"` collapse into one identity: a
-  recorded gap. The checks run before the tracker read, so a replay of a marker written before the
-  predicate existed, carrying filler, is refused rather than read back.
+  executed` survives. A finding's `id` keeps the plain blank check, and it is still the key
+  `record_refutation` groups by, but a second recording under one id no longer disappears: every
+  recording of an id is weighed, every one of them is handed to the refuter, and the verdict keeps the
+  strongest answer they give. What is left is the other direction, which cannot hide a defect: two
+  lenses may spell one defect as two ids, and the receipt then carries two findings where one would
+  do. The checks run before the tracker read, so a replay of a marker written before the predicate
+  existed, carrying filler, is refused rather than read back.
 
 - **The tier's cross-check cannot fire through the real path, and that is measured.**
   `review_tier_answer` derives the level from the diff through `classify_risk` and from the published

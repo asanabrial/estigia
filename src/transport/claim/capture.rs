@@ -10,10 +10,10 @@ use super::validator::{
 };
 use super::{
     FINDING_ORIGINS, FindingReview, LensReportReview, PublicationLineage, Refutation,
-    ReviewTransaction, all_publications, finding_operation_id, findings_for, first_severe_findings,
+    ReviewFinding, ReviewTransaction, all_publications, finding_operation_id, findings_for,
     lens_report_operation_id, precheck_review_finding, record_lens_report, record_refutation,
-    record_review_finding, record_validator_result, review_operation_id, review_status, stop, text,
-    timeline, verify_held,
+    record_review_finding, record_validator_result, review_operation_id, review_status,
+    severe_findings, stop, text, timeline, verify_held,
 };
 use crate::config::ModelRouting;
 use crate::harness::session::now_seconds;
@@ -728,20 +728,24 @@ pub(super) fn prepare_with(
     let mut parent_findings = Vec::new();
     let offered = offered_candidates(status);
     if refuter {
-        let standing = first_severe_findings(&comments, &receipt);
+        let standing = severe_findings(&comments, &receipt);
         for id in &offered {
-            let Some(found) = standing.get(id) else {
+            let recordings: Vec<&ReviewFinding> =
+                standing.iter().filter(|found| &found.id == id).collect();
+            if recordings.is_empty() {
                 return Err(Failure::Read(format!(
                     "`review_status` offered the finding `{id}` and the timeline holds no severe \
                      finding of that id on this receipt"
                 )));
-            };
-            parent_findings.push(prompt_finding(found));
+            }
+            for found in recordings {
+                parent_findings.push(prompt_finding(found));
+            }
         }
     } else if let Some(lineage) = &lineage {
         if validator {
-            parent_findings = first_severe_findings(&comments, &lineage.parent)
-                .values()
+            parent_findings = severe_findings(&comments, &lineage.parent)
+                .iter()
                 .map(prompt_finding)
                 .collect();
         } else {

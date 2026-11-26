@@ -428,7 +428,7 @@ fn unjudged(
             .iter()
             .all(|found| found.reason == NO_REFUTER_RESULT)
     {
-        let standing = super::first_severe_findings(comments, receipt);
+        let standing = super::severe_findings(comments, receipt);
         let findings = super::inferential_population(&standing);
         let inputs = annotated(
             context,

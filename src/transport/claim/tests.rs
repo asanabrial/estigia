@@ -15255,6 +15255,55 @@ fn an_incomplete_refutation_batch_is_refused() {
     assert_eq!(envelope["missing"], serde_json::json!(["loc-1"]));
 }
 
+/// A severe finding that credits the publisher as its reviewer is the
+/// publisher's own review, and is refused by the same rule a refutation is.
+#[test]
+fn a_severe_finding_credited_to_the_publisher_is_refused() {
+    let (_root, context) = context_with_no_repository();
+    let receipt = ReviewTransaction {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let comments = vec![published(&receipt)];
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(
+        42,
+        stdout_with(&comments),
+    )]);
+    let operation_id = "2".repeat(32);
+    // `published` credits "claude-a" as the publisher.
+    let finding = FindingReview {
+        issue: 42,
+        run_id: "claude-a",
+        reviewer: "claude-a",
+        operation_id: &operation_id,
+        epoch: &receipt.epoch,
+        pr: receipt.pr,
+        head: &receipt.head,
+        base: &receipt.base,
+        digest: &receipt.digest,
+        id: "own-review",
+        class: "severe",
+        evidence: "the publisher read its own diff",
+        impact: "none the panel weighed",
+        parent: "",
+        origin: "",
+        evidence_class: "deterministic",
+        causal_disposition: "pre-existing",
+        location: "",
+        lens: "review-risk",
+        now: "2026-08-31T00:00:00Z",
+    };
+    let failure = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        record_review_finding(&context, &finding)
+    })
+    .expect_err("the publishing run was credited as the reviewer");
+    assert_eq!(failure.envelope()["reason"], "reviewer-not-distinct");
+}
+
 /// A refuter equal to the run that published cannot be credited with
 /// adjudicating its own receipt's findings.
 #[test]
@@ -17386,12 +17435,24 @@ fn recorded_finding_on(
     evidence_class: Option<&str>,
     causal: Option<&str>,
 ) -> ownership::Comment {
+    recorded_finding_by("codex-b", receipt, n, id, class, evidence_class, causal)
+}
+
+fn recorded_finding_by(
+    reviewer: &str,
+    receipt: &ReviewTransaction,
+    n: u32,
+    id: &str,
+    class: &str,
+    evidence_class: Option<&str>,
+    causal: Option<&str>,
+) -> ownership::Comment {
     let operation = op(100 + n);
     let pr = receipt.pr.to_string();
     let mut attributes: Vec<(&str, &str)> = vec![
         ("run-id", "claude-a"),
         ("op-id", &operation),
-        ("reviewer", "codex-b"),
+        ("reviewer", reviewer),
         ("epoch", &receipt.epoch),
         ("pr", &pr),
         ("head", &receipt.head),
@@ -17496,6 +17557,74 @@ fn ids(verdict: &ComputedVerdict) -> (Vec<&str>, Vec<(&str, &str)>, Vec<&str>) {
             .collect(),
         verdict.follow_ups.iter().map(String::as_str).collect(),
     )
+}
+
+/// One lens cannot settle another lens's severe recording by sharing its id:
+/// the refuter's answer drops the recording it was given, and the stronger
+/// recording under the same id still blocks.
+#[test]
+fn a_refuted_recording_does_not_settle_a_stronger_recording_of_the_same_id() {
+    let verdict = computed_over(
+        &[
+            recorded_finding_by(
+                "codex-b",
+                &ledger_receipt(),
+                1,
+                "gate-hole",
+                "severe",
+                Some("inferential"),
+                Some("pre-existing"),
+            ),
+            recorded_finding_by(
+                "codex-c",
+                &ledger_receipt(),
+                2,
+                "gate-hole",
+                "severe",
+                Some("deterministic"),
+                Some("introduced"),
+            ),
+            recorded_refutation(3, r#"[{"id":"gate-hole","outcome":"refuted"}]"#),
+        ],
+        RiskLevel::Low,
+    );
+    assert_eq!(verdict.outcome, ComputedOutcome::Rejected);
+    assert_eq!(ids(&verdict), (vec!["gate-hole"], vec![], vec![]));
+}
+
+/// The cause is weighed the same way: a `pre-existing` recording of an id does
+/// not turn another lens's `introduced` recording of the same defect into a
+/// follow-up that blocks nothing.
+#[test]
+fn a_pre_existing_recording_does_not_settle_an_introduced_one() {
+    let verdict = computed_over(
+        &[
+            recorded_finding_by(
+                "codex-b",
+                &ledger_receipt(),
+                1,
+                "gate-hole",
+                "severe",
+                Some("inferential"),
+                Some("pre-existing"),
+            ),
+            recorded_finding_by(
+                "codex-c",
+                &ledger_receipt(),
+                2,
+                "gate-hole",
+                "severe",
+                Some("inferential"),
+                Some("introduced"),
+            ),
+        ],
+        RiskLevel::Low,
+    );
+    assert_eq!(verdict.outcome, ComputedOutcome::Escalated);
+    assert_eq!(
+        ids(&verdict),
+        (vec![], vec![("gate-hole", "no-refuter-result")], vec![])
+    );
 }
 
 #[test]
