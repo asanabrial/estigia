@@ -472,7 +472,13 @@ pub fn admit_relayed(
     dir: &Path,
     answer: &[u8],
 ) -> Result<serde_json::Value, Failure> {
-    crate::reviewer::job::record_relayed_answer(dir, answer)?;
+    let id = dir
+        .file_name()
+        .map(|id| id.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let store = Store::open(&store_path()?)?;
+    let token = store.job_token(&id)?;
+    crate::reviewer::job::record_relayed_answer(dir, answer, token.as_deref())?;
     collect(context, run_id, 0)
 }
 
@@ -530,12 +536,13 @@ pub(crate) fn launch_with(
         )?;
         let deadline = now + JOB_SECONDS;
         store.insert_pull_review_slot(&held.epoch, &name, &dir.to_string_lossy(), deadline)?;
+        let token = store.mint_job_token(&id, now)?;
         if spawner.relayed() {
             crate::reviewer::job::mark_relayed(&dir)?;
             launched.push(serde_json::json!({ "name": name, "job": id, "deadline_at": deadline }));
             continue;
         }
-        match spawner.start(&dir) {
+        match spawner.start_with(&dir, &token) {
             Ok(pid) => store.mark_pull_review_slot_spawned(&held.epoch, &name, pid)?,
             Err(failure) => {
                 store.settle_pull_review_slot(&held.epoch, &name, "abandoned", None)?;
@@ -559,8 +566,25 @@ fn settle_finished(
     slot: &ReviewSlot,
     finished: JobResult,
 ) -> Result<serde_json::Value, Failure> {
+    let id = Path::new(&slot.dir)
+        .file_name()
+        .map(|id| id.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let bytes = match finished {
-        JobResult::Answer(bytes) => bytes,
+        JobResult::Answer { bytes, token } => {
+            let expected = store.job_token(&id)?;
+            if !crate::reviewer::job::bound_to(token.as_deref(), expected.as_deref()) {
+                store.settle_pull_review_slot(&held.epoch, &slot.name, "abandoned", None)?;
+                return Ok(serde_json::json!({
+                    "name": slot.name,
+                    "state": "abandoned",
+                    "detail": "the result in this reviewer's directory does not carry the token \
+                               its launch minted, so it was not written by the runner that launch \
+                               started",
+                }));
+            }
+            bytes
+        }
         JobResult::Refused(refusal) => {
             store.settle_pull_review_slot(&held.epoch, &slot.name, "abandoned", None)?;
             return Ok(serde_json::json!({

@@ -307,7 +307,7 @@ fn wait_for(renderer: &Renderer, job: &mut Job<'_>) -> Result<Vec<u8>, Failure> 
             failed(failure.detail())
         })?;
         match status {
-            JobStatus::Finished(JobResult::Answer(bytes)) => return Ok(bytes),
+            JobStatus::Finished(JobResult::Answer { bytes, .. }) => return Ok(bytes),
             JobStatus::Finished(JobResult::Refused(refusal)) => {
                 return Err(failed(format!(
                     "the rendering job refused as {}: {}",

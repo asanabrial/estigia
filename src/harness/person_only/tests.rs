@@ -212,6 +212,7 @@ fn the_push_guard_denies_it_too() {
         &[],
         crate::harness::guard::Readings {
             literal,
+            text: None,
             same_tier_fragments: &observed.same_tier_fragments,
             write_targets: &observed.write_targets,
         },
@@ -259,6 +260,7 @@ fn an_argv_payload_with_no_literal_command_is_denied_everywhere() {
         &[],
         crate::harness::guard::Readings {
             literal: None,
+            text: None,
             same_tier_fragments: &command.same_tier_fragments,
             write_targets: &command.write_targets,
         },
@@ -326,6 +328,7 @@ fn a_stand_down_beside_a_disarm_fragment_or_a_boundary_is_still_denied() {
             &[],
             crate::harness::guard::Readings {
                 literal,
+                text: None,
                 same_tier_fragments: &command.same_tier_fragments,
                 write_targets: &command.write_targets,
             },
@@ -380,6 +383,7 @@ fn a_stand_down_does_not_lift_its_own_deny_but_still_lifts_another() {
         &[],
         crate::harness::guard::Readings {
             literal,
+            text: None,
             same_tier_fragments: &command.same_tier_fragments,
             write_targets: &command.write_targets,
         },
@@ -461,6 +465,7 @@ fn denied_by_every_road_with(
         &[],
         crate::harness::guard::Readings {
             literal,
+            text: None,
             same_tier_fragments: &command.same_tier_fragments,
             write_targets: &command.write_targets,
         },

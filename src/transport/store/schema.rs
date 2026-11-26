@@ -365,4 +365,12 @@ pub(super) const MIGRATIONS: &[&str] = &[
         at INTEGER NOT NULL
     );
     ",
+    "
+    CREATE TABLE job_tokens (
+        id TEXT PRIMARY KEY,
+        token TEXT NOT NULL,
+        at INTEGER NOT NULL
+    );
+    CREATE INDEX job_tokens_at ON job_tokens (at);
+    ",
 ];

@@ -155,6 +155,16 @@ pub enum Established<T> {
     },
 }
 
+impl Established<String> {
+    /// The value when the gate read one, and `None` when it did not.
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::Known(text) => Some(text),
+            Self::Unestablished { .. } => None,
+        }
+    }
+}
+
 /// What the gate read out of one shell command, whether or not it matched
 /// anything — the reading behind a boundary refusal, so a wrong stated cause
 /// can be checked against what was actually parsed rather than trusted.

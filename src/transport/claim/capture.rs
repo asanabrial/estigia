@@ -1242,7 +1242,8 @@ pub(super) fn launch_with(
         let _ = std::fs::remove_dir_all(&dir);
         return Err(already_running(&holder));
     }
-    let pid = match spawner.start(&dir) {
+    let token = ledger.mint_job_token(&id, started_at)?;
+    let pid = match spawner.start_with(&dir, &token) {
         Ok(pid) => pid,
         Err(failure) => {
             ledger.transact(|tx| tx.compare_and_set_state(&id, "running", "abandoned"))?;
@@ -1274,6 +1275,29 @@ fn lens_findings(
     answer["findings_recorded"] = found.len().into();
     answer["findings"] = found.iter().map(super::ReviewFinding::brief).collect();
     Ok(())
+}
+
+/// Refuses a result that does not carry the token this launch minted for the
+/// job, so a file written beside it by a plain tool is not read as the runner's
+/// answer. A job no launch of this binary recorded a token for — a rendering
+/// job, or one an older binary started — is read as it always was.
+pub(super) fn bound_to_its_runner(
+    ledger: &Ledger,
+    id: &str,
+    named: Option<&str>,
+) -> Result<(), Failure> {
+    let expected = ledger.job_token(id)?;
+    if crate::reviewer::job::bound_to(named, expected.as_deref()) {
+        return Ok(());
+    }
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "capture-result-unbound",
+        "job": id,
+        "action": "the result in this job's directory does not carry the token its launch minted, \
+                   so it was not written by the runner that launch started; leave it unread and \
+                   launch the reviewer again",
+    })))
 }
 
 fn same_receipt(current: &ReviewTransaction, job: &Job) -> bool {
@@ -1374,7 +1398,8 @@ pub(super) fn collect_with(
                 leave(&ledger, &job, &job.state, "abandoned")?;
                 return Err(recorded_failure(&refusal));
             }
-            JobStatus::Finished(JobResult::Answer(bytes)) => {
+            JobStatus::Finished(JobResult::Answer { bytes, token }) => {
+                bound_to_its_runner(&ledger, &job.id, token.as_deref())?;
                 return admit(context, input, &ledger, &job, role, &receipt, &bytes);
             }
         }

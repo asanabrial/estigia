@@ -10,6 +10,19 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   surface it lands on (`a_write_that_lands_on_a_persons_record_is_that_record`). Still open: a **hard
   link** to a surface is not resolved, a link created between the classification and the write is not
   seen, and a landing `placed` declines is read as ordinary, so the spelling decides it.
+- **The state directory is refused for every run, claimed or not, and only the roads it cannot place
+  remain.** A write tool whose target or resolved landing is under `<home>/.estigia`, and a shell line
+  that writes a file and names it, are refused `state-directory-is-for-the-binary` before any
+  stand-down, claim or operation window is consulted
+  (`a_write_under_the_state_directory_is_refused_whether_or_not_the_run_holds_an_issue`). The store, the
+  job directories and the run pointers are read back as claims, admissions and receipts, so no oath
+  covers writing them. The matcher also refuses a repository's own `.estigia/` segment, which is a false
+  positive in the direction of the boundary. Reads stay free. **Not proven:** the landing is
+  `paths::placed`, so a hard link is not resolved and a link created between classification and the
+  write is not seen; and a writer that names no path the reader can place reaches the directory with
+  nothing refused — `sqlite3 ~/.estigia/state.db`, an interpreter handed code (including `bash -lc
+  "…"`, whose combined flag `shell::carries_code` does not take for code), and a wrapper script are all
+  in that set.
 - **Estigia cannot make a person decide or start a turn.** For a human adjudication that is not a
   routine wait on the ordinary review, CI, identity, and delivery-permission gates it can preserve
   the built branch, PR, receipt, checks, and evidence, and record `blocked` with the exact decision

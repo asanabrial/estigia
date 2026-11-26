@@ -300,6 +300,21 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `admitting` in one `BEGIN IMMEDIATE` transaction and ends `admitted`. Operation ids are the same on
   every attempt and the validator's attempt is frozen at launch, so a job a crash left `admitting` is
   admitted again without a second result. Liveness is the lock and the file, never the process id.
+  **A result is the runner's only if its lock has been released and it carries the launch's token.**
+  `job::job_status_with` reads the lock first, so a `result.json` written beside a running job answers
+  `Running` rather than an answer, and `check_job::status` is the same function. A launch mints a
+  32-byte token in `job_tokens`, hands it to its runner in `ESTIGIA_JOB_TOKEN`, and the collector
+  compares the token the result carries with the store's, refusing `capture-result-unbound` a result
+  that does not match; a job no launch of this binary recorded a token for — a rendering job, or one an
+  older binary started — is read as before. A job directory written again — a job id that recurs, as a
+  resumed claim's does — is cleared first: `write_job` deletes the previous attempt's `result.json`,
+  `started`, `usage.json` and `relayed` marker, so the new launch cannot read the dead attempt's answer
+  as its own, and `check_job::write_job` does the same for a checks job. **Not proven:** the token is
+  stored in the clear, so a
+  reader who can open `state.db` with `sqlite3` can read it and forge a result; the relay road
+  (`review admit`) hands the answer over directly rather than through a result file, and a job directory
+  whose `lock` was never created is read from its result alone; and nothing here authenticates the
+  model that wrote the answer.
   **Not proven:** a `lost` job says the runner is gone, not why (nothing reads `runner.err`); a runner
   killed after the answer and before the rename reads as lost; a runner alive a minute past its
   deadline has its group killed by the collect that finds it, but on Unix only the runner's group —

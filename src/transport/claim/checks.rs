@@ -429,7 +429,7 @@ pub fn run_checks(
 pub(super) fn run_checks_with(
     context: &Context,
     request: &RunChecks<'_>,
-    spawn: &dyn Fn(&Path) -> Result<u32, Failure>,
+    spawn: &dyn Fn(&Path, &str) -> Result<u32, Failure>,
 ) -> Result<serde_json::Value, Failure> {
     let began = Instant::now();
     let patience = patience_for(request.wait_seconds);
@@ -487,7 +487,10 @@ pub(super) fn run_checks_with(
     if status == JobStatus::Lost {
         let _ = std::fs::remove_dir_all(&dir);
         check_job::write_job(&dir, tree, &digest, &commands, &checks)?;
-        if let Err(failure) = spawn(&dir) {
+        let clock = crate::harness::session::now_seconds()
+            .ok_or_else(|| Failure::Read("the clock is unreadable".to_owned()))?;
+        let token = ledger.mint_job_token(&id, clock)?;
+        if let Err(failure) = spawn(&dir, &token) {
             let _ = std::fs::remove_dir_all(&dir);
             return Err(failure);
         }
@@ -496,6 +499,7 @@ pub(super) fn run_checks_with(
     loop {
         match status {
             JobStatus::Finished(outcome) => {
+                super::capture::bound_to_its_runner(&ledger, &id, outcome.token.as_deref())?;
                 return collected(
                     context,
                     base,

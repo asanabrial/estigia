@@ -82,6 +82,9 @@ fn inventory() -> Vec<Refusal> {
             )),
         ),
         crate::harness::unclaimed::not_claimed(false),
+        crate::harness::state_directory::refusal(std::path::Path::new(
+            "/home/someone/.estigia",
+        )),
         crate::harness::decision_mode::refusal(&[], true),
         crate::harness::issue_creation::refusal(Some("gh issue create"))
             .expect("a line that files an issue is refused"),

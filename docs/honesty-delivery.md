@@ -297,14 +297,17 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   horizon and target, answered `already-yours`, not `reclaim-metadata-mismatch`. Reaching the latter
   requires a discarded marker still targeting the current `from-op`; no writer produces it. No test
   demonstrates that hypothetical retry.
-- **A person's hand-over confirmation is protected by the shell match and by nothing else.** `estigia
-  hand-over` is refused to an agent's shell line by `harness::person_only`
-  (`hand-over-is-for-a-person`), but what it writes is a `hand-over` row in the local store, and no rule
-  reads a direct write to `~/.estigia/state.db` — through `sqlite3`, a script or a file tool — as a
-  different act. The confirmation keeps out an agent that stays inside its tools, which is the standing
-  the claim markers themselves have; it is not evidence that a person ran anything. What the store does
-  bind is exact: the marker names the run taking the issue and the epoch it displaces, so a
-  confirmation for another run, or for an epoch that has moved, matches nothing (`plan_takeover`).
+- **A person's hand-over confirmation is protected by the shell match and by the state directory.**
+  `estigia hand-over` is refused to an agent's shell line by `harness::person_only`
+  (`hand-over-is-for-a-person`), and a write tool whose target or resolved landing is under
+  `~/.estigia` is refused `state-directory-is-for-the-binary` for every run, claimed or not, so a plain
+  file tool no longer reaches the row. What it writes is still a `hand-over` row in the local store,
+  and a writer that names no path the gate can place — `sqlite3`, a script, an interpreter handed code
+  — reaches it with nothing refused. The confirmation keeps out an agent that stays inside its tools,
+  which is the standing the claim markers themselves have; it is not evidence that a person ran
+  anything. What the store does bind is exact: the marker names the run taking the issue and the epoch
+  it displaces, so a confirmation for another run, or for an epoch that has moved, matches nothing
+  (`plan_takeover`).
 - **The gate's wait on the transport is bounded at fifteen minutes, and what comes back is `Unknown`.**
   `Command::output` returns when the child does, and the transport bounds only *some* of its own `gh`
   calls, so a call without a timeout held the gate open as long as the socket stayed open (a `cargo test`

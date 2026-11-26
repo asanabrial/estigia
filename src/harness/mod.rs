@@ -67,6 +67,7 @@ pub mod roles;
 pub mod session;
 pub mod shell;
 pub mod standdown;
+pub mod state_directory;
 pub(crate) mod status;
 pub(crate) mod text_edit;
 pub mod tracker;
@@ -3632,6 +3633,9 @@ pub fn gate(context: &GateContext, run: &mut Run, action: &Action, how: Sensitiv
     if let Some(denied) = person_only::deny(action) {
         return denied;
     }
+    if let Some(denied) = state_directory::deny(context, action, state_directory::Seen::default()) {
+        return denied;
+    }
     let now = session::now_seconds();
     standdown::over(
         decide(context, run, action, how),
@@ -3650,6 +3654,18 @@ pub fn gate_observing(
     observed: &Observed,
 ) -> Decision {
     if let Some(Decision::Deny(refusal)) = person_only::deny(action) {
+        let subject = action.subject().unwrap_or_default();
+        return Decision::Deny(Box::new(prefixed(*refusal, &subject, observed)));
+    }
+    let seen = match observed.command.as_ref() {
+        Some(command) => state_directory::Seen {
+            literal: command.literal.text(),
+            text: command.against.text(),
+            write_targets: &command.write_targets,
+        },
+        None => state_directory::Seen::default(),
+    };
+    if let Some(Decision::Deny(refusal)) = state_directory::deny(context, action, seen) {
         let subject = action.subject().unwrap_or_default();
         return Decision::Deny(Box::new(prefixed(*refusal, &subject, observed)));
     }
