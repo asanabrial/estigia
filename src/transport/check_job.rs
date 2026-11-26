@@ -296,7 +296,7 @@ pub(crate) fn run_within(dir: &Path, deadline: Duration) -> Result<(), Refusal> 
 
 /// [`run`] with the token its launcher minted, for a runner a test drives
 /// without an environment of its own.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn run_with_token(dir: &Path, token: Option<&str>) -> Result<(), Refusal> {
     run_token_within(dir, DEADLINE, token)
 }
