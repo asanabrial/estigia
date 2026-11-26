@@ -10640,6 +10640,22 @@ pub fn ci_release_recorded(
     ))
 }
 
+/// Whether the verdict on exactly this receipt still clears under the live
+/// ledger: the recomputation `release_ci` performs, asked again without
+/// writing.
+///
+/// A release record says the verdict cleared when it was taken; a finding
+/// recorded after it makes that record stale without erasing it, so a merge
+/// that reads only the record merges bytes whose approval was withdrawn.
+pub fn clearance_holds(
+    context: &Context,
+    issue: u64,
+    receipt: &ReviewTransaction,
+) -> Result<(), Failure> {
+    let comments = Ledger::read_timeline_of(context, issue)?;
+    release_basis(context, &comments, receipt, None).map(|_| ())
+}
+
 /// What a run does once `release_ci` has marked the pull request ready: the
 /// publication lane read for the head, and the step that follows it. `merge`
 /// only where the lane says no CI can run; `ci_status` for every other

@@ -11,11 +11,21 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `review_status` and the claim's restoration of a receipt, which accept a clean advance (next entry),
   so a base that moves *between* that ready check and this merge attempt is not seen at this boundary.
   It does not measure anything after the read: a push landing on the PR between the read and the merge
-  is refused by GitHub itself only when the merge call carries `--match-head-commit <head-sha>`, which
-  `skill/bindings/github/delivery.md` prescribes and this gate does not verify was used. It does not
+  is refused by GitHub itself only because the merge call carries `--match-head-commit <head-sha>`, and
+  the gate now refuses a `gh pr merge` line that does not spell it. What that does not reach is the
+  shell reader's own misses: a line the classifier does not read as one literal `gh pr merge` — a
+  quoted, expanded or chained form, a `--repo` naming another repository — refuses under
+  `delivery-pr-unidentified` or `delivery-pr-repository-option` rather than passing, and a line the
+  reader never matches as a delivery is not watched by this check at all. It does not
   resolve which repository `gh` would ask: an unrelated clone is refused on `same_repository` (whether
   the covered checkout and this one share a Git common directory), never on what `gh pr view` would
   have answered for it.
+- **A merge recomputes the verdict at the line, over the store as it stands then.** `clearance_holds`
+  asks the same `release_basis` `release_ci` asked, so a finding, a correction or a tier change recorded
+  after the release refuses the merge instead of being delivered. It does not make the merge atomic
+  with the read: a finding recorded between the recomputation and the `gh` call is merged. The
+  recomputation reads the checkout named by the gate (not `release_ci`'s `worktree`), so a change whose
+  base and head are not in that checkout refuses rather than clears.
 - **A base that advanced cleanly keeps the receipt live, and a semantic conflict between two
   independently green changes is not tested before the merge.** Issue #44, operator decision
   2026-10-13. A receipt stays live for the merge, in `review_status` and in the claim's restoration of

@@ -2545,7 +2545,15 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
     // the gate either way, and returning green says it did.
     let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
-    let head = rig.head.clone();
+    // A real range under the receipt, so the verdict a merge recomputes can be
+    // read from the checkout the pointer names.
+    let base = rig.head.clone();
+    std::fs::write(repo.join("notes.md"), "A line of prose.\n").expect("a prose file");
+    let _ = checked_git(repo, &["add", "notes.md"]);
+    let _ = checked_git(repo, &["commit", "--quiet", "-m", "reviewed"]);
+    let head = checked_git_stdout(repo, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
 
     let pointer = |state: &str, reviewed: &str| {
         let run = serde_json::json!({
@@ -2559,7 +2567,7 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
                 "epoch": "a".repeat(32),
                 "pr": 12,
                 "head": reviewed,
-                "base": "b".repeat(40),
+                "base": base,
                 "digest": "c".repeat(64),
             },
             "reviewed_head": serde_json::Value::Null,
@@ -2577,9 +2585,11 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
         pointer(state, reviewed);
         let answers = serde_json::to_string(&serde_json::json!([
             pr_view_entry(12, &head),
-            released_issue_view_entry(state, &"a".repeat(32), reviewed),
+            released_issue_view_entry(state, &"a".repeat(32), reviewed, &base),
         ]))
         .expect("the script serialises");
+        let input =
+            format!(r#"{{"command":"gh pr merge 12 --merge --match-head-commit {reviewed}"}}"#);
         let (out, err, _) = run_with_tracker(
             home,
             repo,
@@ -2591,7 +2601,7 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
                 "--run-id",
                 "claude-abcd1234",
                 "--input",
-                r#"{"command":"gh pr merge 12"}"#,
+                &input,
             ],
             "",
         );
@@ -2599,7 +2609,7 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
     };
 
     // A verdict published against bytes that have since moved.
-    let stale = merge("review", &"0".repeat(40));
+    let stale = merge("review", &"f".repeat(40));
     assert!(
         stale.contains("verdict-bound-to-other-bytes"),
         "the gate delivered on a review of other bytes: {stale}"
@@ -2747,6 +2757,15 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
         added.status.success(),
         "the reviewed worktree was not created"
     );
+    std::fs::write(reviewed_checkout.join("notes.md"), "A line of prose.\n")
+        .expect("a prose file in the reviewed worktree");
+    let staged = Command::new("git")
+        .arg("-C")
+        .arg(&reviewed_checkout)
+        .args(["add", "notes.md"])
+        .output()
+        .expect("git stages the prose file");
+    assert!(staged.status.success(), "the prose file was not staged");
     let committed = Command::new("git")
         .arg("-C")
         .arg(&reviewed_checkout)
@@ -2756,7 +2775,6 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
             "-c",
             "user.name=nobody",
             "commit",
-            "--allow-empty",
             "--quiet",
             "-m",
             "reviewed",
@@ -2780,6 +2798,7 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
     // here as this worktree's real head — never by the invoking checkout's
     // own `HEAD`. `reviewed_head` below varies the receipt (or the legacy
     // `reviewed_head` field), not the checkout.
+    let base = rig.head.clone();
     let merge = |reviewed_head: &str, receipt_pr: Option<u64>, command_pr: u64, named: bool| {
         let pointer = serde_json::json!({
             "run_id": "claude-abcd1234",
@@ -2792,7 +2811,7 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
                 "epoch": "a".repeat(32),
                 "pr": pr,
                 "head": reviewed_head,
-                "base": "b".repeat(40),
+                "base": base,
                 "digest": "c".repeat(64),
             })),
             "reviewed_head": receipt_pr.is_none().then_some(reviewed_head),
@@ -2808,11 +2827,13 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
         if named {
             arguments.extend(["--run-id", "claude-abcd1234"]);
         }
-        let input = format!(r#"{{"command":"gh pr merge {command_pr}"}}"#);
+        let input = format!(
+            r#"{{"command":"gh pr merge {command_pr} --merge --match-head-commit {reviewed_head}"}}"#
+        );
         arguments.extend(["--input", &input]);
         let answers = serde_json::to_string(&serde_json::json!([
             pr_view_entry(command_pr, &reviewed),
-            released_issue_view_entry("review", &"a".repeat(32), reviewed_head),
+            released_issue_view_entry("review", &"a".repeat(32), reviewed_head, &base),
         ]))
         .expect("the script serialises");
         let (out, err, _) =

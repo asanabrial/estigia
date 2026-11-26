@@ -370,6 +370,9 @@ const REFUSED: &[&str] = &[
     "linear-team-mismatch",
     "loop-not-writable",
     "malformed-argument",
+    "merge-head-not-bound",
+    "merge-method-not-a-merge-commit",
+    "merge-option-not-admitted",
     "merge-strategy-retired",
     "merge-without-ci-release",
     "message-answer-late",
@@ -618,7 +621,10 @@ mod tests {
     use super::*;
     use crate::harness::tracker::TRANSPORT_VOCABULARY;
 
-    const GATE_CODES: [&str; 10] = [
+    const GATE_CODES: [&str; 13] = [
+        "merge-head-not-bound",
+        "merge-method-not-a-merge-commit",
+        "merge-option-not-admitted",
         "merge-without-ci-release",
         "delivery-pr-unidentified",
         "delivery-pr-repository-option",
