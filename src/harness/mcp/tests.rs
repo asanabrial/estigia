@@ -2063,6 +2063,58 @@ fn a_boolean_goes_out_as_a_bare_flag_or_not_at_all() {
     );
 }
 
+/// A `claim` that also starts a checkout carries the state it believes the
+/// issue is in, because the checkout's claim check has to expect that state.
+/// The state stays pointer-only (it is not a transition), so it travels as
+/// `--expect-state`; a `transition_to` already moves the issue and owns the
+/// expected state itself.
+#[test]
+fn a_claim_that_starts_a_checkout_carries_the_state_it_expects() {
+    let tool = tools::find("claim").expect("a declared tool");
+    let flags = super::flags_for(
+        tool,
+        &json!({
+            "issue": 12,
+            "run_id": "claude-abcd1234",
+            "horizon": "2099-01-01T00:00Z",
+            "branch": "fix/12",
+            "base": "main",
+            "state": "review",
+        }),
+    )
+    .expect("well formed");
+    assert!(
+        flags
+            .windows(2)
+            .any(|pair| pair == ["--expect-state", "review"]),
+        "the state this run believes the issue is in never reached the checkout: {flags:?}"
+    );
+    assert!(
+        !flags.contains(&"--state".to_owned()),
+        "a pointer field was sent as a transport flag: {flags:?}"
+    );
+
+    let transitioned = super::flags_for(
+        tool,
+        &json!({
+            "issue": 12,
+            "run_id": "claude-abcd1234",
+            "horizon": "2099-01-01T00:00Z",
+            "branch": "fix/12",
+            "base": "main",
+            "state": "review",
+            "transition_to": "in-progress",
+        }),
+    )
+    .expect("well formed");
+    assert!(
+        !transitioned
+            .windows(2)
+            .any(|pair| pair[0] == "--expect-state"),
+        "a merging transition also sent an expected state: {transitioned:?}"
+    );
+}
+
 /// The `task` tool's `compact` argument reaches the transport as the bare
 /// `--compact` flag, and declining it sends nothing, so an optimized client
 /// selects the compact answer through the schema rather than a private call.

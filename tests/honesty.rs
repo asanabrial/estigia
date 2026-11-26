@@ -2474,7 +2474,6 @@ const UNDOCUMENTED_REFUSALS: &[&str] = &[
     "no-worktree-location",
     "not-current-live-holder",
     "nothing-to-reclaim",
-    "nothing-to-unassign",
     "ownership-changed-projections-repaired",
     "ownership-kept-changing-before-projection",
     "read-failed",

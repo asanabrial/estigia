@@ -516,6 +516,17 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
             }
         };
         if tools::is_pointer_only(tool.name, argument.name) {
+            // The pointer records the state this run believes the issue is in.
+            // `claim` also starts a checkout, whose claim check needs that
+            // state; without it the start demands `in-progress` of an issue
+            // sitting in `review` and refuses under an `ok` claim.
+            if tool.operation == "claim"
+                && argument.name == "state"
+                && arguments.get("transition_to").is_none()
+            {
+                flags.push("--expect-state".to_owned());
+                flags.push(rendered.clone());
+            }
             continue;
         }
         flags.push(argument.as_flag());

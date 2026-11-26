@@ -677,6 +677,34 @@ fn a_daylight_saving_change_moves_the_instant_not_the_local_minute() {
     assert_eq!(spring_forward(local(6, 8, 0)), utc_clock(local(6, 9, 0)));
 }
 
+/// Europe/Madrid, 2027-03-28: the permitted local half-hour falls inside the
+/// hour the clock skips. A forward walk measured in minutes of local time
+/// lands on an instant outside the window; the last local minute is the next
+/// day's.
+#[test]
+fn a_window_inside_the_skipped_hour_opens_when_the_local_minute_next_occurs() {
+    // Instants before 01:00Z are UTC+1; after it are UTC+2. 02:00-02:30 local
+    // never happens on the 28th.
+    let switch = local(6, 1, 0);
+    let madrid = |at: i64| {
+        let offset = if at < switch { 3_600 } else { 7_200 };
+        Some(((at + offset - MONDAY).div_euclid(60)).rem_euclid(7 * 1440) as u16)
+    };
+    let schedule = window("enabled 02:00-02:30");
+    let opening =
+        next_opening_at(&schedule, local(6, 0, 30), madrid).expect("the window opens the next day");
+    assert!(
+        madrid(opening).is_some_and(|minute| schedule.permits(minute)),
+        "the instant answered is not permitted: {}",
+        madrid(opening).unwrap_or_default()
+    );
+    assert_eq!(
+        opening,
+        local(7, 0, 0),
+        "the next permitted instant is 00:00Z on the 29th, the 02:00 local half-hour"
+    );
+}
+
 #[test]
 fn no_opening_is_named_when_the_window_is_open_or_not_enabled() {
     assert_eq!(

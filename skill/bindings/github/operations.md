@@ -93,8 +93,10 @@ the instruction is `send_message` addressed as `runtime:<name>` with `repo_dir`.
 
 ## Publishing a review target
 
-requires a clean target. It **reuses** the single open PR or creates one and refuses on more than
-one. A reused ready PR is converted to draft and draft readback is confirmed **before push**; a new
+requires a clean target. It **reuses** the single open pull request whose head is this
+repository's branch, or creates one; a pull request opened from a fork under the same branch
+name is not a candidate, whatever its head commit, and two of this repository's refuse
+`ambiguous-open-prs` naming both. A reused ready PR is converted to draft and draft readback is confirmed **before push**; a new
 PR is created with `--draft` after its CI-silent topic push. Reused title/body are refreshed.
 Readback must confirm draft plus exact head/base. The published marker and answer bind a fresh
 epoch, PR, head, base, and complete path/mode/blob manifest digest; every republish creates a new
@@ -632,9 +634,11 @@ fold the close in. A held run may omit a record's receipt fields; the tool fills
 review transaction and keeps any the record names. The close folds in, in the order the store allows: each spend record while the issue is in `review`,
 `done` (from `review` only), the evidence note, the release. A bad spend refuses before any write. A stop after a
 write landed is not a refusal: the answer carries `close_incomplete` (`step`, `failure`) beside what
-landed and the claim is still held: repeat with the same `spend` (it replays), and without
-`evidence_file` once `evidence` landed. Call it from `review`; after `done` a new spend is
-`unexpected-state`.
+landed and the claim is still held: repeat the same call with the same operation id. The release
+is answered from its own `unassign` marker, so a projection that failed after the marker landed
+completes instead of answering `nothing-to-unassign`, a spend record replays from its marker, and
+the steps before the marker are skipped once it exists. Call it from `review`; after `done` a new
+spend is `unexpected-state`.
 
 ## Delivering in one call
 

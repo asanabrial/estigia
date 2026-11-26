@@ -682,7 +682,12 @@ fn merged_release(
     for record in &spends {
         super::claim::check_spend_receipt(&ledger, &record.review(issue, run_id, now))?;
     }
-    super::claim::check_release_epoch(&ledger, departure)?;
+    if super::claim::check_release_epoch(&ledger, departure)? {
+        // Everything before the marker landed on the first attempt, in the
+        // order that put the marker last. Replaying the steps would re-post the
+        // evidence; resuming from the marker is the release the first call did.
+        return super::claim::unassign_on(context, &ledger, departure);
+    }
 
     let mut done = serde_json::Map::new();
     let mut landed = false;
@@ -772,6 +777,19 @@ pub fn dispatch(
             run_operation(context, operation, flags, now)
         })
     })
+}
+
+/// The state the checkout a `claim` starts has to find the issue in.
+///
+/// A merging `--transition-to` moves the issue, so it names the state; otherwise
+/// the state is the one the caller believes the issue is in, which the tool
+/// server sends as `--expect-state` because it is pointer-only. `in-progress` is
+/// the floor a call naming neither gets.
+fn checkout_expect_state<'a>(flags: &'a Flags<'_>) -> &'a str {
+    flags
+        .get("transition-to")
+        .or_else(|| flags.get("expect-state"))
+        .unwrap_or("in-progress")
 }
 
 /// `review-stages` for an autonomous run: the flags the harness sends beside `--published-pr`
@@ -1179,9 +1197,13 @@ fn run_operation(
                 let answer = match f.get("transition-to") {
                     Some(to) => {
                         super::claim::claim_checks(&acquisition)?;
+                        // The state is the caller's to name and the store's to
+                        // accept, so it is refused before a claim event exists:
+                        // after one, the same refusal would report that nothing
+                        // was written when the claim had landed.
+                        super::commands::require_state(to)?;
                         let ledger = super::store::Ledger::open(context, issue, now)?;
                         let answer = super::claim::claim_on(context, &ledger, &acquisition)?;
-                        super::commands::require_state(to)?;
                         let moved =
                             super::commands::transition_on(context, &ledger, issue, to, None, now)?;
                         let mut answer = merged_step(answer, "transition", moved);
@@ -1205,7 +1227,7 @@ fn run_operation(
                             run_id: acquisition.run_id,
                             worktree_root: f.get("worktree-root"),
                             repo_name: &repo_name,
-                            expect_state: f.get("transition-to").unwrap_or("in-progress"),
+                            expect_state: checkout_expect_state(&f),
                             link: !f.on("no-link"),
                             now,
                         },
