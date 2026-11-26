@@ -306,7 +306,11 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   32-byte token in `job_tokens`, hands it to its runner in `ESTIGIA_JOB_TOKEN`, and the collector
   compares the token the result carries with the store's, refusing `capture-result-unbound` a result
   that does not match; a job no launch of this binary recorded a token for — a rendering job, or one an
-  older binary started — is read as before. **Not proven:** the token is stored in the clear, so a
+  older binary started — is read as before. A job directory written again — a job id that recurs, as a
+  resumed claim's does — is cleared first: `write_job` deletes the previous attempt's `result.json`,
+  `started`, `usage.json` and `relayed` marker, so the new launch cannot read the dead attempt's answer
+  as its own, and `check_job::write_job` does the same for a checks job. **Not proven:** the token is
+  stored in the clear, so a
   reader who can open `state.db` with `sqlite3` can read it and forge a result; the relay road
   (`review admit`) hands the answer over directly rather than through a result file, and a job directory
   whose `lock` was never created is read from its result alone; and nothing here authenticates the

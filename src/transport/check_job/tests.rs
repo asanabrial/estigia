@@ -164,3 +164,23 @@ fn a_manifest_the_runner_cannot_read_leaves_no_result() {
     };
     assert_eq!(found, JobStatus::Lost);
 }
+
+#[test]
+fn a_check_job_written_again_does_not_keep_the_previous_attempts_result() {
+    let tree = tempfile::tempdir().expect("a tree");
+    let root = tempfile::tempdir().expect("a directory");
+    let dir = root.path().join("job");
+    write_job(&dir, tree.path(), &"d".repeat(64), &"c".repeat(64), &[])
+        .expect("the job is written");
+    std::fs::write(dir.join(job::RESULT), "{\"checks\":[]}").expect("a result");
+    std::fs::write(dir.join(job::STARTED), "").expect("a started marker");
+
+    write_job(&dir, tree.path(), &"d".repeat(64), &"c".repeat(64), &[]).expect("written again");
+
+    for left in [job::RESULT, job::STARTED] {
+        assert!(
+            !dir.join(left).exists(),
+            "`{left}` from the previous attempt outlived the rewrite"
+        );
+    }
+}

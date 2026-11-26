@@ -35,7 +35,7 @@ pub const TOKEN_VAR: &str = "ESTIGIA_JOB_TOKEN";
 const MANIFEST: &str = "manifest.json";
 const PROMPT: &str = "prompt.bin";
 const LOCK: &str = "lock";
-const STARTED: &str = "started";
+pub(crate) const STARTED: &str = "started";
 pub(crate) const RESULT: &str = "result.json";
 const USAGE: &str = "usage.json";
 const RUNNER_OUT: &str = "runner.out";
@@ -169,7 +169,7 @@ impl Detached {
 /// `estigia review admit` records the answer the host hands back.
 pub struct Relayed;
 
-const RELAYED: &str = "relayed";
+pub(crate) const RELAYED: &str = "relayed";
 
 /// Marks `dir` as a job the host runs: no runner holds its lock, so it is
 /// waiting rather than lost until its answer is recorded or its deadline passes.
@@ -221,6 +221,7 @@ pub(crate) fn refused(message: String) -> Refusal {
 /// last and atomically, so a runner never reads half of one.
 pub fn write_job(dir: &Path, invocation: &Invocation) -> Result<(), Failure> {
     std::fs::create_dir_all(dir).map_err(|e| unwritten("create a review job directory", e))?;
+    clear_previous_attempt(dir)?;
     replace_bytes_atomically(&dir.join(PROMPT), &invocation.prompt)
         .map_err(|e| unwritten("write a review job prompt", e))?;
     let receipt = &invocation.receipt;
@@ -239,6 +240,19 @@ pub fn write_job(dir: &Path, invocation: &Invocation) -> Result<(), Failure> {
     });
     replace_atomically(&dir.join(MANIFEST), &manifest.to_string())
         .map_err(|e| unwritten("write a review job manifest", e))
+}
+
+/// Deletes what an earlier attempt at the same job directory left, so a reader
+/// of the new attempt can never take the old answer for its own.
+pub(crate) fn clear_previous_attempt(dir: &Path) -> Result<(), Failure> {
+    for name in [RESULT, STARTED, USAGE, RELAYED] {
+        match std::fs::remove_file(dir.join(name)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(unwritten("clear a previous review job attempt", e)),
+        }
+    }
+    Ok(())
 }
 
 fn text<'a>(value: &'a serde_json::Value, key: &str) -> Result<&'a str, Refusal> {

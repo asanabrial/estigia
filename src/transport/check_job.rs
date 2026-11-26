@@ -81,6 +81,7 @@ pub fn write_job(
     checks: &[Check],
 ) -> Result<(), Failure> {
     std::fs::create_dir_all(dir).map_err(|e| unwritten("create a check job directory", e))?;
+    job::clear_previous_attempt(dir)?;
     let manifest = serde_json::json!({
         "format": FORMAT,
         "worktree": worktree.display().to_string(),

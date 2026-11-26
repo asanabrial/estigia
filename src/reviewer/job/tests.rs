@@ -2,8 +2,8 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use super::{
-    FORMAT, JobResult, JobStatus, OnThread, RESULT, Spawner, USAGE, await_started, job_status,
-    read_usage, run, write_job,
+    FORMAT, JobResult, JobStatus, OnThread, RELAYED, RESULT, STARTED, Spawner, USAGE,
+    await_started, job_status, mark_relayed, read_usage, run, write_job,
 };
 use crate::outcome::Refusal;
 use crate::reviewer::{Adapter, Invocation, Receipt, Review, ReviewerCode, Usage};
@@ -504,4 +504,29 @@ fn the_reader_refuses_a_usage_artifact_whose_counters_are_empty() {
     );
     let error = read_usage(dir.path()).expect_err("an empty counter set is corrupt");
     assert!(error.detail().contains("no counters"), "{error:?}");
+}
+
+#[test]
+fn a_job_directory_written_again_does_not_keep_the_previous_attempts_answer() {
+    let (_root, dir) = prepared();
+    mark_relayed(&dir).expect("the job is marked relayed");
+    std::fs::write(dir.join(USAGE), "{}").expect("a usage artifact");
+    OnThread(echo).start(&dir).expect("the runner starts");
+    assert!(matches!(finished(&dir), JobResult::Answer { .. }));
+    for left in [RESULT, STARTED, USAGE, RELAYED] {
+        assert!(
+            dir.join(left).exists(),
+            "the first attempt left no `{left}`"
+        );
+    }
+
+    write_job(&dir, &invocation()).expect("the job is written again");
+
+    for left in [RESULT, STARTED, USAGE, RELAYED] {
+        assert!(
+            !dir.join(left).exists(),
+            "`{left}` from the previous attempt outlived the rewrite, so a reader of the new \
+             attempt would take it for this one's"
+        );
+    }
 }
