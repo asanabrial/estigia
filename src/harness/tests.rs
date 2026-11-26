@@ -150,6 +150,39 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
     assert!(matches!(array, Action::Boundary { pr: None, .. }));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_write_that_lands_on_a_persons_record_is_that_record() {
+    let root = tempfile::tempdir().expect("a root");
+    let state = root.path().join(".estigia");
+    std::fs::create_dir_all(&state).expect("a state directory");
+    std::fs::write(state.join("stand-down.json"), "{}").expect("the record");
+    let checkout = root.path().join("checkout");
+    std::fs::create_dir_all(&checkout).expect("a checkout");
+    std::os::unix::fs::symlink(&state, checkout.join("link")).expect("a link");
+
+    let mut targets = Vec::new();
+    for path in [
+        state.join("stand-down.json"),
+        checkout.join("link").join("stand-down.json"),
+    ] {
+        let (action, _) = classify("Write", &json!({ "file_path": path }));
+        let Action::Write { target } = action else {
+            panic!("a write to {path:?} is not a write: {action:?}");
+        };
+        assert_eq!(
+            target,
+            crate::harness::person_only::RECORD.target,
+            "a write to {path:?} is not classified as the person-only record"
+        );
+        targets.push(target);
+    }
+    assert_eq!(
+        targets[0], targets[1],
+        "a write landing on the record through a link is not read as the record"
+    );
+}
+
 #[test]
 fn powershell_is_read_as_the_shell_it_is() {
     for command in [
