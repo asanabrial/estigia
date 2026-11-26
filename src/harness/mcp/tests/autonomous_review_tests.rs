@@ -204,7 +204,13 @@ fn a_marker_for_another_run_or_a_worktree_on_another_branch_refuses_both_tools()
 
 #[test]
 fn another_open_pull_request_on_the_branch_is_not_the_receipts() {
-    for listed in [r#"[{"number":8}]"#, r#"[{"number":7},{"number":8}]"#, "[]"] {
+    for (listed, expected) in [
+        (r#"[{"number":8}]"#, "review-thread-pr-unconfined"),
+        // Two of this repository's pull requests are ambiguous, and naming
+        // both is the refusal publication and this path share.
+        (r#"[{"number":7},{"number":8}]"#, "ambiguous-open-prs"),
+        ("[]", "review-thread-pr-unconfined"),
+    ] {
         let held = held();
         let script = crate::test_env::answers(&[
             crate::test_env::live_holder_issue(RUN, 12, "review"),
@@ -220,7 +226,7 @@ fn another_open_pull_request_on_the_branch_is_not_the_receipts() {
         .expect_err(listed);
         assert_eq!(
             refusal_code(&failure),
-            Some("review-thread-pr-unconfined"),
+            Some(expected),
             "{listed}: {failure}"
         );
         let calls = std::fs::read_to_string(&log).unwrap_or_default();

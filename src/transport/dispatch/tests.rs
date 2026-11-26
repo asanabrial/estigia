@@ -789,6 +789,85 @@ fn start_branch_does_not_demand_a_repository_name_nobody_sends() {
     );
 }
 
+/// A closing release whose ownership projection failed after its marker
+/// landed is repeated and completes.
+///
+/// The marker is the release; the fold that decides ownership is what the
+/// marker removes, so planning again answers `nothing-to-unassign` about a
+/// release that happened. Before the marker was read first, this retry could
+/// never finish and the checkout was never put down.
+#[test]
+fn a_retried_closing_release_is_answered_from_its_own_marker() {
+    let root = tempfile::tempdir().expect("a context root");
+    let context = context(root.path());
+    let issue = 7u64;
+    let run_id = "claude-abcd1234";
+    let target = "a".repeat(32);
+    let operation = "b".repeat(32);
+    let marker = |kind: &str, fields: &[(&str, &str)]| {
+        crate::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let claim = marker(
+        "claim",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("horizon", "2099-01-01T00:00Z"),
+            ("op-id", &target),
+        ],
+    );
+    let unassign = marker(
+        "unassign",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("op-id", &operation),
+            ("target-op", &target),
+        ],
+    );
+    let payload = serde_json::json!({
+        "state": "OPEN",
+        "assignees": [],
+        "labels": [{ "name": "status:done" }],
+        "comments": [
+            {
+                "id": "IC_claim",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!("Claimed.\n\n{claim}\n"),
+            },
+            {
+                "id": "IC_release",
+                "createdAt": "2026-01-01T00:01:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!("Released.\n\n{unassign}\n"),
+            },
+        ],
+    });
+    let evidence = root.path().join("evidence.md");
+    std::fs::write(&evidence, "the delivery evidence\n").expect("an evidence file");
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(issue, payload)]);
+    let departure = crate::transport::claim::Departure {
+        issue,
+        run_id,
+        runtime: "claude",
+        operation_id: &operation,
+        target_operation: Some(&target),
+        held_by_other: false,
+        worktree: None,
+        now: "2026-01-01T00:05:00Z",
+    };
+    let answer = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        super::merged_release(&context, &departure, Some(&evidence), None)
+    })
+    .expect("the retry completes from the marker it already wrote");
+    assert_eq!(answer["ok"], serde_json::json!(true), "{answer}");
+    assert_eq!(answer["issue"], serde_json::json!(issue), "{answer}");
+}
+
 fn hand_call(operation: &str, extra: &[&str]) -> serde_json::Value {
     let root = tempfile::tempdir().expect("a scratch directory");
     let mut flags: Vec<String> = [
@@ -1379,6 +1458,68 @@ fn a_run_checks_wait_that_is_not_an_integer_is_refused_malformed() {
         .envelope();
     assert_eq!(refused["reason"], "malformed-argument", "{refused}");
     assert_eq!(refused["argument"], "--wait-seconds", "{refused}");
+}
+
+/// The expected state for a checkout started by `claim` is the state it moves
+/// to, else the state the caller believes the issue is in, and `in-progress`
+/// only when it named neither.
+#[test]
+fn a_started_checkout_expects_the_state_the_claim_named() {
+    let read = |flags: &[&str]| -> String {
+        let rendered: Vec<String> = flags.iter().map(|flag| (*flag).to_owned()).collect();
+        let parsed = Flags::read(&rendered);
+        super::checkout_expect_state(&parsed).to_owned()
+    };
+    assert_eq!(read(&["--expect-state", "review"]), "review");
+    assert_eq!(
+        read(&["--transition-to", "done", "--expect-state", "review"]),
+        "done",
+        "a merging transition did not decide the state the checkout lands in"
+    );
+    assert_eq!(read(&[]), "in-progress");
+}
+
+/// A `claim` naming a state the store cannot hold is refused before the
+/// tracker is read, so the answer's "nothing was written" is true: the check
+/// used to run after the claim event committed.
+#[test]
+fn a_claim_naming_an_unholdable_state_never_reaches_the_tracker() {
+    let root = tempfile::tempdir().expect("a context root");
+    let context = context(root.path());
+    let log = root.path().join("calls.log");
+    let flags: Vec<String> = [
+        "--issue",
+        "12",
+        "--run-id",
+        "claude-abcd1234",
+        "--horizon",
+        "2099-01-01T00:00Z",
+        "--runtime",
+        "claude",
+        "--operation-id",
+        &"a".repeat(32),
+        "--transition-to",
+        "nonsense",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    let bin = crate::test_env::scripted_gh();
+    // Any read of the tracker would fail, so reaching it is visible.
+    let script = crate::test_env::answers(&[crate::test_env::unreachable_tracker_answer()]);
+    let failure = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        super::dispatch(&context, "claim", &flags, "2026-01-01T00:00:00Z")
+            .expect_err("an unholdable state is not a claim that can run")
+    });
+    assert!(
+        failure.detail().contains("not a workflow state"),
+        "the refusal does not name the state it refused: {failure:?}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        calls.is_empty(),
+        "the claim read or wrote the tracker before refusing the state: {calls}"
+    );
 }
 
 #[test]

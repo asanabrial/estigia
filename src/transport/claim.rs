@@ -8533,7 +8533,7 @@ fn read_back_pr(
                 upcoming,
             )));
         }
-        if let Some(value) = super::gh_json(
+        match super::gh_json(
             &[
                 "pr",
                 "view",
@@ -8542,8 +8542,13 @@ fn read_back_pr(
                 "number,url,headRefOid,baseRefOid,state,isDraft",
             ],
             Some(&context.repo_dir),
-        )? {
-            seen.push(value);
+        ) {
+            Ok(Some(value)) => seen.push(value),
+            // A failed read is an attempt that observed nothing, not a
+            // transport failure: the push and the pull request may both be
+            // fine, and the caller still has to record what it left behind.
+            Ok(None) | Err(Failure::Read(_) | Failure::RateLimited(_)) => {}
+            Err(other) => return Err(other),
         }
         if confirm_published(&seen, local_head, expected_base, true).is_some() {
             break;
@@ -9038,12 +9043,6 @@ fn publish_with_sleep(
     // would otherwise emit synchronize and expose the new head before the
     // review barrier was restored.
     let existing = open_prs(context, branch)?;
-    if existing.len() > 1 {
-        return Err(Failure::Stop(serde_json::json!({
-            "ok": false, "reason": "ambiguous-open-prs", "prs": existing,
-            "action": "more than one open PR for this branch — resolve by hand",
-        })));
-    }
     let reused = existing.first().cloned();
 
     // Read from the timeline here, before `ensure_draft` may rewrite the pull
@@ -9623,16 +9622,60 @@ pub(super) fn push_to_origin(
     .map(|_| ())
 }
 
+/// The open pull requests whose head is this repository's `branch`.
+///
+/// `gh pr list --head <branch>` also matches a fork's branch of the same name,
+/// and taking that one would convert and retitle somebody else's pull request.
+/// `isCrossRepository` and `headRepositoryOwner` are what tell the two apart:
+/// a fork's pull request is not this run's to reuse, and two of this
+/// repository's is a refusal rather than a choice.
 pub(super) fn open_prs(context: &Context, branch: &str) -> Result<Vec<serde_json::Value>, Failure> {
-    let fields = "number,url,headRefOid,baseRefOid,isDraft";
-    super::gh_json(
+    let fields = "number,url,headRefOid,baseRefOid,isDraft,isCrossRepository,headRepositoryOwner";
+    let listed = super::gh_json(
         &["pr", "list", "--head", branch, "--state", "open", "--json", fields],
         Some(&context.repo_dir),
     )?
     .and_then(|value| value.as_array().cloned())
     .ok_or_else(|| Failure::Read(format!(
         "gh pr list returned no list for {branch}, so whether this branch already has an open pull request is unknown"
-    )))
+    )))?;
+
+    let mut ours = Vec::new();
+    for pr in listed {
+        match pr
+            .get("isCrossRepository")
+            .and_then(serde_json::Value::as_bool)
+        {
+            Some(true) => continue,
+            Some(false) => ours.push(pr),
+            None => {
+                let owner = pr
+                    .get("headRepositoryOwner")
+                    .and_then(|owner| owner.get("login"))
+                    .and_then(serde_json::Value::as_str);
+                match owner {
+                    None => ours.push(pr),
+                    Some(owner) => {
+                        let (with_us, _) = super::closing::repo_identity(context)?;
+                        if owner.eq_ignore_ascii_case(&with_us) {
+                            ours.push(pr);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ours.len() > 1 {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "ambiguous-open-prs",
+            "prs": ours,
+            "action": "more than one open pull request names this branch in this repository \
+                       — retarget or close all but the one this run published, because \
+                       choosing one would edit a pull request nobody proved was this run's",
+        })));
+    }
+    Ok(ours)
 }
 
 pub(super) fn pr_number(pr: &serde_json::Value) -> u64 {
@@ -9911,14 +9954,31 @@ fn published(
                 super::How::write(),
             );
             let _ = std::fs::remove_file(&staged);
-            answer?;
+            let created = answer?;
+            // The number the create answered, so a pull request that the list
+            // has not caught up with is still a lease target: the read-back
+            // below confirms head, base and draft, and without a number there
+            // is nothing to record when it cannot.
+            let created_number = created
+                .stdout
+                .lines()
+                .filter_map(|line| line.trim().rsplit('/').next())
+                .find_map(|last| last.parse::<u64>().ok());
             let fresh = open_prs(context, branch)?;
-            let Some(pr) = fresh.first().cloned() else {
-                return Err(Failure::Read(
-                    "the PR was created but is not visible yet".to_owned(),
-                ));
-            };
-            (pr, true)
+            match (fresh.first().cloned(), created_number) {
+                (Some(pr), _) => (pr, true),
+                (None, Some(number)) => (
+                    serde_json::json!({ "number": number, "isDraft": true }),
+                    true,
+                ),
+                (None, None) => {
+                    return Err(Failure::Read(
+                        "the PR was created but is not visible yet, and the create answer named \
+                         no number to record"
+                            .to_owned(),
+                    ));
+                }
+            }
         }
     };
     let number = pr_number(&pr);
@@ -12102,15 +12162,23 @@ fn epoch_of(event: &ownership::Event) -> String {
 }
 
 /// Refuses `target-operation-mismatch`, or `nothing-to-unassign` for a run that
-/// holds nothing, before a release that folds a close into
-/// itself writes anything, so a takeover between the discovery and the write
-/// cannot leave a half-closed delivery behind the refusal. Reads only; every
-/// other refusal stays [`plan_release`]'s.
-pub(crate) fn check_release_epoch(ledger: &Ledger, what: &Departure<'_>) -> Result<(), Failure> {
+/// holds nothing and never recorded this release, before a release that folds
+/// a close into itself writes anything, so a takeover between the discovery
+/// and the write cannot leave a half-closed delivery behind the refusal. Reads
+/// only; every other refusal stays [`plan_release`]'s.
+///
+/// Answers whether this operation's own `unassign` marker already ended the
+/// epoch, read before the ownership fold because the fold is what the marker
+/// removes: a retry after a failed projection finds no live event for its own
+/// release, and planning again would tell it that nothing was ever released.
+pub(crate) fn check_release_epoch(ledger: &Ledger, what: &Departure<'_>) -> Result<bool, Failure> {
     let Some(requested) = what.target_operation else {
-        return Ok(());
+        return Ok(false);
     };
     let comments = ledger.timeline()?;
+    if release_is_recorded(&comments, what, requested)? {
+        return Ok(true);
+    }
     let ownership = holding(&comments, what.now);
     let Some(mine) = ownership
         .live
@@ -12124,7 +12192,7 @@ pub(crate) fn check_release_epoch(ledger: &Ledger, what: &Departure<'_>) -> Resu
     };
     let target = epoch_of(mine);
     if requested == target {
-        return Ok(());
+        return Ok(false);
     }
     Err(Failure::Stop(serde_json::json!({
         "ok": false,
@@ -12132,6 +12200,23 @@ pub(crate) fn check_release_epoch(ledger: &Ledger, what: &Departure<'_>) -> Resu
         "expected": target,
         "provided": requested,
     })))
+}
+
+/// Whether this operation already wrote the `unassign` marker that ended
+/// `requested`.
+fn release_is_recorded(
+    comments: &[ownership::Comment],
+    what: &Departure<'_>,
+    requested: &str,
+) -> Result<bool, Failure> {
+    let sought = [("run-id", what.run_id), ("target-op", requested)];
+    Ok(operation_marker(
+        comments,
+        what.operation_id,
+        OperationKind::Unassign,
+        &sought,
+    )?
+    .is_some())
 }
 
 /// Everything one release needs to say about itself.

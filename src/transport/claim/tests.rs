@@ -8053,6 +8053,229 @@ fn a_readback_that_never_settles_pays_the_whole_window() {
     );
 }
 
+/// A transient `gh pr view` failure after `gh pr create` is an attempt that
+/// observed nothing, not a transport failure: the push and the pull request may
+/// both be fine, and the timeline still has to name the head that landed so a
+/// republish can lease against it.
+#[test]
+fn a_failed_pull_request_read_after_create_still_records_the_publication() {
+    let (_root, _remote, work) = repository_with_remote();
+    git(&work, &["push", "-q", "-u", "origin", "--", "main"]);
+    let base_sha = head_of(&work);
+
+    let issue = 123;
+    let run_id = "claude-abcd1234";
+    let branch = "fix/123-transient";
+    let base = "main";
+    git(&work, &["checkout", "-q", "-b", branch]);
+    std::fs::write(work.join("two.txt"), "two\n").expect("content");
+    git(&work, &["add", "two.txt"]);
+    git(&work, &["commit", "--quiet", "-m", "a change"]);
+    let branch_head = head_of(&work);
+
+    let trace = tempfile::tempdir().expect("a directory for the PR body");
+    let pr_body = trace.path().join("body.md");
+    std::fs::write(&pr_body, "A body that names nothing.\n").expect("the body");
+
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::live_holder_issue(run_id, issue, "in-progress"),
+        serde_json::json!({
+            "matches": "pr create",
+            "stdout": "https://github.com/o/r/pull/7",
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": format!("list --head {branch}"),
+            "nth": 1,
+            "stdout": "[]",
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": format!("list --head {branch}"),
+            "nth": 2,
+            "stdout": serde_json::json!([{
+                "number": 7,
+                "url": "https://github.com/o/r/pull/7",
+                "headRefOid": &branch_head,
+                "baseRefOid": base_sha,
+                "isDraft": true,
+            }])
+            .to_string(),
+            "status": 0,
+        }),
+        // Every view of the pull request fails, as a flaky host or a lost
+        // answer does. The create above is what said a pull request exists.
+        serde_json::json!({
+            "matches": "pr view",
+            "stderr": "HTTP 502",
+            "status": 1,
+        }),
+        serde_json::json!({
+            "matches": "git/refs/heads",
+            "stdout": serde_json::json!({ "object": { "sha": &branch_head } }).to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "api graphql",
+            "stdout": serde_json::json!({
+                "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+                    "nodes": [],
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                } } } },
+            })
+            .to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "json body",
+            "stdout": "{\"body\":\"A body that names nothing.\"}",
+            "status": 0,
+        }),
+        serde_json::json!({ "matches": "issue comment", "stdout": "", "status": 0 }),
+    ]);
+
+    let context = Context {
+        skill_dir: work.clone(),
+        repo_dir: work,
+        config: Vec::new(),
+        repo: None,
+    };
+    let what = Publication {
+        issue,
+        run_id,
+        expect_state: "in-progress",
+        base,
+        branch,
+        title: "Something",
+        pr_body_file: Some(&pr_body),
+        worktree: None,
+        inline_payload: false,
+        topology: None,
+        topology_reason: None,
+        integrate_reason: None,
+        focus: None,
+        declaration: Default::default(),
+        expected_epoch: None,
+        now: "2026-01-01T00:05:00Z",
+    };
+
+    let counts = trace.path().join("count");
+    let failure = crate::test_env::with_counting_gh(bin.path(), &script, &counts, || {
+        super::publish_with_sleep(&context, &what, super::Push::FastForward, &mut |_| {})
+    })
+    .expect_err("a read that never answered must refuse");
+    let envelope = failure.envelope();
+    assert_eq!(
+        envelope["reason"], "publication-readback-disagrees",
+        "unexpected refusal: {envelope}",
+    );
+    assert_eq!(
+        envelope["unconfirmed_epoch"].as_str().map(str::len),
+        Some(32),
+        "the pushed head was not recorded for a later republish: {envelope}"
+    );
+    assert_eq!(envelope["unconfirmed_head"], branch_head);
+}
+
+/// The create answered its pull request's URL while the list had not caught
+/// up: the number it named is still a lease target, and a read that fails
+/// afterwards records the unconfirmed publication instead of stranding the
+/// branch.
+#[test]
+fn a_pull_request_the_list_has_not_caught_up_with_is_still_recorded() {
+    let (_root, _remote, work) = repository_with_remote();
+    git(&work, &["push", "-q", "-u", "origin", "--", "main"]);
+
+    let issue = 123;
+    let run_id = "claude-abcd1234";
+    let branch = "fix/123-list-lag";
+    let base = "main";
+    git(&work, &["checkout", "-q", "-b", branch]);
+    std::fs::write(work.join("two.txt"), "two\n").expect("content");
+    git(&work, &["add", "two.txt"]);
+    git(&work, &["commit", "--quiet", "-m", "a change"]);
+    let branch_head = head_of(&work);
+
+    let trace = tempfile::tempdir().expect("a directory for the PR body");
+    let pr_body = trace.path().join("body.md");
+    std::fs::write(&pr_body, "A body that names nothing.\n").expect("the body");
+
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::live_holder_issue(run_id, issue, "in-progress"),
+        serde_json::json!({
+            "matches": "pr create",
+            "stdout": "https://github.com/o/r/pull/7",
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": format!("list --head {branch}"),
+            "stdout": "[]",
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "pr view",
+            "stderr": "HTTP 502",
+            "status": 1,
+        }),
+        serde_json::json!({
+            "matches": "git/refs/heads",
+            "stdout": serde_json::json!({ "object": { "sha": &branch_head } }).to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        }),
+        serde_json::json!({ "matches": "issue comment", "stdout": "", "status": 0 }),
+    ]);
+
+    let context = Context {
+        skill_dir: work.clone(),
+        repo_dir: work,
+        config: Vec::new(),
+        repo: None,
+    };
+    let what = Publication {
+        issue,
+        run_id,
+        expect_state: "in-progress",
+        base,
+        branch,
+        title: "Something",
+        pr_body_file: Some(&pr_body),
+        worktree: None,
+        inline_payload: false,
+        topology: None,
+        topology_reason: None,
+        integrate_reason: None,
+        focus: None,
+        declaration: Default::default(),
+        expected_epoch: None,
+        now: "2026-01-01T00:05:00Z",
+    };
+
+    let failure = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        super::publish_with_sleep(&context, &what, super::Push::FastForward, &mut |_| {})
+    })
+    .expect_err("a read that never answered must refuse");
+    let envelope = failure.envelope();
+    assert_eq!(envelope["reason"], "publication-readback-disagrees");
+    assert_eq!(
+        envelope["unconfirmed_epoch"].as_str().map(str::len),
+        Some(32),
+        "the create's own number was not used for the lease target: {envelope}"
+    );
+    assert_eq!(envelope["pr"], serde_json::json!(7));
+}
+
 /// End to end for the other world: ref and pull request agree on a foreign
 /// head, so the refusal must say the head moved rather than that GitHub is
 /// catching up.
@@ -17625,6 +17848,86 @@ fn a_pre_existing_recording_does_not_settle_an_introduced_one() {
         ids(&verdict),
         (vec![], vec![("gate-hole", "no-refuter-result")], vec![])
     );
+}
+
+/// A fork's open pull request on the same branch name is not this
+/// repository's to reuse: publishing must not convert or retitle it.
+#[test]
+fn a_fork_pull_request_on_the_same_branch_is_not_an_open_pull_request() {
+    let (root, context) = context_with_no_repository();
+    let branch = "fix/625";
+    let _ = root;
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[serde_json::json!({
+        "matches": format!("list --head {branch}"),
+        "stdout": serde_json::json!([
+            {
+                "number": 9,
+                "url": "https://github.com/somebody/estigia/pull/9",
+                "headRefOid": "a".repeat(40),
+                "baseRefOid": "b".repeat(40),
+                "isDraft": true,
+                "isCrossRepository": true,
+                "headRepositoryOwner": { "login": "somebody" },
+            },
+            {
+                "number": 10,
+                "url": "https://github.com/acme/app/pull/10",
+                "headRefOid": "c".repeat(40),
+                "baseRefOid": "b".repeat(40),
+                "isDraft": true,
+                "isCrossRepository": false,
+                "headRepositoryOwner": { "login": "acme" },
+            },
+        ])
+        .to_string(),
+        "status": 0,
+    })]);
+    let ours = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        super::open_prs(&context, branch).expect("this repository's pull request is listed")
+    });
+    assert_eq!(ours.len(), 1, "the fork's pull request was kept: {ours:?}");
+    assert_eq!(super::pr_number(&ours[0]), 10);
+}
+
+#[test]
+fn two_pull_requests_on_one_branch_are_named_rather_than_one_chosen() {
+    let (_root, context) = context_with_no_repository();
+    let branch = "fix/625";
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[serde_json::json!({
+        "matches": format!("list --head {branch}"),
+        "stdout": serde_json::json!([
+            {
+                "number": 9,
+                "headRefOid": "a".repeat(40),
+                "baseRefOid": "b".repeat(40),
+                "isDraft": true,
+                "isCrossRepository": false,
+            },
+            {
+                "number": 10,
+                "headRefOid": "c".repeat(40),
+                "baseRefOid": "b".repeat(40),
+                "isDraft": true,
+                "isCrossRepository": false,
+            },
+        ])
+        .to_string(),
+        "status": 0,
+    })]);
+    let failure = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        super::open_prs(&context, branch).expect_err("two matches cannot be chosen between")
+    });
+    let envelope = failure.envelope();
+    assert_eq!(envelope["reason"], "ambiguous-open-prs");
+    let numbers: Vec<u64> = envelope["prs"]
+        .as_array()
+        .expect("the two pull requests")
+        .iter()
+        .map(super::pr_number)
+        .collect();
+    assert_eq!(numbers, vec![9, 10]);
 }
 
 #[test]

@@ -1249,9 +1249,10 @@ pub fn start_branch(
     // this run pushed can find them on the issue rather than guessing from the
     // pull request's own head — GitHub's `delete_branch_on_merge` removes only
     // the latter, and the branch linked here is not always the branch published.
-    if !resuming {
-        record_started_branch(&ledger, what)?;
-    }
+    // A resumed start is recorded too: the first attempt can fail after the
+    // checkout was reserved, and that is the only attempt that would have
+    // written the marker.
+    record_started_branch(&ledger, what)?;
 
     let mut answer = serde_json::json!({
         "ok": true,
@@ -1582,6 +1583,18 @@ fn closes_issue(pr: &serde_json::Value, number: u64) -> bool {
 /// `delete_branch_on_merge` never touches.
 fn record_started_branch(ledger: &Ledger, what: &Start<'_>) -> Result<(), Failure> {
     what.number()?;
+    let already = ledger.timeline()?.iter().any(|comment| {
+        super::markers::parse(&comment.body)
+            .into_iter()
+            .any(|marker| {
+                marker.get("kind").map(String::as_str) == Some("branch")
+                    && marker.get("run-id").map(String::as_str) == Some(what.run_id)
+                    && marker.get("branch").map(String::as_str) == Some(what.branch)
+            })
+    });
+    if already {
+        return Ok(());
+    }
     let marker = super::markers::render(
         "branch",
         &[("run-id", what.run_id), ("branch", what.branch)],

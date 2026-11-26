@@ -1431,6 +1431,96 @@ fn claim_script() -> String {
     )])
 }
 
+/// The first start fails after reserving the checkout and before recording
+/// the branch, so the second runs as a resume. A resume is still this run's
+/// first successful start, and the delivery reads the branch it pushed from
+/// the marker this call writes: leaving the marker to the attempt that
+/// reserved would strand the branch the delivery later has to retire.
+#[test]
+fn a_resumed_start_records_the_branch_it_was_the_first_to_finish() {
+    crate::transport::store::forget_scratch_store();
+    let root = tempfile::tempdir().expect("a fixture root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("the repository directory");
+    shell(&repo, &["init", "--quiet", "-b", "main", "."]);
+    shell(&repo, &["config", "user.email", "estigia@example.invalid"]);
+    shell(&repo, &["config", "user.name", "Estigia test"]);
+    std::fs::write(repo.join("main.txt"), "main\n").expect("main content");
+    shell(&repo, &["add", "main.txt"]);
+    shell(&repo, &["commit", "--quiet", "-m", "main"]);
+    let origin = root.path().join("origin.git");
+    shell(
+        &repo,
+        &[
+            "init",
+            "--quiet",
+            "--bare",
+            origin.to_str().expect("a path"),
+        ],
+    );
+    shell(
+        &repo,
+        &["remote", "add", "origin", origin.to_str().expect("a path")],
+    );
+    shell(&repo, &["push", "-q", "-u", "origin", "--", "main"]);
+    shell(&repo, &["branch", "fix/12", "main"]);
+    shell(&repo, &["push", "-q", "origin", "--", "fix/12"]);
+
+    let worktrees = root.path().join("worktrees");
+    let worktree_root = worktrees.to_str().expect("a path").to_owned();
+    let context = Context {
+        skill_dir: root.path().join("skill"),
+        repo_dir: repo,
+        config: Vec::new(),
+        repo: None,
+    };
+    let what = start_what("fix/12", Some(&worktree_root));
+    let bin = crate::test_env::scripted_gh();
+
+    // The link is attempted and its outcome cannot be read, so the first
+    // start stops with the checkout already reserved.
+    let failing = crate::test_env::answers(&[
+        crate::test_env::live_holder_issue("claude-abcd1234", 12, "in-progress"),
+        serde_json::json!({
+            "matches": "issue develop",
+            "stderr": "HTTP 502",
+            "status": 1,
+        }),
+    ]);
+    crate::test_env::with_scripted_gh(bin.path(), &failing, || {
+        super::start_branch(&context, &what, None)
+            .expect_err("the unreadable link outcome must stop the first start");
+    });
+
+    let completing = crate::test_env::answers(&[
+        crate::test_env::live_holder_issue("claude-abcd1234", 12, "in-progress"),
+        serde_json::json!({
+            "matches": "issue develop",
+            "stdout": "",
+            "status": 0,
+        }),
+    ]);
+    crate::test_env::with_scripted_gh(bin.path(), &completing, || {
+        let answer =
+            super::start_branch(&context, &what, None).expect("the resumed start completes");
+        assert_eq!(answer["resumed_existing_worktree"], true, "{answer}");
+        // A second resume must not record the same branch twice: the delivery
+        // reads this list to decide what to retire.
+        super::start_branch(&context, &what, None).expect("a repeated resume completes");
+    });
+
+    let recorded = crate::transport::store::local_bodies(12);
+    assert!(
+        recorded.contains("issue-flow: branch") && recorded.contains("fix/12"),
+        "the resumed start never recorded the branch it started: {recorded}"
+    );
+    assert_eq!(
+        recorded.matches("issue-flow: branch").count(),
+        1,
+        "one branch was recorded more than once: {recorded}"
+    );
+}
+
 std::thread_local! {
     static SCHEDULE_AT: std::cell::Cell<u16> = const { std::cell::Cell::new(0) };
 }

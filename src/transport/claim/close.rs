@@ -80,8 +80,7 @@ pub(crate) fn verified_delivery(
             serde_json::json!({}),
         ));
     };
-    let base_is_ancestor_of_first_parent =
-        super::super::target::is_ancestor(&context.repo_dir, &receipt.base, &first)?;
+    let base_is_ancestor_of_first_parent = base_is_behind(context, &receipt.base, &first)?;
     let merge = serde_json::json!({
         "pr": receipt.pr,
         "merge_commit": sha,
@@ -145,14 +144,37 @@ pub(crate) fn delivery_close(
     let Some((sha, first, second)) = closing_merge(context, receipt.pr)? else {
         return Ok(None);
     };
-    let base_is_ancestor_of_first_parent =
-        super::super::target::is_ancestor(&context.repo_dir, &receipt.base, &first)?;
+    let base_is_ancestor_of_first_parent = base_is_behind(context, &receipt.base, &first)?;
     Ok(match_merge(
         &receipt,
         &sha,
         &second,
         base_is_ancestor_of_first_parent,
     ))
+}
+
+/// Whether `first` descends from `base`, fetching `first` once when this object
+/// store does not have it.
+///
+/// `closing_merge` reads the merge and its parents from the API, so a delivery
+/// merged by hand — or by another machine — can name a commit this checkout
+/// never fetched. `git merge-base` then exits 128, which is a read failure with
+/// no recovery named; the commit is on the remote under the merge's own
+/// branches, so one fetch answers it.
+fn base_is_behind(context: &Context, base: &str, first: &str) -> Result<bool, Failure> {
+    let present = crate::transport::run(
+        &["git", "cat-file", "-e", &format!("{first}^{{commit}}")],
+        Some(&context.repo_dir),
+        crate::transport::How::tolerated(),
+    )?;
+    if present.status != 0 {
+        crate::transport::run(
+            &["git", "fetch", "--quiet", "origin", first],
+            Some(&context.repo_dir),
+            crate::transport::How::read(),
+        )?;
+    }
+    super::super::target::is_ancestor(&context.repo_dir, base, first)
 }
 
 /// The newest confirmed publication — narrowed to `publisher`'s when one is
@@ -302,6 +324,110 @@ mod tests {
     fn a_delivery_whose_first_parent_is_unrelated_to_the_reviewed_base_is_refused() {
         let r = receipt();
         assert!(match_merge(&r, &sha(), &r.head, false).is_none());
+    }
+
+    /// A delivery merged on the remote leaves a first parent this checkout has
+    /// never fetched. `git merge-base` then exits 128; one fetch answers it.
+    #[test]
+    fn a_first_parent_this_checkout_lacks_is_fetched_once() {
+        let root = tempfile::tempdir().expect("a fixture root");
+        let origin = root.path().join("origin.git");
+        let seed = root.path().join("seed");
+        let local = root.path().join("local");
+        let git = |at: &std::path::Path, args: &[&str]| {
+            crate::transport::run(args, Some(at), crate::transport::How::write())
+                .unwrap_or_else(|failure| panic!("{args:?}: {failure:?}"));
+        };
+        let oid = |at: &std::path::Path, reference: &str| {
+            crate::transport::run(
+                &["git", "rev-parse", reference],
+                Some(at),
+                crate::transport::How::read(),
+            )
+            .expect("a commit")
+            .stdout
+            .trim()
+            .to_owned()
+        };
+        std::fs::create_dir_all(&seed).expect("the seed directory");
+        git(
+            root.path(),
+            &[
+                "git",
+                "init",
+                "--quiet",
+                "--bare",
+                origin.to_str().expect("a path"),
+            ],
+        );
+        git(&seed, &["git", "init", "--quiet", "-b", "main", "."]);
+        git(
+            &seed,
+            &["git", "config", "user.email", "estigia@example.invalid"],
+        );
+        git(&seed, &["git", "config", "user.name", "Estigia test"]);
+        std::fs::write(seed.join("base.txt"), "base\n").expect("content");
+        git(&seed, &["git", "add", "base.txt"]);
+        git(&seed, &["git", "commit", "--quiet", "-m", "base"]);
+        let base = oid(&seed, "HEAD");
+        git(
+            &seed,
+            &[
+                "git",
+                "remote",
+                "add",
+                "origin",
+                origin.to_str().expect("a path"),
+            ],
+        );
+        git(&seed, &["git", "push", "-q", "-u", "origin", "--", "main"]);
+
+        // The checkout is cloned here, before the delivery's merge exists.
+        git(
+            root.path(),
+            &[
+                "git",
+                "clone",
+                "--quiet",
+                origin.to_str().expect("a path"),
+                local.to_str().expect("a path"),
+            ],
+        );
+
+        git(&seed, &["git", "checkout", "--quiet", "-b", "work"]);
+        std::fs::write(seed.join("work.txt"), "work\n").expect("content");
+        git(&seed, &["git", "add", "work.txt"]);
+        git(&seed, &["git", "commit", "--quiet", "-m", "work"]);
+        git(&seed, &["git", "checkout", "--quiet", "main"]);
+        std::fs::write(seed.join("main.txt"), "main\n").expect("content");
+        git(&seed, &["git", "add", "main.txt"]);
+        git(&seed, &["git", "commit", "--quiet", "-m", "main moves"]);
+        git(
+            &seed,
+            &["git", "merge", "--quiet", "--no-ff", "-m", "merge", "work"],
+        );
+        let first = oid(&seed, "HEAD^1");
+        git(&seed, &["git", "push", "-q", "origin", "--", "main"]);
+
+        let absent = crate::transport::run(
+            &["git", "cat-file", "-e", &format!("{first}^{{commit}}")],
+            Some(&local),
+            crate::transport::How::tolerated(),
+        )
+        .expect("a tolerated read");
+        assert_ne!(absent.status, 0, "the fixture already has the first parent");
+
+        let context = Context {
+            skill_dir: root.path().to_path_buf(),
+            repo_dir: local,
+            config: Vec::new(),
+            repo: None,
+        };
+        assert!(
+            base_is_behind(&context, &base, &first)
+                .expect("the missing parent is fetched and the ancestry answered"),
+            "the fetched first parent was not read as descending from the reviewed base"
+        );
     }
 
     /// A repository with `base`, a commit that descends from it, and a root

@@ -190,28 +190,21 @@ pub fn next_opening_at(
     if !matches!(window, GitOperationWindow::Enabled { .. }) {
         return None;
     }
-    let here = i64::from(local_at(now)?);
-    if window.permits(here as u16) {
+    let here = local_at(now)?;
+    if window.permits(here) {
         return None;
     }
-    let minutes =
-        (1..=WEEK_MINUTES).find(|ahead| window.permits(((here + ahead) % WEEK_MINUTES) as u16))?;
-    let permits_at = |at: i64| local_at(at).is_some_and(|minute| window.permits(minute));
-    let mut at = now - now.rem_euclid(60) + minutes * 60;
-    for _ in 0..180 {
-        if at - 60 > now && permits_at(at - 60) {
-            at -= 60;
-        } else {
-            break;
-        }
-    }
-    for _ in 0..180 {
-        if permits_at(at) {
-            break;
-        }
-        at += 60;
-    }
-    Some(at)
+    // Walked minute by minute on the clock rather than by adding local minutes,
+    // because a daylight-saving change makes the two disagree: the permitted
+    // local minute may not occur on this day at all, and a fixed-width forward
+    // search then ends on an instant the window does not permit.
+    let start = now - now.rem_euclid(60) + 60;
+    (0..=WEEK_MINUTES).find_map(|ahead| {
+        let at = start + ahead * 60;
+        local_at(at)
+            .filter(|minute| window.permits(*minute))
+            .map(|_| at)
+    })
 }
 
 /// [`next_opening_at`] from this machine's clock, as an RFC 3339 instant in
