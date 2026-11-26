@@ -1099,10 +1099,9 @@ pub fn relay_admit(
         let Some(dir) = crate::transport::pull_review::panel::relayed_slot(run_id, name)? else {
             return Err(job_missing(name));
         };
-        let id = dir
-            .file_name()
-            .map(|id| id.to_string_lossy().into_owned())
-            .unwrap_or_default();
+        let Some(id) = dir.file_name().map(|id| id.to_string_lossy().into_owned()) else {
+            return Err(job_missing(name));
+        };
         require_relay_secret(&id, secret)?;
         let bytes = if crate::reviewer::runs_on_opencode(run_id) {
             let (answered_job, answer) =

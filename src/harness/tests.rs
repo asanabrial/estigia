@@ -9021,18 +9021,24 @@ fn a_run_that_published_a_review_cannot_answer_its_own_reviewers_from_a_shell() 
         );
     }
 
-    let (action, how) = classify("Bash", &json!({ "command": "estigia review_status" }));
-    let mut published = sworn(42, &context.repo_dir);
-    published.review_transaction = Some(crate::transport::claim::ReviewTransaction {
-        epoch: "a".repeat(32),
-        pr: 54,
-        head: "b".repeat(40),
-        base: "c".repeat(40),
-        digest: "d".repeat(64),
-    });
-    let decision = decide(&context, &mut published, &action, how);
-    assert!(
-        !format!("{decision:?}").contains("review-relay-is-the-reviewers"),
-        "reading the review status was refused as the relay: {decision:?}"
-    );
+    for command in [
+        "estigia review_status",
+        "xestigia review admit --name review-risk",
+        "estigia reviews --name review-risk",
+    ] {
+        let (action, how) = classify("Bash", &json!({ "command": command }));
+        let mut published = sworn(42, &context.repo_dir);
+        published.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+            epoch: "a".repeat(32),
+            pr: 54,
+            head: "b".repeat(40),
+            base: "c".repeat(40),
+            digest: "d".repeat(64),
+        });
+        let decision = decide(&context, &mut published, &action, how);
+        assert!(
+            !format!("{decision:?}").contains("review-relay-is-the-reviewers"),
+            "{command} was refused as the relay: {decision:?}"
+        );
+    }
 }

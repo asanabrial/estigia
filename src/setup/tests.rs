@@ -15847,6 +15847,29 @@ const admitted = {
 await after(admitted);
 out.admitted_result = admitted.result;
 out.admitted_status = admitted.status ?? null;
+out.unmarked_admit_secret = state.calls.at(-1).values.some((value) => /^[0-9a-f]{64}$/.test(value));
+
+state.answers = { prompt: { exitCode: 0, stdout: "<!-- estigia-relay-secret: " + "a".repeat(64) + " -->\nSECRET PROMPT" } };
+const paired = {
+  tool: "task",
+  sessionID: "ses_relay",
+  id: "call_secret",
+  input: { subagent_type: "review-risk" },
+};
+await before(paired);
+out.secret_injected = paired.input.prompt;
+state.answers = { admit: { exitCode: 0, stdout: "{\"ok\":true}" } };
+const pairedAfter = {
+  tool: "task",
+  sessionID: "ses_relay",
+  id: "call_secret",
+  input: paired.input,
+  status: "completed",
+  result: "RAW",
+};
+await after(pairedAfter);
+out.secret_status = pairedAfter.status ?? null;
+out.secret_argument = state.calls.at(-1).values.includes("a".repeat(64));
 
 state.answers = {
   admit: {
@@ -16335,6 +16358,21 @@ fn the_review_relay_materialises_the_prompt_and_admits_the_answer() {
     assert!(
         delivered.contains(&"RAW REVIEWER ANSWER"),
         "the reviewer's raw answer never reached the relay: {delivered:?}"
+    );
+    assert_eq!(
+        cases["secret_argument"], true,
+        "the plugin did not pass the prompt's secret to `review admit`: {cases}"
+    );
+    assert_eq!(
+        cases["unmarked_admit_secret"], false,
+        "the plugin invented a secret for a prompt that carried none: {cases}"
+    );
+    assert!(
+        cases["secret_injected"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("estigia-relay-secret"),
+        "the marker prompt did not reach the child: {cases}"
     );
 
     let v1: Vec<&str> = cases["v1_hooks"]

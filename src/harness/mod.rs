@@ -986,13 +986,14 @@ const DISARMS_THE_HARNESS: &[&str] = &[
 const REVIEW_RELAY: &str = "estigia review";
 
 /// Whether a command line names `estigia review`, and not a longer verb such as
-/// `estigia review_status` that only reads.
+/// `estigia review_status` that only reads, nor a different binary whose name
+/// ends in `estigia`.
 fn names_the_review_relay(view: &str) -> bool {
-    view.match_indices(REVIEW_RELAY).any(|(at, _)| {
-        view[at + REVIEW_RELAY.len()..]
-            .chars()
-            .next()
-            .is_none_or(|next| !next.is_ascii_alphanumeric() && next != '_')
+    let words: Vec<&str> = view.split_whitespace().collect();
+    words.windows(2).any(|pair| {
+        pair[0] == "estigia"
+            && pair[1].trim_end_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                == "review"
     })
 }
 
