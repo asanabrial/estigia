@@ -175,7 +175,8 @@ fn findings_section(findings: &[FindingForPrompt]) -> String {
 fn answer_section(role: Role) -> String {
     let shape = match role.answer() {
         Answer::Findings => format!(
-            "{{\"findings\": [{{\"id\": \"<short stable identity>\", \"class\": \"<{classes}>\", \
+            "{{\"findings\": [{{\"id\": \"<short identity built from the path and the \
+             behaviour>\", \"class\": \"<{classes}>\", \
              \"evidence\": \"<what you saw>\", \"impact\": \"<what it costs>\", \
              \"location\": \"<path:line or path:start-end, required>\", \
              \"evidence_class\": \"<{evidence}; required for severe>\", \

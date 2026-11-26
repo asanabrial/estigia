@@ -3946,32 +3946,28 @@ fn refutation_outcomes(
     outcomes
 }
 
-/// The first severe recording of each finding id, which is the one a
-/// refutation batch and the computed verdict both classify it by.
-/// The ids a refutation batch must cover: every standing inferential severe finding.
-fn inferential_population(
-    by_id: &std::collections::BTreeMap<String, ReviewFinding>,
-) -> std::collections::BTreeSet<&String> {
-    by_id
-        .values()
-        .filter(|finding| finding.evidence_class.as_deref() == Some("inferential"))
-        .map(|finding| &finding.id)
+/// Every severe recording this receipt carries, in timeline order.
+///
+/// One id may appear once per lens that recorded it: each recording is weighed
+/// on its own, and the verdict keeps the strongest answer its recordings give.
+fn severe_findings(
+    comments: &[ownership::Comment],
+    receipt: &ReviewTransaction,
+) -> Vec<ReviewFinding> {
+    findings_for(comments, receipt)
+        .into_iter()
+        .filter(ReviewFinding::is_severe)
         .collect()
 }
 
-fn first_severe_findings(
-    comments: &[ownership::Comment],
-    receipt: &ReviewTransaction,
-) -> std::collections::BTreeMap<String, ReviewFinding> {
-    let mut by_id: std::collections::BTreeMap<String, ReviewFinding> =
-        std::collections::BTreeMap::new();
-    for finding in findings_for(comments, receipt)
-        .into_iter()
-        .filter(ReviewFinding::is_severe)
-    {
-        by_id.entry(finding.id.clone()).or_insert(finding);
-    }
-    by_id
+/// The ids a refutation batch must cover: every severe finding at least one
+/// recording calls `inferential`.
+fn inferential_population(findings: &[ReviewFinding]) -> std::collections::BTreeSet<&String> {
+    findings
+        .iter()
+        .filter(|finding| finding.evidence_class.as_deref() == Some("inferential"))
+        .map(|finding| &finding.id)
+        .collect()
 }
 
 fn handoffs_for(
@@ -6312,6 +6308,13 @@ pub fn record_review_finding(
         return Ok(answer);
     }
 
+    // A severe finding is the publisher's own review when it credits the
+    // publisher as the reviewer; the same check a refutation is held to, and
+    // the capture's role label never collides with a run id.
+    if finding.class == "severe" {
+        require_distinct_reviewer(&comments, &receipt, finding.reviewer)?;
+    }
+
     check_finding_against_change(context, finding, &receipt, &comments)?;
 
     let location = finding.location.trim();
@@ -6573,21 +6576,30 @@ pub fn record_refutation(
         })));
     }
 
-    let by_id = first_severe_findings(&comments, &receipt);
-    let inferential = inferential_population(&by_id);
+    let severe = severe_findings(&comments, &receipt);
+    let inferential = inferential_population(&severe);
+    let recorded: std::collections::BTreeSet<&str> =
+        severe.iter().map(|finding| finding.id.as_str()).collect();
 
     let mut covered: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for entry in &outcomes {
-        let Some(finding) = by_id.get(&entry.id) else {
+        let recordings: Vec<&ReviewFinding> = severe
+            .iter()
+            .filter(|finding| finding.id == entry.id)
+            .collect();
+        if recordings.is_empty() {
             return Err(Failure::Stop(serde_json::json!({
                 "ok": false,
                 "reason": "refutation-unknown-finding",
                 "id": entry.id,
-                "recorded": by_id.keys().collect::<Vec<_>>(),
+                "recorded": recorded,
                 "action": "name a severe finding this receipt actually recorded, listed above",
             })));
-        };
-        if finding.evidence_class.as_deref() == Some("deterministic") {
+        }
+        if recordings
+            .iter()
+            .all(|finding| finding.evidence_class.as_deref() == Some("deterministic"))
+        {
             return Err(Failure::Stop(serde_json::json!({
                 "ok": false,
                 "reason": "refutation-includes-deterministic-finding",
