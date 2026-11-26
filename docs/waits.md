@@ -118,9 +118,10 @@ time, daylight-saving change included, and it is carried as `opens_at`: in the
 on the second stop and wake the session then, telling it to run `estigia flush` first. Claude Code's
 `Stop` hook cannot hold a timer. It tells the turn once to schedule its own wake with the host
 (`ScheduleWakeup` or `Monitor`) and end the turn, and lets the second stop for the same opening
-through. While another issue is claimable, Claude Code's and Codex's `Stop` instead keep the turn
-going and tell it to take the next issue with `claim` and `park: true` and work it locally, so the
-wake is scheduled only once nothing is left to claim. A run under no loop tells the person to nudge it
+through. While another issue is claimable or dischargeable, every loop — Claude Code's and Codex's
+`Stop`, Pi's and OpenCode's plugins — instead keeps the turn going and tells it to take the next issue
+with `claim` and `park: true` and work it locally, so the wake is armed or scheduled only once nothing
+is left to claim. A run under no loop tells the person to nudge it
 at `opens_at`.
 
 ## What this page is not

@@ -1792,6 +1792,11 @@ const preamble = (run_id, dischargeable) =>
 
 const held = (issue, run_id) => fill(PREAMBLE.held, {{ issue, run_id }});
 
+const workable = (said) =>
+  typeof said?.claimable === "number" &&
+  typeof said?.dischargeable === "number" &&
+  said.claimable + said.dischargeable > 0;
+
 const ask = async (sessionID, cwd, withCompleted) => {{
   const run = shell();
   if (typeof run !== "function") {{
@@ -2207,6 +2212,14 @@ const consider = async (ctx, sessionID, lapsed) => {{
     issue = String(named);
     const opens = typeof read.said?.opens_at === "string" ? read.said.opens_at : "";
     if (opens !== "") {{
+      if (workable(read.said)) {{
+        const fresh = await ctx.storage.get(KEY + sessionID);
+        if (!running(fresh) || stopRequested.has(sessionID)) return;
+        disarm(sessionID);
+        await tell(ctx, sessionID, held(issue, goal.run_id) + fill(PREAMBLE.window_closed_work, {{ at: opens }}));
+        await reacted(ctx, sessionID, "enqueued");
+        return;
+      }}
       if (goal.window === opens) {{
         await windowWait(ctx, sessionID, opens);
         return;
