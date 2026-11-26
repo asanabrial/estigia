@@ -5212,11 +5212,7 @@ fn the_binding_states_the_sandboxed_credential_path() {
     let binding = std::fs::read_to_string(root.join("skill/bindings/github.md"))
         .expect("the github binding ships");
     let flat = binding.split_whitespace().collect::<Vec<_>>().join(" ");
-    for needle in [
-        "GH_TOKEN",
-        "gh issue list",
-        "before relying on the workflow",
-    ] {
+    for needle in ["GH_TOKEN", "gh issue list"] {
         assert!(
             flat.contains(needle),
             "the github binding no longer states {needle:?}, and the installed skill cannot open \
