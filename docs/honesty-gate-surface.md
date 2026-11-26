@@ -4,6 +4,12 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 
 ## The control surface and what it records
 
+- **The three surfaces are asked of the landing as well as the spelling, and the landing is resolved
+  once.** A write whose spelling is ordinary but whose path resolves through a link inside the checkout
+  onto the person-only record, the control surface or the repository configuration is classified as the
+  surface it lands on (`a_write_that_lands_on_a_persons_record_is_that_record`). Still open: a **hard
+  link** to a surface is not resolved, a link created between the classification and the write is not
+  seen, and a landing `placed` declines is read as ordinary, so the spelling decides it.
 - **Estigia cannot make a person decide or start a turn.** For a human adjudication that is not a
   routine wait on the ordinary review, CI, identity, and delivery-permission gates it can preserve
   the built branch, PR, receipt, checks, and evidence, and record `blocked` with the exact decision

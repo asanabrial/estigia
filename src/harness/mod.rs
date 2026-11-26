@@ -2607,6 +2607,14 @@ pub fn classify_observing(
     if WRITE_TOOLS.contains(&name.as_str()) {
         let named = path_argument(input);
         let target = named.clone().unwrap_or_else(|| tool.to_owned());
+        // A write is what it lands on, not what it is spelled as: a link inside
+        // the checkout can resolve onto a surface the spelling does not name.
+        let landing = crate::paths::placed(std::path::Path::new(&target));
+        let lands_on = |surface: fn(&str) -> bool| {
+            landing
+                .as_deref()
+                .is_some_and(|path| surface(&path.to_string_lossy()))
+        };
         let payload_text = input.to_string();
         // Read only for the tools whose body *is* their target list, and only
         // where no field names a path. Any other write tool that named no path
@@ -2616,6 +2624,7 @@ pub fn classify_observing(
         let write_targets =
             (named.is_none() && names_a_patch_body(&name)).then(|| patch_targets(input));
         if person_only::is_the_record(&target)
+            || lands_on(person_only::is_the_record)
             || (named.is_none() && person_only::names_the_record(&payload_text))
         {
             return (
@@ -2635,6 +2644,7 @@ pub fn classify_observing(
         // two of the eleven write tools put it in a patch body rather than in a
         // field — Codex's `apply_patch` and OpenCode's `patch`.
         if is_control_surface(&target)
+            || lands_on(is_control_surface)
             || (named.is_none() && text_names_a_control_surface(&payload_text))
         {
             return (
@@ -2650,6 +2660,7 @@ pub fn classify_observing(
         // a payload in isolation can have a property of the document that
         // results from applying it. `docs/honesty.md` carries the account.
         if is_repository_configuration(&target)
+            || lands_on(is_repository_configuration)
             || (named.is_none() && text_names_the_repository_configuration(&payload_text))
         {
             return (
