@@ -2504,16 +2504,6 @@ pub(crate) fn apply_effect(
                 }
             }
             PointerEffect::Renew => {
-                // A reviewer claiming after a handoff receives the receipt in
-                // the CI-release call; preserved here so the
-                // recreated pointer can gate delivery from the inherited
-                // worktree after the publisher's own pointer was removed.
-                if tool.name == "release_ci"
-                    && let Some(receipt) = &supplied_receipt
-                {
-                    run.review_transaction = Some(receipt.clone());
-                    run.reviewed_head = None;
-                }
                 // Every field below is filled and none overwritten: this is
                 // the way back for a run that has already been stranded, and
                 // a pointer that already names an issue, a state or a
@@ -2531,7 +2521,22 @@ pub(crate) fn apply_effect(
                 if let Some(discovered) = &discovered_worktree {
                     run.worktree.get_or_insert_with(|| discovered.clone());
                 }
-                run.mark_verified();
+                let about_the_held_issue = issue
+                    .as_ref()
+                    .is_none_or(|named| run.issue.as_ref() == Some(named));
+                if about_the_held_issue {
+                    // A reviewer claiming after a handoff receives the receipt
+                    // in the CI-release call; preserved here so the
+                    // recreated pointer can gate delivery from the inherited
+                    // worktree after the publisher's own pointer was removed.
+                    if tool.name == "release_ci"
+                        && let Some(receipt) = &supplied_receipt
+                    {
+                        run.review_transaction = Some(receipt.clone());
+                        run.reviewed_head = None;
+                    }
+                    run.mark_verified();
+                }
             }
             PointerEffect::Published => {
                 // Supersedes old authority even when the answer is too

@@ -10219,6 +10219,41 @@ fn pointer_with_receipt(name: &str) -> (tempfile::TempDir, GateContext) {
 }
 
 #[test]
+fn releasing_ci_for_a_parked_issue_leaves_the_held_receipt_and_window_alone() {
+    let (_root, context) = pointer_with_receipt("claude-parked0a1b2c3d");
+    let tool = tools::find("release_ci").expect("release_ci");
+    let mut run = crate::harness::session::load(&context.state_root, "claude-parked0a1b2c3d");
+    run.verified_at = Some(1);
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+
+    let sent = json!({
+        "issue": 13,
+        "run_id": "claude-parked0a1b2c3d",
+        "epoch": "9f0c0f5e6a1b2c3d4e5f60718293a4b5",
+        "pr": 99,
+        "head": "9f0c0f5e6a1b2c3d4e5f60718293a4b5c6d7e8f9",
+        "base": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+        "digest": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    });
+    super::apply_effect(tool, &sent, Some(&json!({"ok": true})), &mut run, &context);
+
+    let after = crate::harness::session::load(&context.state_root, "claude-parked0a1b2c3d");
+    assert_eq!(
+        after
+            .review_transaction
+            .as_ref()
+            .map(|receipt| receipt.epoch.clone()),
+        Some("e1".to_owned()),
+        "a parked issue's release replaced the receipt of the issue this run holds"
+    );
+    assert_eq!(
+        after.verified_at,
+        Some(1),
+        "a call about a parked issue renewed the held issue's window"
+    );
+}
+
+#[test]
 fn a_receipt_named_by_its_epoch_is_filled_from_the_pointer_holding_it() {
     let (_root, context) = pointer_with_receipt("claude-expand0a1b2c3d");
     let tool = tools::find("release_ci").expect("release_ci");
