@@ -507,6 +507,16 @@ impl Ledger {
         self.open
     }
 
+    /// Mints the token one job's runner is handed, kept under the job's id.
+    pub(crate) fn mint_job_token(&self, id: &str, at: u64) -> Result<String, Failure> {
+        self.store.mint_job_token(id, at)
+    }
+
+    /// The token a job's launch minted, or `None` when this binary launched none.
+    pub(crate) fn job_token(&self, id: &str) -> Result<Option<String>, Failure> {
+        self.store.job_token(id)
+    }
+
     /// The issue's whole timeline, in the order it was recorded.
     pub(crate) fn timeline(&self) -> Result<Vec<ownership::Comment>, Failure> {
         self.store.timeline(&self.repo, self.issue)

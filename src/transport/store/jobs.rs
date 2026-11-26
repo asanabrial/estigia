@@ -203,6 +203,7 @@ impl Store {
     /// Bounds the job directories under `jobs_root` and settles `running` rows
     /// no lock can still be holding.
     pub(crate) fn bound_jobs(&self, jobs_root: &Path, now: u64) -> Result<(), Failure> {
+        self.bound_job_tokens(now.saturating_sub(JOB_RETENTION_DAYS * 24 * 60 * 60))?;
         for job in self.bound_job_rows()? {
             if job.state != "running" || job.deadline_at.saturating_add(JOB_SETTLE_SECONDS) >= now {
                 continue;

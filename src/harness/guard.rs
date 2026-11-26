@@ -585,6 +585,9 @@ fn linked_siblings(state_root: &Path, repo_dir: &Path) -> Vec<session::Run> {
 pub struct Readings<'a> {
     /// The single command string, when the call was a shell call.
     pub literal: Option<&'a str>,
+    /// The line the classifier searched when the payload carried no single
+    /// command string: an argv list is one command with its spaces taken out.
+    pub text: Option<&'a str>,
     /// The irreversible fragments sharing a tier, when one tier holds two.
     pub same_tier_fragments: &'a [String],
     /// The paths a write tool named in a patch body.
@@ -648,6 +651,17 @@ pub fn adjudicate_command(
             holder: None,
         };
     }
+    let seen = super::state_directory::Seen {
+        literal: readings.literal,
+        text: readings.text,
+        write_targets: readings.write_targets,
+    };
+    if let Some(denied) = super::state_directory::deny(context, action, seen) {
+        return Adjudication {
+            decision: denied,
+            holder: None,
+        };
+    }
     adjudicate_pushing(context, repo_dir, action, how, (refs, &[]), readings)
 }
 
@@ -661,6 +675,7 @@ fn adjudicate_pushing(
 ) -> Adjudication {
     let Readings {
         literal,
+        text: _,
         same_tier_fragments,
         write_targets,
     } = readings;

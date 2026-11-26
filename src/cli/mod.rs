@@ -8321,6 +8321,10 @@ fn show_gate(
                 Some(crate::outcome::Established::Known(text)) => Some(text.as_str()),
                 _ => None,
             };
+            let text = match observed.command.as_ref().map(|command| &command.against) {
+                Some(crate::outcome::Established::Known(text)) => Some(text.as_str()),
+                _ => None,
+            };
             let same_tier_fragments = observed
                 .command
                 .as_ref()
@@ -8333,6 +8337,7 @@ fn show_gate(
                 .unwrap_or_default();
             let readings = harness::guard::Readings {
                 literal,
+                text,
                 same_tier_fragments,
                 write_targets,
             };
