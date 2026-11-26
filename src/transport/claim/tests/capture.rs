@@ -1248,6 +1248,182 @@ fn a_relay_answer_is_admitted_while_the_declared_checks_run() {
 
 #[cfg(unix)]
 #[test]
+fn a_lens_launched_for_its_cli_is_not_admitted_by_a_handed_in_answer() {
+    let world = capturable();
+    let answer = answer_of(&[]).expect("an answer");
+    let (launched, _) = launch(&world, RELIABILITY_LENS, Ok(answer.clone()));
+    let launched = launched.expect("the CLI job launched");
+
+    let outcome = relay_admit_as(&world, RELIABILITY_LENS, &answer);
+
+    assert_eq!(refused_as(&outcome), "capture-not-relayed");
+    assert_eq!(
+        job_state(&world, &launched),
+        "running",
+        "a refused hand-in moved the job"
+    );
+    nothing_was_written(&world);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_refuter_launched_for_its_cli_is_not_admitted_by_a_handed_in_answer() {
+    let world = refutable();
+    let answer = outcomes_of(&[("f-1", "refuted"), ("f-2", "refuted")]).expect("an answer");
+    let (launched, _) = launch(&world, BATCH, Ok(answer.clone()));
+    let launched = launched.expect("the CLI job launched");
+
+    let outcome = relay_admit_as(&world, BATCH, &answer);
+
+    assert_eq!(refused_as(&outcome), "capture-not-relayed");
+    assert_eq!(job_state(&world, &launched), "running");
+    assert!(
+        refutations_on_the_timeline(&world).is_empty(),
+        "a refused hand-in recorded a refutation"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_validator_launched_for_its_cli_is_not_admitted_by_a_handed_in_answer() {
+    let world = validator_owed();
+    let answer = passing().expect("an answer");
+    let (launched, _) = launch(&world, VALIDATOR, Ok(answer.clone()));
+    let launched = launched.expect("the CLI job launched");
+
+    let outcome = relay_admit_as(&world, VALIDATOR, &answer);
+
+    assert_eq!(refused_as(&outcome), "capture-not-relayed");
+    assert_eq!(job_state(&world, &launched), "running");
+    assert!(
+        validator_results(&world).is_empty(),
+        "a refused hand-in recorded a validator result"
+    );
+}
+
+#[test]
+fn a_relayed_answer_without_the_prompt_secret_is_refused() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
+    let answer = framed_answer(&launched, "Acknowledged.", r#"{"findings": []}"#);
+
+    for secret in [None, Some("0".repeat(64))] {
+        let bin = crate::test_env::scripted_gh();
+        let script = script_for(&world, lane_read_answers());
+        let context = named(&world.context);
+        let outcome = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            super::super::relay_admit(
+                &context,
+                run,
+                RELIABILITY_LENS,
+                &answer,
+                secret.as_deref(),
+                NOW,
+            )
+        });
+        assert_eq!(
+            refused_as(&outcome),
+            if secret.is_none() {
+                "capture-secret-missing"
+            } else {
+                "capture-secret-mismatch"
+            }
+        );
+    }
+    assert_eq!(job_state(&world, &launched), "running");
+    nothing_was_written(&world);
+}
+
+#[test]
+fn the_relay_secret_reaches_the_prompt_and_not_the_job_directory() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
+    let prompt = super::super::relay_prompt(&world.context, run, RELIABILITY_LENS)
+        .expect("the materialised prompt");
+    let prompt = String::from_utf8(prompt).expect("UTF-8 prompt");
+    let secret = relay_secret_for(run, RELIABILITY_LENS).expect("a secret");
+    assert!(
+        prompt.contains(&format!("estigia-relay-secret: {secret}")),
+        "the prompt handed to the host carries no secret: {prompt}"
+    );
+
+    let store = crate::transport::store::Store::open(&store_path().expect("the scratch store"))
+        .expect("the store opens");
+    let (_, job) = store
+        .relay_job(run, RELIABILITY_LENS)
+        .expect("the job is readable")
+        .expect("the job is recorded");
+    let on_disk =
+        crate::reviewer::job::prompt_of(std::path::Path::new(&job.dir)).expect("the job prompt");
+    assert!(
+        !String::from_utf8_lossy(&on_disk).contains("estigia-relay-secret"),
+        "the secret was written into the job directory the publishing run can read"
+    );
+}
+
+#[test]
+fn a_relayed_prompt_for_another_host_carries_the_secret_too() {
+    let run = "claude-abc12345";
+    let world = capturable_as(run);
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
+    let prompt = super::super::relay_prompt(&world.context, run, RELIABILITY_LENS)
+        .expect("the materialised prompt");
+    let prompt = String::from_utf8(prompt).expect("UTF-8 prompt");
+    let secret = relay_secret_for(run, RELIABILITY_LENS).expect("a secret");
+    assert!(
+        prompt.starts_with(&format!("<!-- estigia-relay-secret: {secret} -->")),
+        "a prompt this host relays carries no secret: {prompt}"
+    );
+    assert!(
+        !prompt.contains("<estigia-review-result"),
+        "a host that is not OpenCode was handed the OpenCode output channel"
+    );
+
+    let answer = answer_of(&[]).expect("an answer");
+    let admitted = relay_admit_for(&world, RELIABILITY_LENS, &answer, run)
+        .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    assert_eq!(admitted["ok"], true);
+    assert_eq!(job_state(&world, &launched), "admitted");
+}
+
+#[test]
+fn a_relayed_answer_for_another_host_owes_its_secret() {
+    let run = "claude-abc12345";
+    let world = capturable_as(run);
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
+    let answer = answer_of(&[]).expect("an answer");
+
+    for secret in [None, Some("0".repeat(64))] {
+        let bin = crate::test_env::scripted_gh();
+        let script = script_for(&world, lane_read_answers());
+        let context = named(&world.context);
+        let outcome = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            super::super::relay_admit(
+                &context,
+                run,
+                RELIABILITY_LENS,
+                &answer,
+                secret.as_deref(),
+                NOW,
+            )
+        });
+        assert_eq!(
+            refused_as(&outcome),
+            if secret.is_none() {
+                "capture-secret-missing"
+            } else {
+                "capture-secret-mismatch"
+            }
+        );
+    }
+    assert_eq!(job_state(&world, &launched), "running");
+    nothing_was_written(&world);
+}
+
+#[cfg(unix)]
+#[test]
 fn a_relay_answer_for_a_receipt_the_review_moved_past_is_stale_while_the_checks_run() {
     let run = "opencode-ses12345deadbeef";
     let world = declared_world_as(run);
@@ -1338,9 +1514,20 @@ fn relay_admit_for(
     let bin = crate::test_env::scripted_gh();
     let script = script_for(world, lane_read_answers());
     let context = named(&world.context);
+    let secret = relay_secret_for(run_id, name);
     crate::test_env::with_scripted_gh(bin.path(), &script, || {
-        super::super::relay_admit(&context, run_id, name, bytes, NOW)
+        super::super::relay_admit(&context, run_id, name, bytes, secret.as_deref(), NOW)
     })
+}
+
+fn relay_secret_for(run_id: &str, name: &str) -> Option<String> {
+    let store = crate::transport::store::Store::open(&store_path().expect("the scratch store"))
+        .expect("the store opens");
+    let (_, job) = store
+        .relay_job(run_id, name)
+        .expect("the job is readable")
+        .expect("the job is recorded");
+    Some(super::super::capture::relay_secret_of(&job.id).expect("a relay secret"))
 }
 
 fn framed_answer(job: &serde_json::Value, prefix: &str, answer: &str) -> Vec<u8> {

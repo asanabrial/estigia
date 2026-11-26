@@ -15892,6 +15892,48 @@ const admitted = {
 await after(admitted);
 out.admitted_result = admitted.result;
 out.admitted_status = admitted.status ?? null;
+out.unmarked_admit_secret = state.calls.at(-1).values.some((value) => /^[0-9a-f]{64}$/.test(value));
+
+state.answers = { prompt: { exitCode: 0, stdout: "<!-- estigia-relay-secret: " + "a".repeat(64) + " -->\nSECRET PROMPT" } };
+const paired = {
+  tool: "task",
+  sessionID: "ses_relay",
+  id: "call_secret",
+  input: { subagent_type: "review-risk" },
+};
+await before(paired);
+out.secret_injected = paired.input.prompt;
+state.answers = { admit: { exitCode: 0, stdout: "{\"ok\":true}" } };
+const pairedAfter = {
+  tool: "task",
+  sessionID: "ses_relay",
+  id: "call_secret",
+  input: paired.input,
+  status: "completed",
+  result: "RAW",
+};
+await after(pairedAfter);
+out.secret_status = pairedAfter.status ?? null;
+out.secret_argument = state.calls.at(-1).values.includes("a".repeat(64));
+
+state.answers = { prompt: { exitCode: 0, stdout: "<!-- estigia-relay-secret: " + "b".repeat(64) + " -->\nNO ID PROMPT" } };
+const unnumbered = {
+  tool: "task",
+  sessionID: "ses_relay",
+  input: { subagent_type: "review-risk" },
+};
+await before(unnumbered);
+state.answers = { admit: { exitCode: 0, stdout: "{\"ok\":true}" } };
+const unnumberedAfter = {
+  tool: "task",
+  sessionID: "ses_relay",
+  input: unnumbered.input,
+  status: "completed",
+  result: "RAW",
+};
+await after(unnumberedAfter);
+out.unnumbered_status = unnumberedAfter.status ?? null;
+out.unnumbered_secret = state.calls.at(-1).values.includes("b".repeat(64));
 
 state.answers = {
   admit: {
@@ -16380,6 +16422,29 @@ fn the_review_relay_materialises_the_prompt_and_admits_the_answer() {
     assert!(
         delivered.contains(&"RAW REVIEWER ANSWER"),
         "the reviewer's raw answer never reached the relay: {delivered:?}"
+    );
+    assert_eq!(
+        cases["secret_argument"], true,
+        "a task with an id did not pass its prompt's secret: {cases}"
+    );
+    assert_eq!(
+        cases["unmarked_admit_secret"], false,
+        "the plugin invented a secret for a prompt that carried none: {cases}"
+    );
+    assert_eq!(
+        cases["unnumbered_secret"], true,
+        "a task with no id was refused the secret its own prompt carries: {cases}"
+    );
+    assert_ne!(
+        cases["unnumbered_status"], "error",
+        "the id-less relay admission was reported as an error: {cases}"
+    );
+    assert!(
+        cases["secret_injected"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("estigia-relay-secret"),
+        "the marker prompt did not reach the child: {cases}"
     );
 
     let v1: Vec<&str> = cases["v1_hooks"]
@@ -18866,7 +18931,7 @@ const run = async (label, file, name, plan, completion, size = 0, shape = {}) =>
   return { label, ...outcome, completed, calls: calls().slice(before) };
 };
 
-const ok = { prompt: { stdout: "PROMPT BYTES\n" }, model: { stdout: "" }, admit: {} };
+const ok = { prompt: { stdout: "<!-- estigia-relay-secret: " + "a".repeat(64) + " -->\nPROMPT BYTES\n" }, model: { stdout: "" }, admit: {} };
 const tool = await load("relay.mjs");
 
 const out = [
@@ -18986,6 +19051,21 @@ fn review_args(action: &str, name: &str) -> serde_json::Value {
     ])
 }
 
+fn admitted_args(name: &str) -> serde_json::Value {
+    serde_json::json!([
+        "review",
+        "admit",
+        "--name",
+        name,
+        "--session-id",
+        "sess-0198",
+        "--runtime",
+        "pi",
+        "--secret",
+        "a".repeat(64)
+    ])
+}
+
 #[test]
 fn the_pi_review_relay_materialises_the_prompt_and_admits_the_answer() {
     let driven = run_pi_review_relay_driver();
@@ -19014,7 +19094,7 @@ fn the_pi_review_relay_materialises_the_prompt_and_admits_the_answer() {
         serde_json::json!([
             { "args": review_args("prompt", "review-risk"), "cwd": project, "stdin": "" },
             { "args": review_args("model", "review-risk"), "cwd": project, "stdin": "" },
-            { "args": review_args("admit", "review-risk"), "cwd": project, "stdin": "ANSWER" },
+            { "args": admitted_args("review-risk"), "cwd": project, "stdin": "ANSWER" },
         ])
     );
     let completed = inherit["completed"].as_array().expect("the completions");
@@ -19025,7 +19105,10 @@ fn the_pi_review_relay_materialises_the_prompt_and_admits_the_answer() {
     );
     assert_eq!(
         completed[0]["context"]["messages"][0]["content"][0]["text"],
-        "PROMPT BYTES\n"
+        format!(
+            "<!-- estigia-relay-secret: {} -->\nPROMPT BYTES\n",
+            "a".repeat(64)
+        )
     );
     assert!(
         completed[0]["context"].get("systemPrompt").is_none()
@@ -19107,7 +19190,7 @@ fn the_pi_review_relay_leaves_out_the_session_flags_it_cannot_fill_and_refuses_i
             serde_json::json!([
                 { "args": ["review", "prompt", "--name", "review-risk"], "cwd": project, "stdin": "" },
                 { "args": ["review", "model", "--name", "review-risk"], "cwd": project, "stdin": "" },
-                { "args": ["review", "admit", "--name", "review-risk"], "cwd": project, "stdin": "ANSWER" },
+                { "args": ["review", "admit", "--name", "review-risk", "--secret", "a".repeat(64)], "cwd": project, "stdin": "ANSWER" },
             ]),
             "{label}"
         );

@@ -102,6 +102,27 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   - **`handoff_review` remains for a host that can neither start a CLI nor relay.** It records the exact
     receipt for another run; it runs no reviewer and produces no verdict.
 
+- **The CLI road and the relay establish different things, and `review admit` serves only the
+  relay.** A job launched for a sealed `claude` or `codex` is answered from that process's own
+  `result.json` by `collect_review_input`; `review admit` refuses it `capture-not-relayed`, so the
+  publishing run's shell cannot hand in an answer, an empty-findings one included, for a reviewer
+  still working. What the CLI road establishes is unchanged: a process boundary and a tool-less
+  grant, not an identity, over a diff rebuilt from the receipt. What the relay establishes is
+  narrower still: a host context was handed the exact prompt and returned an answer naming the
+  job's secret, which `review prompt` writes into the prompt it materialises — derived from a
+  per-store key and the job id, created on first use in `store_meta` and never written into the
+  job directory — so an answer composed without reading that prompt is refused
+  `capture-secret-missing` or `capture-secret-mismatch`. `estigia review prompt` and
+  `estigia review admit` are refused `review-relay-is-the-reviewers` to a run that holds a
+  complete published receipt, so the publisher cannot ask for the secret of its own slots; the
+  reviewer's own context holds no receipt and is not refused. It still proves nothing about which
+  model answered, whether the host routed to a distinct context, or whether the reviewer read the
+  diff. **The local store is readable from the same run's shell.** The secret lives in
+  `~/.estigia/state.db`, which no refusal protects — only the stand-down record is denied — so a
+  run that opens the store and computes the digest for a job id obtains what `review admit`
+  requires. The mitigation bounds the one-line road the issue describes; it is not a signature, and
+  nothing measures whether a run opened the store.
+
 - **Where no reviewer definition file is installed, the grant is still computed from the embedded
   template.** Six of the eight adapters have no agent-definitions root. `hook.rs`'s prelaunch check
   calls `render_reviewer_agent` on the embedded `RESERVED_REVIEWERS` template and the running

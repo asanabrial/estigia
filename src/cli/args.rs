@@ -1139,6 +1139,9 @@ pub enum StoreAction {
 #[derive(Debug, Subcommand)]
 pub enum ReviewAction {
     /// Materialise the exact prompt of the pending reviewer job on standard output.
+    ///
+    /// A relayed job's prompt opens with the secret its answer has to name; the
+    /// host's reviewer context keeps it and passes it to `admit`.
     Prompt {
         /// The reserved reviewer name the host is launching.
         #[arg(long)]
@@ -1151,10 +1154,16 @@ pub enum ReviewAction {
         name: String,
     },
     /// Admit the reviewer's raw answer, read from standard input.
+    ///
+    /// Only a relayed job is answered this way; a sealed reviewer CLI's answer
+    /// is read from its own result by `collect_review_input`.
     Admit {
         /// The reserved reviewer name the host launched.
         #[arg(long)]
         name: String,
+        /// The secret the prompt handed to the reviewer context opens with.
+        #[arg(long)]
+        secret: Option<String>,
     },
 }
 

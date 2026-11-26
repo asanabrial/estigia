@@ -151,6 +151,30 @@ impl Store {
             .map_err(unreadable("read a relay review job"))
     }
 
+    /// The key a relayed reviewer's answer is bound to.
+    ///
+    /// Created on first use from SQLite's own random source and kept in
+    /// `store_meta`, so the value the host receives cannot be derived from the
+    /// job directory the run that published the review can read. Every process
+    /// that asks reads the one row.
+    pub(crate) fn relay_secret(&self) -> Result<String, Failure> {
+        self.connection()
+            .execute(
+                "INSERT INTO store_meta (key, value)
+                 VALUES ('relay-secret', lower(hex(randomblob(32))))
+                 ON CONFLICT (key) DO NOTHING",
+                [],
+            )
+            .map_err(unreadable("record the relay secret"))?;
+        self.connection()
+            .query_row(
+                "SELECT value FROM store_meta WHERE key = 'relay-secret'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(unreadable("read the relay secret"))
+    }
+
     /// Whether this store recorded that the review relay did not complete on
     /// `run_id`.
     pub(crate) fn relay_lost(&self, run_id: &str) -> Result<bool, Failure> {

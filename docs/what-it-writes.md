@@ -695,6 +695,16 @@ The job ID must equal the current attempt, so a delayed answer cannot satisfy a 
 The whole response, including acknowledgments, is limited to 4 MiB. Other hosts keep their existing
 JSON-only contract.
 
+The prompt the plugin puts in the task input also opens with `<!-- estigia-relay-secret: … -->`, a
+digest over a per-store key and the job id, which the plugin remembers and passes back as
+`estigia review admit --secret`. The marker is added when `estigia review prompt` materialises the
+prompt, never written into the job directory, and an answer admitted without it is refused
+`capture-secret-missing`, one with another job's refused `capture-secret-mismatch`. The binary's Pi
+relay prepends the same marker and passes it the same way. `estigia review prompt` and
+`estigia review admit` are refused to a run that holds a complete published receipt, so the
+publishing run cannot ask for its own slots' secrets; see
+[what the CLI road and the relay each establish](honesty-review-panels.md).
+
 A rejected answer abandons its job and records no report. A subsequent collect can therefore answer
 `capture-job-missing`: ask `review_status`, then call `launch_review_input` again for the still-offered
 name and launch its returned agent/prompt. This creates a new job against the same immutable receipt;
@@ -1022,14 +1032,15 @@ Pi has no sub-agent tool for a relay to intercept, so the extension registers on
 rendered from it). The tool does three things and decides none of them:
 
 1. runs `estigia review prompt --name <slot> --session-id <id> --runtime pi` in `ctx.cwd` and takes
-   standard output, verbatim, as the prompt;
+   standard output, verbatim, as the prompt, keeping the `estigia-relay-secret` marker it opens with
+   for step 3;
 2. runs `estigia review model --name <slot> …`, which prints the model the `reviewer` routing row named
    when `launch_review_input` recorded the job, and runs **one** completion through
    `ctx.modelRegistry.streamSimple`: a single user message holding the prompt, no system prompt, no tools,
    no session, bounded by the same deadline a CLI reviewer has (`DEFAULT_DEADLINE`), and authenticated by
    the registry itself, extension-registered providers included;
-3. pipes the raw answer into `estigia review admit --name <slot> …` and returns only a note that it was
-   admitted, so the model that called the tool never reads the answer.
+3. pipes the raw answer into `estigia review admit --name <slot> --secret <the marker's digest> …` and
+   returns only a note that it was admitted, so the model that called the tool never reads the answer.
 
 **Which model.** The `reviewer` row of `Model routing` is the one place that names it, read once by the
 binary at launch. A `provider/id` that Pi's registry lists runs on that model. `inherit`, or no row at

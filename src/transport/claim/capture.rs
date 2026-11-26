@@ -999,19 +999,35 @@ fn relay_store() -> Result<Store, Failure> {
     })
 }
 
+/// The secret a relayed answer has to carry, for the job at `id`.
+///
+/// Derived from the store's own key and the job id, so it is not in the job
+/// directory the run that published the review can open. It reaches the host's
+/// reviewer context inside the prompt `review prompt` materialises, and nowhere
+/// else.
+pub(crate) fn relay_secret_of(id: &str) -> Result<String, Failure> {
+    let store = Store::open(&store_path()?)?;
+    let key = store.relay_secret()?;
+    Ok(crate::transport::ownership::sha256_hex(
+        format!("{key}:{id}").as_bytes(),
+    ))
+}
+
 /// The exact prompt of the relay job one run launched for one reviewer name.
 ///
-/// Read from the job directory `launch_review_input` wrote, with an OpenCode-only
-/// job-bound output channel appended by the binary. A job that is no longer
-/// live is `capture-job-missing`: the review has moved past it, or it was already
-/// admitted.
+/// Read from the job directory `launch_review_input` wrote, with the job's
+/// secret prepended by the binary and, on OpenCode, a job-bound output channel
+/// appended. The secret is deliberately not in the directory. A job that is no
+/// longer live is `capture-job-missing`: the review has moved past it, or it was
+/// already admitted.
 pub fn relay_prompt(_context: &Context, run_id: &str, name: &str) -> Result<Vec<u8>, Failure> {
     let (dir, id) = relayed_dir(run_id, name)?;
+    let secret = relay_secret_of(&id)?;
     let prompt = prompt_of(&dir)?;
     Ok(if crate::reviewer::runs_on_opencode(run_id) {
-        crate::reviewer::relay::framed_prompt(prompt, &id)
+        crate::reviewer::relay::framed_prompt(prompt, &id, &secret)
     } else {
-        prompt
+        crate::reviewer::relay::with_secret(prompt, &secret)
     })
 }
 
@@ -1066,11 +1082,16 @@ fn live_relay_job(run_id: &str, name: &str) -> Result<Job, Failure> {
 /// the review has moved past is refused `capture-result-stale` with nothing
 /// recorded, and one whose receipt is still that one is admitted whatever step
 /// `review_status` offers next. A job already admitted answers again and writes nothing.
+///
+/// A job launched for a reviewer CLI is refused `capture-not-relayed`: its answer
+/// is the CLI's own result. A relayed job's answer must name the secret its prompt
+/// carried, so an answer composed without reading that prompt is refused.
 pub fn relay_admit(
     context: &Context,
     run_id: &str,
     name: &str,
     bytes: &[u8],
+    secret: Option<&str>,
     now: &str,
 ) -> Result<serde_json::Value, Failure> {
     let store = relay_store()?;
@@ -1078,6 +1099,10 @@ pub fn relay_admit(
         let Some(dir) = crate::transport::pull_review::panel::relayed_slot(run_id, name)? else {
             return Err(job_missing(name));
         };
+        let Some(id) = dir.file_name().map(|id| id.to_string_lossy().into_owned()) else {
+            return Err(job_missing(name));
+        };
+        require_relay_secret(&id, secret)?;
         let bytes = if crate::reviewer::runs_on_opencode(run_id) {
             let (answered_job, answer) =
                 crate::reviewer::relay::framed_result(bytes).map_err(reviewer_failure)?;
@@ -1101,6 +1126,18 @@ pub fn relay_admit(
     if job.run_id != run_id {
         return Err(job_other_run(&job));
     }
+    if !job.relayed {
+        return Err(stop(
+            "capture-not-relayed",
+            format!(
+                "`{name}` was launched for a reviewer CLI, so its answer is read from the job's \
+                 own result by `collect_review_input`, not handed in here"
+            ),
+            "call `collect_review_input` for this slot; `review admit` answers only a reviewer \
+             job the host relays",
+        ));
+    }
+    require_relay_secret(&job.id, secret)?;
     let input = CaptureInput {
         issue,
         run_id,
@@ -1144,6 +1181,32 @@ pub fn relay_admit(
         return Err(result_stale(&job));
     };
     admit(context, &input, &ledger, &job, role, &receipt, bytes)
+}
+
+/// Refuses an answer that was not handed back with the secret `review prompt`
+/// wrote into the job's prompt.
+fn require_relay_secret(id: &str, given: Option<&str>) -> Result<(), Failure> {
+    let Some(given) = given.map(str::trim).filter(|given| !given.is_empty()) else {
+        return Err(stop(
+            "capture-secret-missing",
+            "the answer carries no relay secret, and `review admit` requires the one `review \
+             prompt` writes into the prompt the host's reviewer context is handed"
+                .to_owned(),
+            "launch the reviewer through the installed relay, which keeps the secret from \
+             `review prompt`; an answer composed without reading that prompt cannot name it",
+        ));
+    };
+    if given != relay_secret_of(id)? {
+        return Err(stop(
+            "capture-secret-mismatch",
+            "the answer's relay secret is not the one `review prompt` wrote into this job's \
+             prompt"
+                .to_owned(),
+            "launch the reviewer through the installed relay and use the prompt it was given; \
+             do not reuse a secret from another job",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn launch_with(

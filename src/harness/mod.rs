@@ -979,6 +979,24 @@ const DISARMS_THE_HARNESS: &[&str] = &[
     "core.hookspath",
 ];
 
+/// The verb whose leaves take a reviewer's answer off a shell line.
+///
+/// A run that published the receipt is refused these; the host's reviewer
+/// context, which is a child with no receipt of its own, is not.
+const REVIEW_RELAY: &str = "estigia review";
+
+/// Whether a command line names `estigia review`, and not a longer verb such as
+/// `estigia review_status` that only reads, nor a different binary whose name
+/// ends in `estigia`.
+fn names_the_review_relay(view: &str) -> bool {
+    let words: Vec<&str> = view.split_whitespace().collect();
+    words.windows(2).any(|pair| {
+        pair[0] == "estigia"
+            && pair[1].trim_end_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                == "review"
+    })
+}
+
 /// The subcommands of a verb `DISARMS_THE_HARNESS` names that only read, so
 /// their absence from it is deliberate rather than an oversight.
 ///
@@ -1480,6 +1498,23 @@ pub(crate) fn delivery_pr_mismatch(command_pr: u64, receipt_pr: u64) -> Refusal 
         Resolution::no_command(
             NoCommandReason::HumanAuthority,
             "the complete review transaction for the pull request being merged",
+        ),
+    )
+}
+
+/// The refusal for a run that published the review and tried to hand in a
+/// reviewer's answer from its own shell.
+pub(crate) fn review_relay_is_the_reviewers() -> Refusal {
+    Refusal::not_started(
+        "review-relay-is-the-reviewers",
+        "this run published the review, so a reviewer's answer may not be handed in by its own \
+         shell: `estigia review prompt` and `estigia review admit` belong to the host's reviewer \
+         context, which runs the reviewer and answers for it",
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            "launch the reviewer through the installed relay, or install the `claude` or `codex` \
+             CLI so this process runs it; `collect_review_input` reads a finished reviewer's own \
+             result",
         ),
     )
 }
@@ -2445,6 +2480,26 @@ pub fn classify_observing(
                 CommandObserved {
                     matched: Established::Known((*matched).to_owned()),
                     against: Established::Known(disarm_view.clone()),
+                    literal,
+                    boundary_source: None,
+                    disqualifying_byte: None,
+                    same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
+                },
+            );
+        }
+        // After the disarm list, never before it: a line that names both this
+        // verb and a fragment that stands the gate down has to reach the
+        // fragment, or prefixing the relay's words would launder the disarm.
+        if names_the_review_relay(&disarm_view) {
+            return (
+                Action::Write {
+                    target: REVIEW_RELAY.to_owned(),
+                },
+                Sensitivity::Routine,
+                CommandObserved {
+                    matched: Established::Known(REVIEW_RELAY.to_owned()),
+                    against: Established::Known(disarm_view),
                     literal,
                     boundary_source: None,
                     disqualifying_byte: None,
@@ -3699,6 +3754,19 @@ fn decide_observing(
             None => Decision::Outside(Aside::NothingSworn),
         };
     };
+
+    if run
+        .review_transaction
+        .as_ref()
+        .is_some_and(|receipt| receipt.is_complete())
+        && matches!(action, Action::Write { target } if target == REVIEW_RELAY)
+    {
+        return Decision::Deny(Box::new(prefixed(
+            review_relay_is_the_reviewers(),
+            &subject,
+            observed,
+        )));
+    }
 
     if run.assisted {
         return assisted::decision(context, run, action, how, observed, &subject);
