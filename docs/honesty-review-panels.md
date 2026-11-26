@@ -465,7 +465,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 7,897 | file on disk |
+  | `skill/bindings/github.md` | 7,938 | file on disk |
   | `skill/policies/blind-judges.md` | 42,909 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
