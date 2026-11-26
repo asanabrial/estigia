@@ -461,7 +461,20 @@ fn repository_config(skill_root: &Path, repo_dir: &Path) -> Health {
             ),
         );
     }
-    let base = crate::skill::installed_config(skill_root).unwrap_or_default();
+    let base = match crate::skill::installed_config(skill_root) {
+        Ok(base) => base,
+        // Without the machine's answers there is nothing to judge this
+        // checkout's rows against, and defaulting to `Config::default` would
+        // call a row that tightens the machine a loosening.
+        Err(refusal) => {
+            return Health::Skipped {
+                detail: format!(
+                    "the machine's own rows could not be read: {}",
+                    refusal.message
+                ),
+            };
+        }
+    };
     match crate::skill::repository_complaint(&base, repo_dir) {
         Ok(None) => Health::Fine {
             detail: path.display().to_string(),

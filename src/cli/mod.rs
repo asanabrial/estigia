@@ -3532,13 +3532,24 @@ fn repository_set_stored(
     let path = repository_write(&rows, here, options)?;
     let written = std::fs::read_to_string(&path).ok();
     // Read back what the operator will actually read: the typed value is not
-    // the stored one (`trunk-based` is stored as `trunk`).
-    let config = skill::layer_repository(&Config::default(), here)?;
+    // the stored one (`trunk-based` is stored as `trunk`), and the repository's
+    // rows are adjudicated over the machine's answers, not over the defaults —
+    // a `trunk` written where the machine holds `trunk` is not a loosening.
+    let config = skill::layer_repository(&machine_base(options), here)?;
     Ok(StoredRow {
         value: setting.value_of(&config),
         path,
         changed: before != written,
     })
+}
+
+/// What the machine answers here, with no repository's rows in it: the base a
+/// repository's file is read over. Defaults when nothing is installed, which is
+/// all a checkout outside an installation has to read against.
+fn machine_base(options: &SetupOptions) -> Config {
+    layers_of(None, options, None)
+        .map(|(_, layers, _)| layers.unlayered().clone())
+        .unwrap_or_default()
 }
 
 /// Writes `rows` into this repository's own file as one change, refusing before
@@ -3562,40 +3573,35 @@ fn repository_write(
             ),
         ));
     }
-    // Started from what this repository already answers, so a second `--repo`
-    // does not quietly undo the first one's rows.
+    // Started from what this repository already answers, read over the
+    // machine's rows so a row that tightens them is kept rather than reverted.
+    let base = machine_base(options);
     let path = skill::repository_config_path(here);
     let mut spoken_for = Vec::new();
     let mut config = match skill::repository_rows(here)? {
         // A row this repository carries and cannot parse is a stop, not an empty table.
-        Some((_, text)) => crate::config::Config::read_scope_over(
-            &crate::config::Config::default(),
-            &text,
-            crate::config::Scope::Everywhere,
-        )
-        .and_then(|(mut read, settings)| {
-            let (tightened, refused) = crate::config::Config::tighten_over(
-                &crate::config::Config::default(),
-                &mut read,
-                &text,
-                false,
-            );
-            match refused {
-                Some(refusal) => Err(refusal),
-                None => {
-                    spoken_for = settings;
-                    spoken_for.extend(tightened);
-                    Ok(read)
-                }
-            }
-        })
-        .map_err(|error| {
-            Refusal::not_started(
-                "repository-configuration-unreadable",
-                format!("{}: {error}", path.display()),
-                Resolution::run("estigia config list"),
-            )
-        })?,
+        Some((_, text)) => {
+            crate::config::Config::read_scope_over(&base, &text, crate::config::Scope::Everywhere)
+                .and_then(|(mut read, settings)| {
+                    let (tightened, refused) =
+                        crate::config::Config::tighten_over(&base, &mut read, &text, false);
+                    match refused {
+                        Some(refusal) => Err(refusal),
+                        None => {
+                            spoken_for = settings;
+                            spoken_for.extend(tightened);
+                            Ok(read)
+                        }
+                    }
+                })
+                .map_err(|error| {
+                    Refusal::not_started(
+                        "repository-configuration-unreadable",
+                        format!("{}: {error}", path.display()),
+                        Resolution::run("estigia config list"),
+                    )
+                })?
+        }
         None => crate::config::Config::default(),
     };
     let mut speaks_for = spoken_for;

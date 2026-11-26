@@ -11708,21 +11708,58 @@ fn a_repository_write_reports_the_value_that_was_stored() {
 }
 
 #[test]
+fn a_repository_write_reads_back_over_the_machine_its_rows_tighten() {
+    // The read-back used to be layered over `Config::default()`, so a row that
+    // tightens a machine answer was reverted as a loosening and the command
+    // reported the default instead of the stored value; the same base made a
+    // second `--repo` drop the first row.
+    let mut machine = Config::default();
+    Setting::Integration
+        .apply(&mut machine, "trunk")
+        .expect("trunk is accepted");
+    let rig = authorisation_rig(&machine);
+    let stored = super::repository_set_stored(
+        Setting::Integration,
+        "trunk-based",
+        rig.repo.path(),
+        &rig.options,
+    )
+    .expect("a row the machine already holds");
+    assert_eq!(
+        stored.value, "trunk",
+        "the write reported a value other than the one stored"
+    );
+    super::repository_set_stored(Setting::Tracker, "github", rig.repo.path(), &rig.options)
+        .expect("a second row joins the first");
+    let written = std::fs::read_to_string(&stored.path).expect("the repository's file");
+    assert!(
+        written.contains("| Integration mode | trunk |"),
+        "the file lost the row or holds another value: {written}"
+    );
+}
+
+#[test]
 fn prune_confirm_names_what_it_removed_and_reports_a_deletion_that_failed() {
-    let removed = [
-        serde_json::json!({
-            "kind": "worktree",
-            "worktree": "/tmp/estigia-gone",
-            "removed": true,
-            "outcome": "removed",
-        }),
-        serde_json::json!({
-            "kind": "remote-head",
-            "branch": "fix/still-here",
-            "deleted": false,
-            "detail": "the lease moved",
-        }),
-    ];
+    // Built through the producers' own `to_json`, because the keys are the
+    // contract: a hand-made shape here would agree with the reader while the
+    // sweep's own answer disagreed.
+    let mut gone = crate::transport::branch::Retired {
+        worktree: std::path::PathBuf::from("/tmp/estigia-gone"),
+        worktree_removed: true,
+        branch: Some("fix/estigia-gone".to_owned()),
+        branch_deleted: true,
+        reason: None,
+    }
+    .to_json();
+    gone["kind"] = serde_json::json!("worktree");
+    let mut kept = crate::transport::branch::RemoteRetired {
+        branch: "fix/still-here".to_owned(),
+        deleted: false,
+        reason: Some("the lease moved".to_owned()),
+    }
+    .to_json();
+    kept["kind"] = serde_json::json!("remote-head");
+    let removed = [gone, kept];
     let (lines, failed) = super::prune_removal_lines(&removed);
     assert!(
         lines[0].contains("removed") && lines[0].contains("/tmp/estigia-gone"),

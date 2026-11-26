@@ -683,7 +683,9 @@ readers of their own.
 `doctor` scans a repository's file for labels that resolve to no setting, as it already did for the
 operator's file: a typo is indistinguishable from a deleted row to every reader, which drops both.
 An unknown label in a repository file is a broken `repository-config` check naming the file and the
-labels, never a silent skip.
+labels, never a silent skip. When the machine's own rows cannot be read the check is skipped and says
+what it could not read, because there is nothing to judge the checkout's rows against and the defaults
+are not that answer.
 
 The contract sends the agent to `estigia config list`, run from the repository, for the effective
 answer, and names the repository file only as `estigia/estigia.local.md` under the Git common

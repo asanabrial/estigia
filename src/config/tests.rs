@@ -2929,3 +2929,27 @@ fn every_guard_row_a_repository_may_carry_has_a_looser_direction_the_comparison_
         }
     ));
 }
+
+#[test]
+fn a_repository_may_only_narrow_the_publication_lanes() {
+    let lanes = |value: &str| {
+        let mut config = Config::default();
+        Setting::PublicationLanes
+            .apply(&mut config, value)
+            .expect("a lane list");
+        config
+    };
+    let (two, one) = (lanes("review, merge"), lanes("review"));
+    assert!(Setting::PublicationLanes.tightens(&two, &one));
+    assert!(!Setting::PublicationLanes.tightens(&one, &two));
+    let excluded = |value: &str| {
+        let mut config = Config::default();
+        Setting::PublicationLanesExclude
+            .apply(&mut config, value)
+            .expect("an exclusion list");
+        config
+    };
+    let (some, more) = (excluded("review"), excluded("review, merge"));
+    assert!(Setting::PublicationLanesExclude.tightens(&some, &more));
+    assert!(!Setting::PublicationLanesExclude.tightens(&more, &some));
+}

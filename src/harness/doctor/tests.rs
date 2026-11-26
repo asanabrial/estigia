@@ -4201,3 +4201,23 @@ fn a_repository_row_that_resolves_to_no_setting_is_reported() {
         "a readable file was reported broken"
     );
 }
+
+#[test]
+fn a_checkout_whose_machine_rows_cannot_be_read_is_not_judged_against_defaults() {
+    let skill = tempfile::tempdir().expect("a skill root");
+    std::fs::write(
+        skill.path().join(crate::skill::CONTRACT),
+        "| Irreversible commands | terraform apply |\n| Renewal window | 30 days |\n",
+    )
+    .expect("a contract with one unreadable row");
+    let repo = tempfile::tempdir().expect("a checkout");
+    std::fs::create_dir_all(repo.path().join(".git")).expect("a git directory");
+    let path = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("the directory");
+    std::fs::write(&path, "| Irreversible commands | none |\n").expect("a loosening row");
+
+    let Health::Skipped { detail } = super::repository_config(skill.path(), repo.path()) else {
+        panic!("a machine nobody can read was judged anyway");
+    };
+    assert!(detail.contains("could not be read"), "{detail}");
+}
