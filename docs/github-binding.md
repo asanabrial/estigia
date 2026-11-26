@@ -2,8 +2,9 @@
 
 The incidents and arguments behind several rules in
 [`skill/bindings/github.md`](../skill/bindings/github.md), moved here so a run loads the
-rules without them. Every rule they explain stays in the binding; nothing here is a rule of
-its own.
+rules without them. Every rule they explain stays in the binding; where a section below describes a
+legacy format the store still reads, it says why the binding's rule exists rather than stating a
+second rule.
 
 ## The claim hazard
 
@@ -126,3 +127,91 @@ gets split out when it has earned the seat. The container image is the exception
 developer's machine": the [`Dockerfile`](../Dockerfile) builds one from the pinned toolchain, carrying
 the server alone — `estigia mcp` over stdio, with no `git` and no `gh`, so a tool that reaches the
 tracker refuses inside it — for a directory that inspects a server by running one in a container.
+
+## What GitHub provides, and what it cannot
+
+The workflow asks a tracker for six things. What a binding must declare is not only which of them
+exist, but what happens where they do not — a capability that is absent and undeclared is how a rule
+silently stops applying.
+
+| The workflow needs | GitHub | Consequence |
+|---|---|---|
+| A single-valued **state** per item | ✗ — labels are multi-valued | "exactly one `status:*`" is a **discipline, not a constraint**. Nothing stops two; every transition must remove the old label in the same call |
+| A **claim** applied server-side | ⚠️ — assignees are a set, **but agents usually share one account** | then the set has one element however many runs claimed, and re-reading it can never show a collision — see *The claim hazard* |
+| **Last activity**, timestamped | ✗ — Estigia keeps its own | only a verified holder liveness record in the local store renews a claim; GitHub's `updatedAt` and comment times renew nothing |
+| A stable, short **identity** | ✓ — the issue number | usable verbatim in branch and worktree names |
+| **Comments**, append-only and ordered | ✓ | a person's prose lands here; Estigia's own records live in the local store and none is posted |
+| A native **priority** | ✗ | encoded as a label `<scale>:<value>`; the domain names the scale |
+
+GitHub has a closed state of its own, independent of labels — but `done` is still carried as a sixth
+label, and the two are set together. Relying on closed alone would leave the finished issue wearing
+`status:review`, so every query for work awaiting verification would keep returning it.
+
+## Why the mechanical half is a tool
+
+**Every reversible operation in the binding is executed by Estigia's tools, not by an agent composing
+`gh` calls**: a run once moved labels correctly through the whole state machine and executed a
+mechanical step zero times in a whole session, and prose cannot fix a run that does not execute
+prose. So the steps that are **mechanical and verifiable** — label swaps, the project projection and
+its read-back, claim adjudication, the renewal, branch and worktree creation, draft PR publication,
+CI release, the closing-keyword scan — are code. The steps that need **judgement** — what is worth
+analysing, whether a blocker is discharged, whether a diff passes review — are not, and stay in the
+prose where they belong.
+
+There is no interpreter and no script on the path: the operations answer in one place. The tools read
+the same operator configuration the prose does, so it never becomes a third source of truth, and
+`estigia config list` prints what they resolved.
+
+Where `gh` cannot be installed, the REST API with a token does everything the binding describes at the
+cost of longer invocations; the installer checks for `gh` and tells you rather than fetching it.
+
+## Exit codes: why a failed read is not a failed answer
+
+Exit `3` is never a stand-down and never clearance: treating a timeout as either halts every run or
+lets a run write deaf. Exit `5` is not retried blindly, because a write may have landed before the
+failure surfaced. Exit `2` is not a lesser `1`: no authority changed hands and nothing was attempted,
+so a run fixes the configuration and retries; reporting it as `1` makes a run abandon a claim it still
+holds.
+
+## What the store keeps, and what an older binary posted
+
+Parsing prose for the same answer is fragile — any rewording breaks it — so every control marker these
+operations record carries a machine-readable trailer. `claim`, `reclaim`, `unassign`, the renewal half
+of `comment` (transport `heartbeat`) and of `claim` (transport `start-branch`), and the review
+operations record theirs in the local store; none is posted to GitHub as a comment. The shape below is
+the one the store keeps and the one an older binary posted:
+
+```
+<!-- issue-flow: claim run-id=claude-code-60fabae1 horizon=2026-07-25T23:00Z -->
+<!-- issue-flow: standdown run-id=claude-code-d7d8a22e -->
+<!-- issue-flow: heartbeat run-id=claude-code-60fabae1 -->
+<!-- issue-flow: reclaim run-id=claude-code-3f1a0b2c from=claude-code-60fabae1 -->
+```
+
+Two vocabularies read these, and they must agree about the same words. **Release** kinds
+(`standdown`, `release`, `unassign`, `reclaim`) mean a run-id no longer holds the item, so its earlier
+claim stops counting. **Control** kinds (`standdown`, `reclaim`, `adjudication`) mean a message
+instructs a run-id to stop. `reclaim` names the run it took over **from**, not the run that wrote it —
+a marker's subject is not always its author.
+
+The store keeps this text as an append-only row; an older binary's comment is read through the import
+under the same rules and is inert once edited. A control message must both **name the run-id AND
+instruct**: a heartbeat that mentions a run-id in passing ("waiting on `<run-id>`'s measurement
+phase") instructs you to do nothing, and reading it as a stand-down would have you abandon work nobody
+asked you to drop. Only `viewerDidAuthor=true` comments are control input.
+
+`comment` with `expect_state` runs the renewal **before** it records, and refuses to record when the
+renewal says stop, so a loser's next renewal exits `1` instead of writing. The renewal does not prevent
+losing the race; it caps the cost of having lost it at one renewal interval. The two halves have their
+own kinds — `heartbeat`, `progress` and `blocked` for the renewal, `note`, `blocker` and `diagnosis`
+otherwise — and a kind named against the other half is refused rather than guessed at.
+
+## Credentials on a sandboxed runtime
+
+`gh auth status` may report a token stored in a system keyring that a sandboxed runtime cannot read;
+there, use `GH_TOKEN` instead. Verify with `gh issue list` before relying on the workflow — an analyst
+that cannot file its issue has done the work and lost it.
+
+`gh issue` needs no `project` scope. Project mirroring does — prove it once with
+`gh project list --owner <owner>`, or just run any `transition`, which reports a missing scope as a
+skip rather than failing.
