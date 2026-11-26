@@ -5204,6 +5204,23 @@ fn the_silence_the_skill_states_is_the_one_ownership_applies() {
         );
     }
 }
+/// The credential failure path a sandboxed runtime hits is stated in the binding the agent reads,
+/// not only in a document the installed skill cannot open.
+#[test]
+fn the_binding_states_the_sandboxed_credential_path() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let binding = std::fs::read_to_string(root.join("skill/bindings/github.md"))
+        .expect("the github binding ships");
+    let flat = binding.split_whitespace().collect::<Vec<_>>().join(" ");
+    for needle in ["GH_TOKEN", "gh issue list"] {
+        assert!(
+            flat.contains(needle),
+            "the github binding no longer states {needle:?}, and the installed skill cannot open \
+             docs/github-binding.md"
+        );
+    }
+}
+
 /// Every test the catalogue names is a function this crate still has.
 ///
 /// `docs/testing.md` is the inventory `AGENTS.md` gave up: which test drives which generated

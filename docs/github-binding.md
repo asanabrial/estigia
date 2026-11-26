@@ -2,9 +2,9 @@
 
 The incidents and arguments behind several rules in
 [`skill/bindings/github.md`](../skill/bindings/github.md), moved here so a run loads the
-rules without them. Every rule they explain stays in the binding; where a section below describes a
-legacy format the store still reads, it says why the binding's rule exists rather than stating a
-second rule.
+rules without them. Every rule a run acts on stays in the binding; where a section below describes how
+the store reads a legacy marker, it says why the binding's rule exists rather than stating a second
+rule.
 
 ## The claim hazard
 
