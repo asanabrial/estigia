@@ -1314,7 +1314,9 @@ pub(crate) fn merge_without_ci_release(pr: u64) -> Refusal {
 
 /// The `gh pr merge` boundary's verdict check: `release_ci` records a release
 /// only over the basis it admits, so the merge reads that record for exactly
-/// the receipt the pointer holds. An unreadable store refuses.
+/// the receipt the pointer holds, and recomputes the verdict that record was
+/// taken over — a finding recorded after the release goes stale without
+/// erasing the stamp. An unreadable store refuses.
 pub(crate) fn unreleased_merge(
     action: &Action,
     run: &Run,
@@ -1349,8 +1351,10 @@ pub(crate) fn unreleased_merge(
     }
 }
 
-/// [`unreleased_merge`]'s reader against the live local store.
-pub(crate) fn live_release_reader(
+/// [`unreleased_merge`]'s reader against the live local store: the release the
+/// store recorded for this receipt, and the recomputation of the verdict that
+/// release was taken over.
+pub(crate) fn live_merge_reader(
     context: &GateContext,
 ) -> impl Fn(u64, &crate::transport::claim::ReviewTransaction) -> Result<bool, crate::transport::Failure>
 + '_ {
@@ -1360,7 +1364,127 @@ pub(crate) fn live_release_reader(
             context.repo_dir.clone(),
             context.tracker.named_repo(),
         );
-        crate::transport::claim::ci_release_recorded(&transport, issue, receipt)
+        if !crate::transport::claim::ci_release_recorded(&transport, issue, receipt)? {
+            return Ok(false);
+        }
+        crate::transport::claim::clearance_holds(&transport, issue, receipt)?;
+        Ok(true)
+    }
+}
+
+/// A hand merge whose line does not execute what the gate admitted: a merge
+/// commit bound to the reviewed head.
+///
+/// The gate reads the line's own words. An option it cannot place refuses
+/// rather than passes, and the resolution is the same line with the admitted
+/// spelling, which is a command that clears this refusal as written.
+pub(crate) fn merge_spelling(action: &Action, literal: Option<&str>, run: &Run) -> Option<Refusal> {
+    let Action::Boundary {
+        command,
+        pr: Some(pr),
+        ..
+    } = action
+    else {
+        return None;
+    };
+    if command != "gh pr merge" {
+        return None;
+    }
+    let receipt = run
+        .review_transaction
+        .as_ref()
+        .filter(|receipt| receipt.is_complete())?;
+    let clearing_command = format!(
+        "gh pr merge {pr} --merge --match-head-commit {}",
+        receipt.head
+    );
+    let Some(line) = literal else {
+        return Some(Refusal::not_started(
+            "merge-option-not-admitted",
+            "the merge line reaches this gate without the words it was written with, so no flag \
+             on it can be placed",
+            Resolution::run(clearing_command),
+        ));
+    };
+    let words: Vec<&str> = line.split_ascii_whitespace().collect();
+    let mut merge_commit = false;
+    let mut method_offence: Option<&str> = None;
+    let mut option_offence: Option<&str> = None;
+    let mut bound: Option<&str> = None;
+    let mut index = 4;
+    while let Some(word) = words.get(index).copied() {
+        match word {
+            "--merge" => merge_commit = true,
+            "--auto" => {}
+            "--match-head-commit" => {
+                bound = words.get(index + 1).copied();
+                index += 1;
+            }
+            "-s" | "--squash" | "-r" | "--rebase" => {
+                method_offence.get_or_insert(word);
+            }
+            other => match other.strip_prefix("--match-head-commit=") {
+                Some(sha) => bound = Some(sha),
+                None => {
+                    option_offence.get_or_insert(other);
+                }
+            },
+        }
+        index += 1;
+    }
+    if let Some(offence) = method_offence {
+        return Some(Refusal::not_started(
+            "merge-method-not-a-merge-commit",
+            format!(
+                "the merge line carries `{offence}`, which does not leave the reviewed head as \
+                 the delivered commit's second parent, so the topology delivery verifies cannot \
+                 be there"
+            ),
+            Resolution::run(clearing_command),
+        ));
+    }
+    if !merge_commit {
+        return Some(Refusal::not_started(
+            "merge-method-not-a-merge-commit",
+            "the merge line carries no `--merge`, so the host may prompt, squash or rebase, and \
+             only a merge commit leaves the reviewed head as the delivered commit's second parent",
+            Resolution::run(clearing_command),
+        ));
+    }
+    if let Some(offence) = option_offence {
+        let why = if offence == "--admin" {
+            "`--admin` merges past the branch protection the reviewed head passed, so the merge \
+             would deliver bytes no required check saw"
+                .to_owned()
+        } else {
+            format!(
+                "the merge line carries `{offence}`, which this gate does not read; only `--merge`, \
+                 `--auto` and `--match-head-commit` are admitted"
+            )
+        };
+        return Some(Refusal::not_started(
+            "merge-option-not-admitted",
+            why,
+            Resolution::run(clearing_command),
+        ));
+    }
+    match bound {
+        Some(found) if found == receipt.head => None,
+        Some(found) => Some(Refusal::not_started(
+            "merge-head-not-bound",
+            format!(
+                "the merge line binds the merge to `{}`, not the reviewed head `{}`",
+                short(found),
+                short(&receipt.head)
+            ),
+            Resolution::run(clearing_command),
+        )),
+        None => Some(Refusal::not_started(
+            "merge-head-not-bound",
+            "the merge line carries no `--match-head-commit`, so a push landing between the head \
+             this gate read and the merge would deliver bytes no review saw",
+            Resolution::run(clearing_command),
+        )),
     }
 }
 
@@ -3692,7 +3816,8 @@ fn decide_observing(
                 &context.repo_dir,
                 &live_pr_head_reader(context),
             )
-            .or_else(|| unreleased_merge(action, run, &live_release_reader(context)))
+            .or_else(|| merge_spelling(action, literal, run))
+            .or_else(|| unreleased_merge(action, run, &live_merge_reader(context)))
         {
             return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
         }
@@ -3825,7 +3950,8 @@ fn decide_observing(
                     &context.repo_dir,
                     &live_pr_head_reader(context),
                 )
-                .or_else(|| unreleased_merge(action, run, &live_release_reader(context)))
+                .or_else(|| merge_spelling(action, literal, run))
+                .or_else(|| unreleased_merge(action, run, &live_merge_reader(context)))
                 {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
                 }

@@ -1679,6 +1679,16 @@ fn holder_receipt() -> crate::transport::claim::ReviewTransaction {
     }
 }
 
+/// The same pointer, over a world's own two commits: the checkout a merge
+/// decision reads is the one a release recomputes the verdict from.
+fn reviewed_receipt(world: &World) -> crate::transport::claim::ReviewTransaction {
+    crate::transport::claim::ReviewTransaction {
+        head: world.head.clone(),
+        base: world.base.clone(),
+        ..holder_receipt()
+    }
+}
+
 fn store_holder(
     context: &GateContext,
     repo: &Path,
@@ -1725,19 +1735,20 @@ fn pr_head_answer(head: &str) -> Value {
 #[test]
 fn the_live_merge_decision_names_its_caller_when_another_live_run_holds_the_same_checkout() {
     let root = tempfile::tempdir().expect("a gate root");
-    let repo = crate::test_env::repository_with_commit();
-    let context = shared_checkout_context(root.path(), repo.path());
+    let reviewed = world("notes.md", "A line of prose.\n");
+    let context = shared_checkout_context(root.path(), reviewed.work.path());
+    let receipt = reviewed_receipt(&reviewed);
     store_holder(
         &context,
-        repo.path(),
+        reviewed.work.path(),
         "claude-caller000",
         12,
         "review",
-        Some(holder_receipt()),
+        Some(receipt.clone()),
     );
     store_holder(
         &context,
-        repo.path(),
+        reviewed.work.path(),
         "claude-bystander",
         34,
         "in-progress",
@@ -1749,7 +1760,6 @@ fn the_live_merge_decision_names_its_caller_when_another_live_run_holds_the_same
     ))
     .expect("the pointer reads");
 
-    let receipt = holder_receipt();
     let marker = crate::transport::markers::render(
         "ci-release",
         &[
@@ -2111,19 +2121,19 @@ fn an_answer_a_step_cannot_read_halts_rather_than_passing() {
 #[test]
 fn the_live_merge_decision_reads_the_window_the_repository_answers_now() {
     let root = tempfile::tempdir().expect("a gate root");
-    let repo = crate::test_env::repository_with_commit();
-    let mut context = shared_checkout_context(root.path(), repo.path());
+    let reviewed = world("notes.md", "A line of prose.\n");
+    let mut context = shared_checkout_context(root.path(), reviewed.work.path());
     context.operation_window = crate::config::GitOperationWindow::parse("enabled 09:00-17:00")
         .expect("a window that parses");
+    let receipt = reviewed_receipt(&reviewed);
     store_holder(
         &context,
-        repo.path(),
+        reviewed.work.path(),
         "claude-caller000",
         12,
         "review",
-        Some(holder_receipt()),
+        Some(receipt.clone()),
     );
-    let receipt = holder_receipt();
     let marker = crate::transport::markers::render(
         "ci-release",
         &[
@@ -2138,7 +2148,7 @@ fn the_live_merge_decision_reads_the_window_the_repository_answers_now() {
     .expect("the marker renders");
     let store = root.path().join("store").join("state.db");
     std::fs::create_dir_all(store.parent().expect("a parent")).expect("a store directory");
-    let rows = crate::skill::repository_config_path(repo.path());
+    let rows = crate::skill::repository_config_path(reviewed.work.path());
     std::fs::create_dir_all(rows.parent().expect("a parent")).expect("the rows directory");
     let bin = scripted_gh();
     let script = answers(&[

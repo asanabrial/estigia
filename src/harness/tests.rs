@@ -8791,6 +8791,154 @@ fn a_merge_reads_its_ci_release_and_an_unreadable_store_refuses() {
 }
 
 #[test]
+fn a_hand_merge_must_spell_the_delivery_the_gate_admitted() {
+    let head = "e".repeat(40);
+    let held = || {
+        let mut run = Run::new("claude-abcd1234".to_owned());
+        run.issue = Some(crate::identity::Identity::Number(12));
+        run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+            epoch: "a".repeat(32),
+            pr: 54,
+            head: head.clone(),
+            base: "b".repeat(40),
+            digest: "c".repeat(64),
+        });
+        run
+    };
+    let merge = |flags: &str| format!("gh pr merge 54 {flags}");
+    let bound = format!("--match-head-commit {head}");
+    let corrected = merge(&format!("--merge {bound}"));
+    let admitted = merge(&format!("--merge --auto {bound}"));
+    let (action, _) = classify("Bash", &json!({ "command": admitted }));
+    assert!(
+        super::merge_spelling(&action, Some(&admitted), &held()).is_none(),
+        "the merge `deliver` runs was refused"
+    );
+
+    let refused = [
+        (
+            merge(&format!("--squash {bound}")),
+            "merge-method-not-a-merge-commit",
+        ),
+        (
+            merge(&format!("--rebase {bound}")),
+            "merge-method-not-a-merge-commit",
+        ),
+        (merge(&bound), "merge-method-not-a-merge-commit"),
+        (
+            merge(&format!("--merge --admin {bound}")),
+            "merge-option-not-admitted",
+        ),
+        (
+            merge(&format!("--merge --delete-branch {bound}")),
+            "merge-option-not-admitted",
+        ),
+        (merge("--merge"), "merge-head-not-bound"),
+        (
+            merge(&format!("--merge --match-head-commit {}", "f".repeat(40))),
+            "merge-head-not-bound",
+        ),
+    ];
+    for (line, code) in refused {
+        let (action, _) = classify("Bash", &json!({ "command": line }));
+        let refusal = super::merge_spelling(&action, Some(&line), &held())
+            .unwrap_or_else(|| panic!("`{line}` was admitted"));
+        assert_eq!(refusal.code, code, "`{line}`");
+        assert_eq!(
+            refusal.resolution,
+            Resolution::run(corrected.clone()),
+            "`{line}` does not name the line that clears it"
+        );
+    }
+
+    for (flags, needle) in [
+        (format!("--squash {bound}"), "--squash"),
+        (format!("--rebase {bound}"), "--rebase"),
+        (format!("--merge --admin {bound}"), "--admin"),
+        (
+            format!("--merge --delete-branch {bound}"),
+            "--delete-branch",
+        ),
+    ] {
+        let line = merge(&flags);
+        let (action, _) = classify("Bash", &json!({ "command": line }));
+        let refusal = super::merge_spelling(&action, Some(&line), &held())
+            .unwrap_or_else(|| panic!("`{line}` was admitted"));
+        assert!(
+            refusal.message.contains(needle),
+            "the refusal of `{line}` does not name `{needle}`: {refusal}"
+        );
+    }
+
+    let (action, _) = classify("Bash", &json!({ "command": admitted }));
+    assert_eq!(
+        super::merge_spelling(&action, None, &held()).map(|refusal| refusal.code),
+        Some("merge-option-not-admitted"),
+        "a merge whose words the gate never saw was read as though it had"
+    );
+}
+
+#[test]
+fn the_gate_refuses_a_hand_merge_that_does_not_spell_the_merge_commit() {
+    let repo = crate::test_env::repository_with_commit();
+    let head = super::head_of(repo.path()).expect("the checkout's head");
+    let root = tempfile::tempdir().expect("a gate root");
+    let mut context = context(root.path());
+    context.repo_dir = repo.path().to_path_buf();
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
+
+    let mut base = sworn(33, repo.path());
+    base.worktree = Some(repo.path().to_path_buf());
+    base.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: head.clone(),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    });
+
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::live_holder_issue(&base.run_id, 33, "in-progress"),
+        json!({
+            "matches": "pr view 54 --json",
+            "stdout": json!({
+                "number": 54,
+                "headRefOid": head,
+                "state": "OPEN",
+                "isDraft": false,
+            })
+            .to_string(),
+            "status": 0,
+        }),
+    ]);
+    let line = format!("gh pr merge 54 --squash --match-head-commit {head}");
+    let decision = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        let input = json!({ "command": line });
+        let (action, how, command) = classify_observing("Bash", &input, &[]);
+        let observed = Observed {
+            command: Some(command),
+            checkout: None,
+            push_refs: Vec::new(),
+        };
+        gate_observing(&context, &mut base.clone(), &action, how, &observed)
+    });
+    let Decision::Deny(refusal) = decision else {
+        panic!("a hand merge that squashes was admitted: {decision:?}");
+    };
+    assert_eq!(refusal.code, "merge-method-not-a-merge-commit");
+    assert!(
+        refusal.message.contains("--squash"),
+        "the refusal did not name the flag it read: {refusal}"
+    );
+}
+
+#[test]
 fn a_git_write_is_a_write_whatever_order_its_options_come_in() {
     for line in [
         "git reset -q --hard HEAD~3",

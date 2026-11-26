@@ -264,11 +264,16 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   one); verdict and CI-release effects restore a supplied receipt into a reviewer's pointer after a handoff
   removed the publisher's. `gh pr merge` is also refused `merge-without-ci-release` unless the store holds a
   trusted `ci-release` marker for exactly the pointer's receipt (written by this identity, never edited, so
-  an imported comment carrying one counts the same; an unreadable store refuses). A `claim` restores a
+  an imported comment carrying one counts the same; an unreadable store refuses), and refused when the
+  verdict that release was taken over no longer clears: the gate recomputes the receipt's basis as
+  `release_ci` does, so a finding recorded after the release refuses the merge instead of being merged
+  anyway. The line's own words are read too — `--squash`, `--rebase`, no `--merge`, `--admin` and any flag
+  the gate does not place refuse, as does a missing or mismatched `--match-head-commit`. A `claim` restores a
   receipt when its answer carries the issue's newest confirmed, approved, unescalated publication whose pull
   request is open at the receipt's head with that base or one advanced cleanly past it, at the price of one
   `gh pr view` read (a failed read restores nothing); it does not read CI state, and a push between the
-  claim's read and the merge is caught only by `--match-head-commit`. `git push` and `gh pr create` are not
+  claim's read and the merge is caught by `--match-head-commit`, which the gate now requires on the line it
+  read. `git push` and `gh pr create` are not
   gated on it (the answer to a moved head is *re-publish*). Not seen: a run that bypasses the tools and
   changes GitHub directly. For `git merge`, `git tag` and `gh release` both halves of the comparison run
   through the same unsteered git invocation, so an exported `GIT_DIR` cannot make an unrelated clone look

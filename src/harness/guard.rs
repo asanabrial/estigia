@@ -662,7 +662,7 @@ fn adjudicate_pushing(
     let Readings {
         literal,
         same_tier_fragments,
-        ..
+        write_targets,
     } = readings;
     // Before asking who holds the checkout, because the answer cannot matter:
     // an action the harness does not watch is outside whoever swore what. The
@@ -828,12 +828,25 @@ fn adjudicate_pushing(
                 };
             }
             selected = Some(run.run_id.clone());
+            // The words this road read travel with the decision, the same way
+            // the run road carries them: a check that reads the line cannot
+            // answer for a call whose line was dropped here.
+            let command = literal.map(|text| crate::outcome::CommandObserved {
+                matched: crate::outcome::Established::Known(action.subject().unwrap_or_default()),
+                against: crate::outcome::Established::Known(text.to_owned()),
+                literal: crate::outcome::Established::Known(text.to_owned()),
+                boundary_source: None,
+                disqualifying_byte: None,
+                same_tier_fragments: same_tier_fragments.to_vec(),
+                write_targets: write_targets.to_vec(),
+            });
             let decision = super::gate_observing(
                 context,
                 &mut run,
                 action,
                 how,
                 &crate::outcome::Observed {
+                    command,
                     push_refs: refs
                         .iter()
                         .enumerate()

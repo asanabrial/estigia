@@ -147,6 +147,10 @@ or broke a rule it can be told. That includes:
   target than the published one) are `refused` for the same reason;
 - `merge-without-ci-release`: the local store holds no `ci-release` for the exact receipt being
   merged, so no verdict was checked for those bytes;
+- `merge-head-not-bound`, `merge-method-not-a-merge-commit` and `merge-option-not-admitted`: the merge
+  line as the gate read it would not run the delivery the gate admitted — no `--match-head-commit` for
+  the reviewed head, no merge commit, or a flag the gate does not read (`--admin` above all). The
+  resolution is the same line with the admitted spelling, which the agent retypes itself;
 - `inspect-parent-missing`: the publication named for an inspection was published with no recorded
   parent, or as a recovered successor, a fresh candidate, so there is no correction to look at;
 - `transport-refused`, the catch-all for a reason the transport vocabulary does not name.
