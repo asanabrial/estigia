@@ -76,7 +76,7 @@ Crossing a threshold selects delegated work only. Size, file count, and risk do 
 
 FLOW keeps the claimed issue as the record and the publication as the candidate.
 
-1. **Understand.** Read-only work stays read-only. Explore in proportion; one product question,
+1. **Understand.** Read-only work stays read-only. Explore in proportion; at most one product question,
    one premise challenge.
 2. **Route.** Execute directly when the work is understood; plan briefly only for real uncertainty;
    delegate only for a reason the table above names.
@@ -93,7 +93,7 @@ A checklist exists only when the work spans publications or sessions, divides in
 2. For `ready`, partition candidates by stable domain and scale, rank within each partition, and take the oldest head; a selected domain limits selection to its highest-ranked oldest item. Use oldest-first only when no candidate has a valid scale contract.
 3. `claim` with the run-id and horizon; the store adjudicates and the earliest live claim wins. Pass `transition_to`, `branch` and `base` for a ready item; keep claimed review work in `review` unless a code change needs a fresh cycle. Move a task between states on your own only when `Transition authorisation` allows it; otherwise ask first.
 4. Load the route's right-hand implementation rule book; if absent, say so and build to the acceptance criteria. Follow repository rules and the repository-delivery fallback, and implement in the isolated checkout.
-5. **Renew before publishing.** Publish or reuse the shared PR as a confirmed draft, record epoch, PR, head, base and clean-target digest, then transition to `review`. Read the lane before acquiring reviewers. Where the base declares checks, `collect_review_input` with `checks` runs them, and no lens launches while the receipt is red or running. Follow `review_status`'s `next` until it stops — `collect_review_input` per slot, with `launch: true` to start a reviewer, `deliver` for the verdict — calling `escalate_review` when a spent correction leaves the decision to a person, `handoff_review` when this run cannot obtain the required distinct context. [Blind judges](policies/blind-judges.md) owns settlement. **Commit to the disposition before reading anything the panel returns.**
+5. **Renew before publishing.** Publish or reuse the shared PR as a confirmed draft, record epoch, PR, head, base and clean-target digest, then transition to `review`. Read the lane before acquiring reviewers, and `republish_review`'s force-push rule from [repository delivery](references/repository-delivery.md). Where the base declares checks, `collect_review_input` with `checks` runs them, and no lens launches while the receipt is red or running. Follow `review_status`'s `next` until it stops — `collect_review_input` per slot, with `launch: true` to start a reviewer, `deliver` for the verdict — calling `escalate_review` when a spent correction leaves the decision to a person, `handoff_review` when this run cannot obtain the required distinct context. [Blind judges](policies/blind-judges.md) owns settlement. **Commit to the disposition before reading anything the panel returns.**
 6. `deliver` runs step 5's tail through the close; follow its `next`. By hand: renew at each irreversible boundary; merge only when reviewed, green, at the reviewed head, on its base or a cleanly advanced one, and only when `Delivery authorisation` allows it — otherwise ask first, naming head and base. Verify the delivered SHA's topology as [github delivery](bindings/github/delivery.md) states, then close from `review` with one `release` carrying the evidence file and `spend`. Release is last and not optional; a run releasing its own issue names no `target_operation`. **A delivery that skips release is reported, not refused.**
 7. Steps 5 and 6 apply the Decision Gates table and invent no third wait. Record the exact blocker, or the decision and its discharger, before release.
 8. A defect, risk or improvement outside this issue's scope is handed to an analyst run and never written into this change. That run is this one's own analyst half, filing with `create` under the [analyst contract](references/analyst.md), including its bound of at most one evidenced issue or none, or a separate session that holds its own claim; a subagent of this run is not a separate run, so it reads and this run files. Hand over what is held: the reproduction, the file and line, the command and its output; or say plainly that it could not be reduced to a reproduction, rather than filing an impression. A delegated `analyst` worker definition, where the host installs one, can carry the reading, but it is repository-read-only and files nothing. Do not block delivery on the answer; record the handoff and its outcome in the close evidence when the answer has come back, or say the handoff is still open, so a later run can see that this one looked and what came of it.
@@ -112,14 +112,14 @@ Load a reference when its condition holds; each owns its subject once.
 | [repository delivery](references/repository-delivery.md) | The repository leaves isolation, integration, review sizing, base movement or cleanup unsettled, or step 5 sends a run to its lane and force-push rules. |
 | [analyst](references/analyst.md) | The role is analyst, or the run is the combined analyst-developer. |
 | [decision gates](references/decision-gates.md) | A Decision Gates row above names it. |
-| [safety incidents](references/safety-incidents.md) | Claim, reclaim, handoff or failure rationale, or an incident's evidence. |
+| [safety incidents](references/safety-incidents.md) | Claim, reclaim, handoff, failure or incident evidence. |
 | [github recovery](bindings/github/recovery.md) | A lock, a migration, or a quiet failure fired. |
 | [github setup](bindings/github/setup.md) | `estigia setup` or `sync` is running. |
 | [github delivery](bindings/github/delivery.md) | `deliver` answered `stopped`, step 6's topology check applies, or a version tag is due. |
 | [github operations](bindings/github/operations.md) and its [guarantees](bindings/github/operations-guarantees.md) | An operation's full guarantee, or a refusal only it raises, is needed. |
 | [github refusals](bindings/github/refusals.md) | A refusal is not self-explanatory. |
 | [linear binding](bindings/linear.md) | The `Tracker` row names `linear`. |
-| [runtime notes](references/runtime-notes.md) | Invocation, delegation, read-only enforcement, install mechanics, or runtime limits. |
+| [runtime notes](references/runtime-notes.md) | Invocation, delegation, read-only enforcement, install mechanics, runtime limits. |
 | [blind judges](policies/blind-judges.md) | `review_status` stops as escalated or a correction is owed. |
 | [judgment day](policies/judgment-day.md) | The operator asks for the adversarial panel. |
 | [receipt-driven review](protocols/rdd.md) | The base moved under a review. |

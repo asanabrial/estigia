@@ -31,7 +31,7 @@ deciding; `refused` means stop, because repeating the command repeats the answer
 Not scripted, and performed by the agent after verifying SHAs (`github/delivery.md`): `ci_status`,
 `publish_version`, `close`, `merge`. A defect in a script must not be able to tag or close anything.
 
-Where a sandboxed runtime cannot read the keyring, use `GH_TOKEN` and verify with `gh issue list`
+Where a sandboxed runtime cannot read the keyring, use `GH_TOKEN`; verify with `gh issue list`
 before relying on the workflow.
 
 ## State names
@@ -63,7 +63,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused on retry.
 
 | Operation | Command |
 |---|---|
-| `flush` | `estigia flush` |
+| `flush` | `estigia flush`; `--status` lists the queue |
 | `create` | `SCRIPT create` |
 | `list_state` | `SCRIPT list-state` |
 | `claim` | `SCRIPT claim` — see *Claim* in github/operations.md |
@@ -135,7 +135,7 @@ keyword** in the PR body or a commit message is forbidden — remove it, use `Re
 **So `transition` to `done` AFTER the merge, REGARDLESS of whether GitHub already closed the issue:**
 closing is not a label event, so skipping the transition because "it is already closed" leaves it
 CLOSED wearing its old label. `publish-review` reports the cause: a keyword is a hard stop, a branch
-link does not block.
+link carries its mandated follow-up and does not block.
 
 ## `transition` — and why the read-back covers the projects
 

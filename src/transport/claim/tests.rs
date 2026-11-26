@@ -8808,12 +8808,45 @@ fn the_contract_states_flow_its_budget_and_test_first() {
         "test-first",
         "`collect_review_input` with `checks`",
         "no lens launches while the receipt is red or running",
+        "`republish_review`'s force-push rule from [repository delivery]",
         "step 5 sends a run to its lane and force-push rules",
         "step 6's topology check applies",
     ] {
         assert!(
             flat.contains(needle),
             "the FLOW contract does not state {needle:?}"
+        );
+    }
+    let after_five = flat
+        .split("5. **Renew before publishing.**")
+        .nth(1)
+        .expect("the contract states step 5");
+    let step_five = after_five.split("6. `deliver`").next().unwrap_or_default();
+    let step_six = after_five
+        .split("6. `deliver`")
+        .nth(1)
+        .unwrap_or_default()
+        .split("Load a reference when its condition holds")
+        .next()
+        .unwrap_or_default();
+    for (step, needle) in [
+        (step_five, "`collect_review_input` with `checks`"),
+        (
+            step_five,
+            "no lens launches while the receipt is red or running",
+        ),
+        (
+            step_five,
+            "`republish_review`'s force-push rule from [repository delivery]",
+        ),
+        (
+            step_six,
+            "Verify the delivered SHA's topology as [github delivery]",
+        ),
+    ] {
+        assert!(
+            step.contains(needle),
+            "the step itself does not state {needle:?}; the references table alone is not the rule"
         );
     }
 }
