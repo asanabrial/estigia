@@ -119,6 +119,7 @@ fn the_gate_answers_before_the_command_reaches_github() {
         &[],
         crate::harness::guard::Readings {
             literal,
+            text: None,
             same_tier_fragments: &observed.same_tier_fragments,
             write_targets: &observed.write_targets,
         },

@@ -2,8 +2,8 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use super::{
-    FORMAT, JobResult, JobStatus, OnThread, RESULT, Spawner, USAGE, await_started, job_status,
-    read_usage, run, write_job,
+    FORMAT, JobResult, JobStatus, OnThread, RELAYED, RESULT, STARTED, Spawner, USAGE,
+    await_started, job_status, mark_relayed, read_usage, run, write_job,
 };
 use crate::outcome::Refusal;
 use crate::reviewer::{Adapter, Invocation, Receipt, Review, ReviewerCode, Usage};
@@ -112,7 +112,7 @@ fn settled(dir: &std::path::Path) -> JobStatus {
 fn the_runner_leaves_the_answer_the_adapter_gave_byte_for_byte() {
     let (_root, dir) = prepared();
     OnThread(echo).start(&dir).expect("the runner starts");
-    let JobResult::Answer(bytes) = finished(&dir) else {
+    let JobResult::Answer { bytes, .. } = finished(&dir) else {
         panic!("a refusal where an answer was expected");
     };
     let mut wanted = b"review-risk|Some(\"a-model\")|".to_vec();
@@ -185,7 +185,13 @@ fn a_slow_reviewer_is_running_after_the_start_returns_and_finished_when_it_answe
 
     assert_eq!(job_status(&dir).expect("status"), JobStatus::Running);
     release.send(()).expect("released");
-    assert_eq!(finished(&dir), JobResult::Answer(b"late".to_vec()));
+    assert_eq!(
+        finished(&dir),
+        JobResult::Answer {
+            bytes: b"late".to_vec(),
+            token: None
+        }
+    );
 }
 
 #[test]
@@ -258,7 +264,13 @@ fn a_finished_job_preserves_the_usage_its_adapter_reported() {
         }
     };
     OnThread(select).start(&dir).expect("the runner starts");
-    assert_eq!(finished(&dir), JobResult::Answer(b"the answer".to_vec()));
+    assert_eq!(
+        finished(&dir),
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        }
+    );
     assert!(dir.join(USAGE).is_file(), "no usage artifact was written");
 
     let artifact: serde_json::Value =
@@ -366,7 +378,10 @@ fn a_usage_write_that_fails_leaves_the_answer_as_the_outcome() {
 
     assert_eq!(
         finished(&dir),
-        JobResult::Answer(b"the answer".to_vec()),
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        },
         "a failed usage write turned the review's answer into a refusal"
     );
     assert!(
@@ -395,7 +410,10 @@ fn the_writer_never_emits_the_empty_counter_map_the_reader_refuses() {
 
     assert_eq!(
         finished(&empty_dir),
-        JobResult::Answer(b"the answer".to_vec())
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        }
     );
     assert!(
         !empty_dir.join(USAGE).exists(),
@@ -412,7 +430,10 @@ fn the_writer_never_emits_the_empty_counter_map_the_reader_refuses() {
 
     assert_eq!(
         finished(&counted_dir),
-        JobResult::Answer(b"the answer".to_vec())
+        JobResult::Answer {
+            bytes: b"the answer".to_vec(),
+            token: None
+        }
     );
     assert!(
         counted_dir.join(USAGE).is_file(),
@@ -483,4 +504,29 @@ fn the_reader_refuses_a_usage_artifact_whose_counters_are_empty() {
     );
     let error = read_usage(dir.path()).expect_err("an empty counter set is corrupt");
     assert!(error.detail().contains("no counters"), "{error:?}");
+}
+
+#[test]
+fn a_job_directory_written_again_does_not_keep_the_previous_attempts_answer() {
+    let (_root, dir) = prepared();
+    mark_relayed(&dir).expect("the job is marked relayed");
+    std::fs::write(dir.join(USAGE), "{}").expect("a usage artifact");
+    OnThread(echo).start(&dir).expect("the runner starts");
+    assert!(matches!(finished(&dir), JobResult::Answer { .. }));
+    for left in [RESULT, STARTED, USAGE, RELAYED] {
+        assert!(
+            dir.join(left).exists(),
+            "the first attempt left no `{left}`"
+        );
+    }
+
+    write_job(&dir, &invocation()).expect("the job is written again");
+
+    for left in [RESULT, STARTED, USAGE, RELAYED] {
+        assert!(
+            !dir.join(left).exists(),
+            "`{left}` from the previous attempt outlived the rewrite, so a reader of the new \
+             attempt would take it for this one's"
+        );
+    }
 }

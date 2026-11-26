@@ -17,6 +17,7 @@ mod feed;
 mod filesystem;
 mod handoffs;
 mod import;
+mod job_tokens;
 mod jobs;
 mod ledger;
 mod messages;

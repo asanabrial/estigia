@@ -3482,3 +3482,82 @@ fn an_unreadable_repository_configuration_denies_the_commit_it_could_have_denied
         );
     }
 }
+
+/// A run that holds an issue is refused a write into the state directory.
+///
+/// The store, the job directories and the run pointers are what the gate reads
+/// decisions back from, and the control surface already classified a write
+/// there as `Boundary` — which a verified claim then allowed. The refusal is
+/// unconditional, so a claimed run is refused exactly as an unclaimed one is.
+#[test]
+fn a_claimed_run_is_refused_a_write_into_the_state_directory() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let run_id = "claude-abcd1234";
+    let horizon = "2099-01-01T00:00Z";
+    let epoch = "2".repeat(32);
+
+    let marker = estigia::transport::markers::render(
+        "claim",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("horizon", horizon),
+            ("op-id", &epoch),
+        ],
+    )
+    .expect("a claim marker");
+    let held = serde_json::json!({
+        "state": "OPEN",
+        "assignees": [{"login": "fixture"}],
+        "labels": [{"name": "status:ready"}],
+        "comments": [{
+            "id": "IC_1",
+            "createdAt": "2026-08-17T16:00:00Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("Claimed by {run_id}.\n\n{marker}\n"),
+        }],
+    });
+    let script = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": held.to_string(), "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the script serialises");
+
+    let claimed = tracker_command(home, repo, bin, &script)
+        .args(["claim", "12", "--run-id", run_id, "--horizon", horizon])
+        .output()
+        .expect("estigia claim runs");
+    assert!(
+        claimed.status.success(),
+        "the fixture claim failed: {}",
+        String::from_utf8_lossy(&claimed.stderr)
+    );
+
+    let destination = home
+        .join(".estigia")
+        .join("jobs")
+        .join("a-job")
+        .join("result.json");
+    let input = serde_json::json!({ "file_path": destination.display().to_string() }).to_string();
+    let gate = tracker_command(home, repo, bin, &script)
+        .args([
+            "gate", "Write", "--input", &input, "--run-id", run_id, "--json",
+        ])
+        .output()
+        .expect("estigia gate runs");
+    let answer = format!(
+        "{}{}",
+        String::from_utf8_lossy(&gate.stdout),
+        String::from_utf8_lossy(&gate.stderr)
+    );
+    assert!(
+        answer.contains("state-directory-is-for-the-binary"),
+        "a claimed run was allowed to write its own result file: {answer}"
+    );
+    assert!(
+        answer.contains("\"class\": \"refused\""),
+        "the denial did not class the rule that said no: {answer}"
+    );
+}

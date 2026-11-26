@@ -81,7 +81,13 @@ fn a_detached_runner_returns_before_a_slow_reviewer_finishes_and_leaves_its_answ
             JobStatus::Running => panic!("the runner never finished"),
         }
     };
-    assert_eq!(result, JobResult::Answer(b"{\"findings\": []}".to_vec()));
+    assert_eq!(
+        result,
+        JobResult::Answer {
+            bytes: b"{\"findings\": []}".to_vec(),
+            token: None,
+        }
+    );
     assert!(
         !home.join(".estigia").exists(),
         "the runner wrote under the home it was given"
