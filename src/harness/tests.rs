@@ -9181,3 +9181,17 @@ fn a_run_that_published_a_review_cannot_answer_its_own_reviewers_from_a_shell() 
         );
     }
 }
+
+#[test]
+fn the_relay_verb_does_not_hide_a_disarm_beside_it() {
+    let (action, _) = classify(
+        "Bash",
+        &json!({
+            "command": "estigia review prompt --name review-risk && git config core.hookspath /dev/null"
+        }),
+    );
+    assert!(
+        matches!(&action, Action::Boundary { command, .. } if command == "core.hookspath"),
+        "the relay classification swallowed the disarm on the same line: {action:?}"
+    );
+}

@@ -15916,6 +15916,25 @@ await after(pairedAfter);
 out.secret_status = pairedAfter.status ?? null;
 out.secret_argument = state.calls.at(-1).values.includes("a".repeat(64));
 
+state.answers = { prompt: { exitCode: 0, stdout: "<!-- estigia-relay-secret: " + "b".repeat(64) + " -->\nNO ID PROMPT" } };
+const unnumbered = {
+  tool: "task",
+  sessionID: "ses_relay",
+  input: { subagent_type: "review-risk" },
+};
+await before(unnumbered);
+state.answers = { admit: { exitCode: 0, stdout: "{\"ok\":true}" } };
+const unnumberedAfter = {
+  tool: "task",
+  sessionID: "ses_relay",
+  input: unnumbered.input,
+  status: "completed",
+  result: "RAW",
+};
+await after(unnumberedAfter);
+out.unnumbered_status = unnumberedAfter.status ?? null;
+out.unnumbered_secret = state.calls.at(-1).values.includes("b".repeat(64));
+
 state.answers = {
   admit: {
     exitCode: 1,
@@ -16406,11 +16425,19 @@ fn the_review_relay_materialises_the_prompt_and_admits_the_answer() {
     );
     assert_eq!(
         cases["secret_argument"], true,
-        "the plugin did not pass the prompt's secret to `review admit`: {cases}"
+        "a task with an id did not pass its prompt's secret: {cases}"
     );
     assert_eq!(
         cases["unmarked_admit_secret"], false,
         "the plugin invented a secret for a prompt that carried none: {cases}"
+    );
+    assert_eq!(
+        cases["unnumbered_secret"], true,
+        "a task with no id was refused the secret its own prompt carries: {cases}"
+    );
+    assert_ne!(
+        cases["unnumbered_status"], "error",
+        "the id-less relay admission was reported as an error: {cases}"
     );
     assert!(
         cases["secret_injected"]

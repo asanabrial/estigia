@@ -2457,23 +2457,6 @@ pub fn classify_observing(
                 },
             );
         }
-        if names_the_review_relay(&disarm_view) {
-            return (
-                Action::Write {
-                    target: REVIEW_RELAY.to_owned(),
-                },
-                Sensitivity::Routine,
-                CommandObserved {
-                    matched: Established::Known(REVIEW_RELAY.to_owned()),
-                    against: Established::Known(disarm_view),
-                    literal,
-                    boundary_source: None,
-                    disqualifying_byte: None,
-                    same_tier_fragments: Vec::new(),
-                    write_targets: Vec::new(),
-                },
-            );
-        }
         if let Some(matched) = DISARMS_THE_HARNESS
             .iter()
             .find(|fragment| disarm_view.contains(*fragment))
@@ -2497,6 +2480,26 @@ pub fn classify_observing(
                 CommandObserved {
                     matched: Established::Known((*matched).to_owned()),
                     against: Established::Known(disarm_view.clone()),
+                    literal,
+                    boundary_source: None,
+                    disqualifying_byte: None,
+                    same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
+                },
+            );
+        }
+        // After the disarm list, never before it: a line that names both this
+        // verb and a fragment that stands the gate down has to reach the
+        // fragment, or prefixing the relay's words would launder the disarm.
+        if names_the_review_relay(&disarm_view) {
+            return (
+                Action::Write {
+                    target: REVIEW_RELAY.to_owned(),
+                },
+                Sensitivity::Routine,
+                CommandObserved {
+                    matched: Established::Known(REVIEW_RELAY.to_owned()),
+                    against: Established::Known(disarm_view),
                     literal,
                     boundary_source: None,
                     disqualifying_byte: None,

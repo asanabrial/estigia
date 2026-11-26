@@ -1288,7 +1288,15 @@ const after = async (event, cwd, shell) => {
     putResult(event, event.error);
     return;
   }
-  const asked = await ask(shell, cwd, "admit", name, event?.sessionID, raw, remembered?.secret);
+  const asked = await ask(
+    shell,
+    cwd,
+    "admit",
+    name,
+    event?.sessionID,
+    raw,
+    remembered?.secret ?? secretOf(event?.input?.prompt),
+  );
   if (asked.code) {
     const refusal = asked.message || `estigia refused the reviewer's answer (${asked.code})`;
     if (event && typeof event === "object") {
