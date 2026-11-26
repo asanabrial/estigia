@@ -47,6 +47,9 @@ The acceptance criteria came with the launch. Do not widen them, do not narrow t
 invent a bar that was not written. Where they are silent and a decision has to be made, make the
 ordinary one and say in your report that you made it.
 
+Isolation and review-unit size come from the repository's own instructions; where those are silent,
+`references/repository-delivery.md` settles them.
+
 ## The tool list above is enforced, not requested
 
 Estigia reads this file at the gate and refuses a call outside it — but only for the tools the hook
@@ -55,9 +58,3 @@ is woken for: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Update`, `Bash`, `A
 convention. The half that binds is the half that writes, which for this role is the whole of it —
 including `Agent` and `Task`, so the instruction above not to delegate is refused rather than
 trusted.
-
-## Load the contract first
-
-Read `SKILL.md` in the installed skill directory for the states, the claim, and what a run may
-write. Read `references/repository-delivery.md` for isolation and review-unit rules when the
-repository's own instructions do not settle them.
