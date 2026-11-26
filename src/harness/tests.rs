@@ -150,6 +150,33 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
     assert!(matches!(array, Action::Boundary { pr: None, .. }));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_write_that_lands_on_a_persons_record_is_that_record() {
+    let root = tempfile::tempdir().expect("a root");
+    let state = root.path().join(".estigia");
+    std::fs::create_dir_all(&state).expect("a state directory");
+    std::fs::write(state.join("stand-down.json"), "{}").expect("the record");
+    let checkout = root.path().join("checkout");
+    std::fs::create_dir_all(&checkout).expect("a checkout");
+    std::os::unix::fs::symlink(&state, checkout.join("link")).expect("a link");
+
+    let (direct, direct_sensitivity) = classify(
+        "Write",
+        &json!({ "file_path": state.join("stand-down.json") }),
+    );
+    let (through, through_sensitivity) = classify(
+        "Write",
+        &json!({ "file_path": checkout.join("link").join("stand-down.json") }),
+    );
+    assert_eq!(
+        format!("{through:?}"),
+        format!("{direct:?}"),
+        "a write landing on the record through a link is not read as the record"
+    );
+    assert_eq!(through_sensitivity, direct_sensitivity);
+}
+
 #[test]
 fn powershell_is_read_as_the_shell_it_is() {
     for command in [
