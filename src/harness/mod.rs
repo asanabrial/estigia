@@ -987,12 +987,19 @@ const REVIEW_RELAY: &str = "estigia review";
 
 /// Whether a command line names `estigia review`, and not a longer verb such as
 /// `estigia review_status` that only reads, nor a different binary whose name
-/// ends in `estigia`. Read the way [`person_only::named_in`] reads its commands,
-/// so a path-qualified binary and an option before the verb are caught; that
-/// also means a line that merely mentions the two words is caught, the same
-/// boundary the disarm list has.
+/// ends in `estigia`. Read as `person_only::named_in` reads its commands — the
+/// binary in any position, an option between it and the verb skipped — so a
+/// path-qualified binary or a wrapper is caught; that also means a line that
+/// merely mentions the two words is caught, the boundary the disarm list has.
 fn names_the_review_relay(view: &str) -> bool {
-    person_only::runs_the_verb(view, "review")
+    let words: Vec<&str> = view.split_whitespace().collect();
+    words.iter().enumerate().any(|(at, word)| {
+        *word == "estigia"
+            && words[at + 1..]
+                .iter()
+                .find(|next| !next.starts_with('-'))
+                .is_some_and(|next| *next == "review")
+    })
 }
 
 /// The subcommands of a verb `DISARMS_THE_HARNESS` names that only read, so
