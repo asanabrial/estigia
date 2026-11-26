@@ -48,6 +48,11 @@ const preamble = (run_id, dischargeable, capped) =>
 
 const held = (issue, run_id) => fill(PREAMBLE.held, { issue, run_id });
 
+const workable = (said) =>
+  typeof said?.claimable === "number" &&
+  typeof said?.dischargeable === "number" &&
+  said.claimable + said.dischargeable > 0;
+
 const objective = (given) =>
   given === ""
     ? OBJECTIVE.default
@@ -346,6 +351,13 @@ const consider = async (pi, ctx, session, lapsed) => {
     issue = String(named);
     const opens = typeof read.said?.opens_at === "string" ? read.said.opens_at : "";
     if (opens !== "") {
+      if (workable(read.said)) {
+        if (!running(loops.get(session)) || stopRequested.has(session)) return;
+        disarm(session);
+        tell(pi, held(issue, goal.run_id) + fill(PREAMBLE.window_closed_work, { at: opens }));
+        reacted(goal, "enqueued");
+        return;
+      }
       if (goal.window === opens) {
         windowWait(pi, ctx, session, opens);
         return;

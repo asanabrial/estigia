@@ -225,6 +225,7 @@ pub fn preamble_parts() -> Value {
         "assisted": ASSISTED,
         "window_closed": WINDOW_CLOSED,
         "window_timed": WINDOW_TIMED,
+        "window_closed_work": WINDOW_CLOSED_WORK,
         "person_recheck": PERSON_RECHECK,
         "window_wait": WINDOW_WAIT,
         "window_open": WINDOW_OPEN,
