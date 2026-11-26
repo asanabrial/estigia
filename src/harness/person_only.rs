@@ -301,6 +301,13 @@ pub fn named_in(view: &str) -> Option<&'static PersonOnly> {
         .find(|command| runs(&plain, command.verb) || runs(&folded, command.verb))
 }
 
+/// Whether the line runs `estigia <verb>`, read exactly as [`named_in`] reads a
+/// person-only command: a word naming the binary, by basename and with its
+/// quotes stripped, then the next word that is not an option.
+pub(crate) fn runs_the_verb(view: &str, verb: &str) -> bool {
+    runs(&words_of(view), verb) || runs(&words_of(&dequoted(view)), verb)
+}
+
 fn words_of(text: &str) -> Vec<&str> {
     text.split(|c: char| !in_a_word(c))
         .filter(|word| !word.is_empty())

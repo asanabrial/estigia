@@ -9165,14 +9165,40 @@ fn a_run_that_published_a_review_cannot_answer_its_own_reviewers_from_a_shell() 
         let decision = decide(&context, &mut reading, &action, how);
         assert!(
             !format!("{decision:?}").contains("review-relay-is-the-reviewers"),
-            "{command} was refused for a run that published nothing: {decision:?}"
+            "{command} was refused as the relay for a run that published nothing: {decision:?}"
         );
     }
 
     for command in [
-        "estigia review_status",
         "xestigia review admit --name review-risk",
         "estigia reviews --name review-risk",
+        "estigia review_status",
+    ] {
+        let (action, _) = classify("Bash", &json!({ "command": command }));
+        assert!(
+            !matches!(action, Action::Write { ref target } if target == "estigia review"),
+            "{command} was read as the relay's own command"
+        );
+    }
+
+    for command in [
+        "/usr/local/bin/estigia review admit --name review-risk",
+        "./estigia review prompt --name review-risk",
+        "estigia --json review admit --name review-risk",
+    ] {
+        let (action, _) = classify("Bash", &json!({ "command": command }));
+        assert_eq!(
+            action,
+            Action::Write {
+                target: "estigia review".to_owned()
+            },
+            "{command} escaped the relay's own command"
+        );
+    }
+
+    for command in [
+        "git commit -m \"fix estigia review flow\"",
+        "echo estigia review",
     ] {
         let (action, how) = classify("Bash", &json!({ "command": command }));
         let mut published = sworn(42, &context.repo_dir);
@@ -9183,10 +9209,12 @@ fn a_run_that_published_a_review_cannot_answer_its_own_reviewers_from_a_shell() 
             base: "c".repeat(40),
             digest: "d".repeat(64),
         });
-        let decision = decide(&context, &mut published, &action, how);
-        assert!(
-            !format!("{decision:?}").contains("review-relay-is-the-reviewers"),
-            "{command} was refused as the relay: {decision:?}"
+        let Decision::Deny(refusal) = decide(&context, &mut published, &action, how) else {
+            panic!("`{command}` was allowed, so the words are read positionally");
+        };
+        assert_eq!(
+            refusal.code, "review-relay-is-the-reviewers",
+            "a line that only mentions the relay changed how it is held: {command}"
         );
     }
 }
