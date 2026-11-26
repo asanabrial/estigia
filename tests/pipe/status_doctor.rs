@@ -394,6 +394,11 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         // Broken by the same step 9: a store that does not open cannot be read
         // for its counted failures either.
         "store-records",
+        // Skipped here: the command runs in a temporary directory that is no
+        // git checkout, so the checkout has no rows of its own. Broken against
+        // a real repository file in `harness::doctor`'s own module
+        // (`a_repository_row_that_resolves_to_no_setting_is_reported`).
+        "repository-config",
     ];
     let unforced: Vec<&String> = printed
         .iter()

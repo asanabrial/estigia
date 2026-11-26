@@ -1330,11 +1330,17 @@ impl Config {
         Ok(config.review_voice)
     }
 
-    /// Lays the authorisation rows a repository's file may tighten over `config`.
+    /// Lays a repository's own file over `config`, and says which rows it answers.
     ///
-    /// A row is honoured unless it is `auto` over a `base` that says `ask`; the
-    /// row it cannot honour is left out of the returned settings and `config`
-    /// keeps `base`'s answer. `base` is what the layers below this one read.
+    /// One rule, here: a row whose scope is the repository is answered freely;
+    /// a row the machine also answers may be carried only when the value is no
+    /// looser than `base` holds. An agent row it may not carry at all is inert.
+    ///
+    /// A row that cannot be parsed is a refusal when `tolerant` is false. When
+    /// it is true — the gate's read, which must not stop an agent mid-edit — the
+    /// setting the gate decides on is read at its strictest value instead, and
+    /// a row the gate does not read keeps `base`. `base` is what the layers
+    /// below this one read.
     pub(crate) fn tighten_over(
         base: &Self,
         config: &mut Self,
@@ -1347,12 +1353,24 @@ impl Config {
             let Some(setting) = Setting::from_label(&label) else {
                 continue;
             };
-            if !setting.repository_may_tighten() && setting.scope() != Scope::Repository {
+            let may_answer = match setting.scope() {
+                Scope::Repository | Scope::Everywhere => true,
+                Scope::Agent => setting.repository_may_tighten(),
+                Scope::Machine => false,
+            };
+            if !may_answer {
                 continue;
             }
             let mut probe = base.clone();
             if let Err(refusal) = setting.apply_stored(&mut probe, &value) {
-                if !tolerant {
+                if tolerant {
+                    if let Some(strict) = setting.strictest_where_unreadable() {
+                        let _ = setting.apply_stored(config, strict);
+                        if !owned.contains(&setting) {
+                            owned.push(setting);
+                        }
+                    }
+                } else {
                     refused.get_or_insert(refusal);
                 }
                 continue;
@@ -1365,6 +1383,9 @@ impl Config {
             } else {
                 let _ = setting.apply(config, &setting.value_of(base));
                 owned.retain(|held| held != &setting);
+                if !tolerant {
+                    refused.get_or_insert_with(|| looser_than_the_machine(setting, &probe, base));
+                }
             }
         }
         (owned, refused)
@@ -1601,6 +1622,38 @@ impl Config {
     pub fn render_some_agent_rows(&self, speaks_for: &[Setting]) -> String {
         settings::render_some_agent_rows(self, speaks_for)
     }
+}
+
+/// The refusal code for a repository row that would loosen a machine answer.
+///
+/// One spelling, because the layering reads this code to tell a row it will not
+/// honour from one it cannot parse.
+pub const CANNOT_LOOSEN: &str = "repository-cannot-loosen";
+
+/// The refusal for a repository row that would loosen what the machine answers.
+///
+/// The file is appended by the reader that called this; the row and the value
+/// it tries to loosen are named here so the complaint can be acted on without
+/// opening the table.
+fn looser_than_the_machine(setting: Setting, written: &Config, base: &Config) -> Refusal {
+    let written = setting.value_of(written);
+    let held = setting.value_of(base);
+    Refusal::not_started(
+        CANNOT_LOOSEN,
+        format!(
+            "`{}` is {written:?} here, which is looser than {held:?} underneath it; a repository \
+             may only tighten a row the machine answers",
+            setting.label()
+        ),
+        crate::outcome::Resolution::no_command(
+            crate::outcome::NoCommandReason::OperatorKnowledge,
+            format!(
+                "`{}` changed in this repository's own file, or its machine-wide value narrowed \
+                 enough that this one only tightens it",
+                setting.label()
+            ),
+        ),
+    )
 }
 
 #[cfg(test)]

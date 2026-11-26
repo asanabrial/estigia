@@ -79,9 +79,7 @@ fn a_hand_written_auto_does_not_loosen_an_agents_ask() {
     let skill = root.path().join(DIRECTORY);
     install(&skill, &Config::default(), false).expect("the contract installs");
     asking_agent(&skill);
-    let (_repository, path) = repository_with_rows(
-        "| Delivery authorisation | auto | auto |\n| Review delegation | ask | auto |\n",
-    );
+    let (_repository, path) = repository_with_rows("| Delivery authorisation | auto | auto |\n");
 
     let layers = config_layers(&skill, Some("opencode"), Some(&path)).expect("the layers read");
 
@@ -97,9 +95,11 @@ fn a_hand_written_auto_does_not_loosen_an_agents_ask() {
     );
     let (_, report) = config_layers_for_reporting(&skill, Some("opencode"), Some(&path))
         .expect("the layers read");
-    assert_eq!(
-        report.expect("the retired repository row is reported").code,
-        "review-delegation-retired"
+    let report = report.expect("the row that was ignored is not reported");
+    assert_eq!(report.code, crate::config::CANNOT_LOOSEN);
+    assert!(
+        report.message.contains("Delivery authorisation"),
+        "{report}"
     );
 }
 
@@ -785,6 +785,48 @@ fn one_row_the_gate_cannot_read_does_not_cost_it_the_rows_beside_it() {
 }
 
 #[test]
+fn a_repository_row_that_did_not_parse_keeps_the_workflow_beside_it() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let skill = root.path().join(DIRECTORY);
+    install(&skill, &Config::default(), false).expect("install succeeds");
+    let (_repository, here) =
+        repository_with_rows("| Claim workflow | assisted |\n| Renewal window | 30 days |\n");
+
+    let kept = installed_config_in_keeping_what_parses_apart(&skill, &here);
+    assert!(
+        kept.row.is_some(),
+        "the bad row was dropped without a complaint"
+    );
+    assert!(kept.contract.is_none());
+    assert_eq!(
+        kept.config.workflow,
+        crate::config::Workflow::Assisted,
+        "a row that parsed was lost with the one that did not"
+    );
+    assert_eq!(
+        kept.config.window,
+        std::time::Duration::from_secs(1),
+        "a renewal window nobody can read was read wider than one second"
+    );
+}
+
+#[test]
+fn a_repository_workflow_row_that_does_not_parse_shuts_the_tracker_writers() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let skill = root.path().join(DIRECTORY);
+    install(&skill, &Config::default(), false).expect("install succeeds");
+    let (_repository, here) = repository_with_rows("| Claim workflow | maybe |\n");
+
+    let kept = installed_config_in_keeping_what_parses_apart(&skill, &here);
+    assert!(kept.row.is_some());
+    assert_eq!(
+        kept.config.workflow,
+        crate::config::Workflow::Assisted,
+        "a workflow row nobody can read left the tracker writers open"
+    );
+}
+
+#[test]
 fn an_unreadable_repository_file_keeps_the_layers_underneath_it() {
     let root = tempfile::tempdir().expect("a temporary root");
     let skill = root.path().join(DIRECTORY);
@@ -844,18 +886,17 @@ fn a_bad_contract_row_does_not_hide_an_unreadable_repository_file() {
     fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
     fs::write(&file, [0xff, 0xfe]).expect("an unreadable repository file");
 
-    let (kept, contract_failure, repository_failure) =
-        installed_config_in_keeping_what_parses_apart(&skill, &here);
+    let kept = installed_config_in_keeping_what_parses_apart(&skill, &here);
     assert!(
-        contract_failure.is_some(),
+        kept.contract.is_some(),
         "the bad contract row was not reported"
     );
     assert!(
-        repository_failure.is_some(),
+        kept.file.is_some(),
         "the unreadable repository file was hidden by the contract's own failure"
     );
     assert_eq!(
-        kept.boundaries,
+        kept.config.boundaries,
         vec!["terraform apply".to_owned()],
         "the rows the contract did parse were thrown away with the bad one"
     );
@@ -1765,7 +1806,7 @@ fn config_layers_keep_contract_agent_local_and_repository_snapshots_distinct() {
     crate::setup::write_repository_configuration(
         &repository_path,
         &Config {
-            evidence: crate::config::Evidence::Measuring,
+            corrections_per_lineage: 1,
             ..Config::default()
         },
         crate::config::EVERYWHERE_SETTINGS,
@@ -1789,9 +1830,9 @@ fn config_layers_keep_contract_agent_local_and_repository_snapshots_distinct() {
         "developer=inherit"
     );
     assert_eq!(
-        crate::config::Setting::Evidence
+        crate::config::Setting::CorrectionsPerLineage
             .value_of(layers.repository.as_ref().expect("the repository snapshot")),
-        "measuring"
+        "1"
     );
 }
 
@@ -1941,7 +1982,7 @@ fn an_invalid_forbidden_repository_row_is_ignored_before_validation() {
         format!(
             "{}\n| Setting | Value here | Skill default |\n|---|---|---|\n\
                  | Model routing | nonsense | none |\n\
-                 | Evidence standard | measuring | reading |\n{}\n",
+                 | Corrections per lineage | 1 | 3 |\n{}\n",
             CONFIG_FENCE.begin, CONFIG_FENCE.end
         ),
     )
@@ -1952,16 +1993,16 @@ fn an_invalid_forbidden_repository_row_is_ignored_before_validation() {
 
     assert_eq!(
         layers.repository_settings,
-        vec![crate::config::Setting::Evidence]
+        vec![crate::config::Setting::CorrectionsPerLineage]
     );
     assert_eq!(
-        crate::config::Setting::Evidence.value_of(
+        crate::config::Setting::CorrectionsPerLineage.value_of(
             layers
                 .repository
                 .as_ref()
                 .expect("the repository layer exists")
         ),
-        "measuring"
+        "1"
     );
 }
 
@@ -1991,6 +2032,100 @@ fn an_invalid_permitted_repository_row_still_refuses() {
 }
 
 #[test]
+fn a_repository_row_may_only_tighten_what_the_machine_holds() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let skill = root.path().join(DIRECTORY);
+    let repository = tempfile::tempdir().expect("a repository");
+    install(&skill, &Config::default(), false).expect("the contract installs");
+    let path = repository_config_path(repository.path());
+
+    write_repository_rows(&path, "| Evidence standard | measuring | measuring |\n");
+    let ignored = layer_repository(&Config::default(), repository.path())
+        .expect("a row that loosens is ignored, not a failure to read the file");
+    assert_eq!(
+        ignored.evidence,
+        crate::config::Evidence::Reading,
+        "a repository widened the evidence standard"
+    );
+    let complaint = repository_complaint(&Config::default(), repository.path())
+        .expect("the file reads")
+        .expect("the looser row was dropped in silence");
+    assert_eq!(complaint.code, crate::config::CANNOT_LOOSEN);
+    assert!(
+        complaint.message.contains("Evidence standard"),
+        "{complaint}"
+    );
+    assert!(
+        complaint.message.contains(&path.display().to_string()),
+        "the complaint does not name the file: {complaint}"
+    );
+    let (tolerant, complaint) = installed_config_in_keeping_what_parses(&skill, repository.path());
+    assert!(
+        complaint.is_none(),
+        "an ignored row was reported as a row the gate could not read"
+    );
+    assert_eq!(tolerant.evidence, crate::config::Evidence::Reading);
+
+    // A tighter answer is taken, and a repository-scoped row is answered freely.
+    write_repository_rows(
+        &path,
+        "| Corrections per lineage | 1 | 3 |\n| Issue required | on | off |\n",
+    );
+    let tightened = layer_repository(&Config::default(), repository.path())
+        .expect("a repository tightened two rows");
+    assert_eq!(tightened.corrections_per_lineage, 1);
+    assert_eq!(
+        tightened.issue_requirement,
+        crate::config::IssueRequirement::On
+    );
+}
+
+#[test]
+fn a_repository_cannot_lengthen_the_renewal_window_or_drop_a_boundary_the_machine_declares() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let skill = root.path().join(DIRECTORY);
+    let repository = tempfile::tempdir().expect("a repository");
+    let machine = Config {
+        boundaries: vec!["npm publish".to_owned()],
+        window: std::time::Duration::from_secs(30),
+        ..Config::default()
+    };
+    install(&skill, &machine, false).expect("the contract installs");
+    let path = repository_config_path(repository.path());
+
+    write_repository_rows(
+        &path,
+        "| Renewal window | 2m | 2m |\n| Irreversible commands | none | unset |\n",
+    );
+    let ignored = layer_repository(&machine, repository.path())
+        .expect("the rows are ignored, not a failure to read the file");
+    assert_eq!(ignored.window, std::time::Duration::from_secs(30));
+    assert_eq!(ignored.boundaries, vec!["npm publish".to_owned()]);
+    let complaint = repository_complaint(&machine, repository.path())
+        .expect("the file reads")
+        .expect("a looser row was dropped in silence");
+    assert_eq!(complaint.code, crate::config::CANNOT_LOOSEN);
+
+    write_repository_rows(
+        &path,
+        "| Renewal window | 15s | 2m |\n| Irreversible commands | npm publish, terraform apply | unset |\n",
+    );
+    let tightened = layer_repository(&machine, repository.path())
+        .expect("a shorter window and one more boundary are tightenings");
+    assert_eq!(tightened.window, std::time::Duration::from_secs(15));
+    assert_eq!(
+        tightened.boundaries,
+        vec!["npm publish".to_owned(), "terraform apply".to_owned()]
+    );
+    assert!(
+        repository_complaint(&machine, repository.path())
+            .expect("the file reads")
+            .is_none(),
+        "a tightening was reported as ignored"
+    );
+}
+
+#[test]
 fn config_layers_bind_repository_values_and_ownership_to_one_snapshot() {
     let root = tempfile::tempdir().expect("a temporary root");
     let skill = root.path().join(DIRECTORY);
@@ -1998,13 +2133,13 @@ fn config_layers_bind_repository_values_and_ownership_to_one_snapshot() {
     let replacement = tempfile::tempdir().expect("a replacement repository");
     install(&skill, &Config::default(), false).expect("the contract installs");
     let mut first = Config::default();
-    crate::config::Setting::Evidence
-        .apply(&mut first, "measuring")
-        .expect("the first evidence standard is accepted");
+    crate::config::Setting::CorrectionsPerLineage
+        .apply(&mut first, "1")
+        .expect("the first correction limit is accepted");
     crate::setup::write_repository_configuration(
         &repository_config_path(repository.path()),
         &first,
-        &[crate::config::Setting::Evidence],
+        &[crate::config::Setting::CorrectionsPerLineage],
     )
     .expect("the first snapshot exists");
     let mut second = Config::default();
@@ -2027,12 +2162,12 @@ fn config_layers_bind_repository_values_and_ownership_to_one_snapshot() {
 
     assert_eq!(
         layers.repository_settings,
-        vec![crate::config::Setting::Evidence]
+        vec![crate::config::Setting::CorrectionsPerLineage]
     );
     assert_eq!(
-        crate::config::Setting::Evidence
+        crate::config::Setting::CorrectionsPerLineage
             .value_of(layers.repository.as_ref().expect("repository values")),
-        "measuring"
+        "1"
     );
 }
 
@@ -2195,7 +2330,7 @@ fn what_a_repository_says_about_itself_wins_and_says_nothing_about_an_agent() {
         &path,
         "| Setting | Value |
 |---|---|
-| Evidence standard | measuring |
+| Corrections per lineage | 1 |
              | Model routing | developer=opus |
 ",
     )
@@ -2203,14 +2338,12 @@ fn what_a_repository_says_about_itself_wins_and_says_nothing_about_an_agent() {
 
     let layered = installed_config_in(&skill, repo.path()).unwrap();
     assert_eq!(
-        layered.evidence,
-        crate::config::Evidence::Measuring,
-        "the repository did not get to say what evidence standard it uses"
+        layered.corrections_per_lineage, 1,
+        "the repository did not get to tighten a row the whole machine answers"
     );
     assert_ne!(
-        installed.evidence,
-        crate::config::Evidence::Measuring,
-        "the installed contract already said measuring, so the line above measures nothing"
+        installed.corrections_per_lineage, 1,
+        "the installed contract already said 1, so the line above measures nothing"
     );
     assert_ne!(
         crate::config::Setting::Models.value_of(&installed),

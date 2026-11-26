@@ -196,8 +196,10 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `std::env::current_dir()`, takes no parameters, and is reachable only through a subprocess. A defect
   purely in that call site's arguments is caught by nothing.
 
-- **`doctor` checks twenty-one things, not everything.** Skill, installed skill assets, `gh`
-  authentication, a git remote, this repository's push guard, the contract each configured agent
+- **`doctor` checks twenty-two things, not everything.** Skill, installed skill assets, `gh`
+  authentication, a git remote, this repository's own configuration rows (an unknown label, a row
+  that does not parse, or a row that would loosen a machine answer), this repository's push guard,
+  the contract each configured agent
   reads, whether the root the gate decides in carries the rows those agents read, whether the gate
   each of them registers would actually run, whether the tool server each
   of them registers would actually start, whether the operator has the gate standing down right

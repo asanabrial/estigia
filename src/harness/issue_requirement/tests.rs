@@ -228,6 +228,32 @@ fn a_commit_after_storing(stored: &str) -> (IssueRequirement, Decision) {
 }
 
 #[test]
+fn a_mistyped_issue_row_in_the_repository_file_still_holds_an_unclaimed_commit() {
+    let repo = repository_on_main();
+    let path = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("the directory");
+    std::fs::write(&path, repository_file_row("yes")).expect("the repository file");
+    let root = tempfile::tempdir().expect("a temporary skill root");
+    std::fs::write(root.path().join(crate::skill::CONTRACT), "the contract\n")
+        .expect("the contract is installed");
+
+    let kept =
+        crate::skill::installed_config_in_keeping_what_parses_apart(root.path(), repo.path());
+    assert!(
+        kept.row.is_some(),
+        "a repository row that does not parse was dropped in silence"
+    );
+    assert!(kept.file.is_none());
+    assert_eq!(kept.config.issue_requirement, IssueRequirement::On);
+
+    let context = context(root.path(), repo.path(), kept.config.issue_requirement);
+    assert!(
+        held_for_an_issue(&commit(&context)),
+        "the gate let an unclaimed commit through a row it could not read"
+    );
+}
+
+#[test]
 fn a_stored_watch_reads_as_on_and_refuses_an_unclaimed_commit_on_the_default_branch() {
     let (read, decision) = a_commit_after_storing("watch");
     assert_eq!(read, IssueRequirement::On);

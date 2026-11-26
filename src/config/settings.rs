@@ -12,8 +12,8 @@ use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 use super::{
     Authority, Config, DEFAULT_ASK_TIMEOUT, DecisionMode, Evidence, GitOperationWindow,
-    IssueRequirement, Language, LoopPlugin, Notifications, Profile, PublicationLane, RepoRef,
-    RepositoryHost, ReviewBudget, ReviewVoice, Tracker, Workflow, WorktreeRoot, delivery,
+    Integration, IssueRequirement, Language, LoopPlugin, Notifications, Profile, PublicationLane,
+    RepoRef, RepositoryHost, ReviewBudget, ReviewVoice, Tracker, Workflow, WorktreeRoot, delivery,
 };
 use crate::setup::AgentAdapter;
 
@@ -447,14 +447,79 @@ impl Setting {
         }
     }
 
-    /// Whether `candidate` is no looser than `base` on this row: it asks, or
-    /// `base` is already `auto`. An `ask` is never looser than another `ask`,
-    /// whatever their durations.
+    /// Whether `candidate` is no looser than `base` on this row.
+    ///
+    /// The comparison a repository's file is held to: it may answer a row the
+    /// machine already answers only in a direction that removes nothing. For an
+    /// authorisation an `ask` is never looser than another `ask`, whatever the
+    /// durations, and `auto` is looser than `ask`. A row that names *where*
+    /// something is rather than *how much is allowed* has no looser direction
+    /// and is always accepted.
     pub fn tightens(self, base: &Config, candidate: &Config) -> bool {
-        !matches!(
-            (self.authority_in(base), self.authority_in(candidate)),
-            (Some(Authority::Ask { .. }), Some(Authority::Auto))
-        )
+        match self {
+            Self::Delivery | Self::Transitions => !matches!(
+                (self.authority_in(base), self.authority_in(candidate)),
+                (Some(Authority::Ask { .. }), Some(Authority::Auto))
+            ),
+            Self::Evidence => {
+                !(base.evidence == Evidence::Reading && candidate.evidence == Evidence::Measuring)
+            }
+            Self::PublicationLane => {
+                !(base.publication_lane == PublicationLane::On
+                    && candidate.publication_lane == PublicationLane::Off)
+            }
+            Self::DecisionMode => {
+                !(base.decision_mode == DecisionMode::Ask
+                    && candidate.decision_mode == DecisionMode::Auto)
+            }
+            Self::Integration => {
+                !(base.integration == Integration::Branch
+                    && candidate.integration == Integration::Trunk)
+            }
+            Self::Window => candidate.window <= base.window,
+            Self::Boundaries => base
+                .boundaries
+                .iter()
+                .all(|command| candidate.boundaries.contains(command)),
+            Self::CorrectionsPerLineage => {
+                candidate.corrections_per_lineage <= base.corrections_per_lineage
+            }
+            Self::PublicationLanes => {
+                match (&base.publication_lanes, &candidate.publication_lanes) {
+                    (None, _) => true,
+                    (Some(_), None) => false,
+                    (Some(held), Some(written)) => {
+                        written.iter().all(|workflow| held.contains(workflow))
+                    }
+                }
+            }
+            Self::PublicationLanesExclude => base
+                .publication_lanes_exclude
+                .iter()
+                .all(|workflow| candidate.publication_lanes_exclude.contains(workflow)),
+            _ => true,
+        }
+    }
+
+    /// The value this row is read as when a repository's cell cannot be parsed.
+    ///
+    /// Only the rows the gate decides on have one. A row the gate does not read
+    /// has no stricter answer to fall back to, and the layers underneath stand;
+    /// [`Self::GitOperationWindow`] and [`Self::ReviewVoice`] keep readers of
+    /// their own that already refuse an unreadable row.
+    pub fn strictest_where_unreadable(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Delivery | Self::Transitions | Self::DecisionMode => "ask",
+            Self::Evidence => "reading",
+            Self::Integration => "branch",
+            Self::IssueRequirement => "on",
+            // The value that keeps the tracker writers shut, which is what a
+            // workflow row is read to decide.
+            Self::Workflow => "assisted",
+            // A second is the shortest window the row accepts; zero is refused.
+            Self::Window => "1s",
+            _ => return None,
+        })
     }
 
     /// Whose answer this is. The split is by *what the answer is about*, not
@@ -860,9 +925,10 @@ impl Setting {
             .iter()
             .copied()
             .find(|setting| named(setting).any(|name| name == normalized))
-            // The binding looks labels up by **prefix**, not whole word, so a
-            // first cell carrying anything after the label is a row the
-            // transport acts on and this compared whole words.
+            // A first cell may carry a trailing explanation the way a value cell
+            // may: `Delivery authorisation (per agent)`. It is taken only when
+            // what follows the label starts with punctuation, because another
+            // word is another label: `Workflow mode` is not `Workflow (mode)`.
             //
             // After the exact match, never before it: a prefix is the looser
             // reading and an exact spelling must never lose to it. And the
@@ -875,9 +941,10 @@ impl Setting {
                     .filter_map(|setting| {
                         named(&setting)
                             .filter(|name| {
-                                normalized
-                                    .strip_prefix(name)
-                                    .is_some_and(|rest| !rest.is_empty())
+                                normalized.strip_prefix(name).is_some_and(|rest| {
+                                    rest.trim_start()
+                                        .starts_with(|first: char| !first.is_alphanumeric())
+                                })
                             })
                             .map(|name| name.len())
                             .max()
@@ -1480,8 +1547,37 @@ impl Setting {
     }
 
     /// Reads one written value, or refuses.
+    ///
+    /// A value that would not read back as itself is refused before anything is
+    /// written. The reader cuts a trailing explanation out of a cell, which is
+    /// what a hand-written row relies on; a value somebody *typed* must not be
+    /// cut, because what is written would then be a different answer from the
+    /// one asked for — `terraform apply (prod), npm publish` reads back as
+    /// `terraform apply`, and the second boundary is gone.
     pub fn apply(self, config: &mut Config, value: &str) -> Result<(), Refusal> {
-        self.parse_into(config, value)
+        self.parse_into(config, value)?;
+        let held = self.value_of(config);
+        let read = clean(&held);
+        if read != held {
+            return Err(Refusal::not_started(
+                "config-value-would-be-cut",
+                format!(
+                    "`{}` would be written as `{held}`, and that cell reads back as `{read}` \
+                     \u{2014} the reader stops at a backtick, at `**`, or at a space before `(` \
+                     or an em dash",
+                    self.label()
+                ),
+                Resolution::no_command(
+                    NoCommandReason::OperatorKnowledge,
+                    format!(
+                        "a value without the part the reader cuts \u{2014} `{}` accepts {}",
+                        self.label(),
+                        self.accepted()
+                    ),
+                ),
+            ));
+        }
+        Ok(())
     }
 
     /// Reads one value already stored in a file: a stored `required`, `watch` or `ask` for

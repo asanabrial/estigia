@@ -376,7 +376,11 @@ pub enum Command {
     /// Read-only. A refusal otherwise arrives one edit at a time with no way to
     /// tell which of five things is wrong, and every failure here names what to
     /// do about it.
-    Doctor,
+    Doctor {
+        /// Print only what is not `ok`.
+        #[arg(long)]
+        problems: bool,
+    },
 
     /// Sweep branches and checkouts no delivery owns.
     ///
@@ -1159,10 +1163,20 @@ pub enum ReviewAction {
 pub enum ConfigAction {
     /// Print every setting, its value, and what it accepts.
     List {
+        /// List only these rows, by label or by a label the build still reads.
+        ///
+        /// A question about one row answers one row: the group headings and
+        /// every other row are left out. A row that resolves to nothing is
+        /// refused, named, rather than answering an empty listing.
+        #[arg(value_name = "ROW")]
+        row: Vec<String>,
         /// Which agent's installed contract to read. Defaults to the first
         /// configured one.
         #[arg(long)]
         agent: Option<String>,
+        /// Print what each row accepts as well as what it holds.
+        #[arg(long)]
+        accepts: bool,
     },
     /// Review and change every setting on one screen.
     Edit {
