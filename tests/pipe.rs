@@ -886,6 +886,39 @@ fn released_issue_view_entry(
     entry
 }
 
+/// [`released_issue_view_entry`] plus a severe finding recorded against the same
+/// receipt after the release: a release whose verdict no longer clears.
+fn released_issue_view_entry_whose_verdict_went_stale(
+    state: &str,
+    epoch: &str,
+    head: &str,
+    base: &str,
+) -> serde_json::Value {
+    let mut entry = released_issue_view_entry(state, epoch, head, base);
+    let mut issue: serde_json::Value =
+        serde_json::from_str(entry["stdout"].as_str().expect("the view")).expect("json");
+    let marker = format!(
+        "<!-- issue-flow: review-finding encoding=pct run-id=claude-abcd1234 op-id={} \
+         reviewer=codex-b epoch={epoch} pr=12 head={head} base={base} digest={} id=f-1 \
+         class=severe evidence=observed impact=wrong-output evidence-class=deterministic \
+         causal-disposition=introduced -->",
+        "9".repeat(32),
+        "c".repeat(64)
+    );
+    issue["comments"]
+        .as_array_mut()
+        .expect("comments")
+        .push(serde_json::json!({
+            "id": "IC_3",
+            "createdAt": "2026-01-01T00:02Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("A finding.\n\n{marker}\n"),
+        }));
+    entry["stdout"] = issue.to_string().into();
+    entry
+}
+
 /// One `ESTIGIA_FAKE_ANSWERS` entry answering `gh pr view <pr>` with the PR
 /// sitting at `head_ref_oid`.
 ///

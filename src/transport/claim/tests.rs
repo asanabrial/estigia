@@ -18809,6 +18809,21 @@ fn a_stale_verdict_keeps_its_release_stamp_and_not_its_clearance() {
 }
 
 #[test]
+fn a_verdict_whose_range_the_checkout_does_not_hold_refuses_rather_than_clears() {
+    let (_root, context, receipt) = medium_change();
+    let gone = ReviewTransaction {
+        head: "f".repeat(40),
+        ..receipt
+    };
+    let comments = reported_and_recorded(&gone, "medium");
+    assert_eq!(
+        release_refusal(&context, &gone, &comments),
+        "read-failed",
+        "a receipt naming bytes this checkout does not hold was cleared instead of refused"
+    );
+}
+
+#[test]
 fn a_marker_recorded_under_another_tier_refuses() {
     let (_root, context, receipt) = medium_change();
     let comments = reported_and_recorded(&receipt, "high");

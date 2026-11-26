@@ -188,6 +188,98 @@ fn a_gh_pr_merge_without_a_ci_release_for_the_exact_receipt_is_refused() {
     }
 }
 
+/// A finding recorded after the release withdraws the verdict, and the hand
+/// merge is refused for it — the first acceptance criterion of #640.
+///
+/// The floor is the same call without the finding: it is allowed, so a refusal
+/// below is the finding and not the fixture.
+#[test]
+fn a_finding_recorded_after_the_release_refuses_the_hand_merge() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let base = rig.head.clone();
+    std::fs::write(repo.join("notes.md"), "A line of prose.\n").expect("a prose file");
+    let _ = checked_git(repo, &["add", "notes.md"]);
+    let _ = checked_git(repo, &["commit", "--quiet", "-m", "reviewed"]);
+    let reviewed = checked_git_stdout(repo, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
+
+    let pointer = serde_json::json!({
+        "run_id": "claude-abcd1234",
+        "issue": 12,
+        "revision": 1,
+        "state": "review",
+        "repo_dir": repo,
+        "worktree": serde_json::Value::Null,
+        "review_receipt": {
+            "epoch": "a".repeat(32),
+            "pr": 12,
+            "head": reviewed,
+            "base": base,
+            "digest": "c".repeat(64),
+        },
+        "reviewed_head": serde_json::Value::Null,
+    });
+    std::fs::write(
+        home.join(".estigia")
+            .join("runs")
+            .join("claude-abcd1234.json"),
+        serde_json::to_string(&pointer).expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+
+    let merge = |released: serde_json::Value| {
+        forget_store(home);
+        let answers =
+            serde_json::to_string(&serde_json::json!(
+                [pr_view_entry(12, &reviewed), released,]
+            ))
+            .expect("the script serialises");
+        let input =
+            format!(r#"{{"command":"gh pr merge 12 --merge --match-head-commit {reviewed}"}}"#);
+        let (out, err, _) = run_with_tracker(
+            home,
+            repo,
+            bin,
+            &answers,
+            &[
+                "gate",
+                "Bash",
+                "--run-id",
+                "claude-abcd1234",
+                "--input",
+                &input,
+            ],
+            "",
+        );
+        format!("{out}{err}")
+    };
+
+    let cleared = merge(released_issue_view_entry(
+        "review",
+        &"a".repeat(32),
+        &reviewed,
+        &base,
+    ));
+    assert!(
+        cleared.contains("allow"),
+        "the released review was refused before any finding was recorded: {cleared}"
+    );
+
+    let withdrawn = merge(released_issue_view_entry_whose_verdict_went_stale(
+        "review",
+        &"a".repeat(32),
+        &reviewed,
+        &base,
+    ));
+    assert!(
+        withdrawn.contains("computed-verdict-rejected"),
+        "a severe finding recorded after the release was merged anyway, or refused for another \
+         reason: {withdrawn}"
+    );
+}
+
 /// The floor a compound line's classification is measured against: a bare
 /// `git push` from `in-progress` still answers the way it does today. Without
 /// this floor, every assertion below could pass with nothing left to

@@ -41,6 +41,23 @@ const SOUND: [&str; 3] = ["SUCCESS", "NEUTRAL", "SKIPPED"];
 const PR_FIELDS: &str = "statusCheckRollup,mergeStateStatus,headRefOid,baseRefOid,baseRefName";
 const MERGED_FIELDS: &str = "state,mergedAt,mergeCommit";
 
+/// The one merge command: what `deliver` runs, and the words the gate reads for
+/// it. One function, so the two cannot drift.
+fn merge_argv(pr: u64, head: &str) -> Vec<String> {
+    [
+        "gh",
+        "pr",
+        "merge",
+        &pr.to_string(),
+        "--merge",
+        "--match-head-commit",
+        head,
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
 pub(super) struct Settings {
     pub(super) merge_by_agent: bool,
     pub(super) delivery_auto: bool,
@@ -774,19 +791,9 @@ impl<H: Hands> Deliver<'_, H> {
         self.hands
             .merge_decision(receipt.pr)
             .map_err(|refusal| refused("merge", refusal))?;
-        let pr = receipt.pr.to_string();
-        let attempted = self.hands.exec(
-            &[
-                "gh",
-                "pr",
-                "merge",
-                &pr,
-                "--merge",
-                "--match-head-commit",
-                &receipt.head,
-            ],
-            How::tolerated(),
-        );
+        let argv = merge_argv(receipt.pr, &receipt.head);
+        let words: Vec<&str> = argv.iter().map(String::as_str).collect();
+        let attempted = self.hands.exec(&words, How::tolerated());
         let refusal = match &attempted {
             Ok(output) if output.status == 0 => None,
             Ok(output) => Some(output.stderr.trim().to_owned()),
@@ -1371,10 +1378,7 @@ impl<'a> Live<'a> {
         else {
             return Observed::default();
         };
-        let literal = format!(
-            "gh pr merge {pr} --merge --match-head-commit {}",
-            receipt.head
-        );
+        let literal = merge_argv(pr, &receipt.head).join(" ");
         Observed {
             command: Some(CommandObserved {
                 matched: Established::Known("gh pr merge".to_owned()),
