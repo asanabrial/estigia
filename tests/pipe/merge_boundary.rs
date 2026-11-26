@@ -8,11 +8,22 @@ use super::*;
 fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
-    let reviewed = "e".repeat(40);
+    // The reviewed head is a real commit of its own branch, so the tier the
+    // merge recomputes can be read from this checkout; the checkout itself
+    // stays put, which is the thing this test is about.
+    let _ = checked_git(repo, &["checkout", "--quiet", "-b", "reviewed"]);
+    std::fs::write(repo.join("notes.md"), "A line of prose.\n").expect("a prose file");
+    let _ = checked_git(repo, &["add", "notes.md"]);
+    let _ = checked_git(repo, &["commit", "--quiet", "-m", "reviewed"]);
+    let reviewed = checked_git_stdout(repo, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
+    let _ = checked_git(repo, &["checkout", "--quiet", "-"]);
     assert_ne!(
         reviewed, rig.head,
-        "the synthetic reviewed head collides with the checkout's real head"
+        "the reviewed head collides with the checkout's real head"
     );
+    let base = rig.head.clone();
 
     let pointer = serde_json::json!({
         "run_id": "claude-abcd1234",
@@ -25,7 +36,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
             "epoch": "a".repeat(32),
             "pr": 12,
             "head": reviewed,
-            "base": "b".repeat(40),
+            "base": base,
             "digest": "c".repeat(64),
         },
         "reviewed_head": serde_json::Value::Null,
@@ -38,6 +49,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     )
     .expect("the pointer is written");
 
+    let input = format!(r#"{{"command":"gh pr merge 12 --merge --match-head-commit {reviewed}"}}"#);
     let merge = |answers: &str| {
         let (out, err, _) = run_with_tracker(
             home,
@@ -50,7 +62,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
                 "--run-id",
                 "claude-abcd1234",
                 "--input",
-                r#"{"command":"gh pr merge 12"}"#,
+                &input,
             ],
             "",
         );
@@ -63,7 +75,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let allowed = merge(
         &serde_json::to_string(&serde_json::json!([
             pr_view_entry(12, &reviewed),
-            released_issue_view_entry("review", &"a".repeat(32), &reviewed),
+            released_issue_view_entry("review", &"a".repeat(32), &reviewed, &base),
         ]))
         .expect("the script serialises"),
     );
@@ -78,7 +90,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let refused = merge(
         &serde_json::to_string(&serde_json::json!([
             pr_view_entry(12, &moved),
-            released_issue_view_entry("review", &"a".repeat(32), &reviewed),
+            released_issue_view_entry("review", &"a".repeat(32), &reviewed, &base),
         ]))
         .expect("the script serialises"),
     );
@@ -96,7 +108,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let unreadable = merge(
         &serde_json::to_string(&serde_json::json!([
             { "matches": "pr view 12", "status": 1, "stderr": "gh: pull request not found" },
-            released_issue_view_entry("review", &"a".repeat(32), &reviewed),
+            released_issue_view_entry("review", &"a".repeat(32), &reviewed, &base),
         ]))
         .expect("the script serialises"),
     );
@@ -116,9 +128,10 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
 #[test]
 fn a_gh_pr_merge_without_a_ci_release_for_the_exact_receipt_is_refused() {
     let reviewed = "e".repeat(40);
+    let base = "b".repeat(40);
     for issue_view in [
         issue_view_entry("review"),
-        released_issue_view_entry("review", &"9".repeat(32), &reviewed),
+        released_issue_view_entry("review", &"9".repeat(32), &reviewed, &base),
     ] {
         let rig = tracker_rig();
         let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
@@ -150,6 +163,8 @@ fn a_gh_pr_merge_without_a_ci_release_for_the_exact_receipt_is_refused() {
             issue_view,
         ]))
         .expect("the script serialises");
+        let input =
+            format!(r#"{{"command":"gh pr merge 12 --merge --match-head-commit {reviewed}"}}"#);
         let (out, err, _) = run_with_tracker(
             home,
             repo,
@@ -161,7 +176,7 @@ fn a_gh_pr_merge_without_a_ci_release_for_the_exact_receipt_is_refused() {
                 "--run-id",
                 "claude-abcd1234",
                 "--input",
-                r#"{"command":"gh pr merge 12"}"#,
+                &input,
             ],
             "",
         );

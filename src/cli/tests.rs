@@ -37,6 +37,21 @@ fn screen_plan() -> crate::tui::Plan {
     }
 }
 
+/// A run holding PR 54's complete receipt, so a merge refusal can be built by
+/// its real constructor.
+fn merge_held_run() -> crate::harness::Run {
+    let mut run = crate::harness::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: "e".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    });
+    run
+}
+
 fn inventory() -> Vec<Refusal> {
     let mut refusals = vec![
         setup::no_agent_named(),
@@ -456,6 +471,48 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::delivery_pr_repository_option(),
         crate::harness::complete_review_transaction_missing(54),
         crate::harness::merge_without_ci_release(54),
+        crate::harness::merge_spelling(
+            &crate::harness::Action::Boundary {
+                command: "gh pr merge".to_owned(),
+                pr: Some(54),
+                pr_unidentified_reason: None,
+                local_fast_forward_target: None,
+                is_exact_integration_merge: false,
+                runs_in: crate::harness::RunsIn::Session,
+                target: crate::harness::CommitTarget::Checkout,
+            },
+            Some("gh pr merge 54 --squash"),
+            &merge_held_run(),
+        )
+        .expect("a squash does not run the admitted merge"),
+        crate::harness::merge_spelling(
+            &crate::harness::Action::Boundary {
+                command: "gh pr merge".to_owned(),
+                pr: Some(54),
+                pr_unidentified_reason: None,
+                local_fast_forward_target: None,
+                is_exact_integration_merge: false,
+                runs_in: crate::harness::RunsIn::Session,
+                target: crate::harness::CommitTarget::Checkout,
+            },
+            Some("gh pr merge 54 --merge --admin --match-head-commit eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+            &merge_held_run(),
+        )
+        .expect("--admin is not the admitted merge"),
+        crate::harness::merge_spelling(
+            &crate::harness::Action::Boundary {
+                command: "gh pr merge".to_owned(),
+                pr: Some(54),
+                pr_unidentified_reason: None,
+                local_fast_forward_target: None,
+                is_exact_integration_merge: false,
+                runs_in: crate::harness::RunsIn::Session,
+                target: crate::harness::CommitTarget::Checkout,
+            },
+            Some("gh pr merge 54 --merge"),
+            &merge_held_run(),
+        )
+        .expect("a merge not bound to the reviewed head is not the admitted merge"),
         crate::harness::delivery_pr_mismatch(54, 55),
         crate::harness::complete_review_transaction_not_selected(),
         crate::harness::several_irreversible_fragments(&[
@@ -3498,6 +3555,10 @@ const UNREAD_ARGUMENTS_COVERED: &[&str] = &[
     // `every_command_a_rejection_names_parses` walks, and `goal progress`/
     // `blocked` have `the_goal_activity_identity_road_names_a_command_that_parses`.
     "{command} --session-id",
+    // `merge_spelling` rebuilds the merge line from the PR and the receipt's head;
+    // `a_hand_merge_must_spell_the_delivery_the_gate_admitted` holds every one of
+    // its refusals to that exact line.
+    "clearing_command",
 ];
 
 #[test]

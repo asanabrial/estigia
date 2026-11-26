@@ -857,14 +857,18 @@ fn issue_answer_held_by(run_id: &str, state: &str) -> String {
 
 /// [`issue_view_entry`], with a `ci-release` marker for the receipt the merge
 /// pipe tests put in the pointer, under the given epoch.
-fn released_issue_view_entry(state: &str, epoch: &str, head: &str) -> serde_json::Value {
+fn released_issue_view_entry(
+    state: &str,
+    epoch: &str,
+    head: &str,
+    base: &str,
+) -> serde_json::Value {
     let mut entry = issue_view_entry(state);
     let mut issue: serde_json::Value =
         serde_json::from_str(entry["stdout"].as_str().expect("the view")).expect("json");
     let marker = format!(
         "<!-- issue-flow: ci-release encoding=pct run-id=claude-abcd1234 epoch={epoch} pr=12 \
-         head={head} base={} digest={} -->",
-        "b".repeat(40),
+         head={head} base={base} digest={} -->",
         "c".repeat(64)
     );
     issue["comments"]

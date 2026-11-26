@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use super::{NamedRun, ToolFailure};
 use crate::harness::{Action, CommitTarget, Decision, GateContext, RunsIn, Sensitivity, session};
-use crate::outcome::Observed;
+use crate::outcome::{CommandObserved, Established, Observed};
 use crate::transport::claim::ReviewTransaction;
 use crate::transport::{self, Failure, How, Output};
 
@@ -1360,6 +1360,34 @@ impl<'a> Live<'a> {
         crate::harness::apply_gh_repo_locked(self.transport.repo.as_deref());
         body()
     }
+
+    /// The merge command this road runs, as the gate reads a hand-typed one, so
+    /// both roads pass through the same spelling check.
+    fn merge_line(&self, pr: u64, run: &session::Run) -> Observed {
+        let Some(receipt) = run
+            .review_transaction
+            .as_ref()
+            .filter(|receipt| receipt.is_complete())
+        else {
+            return Observed::default();
+        };
+        let literal = format!(
+            "gh pr merge {pr} --merge --match-head-commit {}",
+            receipt.head
+        );
+        Observed {
+            command: Some(CommandObserved {
+                matched: Established::Known("gh pr merge".to_owned()),
+                against: Established::Known(literal.clone()),
+                literal: Established::Known(literal),
+                boundary_source: None,
+                disqualifying_byte: None,
+                same_tier_fragments: Vec::new(),
+                write_targets: Vec::new(),
+            }),
+            ..Observed::default()
+        }
+    }
 }
 
 impl Hands for Live<'_> {
@@ -1393,6 +1421,7 @@ impl Hands for Live<'_> {
             target: CommitTarget::Checkout,
         };
         let mut run = session::load(&self.context.state_root, self.run_id);
+        let observed = self.merge_line(pr, &run);
         let context = GateContext {
             operation_window: crate::harness::operation_window::current(self.context),
             ..self.context.clone()
@@ -1402,7 +1431,7 @@ impl Hands for Live<'_> {
             &mut run,
             &action,
             Sensitivity::Boundary,
-            &Observed::default(),
+            &observed,
         );
         if matches!(decided, Decision::Allow(_)) {
             let _ = session::store(&self.context.state_root, &run);

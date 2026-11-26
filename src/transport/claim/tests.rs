@@ -18712,6 +18712,27 @@ fn reported_and_recorded(receipt: &ReviewTransaction, level: &str) -> Vec<owners
     ]
 }
 
+fn released_for(receipt: &ReviewTransaction) -> ownership::Comment {
+    wrote(
+        "7",
+        format!(
+            "CI released.\n\n{}\n",
+            super::super::markers::render(
+                "ci-release",
+                &[
+                    ("run-id", "claude-a"),
+                    ("epoch", &receipt.epoch),
+                    ("pr", &receipt.pr.to_string()),
+                    ("head", &receipt.head),
+                    ("base", &receipt.base),
+                    ("digest", &receipt.digest),
+                ],
+            )
+            .expect("a CI release marker"),
+        ),
+    )
+}
+
 #[test]
 fn a_recomputed_approval_with_an_approved_marker_releases() {
     let (_root, context, receipt) = medium_change();
@@ -18735,6 +18756,55 @@ fn a_marker_gone_stale_by_a_later_finding_refuses_even_though_it_says_approved()
     assert_eq!(
         release_refusal(&context, &receipt, &comments),
         "computed-verdict-stale"
+    );
+}
+
+#[test]
+fn a_stale_verdict_keeps_its_release_stamp_and_not_its_clearance() {
+    let (_root, context, receipt) = medium_change();
+    let comments = [
+        reported_and_recorded(&receipt, "medium"),
+        vec![
+            released_for(&receipt),
+            recorded_finding_on(
+                &receipt,
+                6,
+                "f-1",
+                "severe",
+                Some("deterministic"),
+                Some("introduced"),
+            ),
+        ],
+    ]
+    .concat();
+    status::stored(&context, &comments);
+
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[serde_json::json!({
+        "matches": "api repos/{owner}/{repo}/issues/42",
+        "stdout": serde_json::json!({
+            "state": "open",
+            "repository_url": "https://api.github.com/repos/fixture/repo",
+        })
+        .to_string(),
+        "status": 0,
+    })]);
+    let (stamped, clearance) = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        (
+            ci_release_recorded(&context, 42, &receipt),
+            clearance_holds(&context, 42, &receipt),
+        )
+    });
+
+    assert!(
+        stamped.expect("the store is readable"),
+        "a finding recorded after the release erased the release stamp, so this fixture no \
+         longer poses the merge that reads only the stamp"
+    );
+    assert_eq!(
+        reason(clearance.expect_err("a finding recorded after the release withdrew the verdict")),
+        "computed-verdict-stale",
+        "the hand merge was cleared by a verdict the ledger had already withdrawn"
     );
 }
 
