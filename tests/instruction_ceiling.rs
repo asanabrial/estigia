@@ -15,63 +15,35 @@ use std::path::{Path, PathBuf};
 
 #[rustfmt::skip]
 const DOCUMENTS: &[(&str, usize)] = &[
-    ("skill/SKILL.md", 27_459),
-
-    ("skill/agents/analyst.md", 2_052),
-
-    ("skill/agents/developer.md", 3_298),
-
-    ("skill/agents/review-blind.md", 7_984),
-
-    ("skill/agents/review-lens.md", 3_398),
-
-    ("skill/agents/review-readability.md", 4_516),
-
-    ("skill/agents/review-readback.md", 4_618),
-
-    ("skill/agents/review-refuter.md", 2_438),
-
-    ("skill/agents/review-reliability.md", 4_620),
-
-    ("skill/agents/review-risk.md", 4_276),
-
-    ("skill/agents/review-validator.md", 1_998),
-
-    ("skill/assets/analyst-issue-template.md", 4_459),
-
-    ("skill/bindings/github.md", 20_853),
-
-    ("skill/bindings/github/delivery.md", 42_913),
-
-    ("skill/bindings/github/operations-guarantees.md", 42_449),
-
-    ("skill/bindings/github/operations.md", 60_321),
-
-    ("skill/bindings/github/recovery.md", 6_744),
-
-    ("skill/bindings/github/refusals.md", 66_320),
-
-    ("skill/bindings/github/setup.md", 1_672),
-
-    ("skill/bindings/linear.md", 7_394),
-
-    ("skill/policies/blind-judges.md", 43_364),
-
-    ("skill/policies/judgment-day.md", 16_022),
-
-    ("skill/protocols/rdd.md", 7_863),
-
-    ("skill/references/analyst.md", 3_188),
-
-    ("skill/references/decision-gates.md", 8_146),
-
-    ("skill/references/domain-composition.md", 9_798),
-
-    ("skill/references/repository-delivery.md", 23_332),
-
-    ("skill/references/runtime-notes.md", 23_157),
-
-    ("skill/references/safety-incidents.md", 16_341),
+    ("skill/SKILL.md", 16907),
+    ("skill/agents/analyst.md", 1851),
+    ("skill/agents/developer.md", 3182),
+    ("skill/agents/review-blind.md", 7984),
+    ("skill/agents/review-lens.md", 3398),
+    ("skill/agents/review-readability.md", 4516),
+    ("skill/agents/review-readback.md", 4618),
+    ("skill/agents/review-refuter.md", 2438),
+    ("skill/agents/review-reliability.md", 4620),
+    ("skill/agents/review-risk.md", 4276),
+    ("skill/agents/review-validator.md", 1998),
+    ("skill/assets/analyst-issue-template.md", 4459),
+    ("skill/bindings/github.md", 7897),
+    ("skill/bindings/github/delivery.md", 42913),
+    ("skill/bindings/github/operations-guarantees.md", 42449),
+    ("skill/bindings/github/operations.md", 60321),
+    ("skill/bindings/github/recovery.md", 6744),
+    ("skill/bindings/github/refusals.md", 66320),
+    ("skill/bindings/github/setup.md", 1586),
+    ("skill/bindings/linear.md", 7291),
+    ("skill/policies/blind-judges.md", 43364),
+    ("skill/policies/judgment-day.md", 16022),
+    ("skill/protocols/rdd.md", 7863),
+    ("skill/references/analyst.md", 3169),
+    ("skill/references/decision-gates.md", 8146),
+    ("skill/references/domain-composition.md", 9088),
+    ("skill/references/repository-delivery.md", 23309),
+    ("skill/references/runtime-notes.md", 23279),
+    ("skill/references/safety-incidents.md", 16341),
 ];
 
 const LINE_CEILING: usize = 2_000;

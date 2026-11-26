@@ -164,6 +164,9 @@ but does not apply the definition's `skills` field. Put required domain rule boo
 prompt rather than assuming they were inherited. A delegating dev MUST load the routed domain itself
 before choosing a delegation plan because that domain may prescribe orchestration constraints.
 
+A delegated context is measured against the launching run's claim, and nothing seals it separately:
+what its definition tells it not to do is a rule the launch keeps.
+
 ## Runtime identity derivation
 
 Create one run-id and reuse it for the full run. The gate admits only the named shape

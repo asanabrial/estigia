@@ -38,8 +38,3 @@ asked.
 Findings outside the bounded question are worth reporting and are not yours to act on or to file.
 Put them at the end of your report, marked as outside scope, and let the launching run decide what
 becomes of them.
-
-## Load the contract first
-
-Read `SKILL.md` in the installed skill directory for the states, the claim, and the analyst's
-read-only rule, which binds this role whether or not a tool list is enforced.
