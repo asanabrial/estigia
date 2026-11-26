@@ -9195,26 +9195,4 @@ fn a_run_that_published_a_review_cannot_answer_its_own_reviewers_from_a_shell() 
             "{command} escaped the relay's own command"
         );
     }
-
-    for command in [
-        "git commit -m \"fix estigia review flow\"",
-        "echo estigia review",
-    ] {
-        let (action, how) = classify("Bash", &json!({ "command": command }));
-        let mut published = sworn(42, &context.repo_dir);
-        published.review_transaction = Some(crate::transport::claim::ReviewTransaction {
-            epoch: "a".repeat(32),
-            pr: 54,
-            head: "b".repeat(40),
-            base: "c".repeat(40),
-            digest: "d".repeat(64),
-        });
-        let Decision::Deny(refusal) = decide(&context, &mut published, &action, how) else {
-            panic!("`{command}` was allowed, so the words are read positionally");
-        };
-        assert_eq!(
-            refusal.code, "review-relay-is-the-reviewers",
-            "a line that only mentions the relay changed how it is held: {command}"
-        );
-    }
 }

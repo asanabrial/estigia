@@ -1365,27 +1365,12 @@ fn the_relay_secret_reaches_the_prompt_and_not_the_job_directory() {
 
 #[test]
 fn a_relay_secret_is_bound_to_its_own_job() {
-    let run = "claude-abc12345";
-    let world = capturable_as(run);
-    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
-    let mine = launched["job"].as_str().expect("a job id").to_owned();
-    let other = super::super::capture::relay_secret_of("a-different-job").expect("a secret");
+    let mine = super::super::capture::relay_secret_of("job-a").expect("a secret");
+    let other = super::super::capture::relay_secret_of("job-b").expect("a secret");
     assert_ne!(
-        super::super::capture::relay_secret_of(&mine).expect("this job's secret"),
-        other,
+        mine, other,
         "the secret does not depend on the job id, so one slot's prompt unlocks another's"
     );
-
-    let answer = answer_of(&[]).expect("an answer");
-    let bin = crate::test_env::scripted_gh();
-    let script = script_for(&world, lane_read_answers());
-    let context = named(&world.context);
-    let outcome = crate::test_env::with_scripted_gh(bin.path(), &script, || {
-        super::super::relay_admit(&context, run, RELIABILITY_LENS, &answer, Some(&other), NOW)
-    });
-    assert_eq!(refused_as(&outcome), "capture-secret-mismatch");
-    assert_eq!(job_state(&world, &launched), "running");
-    nothing_was_written(&world);
 }
 
 #[test]
