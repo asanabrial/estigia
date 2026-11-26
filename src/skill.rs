@@ -1705,16 +1705,21 @@ impl RepositorySnapshot {
     }
 
     /// Applies this exact document to one lower-layer baseline.
+    ///
+    /// A row this build cannot parse is a refusal. A row that would loosen what
+    /// the machine answers is **not**: it is left out, `base` keeps its answer,
+    /// and [`Self::layer_over_folding_retired_workers`] is where that is
+    /// reported. A hand-written `auto` over an `ask` must not stop every read of
+    /// the table — it must stop deciding anything.
     pub(crate) fn layer_over(&self, base: &Config) -> Result<RepositoryLayer, Refusal> {
-        let (mut config, mut settings) = in_file(
+        let (mut config, _) = in_file(
             &self.path,
             Config::read_scope_over(base, &self.document, crate::config::Scope::Everywhere),
         )?;
-        let (tightened, refused) = Config::tighten_over(base, &mut config, &self.document, false);
-        if let Some(refusal) = refused {
+        let (settings, refused) = Config::tighten_over(base, &mut config, &self.document, false);
+        if let Some(refusal) = refused.filter(|refusal| !is_a_loosening(refusal)) {
             return Err(named_by(refusal, &self.path));
         }
-        settings.extend(tightened);
         Ok(RepositoryLayer { config, settings })
     }
 
@@ -1723,22 +1728,21 @@ impl RepositorySnapshot {
     }
 
     fn layer_over_keeping_what_parses(&self, base: &Config) -> RepositoryLayer {
-        let (mut config, mut settings) = Config::read_scope_over_keeping_what_parses(
+        let (mut config, _) = Config::read_scope_over_keeping_what_parses(
             base,
             &self.document,
             crate::config::Scope::Everywhere,
         );
-        let (tightened, _) = Config::tighten_over(base, &mut config, &self.document, true);
-        settings.extend(tightened);
+        let (settings, _) = Config::tighten_over(base, &mut config, &self.document, true);
         RepositoryLayer { config, settings }
     }
 
-    /// [`Self::layer_over`], folding a retired row rather than refusing it.
+    /// [`Self::layer_over`], reporting a row it could not honour.
     pub(crate) fn layer_over_folding_retired_workers(
         &self,
         base: &Config,
     ) -> Result<(RepositoryLayer, Option<Refusal>), Refusal> {
-        let (mut config, mut settings, folded) = in_file(
+        let (mut config, _, folded) = in_file(
             &self.path,
             Config::read_scope_over_folding_retired_workers(
                 base,
@@ -1746,12 +1750,15 @@ impl RepositorySnapshot {
                 crate::config::Scope::Everywhere,
             ),
         )?;
-        let (tightened, refused) = Config::tighten_over(base, &mut config, &self.document, false);
-        if let Some(refusal) = refused {
-            return Err(named_by(refusal, &self.path));
-        }
-        settings.extend(tightened);
-        Ok((RepositoryLayer { config, settings }, folded))
+        let (settings, refused) = Config::tighten_over(base, &mut config, &self.document, false);
+        let reported = match refused {
+            None => None,
+            Some(refusal) if !is_a_loosening(&refusal) => {
+                return Err(named_by(refusal, &self.path));
+            }
+            Some(refusal) => Some(named_by(refusal, &self.path)),
+        };
+        Ok((RepositoryLayer { config, settings }, reported.or(folded)))
     }
 }
 
@@ -1878,26 +1885,42 @@ pub fn installed_config_in_keeping_what_parses(
     root: &Path,
     repo_dir: &Path,
 ) -> (Config, Option<Refusal>) {
-    let (config, contract, repository) =
-        installed_config_in_keeping_what_parses_apart(root, repo_dir);
-    (config, contract.or(repository))
+    installed_config_in_keeping_what_parses_apart(root, repo_dir).complaint()
 }
 
 /// The same read, told apart into the failure that kept what parses and the
 /// repository file that could not be read at all.
 ///
-/// The gate needs the difference. A contract that did not parse, or a
-/// repository row that did not, leaves nothing standing above the bad row but
-/// still says no workflow; a repository file that is there and cannot be read
-/// says nothing at all about the rows it carries, so they read as the denying
-/// answer (`required` for the issue requirement) and the refusal names the file
-/// and the read error. The first side is `None` when only the file could not be
-/// read; the second is `None` when only a row did not parse; both are `None`
-/// when everything parsed.
+/// The gate needs the difference. A contract or the operator's own file that
+/// did not parse says no workflow at all; a repository row that did not leaves
+/// the workflow its file did carry standing, and an unreadable repository file
+/// says nothing about the rows it carries, so they read as the denying answer
+/// (`required` for the issue requirement, `assisted` for the claim workflow) and
+/// the refusal names the file and the read error.
+pub(crate) struct KeptWhatParses {
+    /// The configuration the rows that parsed produce.
+    pub config: Config,
+    /// The contract or the operator's file could not be read whole.
+    pub contract: Option<Refusal>,
+    /// A row of the repository's file did not parse. Every row the gate decides
+    /// on is at its strictest value in `config`.
+    pub row: Option<Refusal>,
+    /// The repository's file was there and could not be read at all.
+    pub file: Option<Refusal>,
+}
+
+impl KeptWhatParses {
+    /// The configuration and the one complaint every other caller gets.
+    pub fn complaint(self) -> (Config, Option<Refusal>) {
+        let complaint = self.contract.or(self.row).or(self.file);
+        (self.config, complaint)
+    }
+}
+
 pub(crate) fn installed_config_in_keeping_what_parses_apart(
     root: &Path,
     repo_dir: &Path,
-) -> (Config, Option<Refusal>, Option<Refusal>) {
+) -> KeptWhatParses {
     let contract_config = match installed_config(root) {
         Ok(config) => config,
         Err(failure) => {
@@ -1906,22 +1929,52 @@ pub(crate) fn installed_config_in_keeping_what_parses_apart(
             }) {
                 Ok(base) => base,
                 Err(_) => {
-                    let repository =
+                    let file =
                         layer_repository_keeping_what_parses(&Config::default(), repo_dir).err();
-                    return (Config::default(), Some(failure), repository);
+                    return KeptWhatParses {
+                        config: Config::default(),
+                        contract: Some(failure),
+                        row: None,
+                        file,
+                    };
                 }
             };
             return match layer_repository_keeping_what_parses(&base, repo_dir) {
-                Ok(config) => (config, Some(failure), None),
-                Err(repository) => (base, Some(failure), Some(repository)),
+                Ok(config) => KeptWhatParses {
+                    config,
+                    contract: Some(failure),
+                    row: None,
+                    file: None,
+                },
+                Err(file) => KeptWhatParses {
+                    config: base,
+                    contract: Some(failure),
+                    row: None,
+                    file: Some(file),
+                },
             };
         }
     };
     match layer_repository(&contract_config, repo_dir) {
-        Ok(config) => (config, None, None),
+        Ok(config) => KeptWhatParses {
+            config,
+            contract: None,
+            row: None,
+            file: None,
+        },
         Err(failure) => match layer_repository_keeping_what_parses(&contract_config, repo_dir) {
-            Ok(config) => (config, Some(failure), None),
-            Err(repository) => (contract_config, None, Some(repository)),
+            Ok(config) => KeptWhatParses {
+                config,
+                contract: None,
+                row: Some(failure),
+                file: None,
+            },
+            Err(file) => KeptWhatParses {
+                config: contract_config,
+                contract: None,
+                row: None,
+                file: Some(file),
+            },
         },
     }
 }
@@ -2465,6 +2518,30 @@ fn in_file<T>(path: &Path, read: Result<T, Refusal>) -> Result<T, Refusal> {
 }
 
 /// A refusal's own words, with the file it was read from appended.
+/// Whether a refusal is a repository row the layering would not honour, as
+/// opposed to one it could not read.
+///
+/// The strict layering leaves the layer underneath standing for the first and
+/// reports it; a row that does not parse refuses. [`crate::config::CANNOT_LOOSEN`]
+/// is the one code, so a second reader cannot decide this by prose.
+fn is_a_loosening(refusal: &Refusal) -> bool {
+    refusal.code == crate::config::CANNOT_LOOSEN
+}
+
+/// Why this checkout's file is not read as written, when it is not.
+///
+/// `Ok(None)` for a checkout with no file of its own or one that is read in
+/// full; `Ok(Some(_))` for a row that is there and is not honoured; `Err` for a
+/// file or a row that cannot be read at all.
+pub fn repository_complaint(base: &Config, repo_dir: &Path) -> Result<Option<Refusal>, Refusal> {
+    match repository_snapshot(repo_dir)? {
+        Some(snapshot) => snapshot
+            .layer_over_folding_retired_workers(base)
+            .map(|(_, report)| report),
+        None => Ok(None),
+    }
+}
+
 fn named_by(mut refusal: Refusal, path: &Path) -> Refusal {
     refusal.message = format!("{} in {}", refusal.message, path.display());
     refusal

@@ -443,7 +443,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
 
         Command::Update => update(cli.json),
 
-        Command::Doctor => doctor(cli.json),
+        Command::Doctor { problems } => doctor(cli.json, *problems),
 
         Command::Prune { confirm, base } => prune(*confirm, base, cli.json),
 
@@ -601,9 +601,17 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
         } => stand_down(reason, *minutes, *lift, cli.json),
 
         Command::Config { action } => match action {
-            ConfigAction::List { agent } => {
-                config_list(agent.as_deref(), &SetupOptions::default(), cli.json)
-            }
+            ConfigAction::List {
+                row,
+                agent,
+                accepts,
+            } => config_list(
+                row,
+                agent.as_deref(),
+                &SetupOptions::default(),
+                *accepts,
+                cli.json,
+            ),
             ConfigAction::Edit { agent } => {
                 require_terminal(Resolution::run("estigia config set <setting> <value>"))?;
                 config_edit(agent.as_deref(), &SetupOptions::default())
@@ -2814,71 +2822,100 @@ fn println_guard(repo_dir: &std::path::Path, state: harness::guard::State) {
     }
 }
 
-fn config_list(agent: Option<&str>, options: &SetupOptions, json: bool) -> Result<(), Refusal> {
+/// Prints the configuration in force, every row or only the ones asked for.
+///
+/// A question about one row answers one row: naming rows leaves out both the
+/// other rows and the group headings, and `accepts` is printed only when it is
+/// asked for. It used to be on every line and in the JSON, which made a
+/// one-word answer cost a paragraph.
+fn config_list(
+    named: &[String],
+    agent: Option<&str>,
+    options: &SetupOptions,
+    accepts: bool,
+    json: bool,
+) -> Result<(), Refusal> {
+    let selected = rows_asked_for(named)?;
     // With this checkout's own rows layered on, as a run here reads them, and
     // every layer kept apart so each row can name the one that answers it.
     let here = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let (_, layers, _) = layers_of(agent, options, Some(&here))?;
-    let effective = layers.effective();
+    let (_, layers, report) = layers_of(agent, options, Some(&here))?;
     if json {
-        #[derive(serde::Serialize)]
-        struct Shadowed {
-            value: String,
-            source: &'static str,
-        }
-        #[derive(serde::Serialize)]
-        struct Row {
-            setting: &'static str,
-            group: &'static str,
-            scope: &'static str,
-            value: String,
-            accepts: &'static str,
-            source: &'static str,
-            #[serde(skip_serializing_if = "Vec::is_empty")]
-            shadowed: Vec<Shadowed>,
-        }
-        let rows = SETTINGS
-            .iter()
-            .map(|setting| {
-                let provenance = provenance_of(*setting, &layers);
-                Row {
-                    setting: setting.label(),
-                    group: setting.group().label(),
-                    scope: setting.scope_label(),
-                    value: setting.value_of(effective),
-                    accepts: setting.accepted(),
-                    source: provenance.source.name(),
-                    shadowed: provenance
-                        .shadowed
-                        .iter()
-                        .map(|(value, source)| Shadowed {
-                            value: value.clone(),
-                            source: source.name(),
-                        })
-                        .collect(),
-                }
-            })
-            .collect::<Vec<_>>();
-        print_json(&rows);
+        print_json(&config_list_json(&layers, &selected, accepts));
         return Ok(());
     }
-    let mut group: Option<Group> = None;
-    for setting in SETTINGS {
-        if group != Some(setting.group()) {
-            group = Some(setting.group());
-            say!();
-            say!("{}", setting.group().label().to_uppercase());
+    let mut lines = config_list_lines(&layers, &selected, accepts, named.is_empty());
+    if let Some(report) = report {
+        lines.insert(0, report.message);
+    }
+    for line in lines {
+        say!("{line}");
+    }
+    Ok(())
+}
+
+/// The rows a listing asks for: everything, or each name resolved and ordered
+/// as the table orders it.
+fn rows_asked_for(named: &[String]) -> Result<Vec<Setting>, Refusal> {
+    if named.is_empty() {
+        return Ok(SETTINGS.to_vec());
+    }
+    let mut asked: Vec<Setting> = Vec::new();
+    for name in named {
+        let Some(setting) = Setting::from_label(name) else {
+            return Err(Refusal::not_started(
+                "setting-unknown",
+                format!("{name:?} is not a setting"),
+                Resolution::run("estigia config list"),
+            ));
+        };
+        if !asked.contains(&setting) {
+            asked.push(setting);
         }
-        let provenance = provenance_of(*setting, &layers);
+    }
+    Ok(SETTINGS
+        .iter()
+        .copied()
+        .filter(|setting| asked.contains(setting))
+        .collect())
+}
+
+/// One line per asked row, with the group heading only for the whole listing.
+fn config_list_lines(
+    layers: &skill::ConfigLayers,
+    selected: &[Setting],
+    accepts: bool,
+    headings: bool,
+) -> Vec<String> {
+    let effective = layers.effective();
+    let mut lines = Vec::new();
+    let mut group: Option<Group> = None;
+    for setting in selected {
+        if headings && group != Some(setting.group()) {
+            group = Some(setting.group());
+            lines.push(String::new());
+            lines.push(setting.group().label().to_uppercase());
+        }
+        let provenance = provenance_of(*setting, layers);
         let value = setting.value_of(effective);
-        say!(
-            "{:<26} {:<24} accepts: {}  [scope: {}]  ({})",
-            setting.label(),
-            value,
-            setting.accepted(),
-            setting.scope_label(),
-            provenance.source.name()
-        );
+        lines.push(if accepts {
+            format!(
+                "{:<26} {:<24} accepts: {}  [scope: {}]  ({})",
+                setting.label(),
+                value,
+                setting.accepted(),
+                setting.scope_label(),
+                provenance.source.name()
+            )
+        } else {
+            format!(
+                "{:<26} {:<24} [scope: {}]  ({})",
+                setting.label(),
+                value,
+                setting.scope_label(),
+                provenance.source.name()
+            )
+        });
         if !provenance.shadowed.is_empty() {
             let listed = provenance
                 .shadowed
@@ -2886,15 +2923,67 @@ fn config_list(agent: Option<&str>, options: &SetupOptions, json: bool) -> Resul
                 .map(|(shadowed, source)| format!("{shadowed} ({})", source.name()))
                 .collect::<Vec<_>>()
                 .join(", ");
-            say!("  shadows {listed}");
+            lines.push(format!("  shadows {listed}"));
         }
         if layers.repository.is_some()
             && setting.value_of(effective) != setting.value_of(layers.unlayered())
         {
-            say!("{}", checkout_answers_instead(&value));
+            lines.push(checkout_answers_instead(&value));
         }
     }
-    Ok(())
+    lines
+}
+
+/// One row of `config list --json`.
+#[derive(serde::Serialize)]
+struct ListedRow {
+    setting: &'static str,
+    group: &'static str,
+    scope: &'static str,
+    value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accepts: Option<&'static str>,
+    source: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    shadowed: Vec<ListedShadow>,
+}
+
+/// A farther layer a listed row disagrees with.
+#[derive(serde::Serialize)]
+struct ListedShadow {
+    value: String,
+    source: &'static str,
+}
+
+/// The same listing as JSON. `accepts` is present only when it was asked for.
+fn config_list_json(
+    layers: &skill::ConfigLayers,
+    selected: &[Setting],
+    accepts: bool,
+) -> Vec<ListedRow> {
+    let effective = layers.effective();
+    selected
+        .iter()
+        .map(|setting| {
+            let provenance = provenance_of(*setting, layers);
+            ListedRow {
+                setting: setting.label(),
+                group: setting.group().label(),
+                scope: setting.scope_label(),
+                value: setting.value_of(effective),
+                accepts: accepts.then(|| setting.accepted()),
+                source: provenance.source.name(),
+                shadowed: provenance
+                    .shadowed
+                    .iter()
+                    .map(|(value, source)| ListedShadow {
+                        value: value.clone(),
+                        source: source.name(),
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
 }
 
 /// Where one row's winning value came from, and what it shadows.
@@ -3400,16 +3489,56 @@ fn elsewhere(
 }
 
 /// Writes one row into this repository's own file, creating it if need be.
+#[cfg(test)]
 fn repository_set(
     setting: Setting,
     value: &str,
     here: &std::path::Path,
     options: &SetupOptions,
 ) -> Result<(), Refusal> {
-    let rows = repository_rows_for(setting, value)?;
-    let path = repository_write(&rows, here, options)?;
-    say!("{} = {} in {}", setting.label(), value, path.display());
+    let stored = repository_set_stored(setting, value, here, options)?;
+    say!(
+        "{} = {} in {}",
+        setting.label(),
+        stored.value,
+        stored.path.display()
+    );
     Ok(())
+}
+
+/// What one repository write left in the file, read back rather than assumed.
+struct StoredRow {
+    /// The value the row reads as, which is not always the one typed:
+    /// `trunk-based` is stored as `trunk`.
+    value: String,
+    /// The file the row went into.
+    path: std::path::PathBuf,
+    /// Whether the file's bytes moved.
+    changed: bool,
+}
+
+/// [`repository_set`], answering what was written instead of printing it.
+fn repository_set_stored(
+    setting: Setting,
+    value: &str,
+    here: &std::path::Path,
+    options: &SetupOptions,
+) -> Result<StoredRow, Refusal> {
+    let rows = repository_rows_for(setting, value)?;
+    let before = skill::repository_rows(here)
+        .ok()
+        .flatten()
+        .map(|(_, text)| text);
+    let path = repository_write(&rows, here, options)?;
+    let written = std::fs::read_to_string(&path).ok();
+    // Read back what the operator will actually read: the typed value is not
+    // the stored one (`trunk-based` is stored as `trunk`).
+    let config = skill::layer_repository(&Config::default(), here)?;
+    Ok(StoredRow {
+        value: setting.value_of(&config),
+        path,
+        changed: before != written,
+    })
 }
 
 /// Writes `rows` into this repository's own file as one change, refusing before
@@ -3420,7 +3549,7 @@ fn repository_write(
     options: &SetupOptions,
 ) -> Result<std::path::PathBuf, Refusal> {
     for (row, row_value) in rows {
-        refuse_a_row_looser_than_an_agent_holds(*row, row_value, options)?;
+        refuse_a_row_looser_than_the_machine_holds(*row, row_value, options)?;
     }
     // A repository first: creating `.git` here would not make a checkout.
     if skill::checkout_root(here).is_none() {
@@ -3616,21 +3745,18 @@ fn repository_rows_for(setting: Setting, value: &str) -> Result<Vec<(Setting, St
     Ok(vec![(setting, value.to_owned())])
 }
 
-/// Refuses an `auto` row over an `ask` any layer holds.
+/// Refuses a repository row that would loosen what the machine holds.
 ///
 /// The layer is resolved the way [`ConfigLayers::unlayered`] reads — local, then
 /// agent, then contract — so the refusal names the file that holds the stricter
-/// answer and, where a command clears it, only a command that does. Every other
-/// value is a tightening or a no-op and passes, whatever the durations of two
-/// `ask` rows.
-fn refuse_a_row_looser_than_an_agent_holds(
+/// answer and, where a command clears it, only a command that does. A row whose
+/// scope is the repository has no machine answer to loosen, and a row that names
+/// a location or an identity has no looser direction, so both pass.
+fn refuse_a_row_looser_than_the_machine_holds(
     setting: Setting,
     value: &str,
     options: &SetupOptions,
 ) -> Result<(), Refusal> {
-    if !setting.repository_may_tighten() {
-        return Ok(());
-    }
     let mut candidate = Config::default();
     setting.apply(&mut candidate, value)?;
     for adapter in configured(options) {
@@ -3685,11 +3811,15 @@ fn refuse_a_row_looser_than_an_agent_holds(
             ));
         }
         let file = paths.skill_root.join(skill::CONTRACT);
-        let resolution = Resolution::run(format!(
-            "estigia config set {:?} {value} --agent {}",
-            setting.label(),
-            adapter.slug,
-        ));
+        let resolution = if setting.scope() == crate::config::Scope::Everywhere {
+            Resolution::run(format!("estigia config set {:?} {value}", setting.label()))
+        } else {
+            Resolution::run(format!(
+                "estigia config set {:?} {value} --agent {}",
+                setting.label(),
+                adapter.slug
+            ))
+        };
         return Err(Refusal::not_started(
             "repository-cannot-loosen",
             format!(
@@ -3833,7 +3963,23 @@ fn config_set(
                 ),
             )
         })?;
-        return repository_set(setting, value, &here, options);
+        let stored = repository_set_stored(setting, value, &here, options)?;
+        if json {
+            print_json(&serde_json::json!({
+                "setting": setting.label(),
+                "value": stored.value,
+                "changed": stored.changed,
+                "file": stored.path.display().to_string(),
+            }));
+            return Ok(());
+        }
+        say!(
+            "{} = {} in {}",
+            setting.label(),
+            stored.value,
+            stored.path.display()
+        );
+        return Ok(());
     }
     // Linear is read-only and admitted only under `Workflow: assisted`, which a
     // repository answers in its own file. A machine-wide value
@@ -4410,7 +4556,17 @@ fn layers_of(
 /// Exits non-zero when something is broken, so a script can gate on it — and
 /// the refusal it exits with names the first thing to fix rather than the last
 /// thing checked.
-fn doctor(json: bool) -> Result<(), Refusal> {
+/// The checks a report prints: every one, or only what is not `ok`.
+fn reported_checks(
+    checks: &[harness::doctor::Check],
+    problems: bool,
+) -> impl Iterator<Item = &harness::doctor::Check> {
+    checks.iter().filter(move |check| {
+        !problems || !matches!(check.health, harness::doctor::Health::Fine { .. })
+    })
+}
+
+fn doctor(json: bool, problems: bool) -> Result<(), Refusal> {
     let skill_root = harness::discover_skill_root().ok();
     let repo_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let tracker = harness::doctor::tracker_in_force(skill_root.as_deref(), &repo_dir);
@@ -4447,7 +4603,9 @@ fn doctor(json: bool) -> Result<(), Refusal> {
     if json {
         print_json(&checks);
     } else {
-        for line in checks.iter().flat_map(harness::doctor::Check::report_lines) {
+        for line in
+            reported_checks(&checks, problems).flat_map(harness::doctor::Check::report_lines)
+        {
             say!("{line}");
         }
     }
@@ -4545,7 +4703,66 @@ fn prune(confirm: bool, base: &str, json: bool) -> Result<(), Refusal> {
     if !confirm && deletable > 0 {
         say!("{deletable} would be removed; re-run with --confirm");
     }
+    if confirm {
+        let (lines, failed) = prune_removal_lines(&removed);
+        for line in lines {
+            say!("{line}");
+        }
+        if failed {
+            return Err(Refusal::not_started(
+                "prune-incomplete",
+                "something the sweep listed stayed where it was; each entry above marked KEPT \
+                 carries the reason",
+                Resolution::run("estigia prune --confirm"),
+            ));
+        }
+    }
     Ok(())
+}
+
+/// What a confirmed sweep did, in text, and whether every removal landed.
+///
+/// The dry-run listing says what would go; this says what went. They read
+/// different facts — the sweep's decision and the removal's read-back — and a
+/// text run that printed only the first reported success for deletions that
+/// failed.
+fn prune_removal_lines(removed: &[serde_json::Value]) -> (Vec<String>, bool) {
+    let mut lines = Vec::new();
+    let mut failed = false;
+    for entry in removed {
+        let (kind, name) = match entry.get("kind").and_then(serde_json::Value::as_str) {
+            Some("remote-head") => (
+                "remote head",
+                entry
+                    .get("branch")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("?"),
+            ),
+            _ => (
+                "worktree",
+                entry
+                    .get("worktree")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("?"),
+            ),
+        };
+        let landed = entry
+            .get("removed")
+            .and_then(serde_json::Value::as_bool)
+            .or_else(|| entry.get("deleted").and_then(serde_json::Value::as_bool))
+            .unwrap_or(false);
+        if landed {
+            lines.push(format!("  removed  {kind:<11} {name}"));
+        } else {
+            failed = true;
+            let detail = entry
+                .get("detail")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("it did not move, and no reason was recorded");
+            lines.push(format!("  KEPT     {kind:<11} {name}  {detail}"));
+        }
+    }
+    (lines, failed)
 }
 
 /// Lists the uncommitted work in every checkout. Writes nothing.
@@ -5227,8 +5444,13 @@ struct InertTracker {
 /// `Workflow: assisted`, where a run does swear against it.
 fn inert_tracker(repo_dir: &std::path::Path) -> Option<InertTracker> {
     let skill_root = harness::control_surface();
-    let (config, complaint) = skill::installed_config_in_keeping_what_parses(&skill_root, repo_dir);
-    let workflow = effective_workflow(complaint.is_some(), config.workflow);
+    let skill::KeptWhatParses {
+        config,
+        contract,
+        row: _,
+        file,
+    } = skill::installed_config_in_keeping_what_parses_apart(&skill_root, repo_dir);
+    let workflow = effective_workflow(contract.is_some(), file.is_some(), config.workflow);
     if config.tracker.adjudicates_unclaimed_writes(workflow) {
         return None;
     }
@@ -5291,10 +5513,20 @@ fn effective_evidence(
 }
 
 fn effective_workflow(
-    unreadable: bool,
+    contract_unreadable: bool,
+    repository_unknown: bool,
     installed: crate::config::Workflow,
 ) -> Option<crate::config::Workflow> {
-    (!unreadable).then_some(installed)
+    if contract_unreadable {
+        return None;
+    }
+    // A repository file nobody can read says nothing about the workflow it
+    // carries, and `None` is the answer that lets every tracker writer run.
+    Some(if repository_unknown {
+        crate::config::Workflow::Assisted
+    } else {
+        installed
+    })
 }
 
 /// Everything the gate needs, or nothing if the harness is not installed.
@@ -5310,10 +5542,16 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     // Defaults rather than refusing, with this repository's rows layered on top.
     // Told apart: a contract that did not parse leaves nothing standing, while a
     // repository file that did not read keeps the rows underneath it.
-    let (installed, complaint, repository_unreadable) =
-        skill::installed_config_in_keeping_what_parses_apart(&skill_root, &repo_dir);
+    let skill::KeptWhatParses {
+        config: installed,
+        contract,
+        row,
+        file,
+    } = skill::installed_config_in_keeping_what_parses_apart(&skill_root, &repo_dir);
+    let complaint = contract.as_ref().or(row.as_ref()).or(file.as_ref());
     let unreadable = complaint.is_some();
-    let repository_unknown = repository_unreadable.is_some();
+    let repository_unknown = file.is_some();
+    let contract_unreadable = contract.is_some();
     let tracker = installed.tracker;
     let repository_host = installed.repository_host;
     let boundaries = installed.boundaries;
@@ -5332,9 +5570,9 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
         } else {
             installed.issue_requirement
         },
-        repository_config_unreadable: repository_unreadable,
+        repository_config_unreadable: file,
         decision_mode: installed.decision_mode,
-        workflow: effective_workflow(unreadable || repository_unknown, installed.workflow),
+        workflow: effective_workflow(contract_unreadable, repository_unknown, installed.workflow),
         // Read off `installed` so the crossing in `tests/honesty.rs` sees which
         // row this field answers.
         operation_window: harness::operation_window::effective_in(

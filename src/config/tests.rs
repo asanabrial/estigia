@@ -2838,3 +2838,94 @@ fn the_review_voice_grammar_is_none_or_lowercase_letters_digits_and_hyphens() {
     assert_eq!(Setting::ReviewVoice.scope(), Scope::Repository);
     assert_eq!(Setting::ReviewVoice.default_value(), "none");
 }
+
+#[test]
+fn a_label_with_another_word_after_it_is_not_the_row_that_prefix_names() {
+    // `Claim workflow` carried `Workflow` as an alias, and a prefix match on it
+    // read `Workflow mode` as that row.
+    assert_eq!(Setting::from_label("Workflow mode"), None);
+    assert_eq!(Setting::from_label("Workflow"), Some(Setting::Workflow));
+    assert_eq!(
+        Setting::from_label("Claim workflow"),
+        Some(Setting::Workflow)
+    );
+
+    // A trailing explanation after the label is still a row: a hand-written
+    // table says what a row is for in the same cell.
+    assert_eq!(
+        Setting::from_label("Delivery authorisation (per agent)"),
+        Some(Setting::Delivery)
+    );
+    assert_eq!(
+        Setting::from_label("Irreversible commands \u{2014} this repository's"),
+        Some(Setting::Boundaries)
+    );
+}
+
+#[test]
+fn a_value_the_reader_would_cut_is_refused_before_it_is_written() {
+    let mut config = Config::default();
+    let refusal = Setting::Boundaries
+        .apply(&mut config, "terraform apply (prod), npm publish")
+        .expect_err("a value the reader cuts was accepted");
+    assert_eq!(refusal.code, "config-value-would-be-cut");
+    assert!(refusal.message.contains("terraform apply"), "{refusal}");
+    assert!(
+        refusal.message.contains("Irreversible commands"),
+        "{refusal}"
+    );
+
+    // The same value without the parenthesis reads back whole, so the second
+    // boundary is not silently lost.
+    Setting::Boundaries
+        .apply(&mut config, "terraform apply, npm publish")
+        .expect("a value the reader keeps");
+    assert_eq!(
+        config.boundaries,
+        vec!["terraform apply".to_owned(), "npm publish".to_owned()]
+    );
+}
+
+#[test]
+fn every_guard_row_a_repository_may_carry_has_a_looser_direction_the_comparison_refuses() {
+    let held = |setting: Setting, value: &str| {
+        let mut config = Config::default();
+        setting
+            .apply(&mut config, value)
+            .expect("the machine value");
+        config
+    };
+    for (setting, tighter, looser) in [
+        (Setting::Evidence, "reading", "measuring"),
+        (Setting::PublicationLane, "on", "off"),
+        (Setting::DecisionMode, "ask", "auto"),
+        (Setting::Integration, "branch", "trunk"),
+        (Setting::CorrectionsPerLineage, "1", "5"),
+        (Setting::Window, "30s", "2m"),
+        (Setting::Boundaries, "npm publish", "none"),
+    ] {
+        let base = held(setting, tighter);
+        let tightened = held(setting, tighter);
+        let loosened = held(setting, looser);
+        assert!(
+            setting.tightens(&base, &tightened),
+            "{} refused its own value",
+            setting.label()
+        );
+        assert!(
+            !setting.tightens(&base, &loosened),
+            "{} accepted {looser} over {tighter}",
+            setting.label()
+        );
+    }
+    // A row that names where something is has no looser direction.
+    assert!(Setting::Tracker.tightens(
+        &Config::default(),
+        &Config {
+            tracker: Tracker::Github {
+                repo: Some(RepoRef::parse("acme/other").expect("a repo")),
+            },
+            ..Config::default()
+        }
+    ));
+}

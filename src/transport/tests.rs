@@ -299,9 +299,9 @@ fn a_failing_write_and_a_failing_read_are_not_the_same_answer() {
 /// the operator's value to every question.
 #[test]
 fn a_live_call_carries_the_operators_own_files() {
-    for (theirs, expected_worktree, expected_evidence) in [
-        (true, crate::test_env::work_trees(), "measuring"),
-        (false, "unset", "reading"),
+    for (theirs, expected_worktree, expected_boundaries) in [
+        (true, crate::test_env::work_trees(), "npm publish"),
+        (false, "unset", "none"),
     ] {
         let home = tempfile::tempdir().expect("a home");
         let skill = home.path().join("skill");
@@ -328,7 +328,7 @@ fn a_live_call_carries_the_operators_own_files() {
             std::fs::write(
                 &inside,
                 "<!-- estigia:config:start -->\n| Setting | Value here |\n|---|---|\n\
-                 | Evidence standard | measuring |\n<!-- estigia:config:end -->\n",
+                 | Irreversible commands | npm publish |\n<!-- estigia:config:end -->\n",
             )
             .expect("the repository's file");
         }
@@ -341,8 +341,8 @@ fn a_live_call_carries_the_operators_own_files() {
             "the fixture does not pose what it says it does"
         );
         assert_eq!(
-            crate::config::Setting::Evidence.value_of(&told),
-            expected_evidence,
+            crate::config::Setting::Boundaries.value_of(&told),
+            expected_boundaries,
             "the fixture does not pose what it says it does"
         );
 
@@ -354,9 +354,9 @@ fn a_live_call_carries_the_operators_own_files() {
             "the transport reads a worktree location the operator did not configure"
         );
         assert_eq!(
-            live.get("evidence standard"),
-            Some(expected_evidence),
-            "the transport reads a merge strategy this repository did not choose"
+            live.get("irreversible commands"),
+            Some(expected_boundaries),
+            "the transport reads boundaries this repository did not choose"
         );
     }
 }

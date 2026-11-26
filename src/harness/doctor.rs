@@ -309,6 +309,12 @@ pub fn examine(skill_root: Option<&Path>, repo_dir: &Path) -> Vec<Check> {
         health: remote(repo_dir),
     });
 
+    checks.push(Check {
+        name: "repository-config",
+        about: "this checkout's own configuration rows",
+        health: repository_config(skill_root, repo_dir),
+    });
+
     checks
 }
 
@@ -411,6 +417,56 @@ fn remote(repo_dir: &Path) -> Health {
         _ => Health::Skipped {
             detail: format!("{} is not a git repository", repo_dir.display()),
         },
+    }
+}
+
+/// Whether this checkout's own file reads as configuration, and names rows
+/// this build knows.
+///
+/// Absent is not broken: a repository that has never answered for itself is the
+/// ordinary case. A row that names no setting and a row that does not parse are
+/// both reported here, because both are dropped by every reader — the first by
+/// `filter_map`, the second by a tolerant read — and a dropped row is a rule
+/// nobody is following.
+fn repository_config(skill_root: &Path, repo_dir: &Path) -> Health {
+    let rows = match crate::skill::repository_rows(repo_dir) {
+        Ok(rows) => rows,
+        Err(refusal) => return Health::broken(refusal.message, refusal.resolution),
+    };
+    let Some((path, text)) = rows else {
+        return Health::Skipped {
+            detail: format!("{} has no rows of its own", repo_dir.display()),
+        };
+    };
+    let unknown: Vec<String> = crate::config::table_rows(&text)
+        .into_iter()
+        .filter(|(label, value)| {
+            crate::config::Setting::from_label(label).is_none()
+                && crate::config::retired_setting_report(label, value).is_none()
+        })
+        .map(|(label, _)| label)
+        .collect();
+    if !unknown.is_empty() {
+        return Health::broken(
+            format!(
+                "{} names {} row(s) that resolve to no setting: {}",
+                path.display(),
+                unknown.len(),
+                unknown.join(", ")
+            ),
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "the row's label corrected or removed; `estigia config set --repo` writes the \
+                 spelling this build reads",
+            ),
+        );
+    }
+    let base = crate::skill::installed_config(skill_root).unwrap_or_default();
+    match crate::skill::repository_complaint(&base, repo_dir) {
+        Ok(None) => Health::Fine {
+            detail: path.display().to_string(),
+        },
+        Ok(Some(refusal)) | Err(refusal) => Health::broken(refusal.message, refusal.resolution),
     }
 }
 
@@ -1226,6 +1282,7 @@ pub const CHECKS: &[&str] = &[
     "gh",
     "push-guard",
     "remote",
+    "repository-config",
     "contract",
     "canonical",
     "gate",

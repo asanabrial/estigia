@@ -285,6 +285,27 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     file: one that is there and cannot be read reads as the denying answers (`on` for `Issue required`,
     `unreadable` for `Git operation window`), so the gate refuses what those rows could have refused,
     and the refusal that stops an unclaimed write names the file and the read error.
+  - **A repository row the gate cannot read is closed, and one it will not honour is inert.** A row
+    that does not parse makes the gate read that setting at its strictest value — `Issue required` as
+    `on`, `Claim workflow` as `assisted`, `Evidence standard` as `reading`, `Decision mode` as `ask`,
+    `Integration mode` as `branch`, the two authorisations as `ask`, `Renewal window` as one second —
+    while the rows the gate does not decide on keep the machine's answer; the complaint names the row
+    and the file. A workflow row that parsed survives a bad row beside it, and a repository file that
+    cannot be read at all reads as `assisted`, so neither hands the tracker writers an open gate. A row
+    that parses but would loosen a machine-wide answer (the comparison in `docs/configuration.md`) is
+    ignored the same way: the layer underneath stands, `config list` prints the complaint, and
+    `doctor`'s `repository-config` check reports it. **What this costs:** the gate does not stop a run
+    for a row it merely ignores, so a person who meant to loosen a row and had it refused at
+    `config set --repo` can still hand-write it and see the machine's answer apply; and a row that
+    fails to parse on a setting the gate does not decide on still leaves the machine's answer, which
+    can be looser than the row intended. Held by
+    `a_mistyped_issue_row_in_the_repository_file_still_holds_an_unclaimed_commit`,
+    `a_repository_row_that_did_not_parse_keeps_the_workflow_beside_it`,
+    `a_repository_workflow_row_that_does_not_parse_shuts_the_tracker_writers`,
+    `a_repository_row_may_only_tighten_what_the_machine_holds`,
+    `a_repository_cannot_lengthen_the_renewal_window_or_drop_a_boundary_the_machine_declares`,
+    `a_hand_written_auto_does_not_loosen_an_agents_ask` and
+    `a_repository_row_that_resolves_to_no_setting_is_reported`.
   - A test classifies every tool in the server's table as tracker writer, assisted-only, follow-up
     (`review_stages` and `review_thread`, offered under both workflows), pull review, local writer or
     read, so a new tool fails until placed; a writer a person runs by hand through `gh` is not a tool call.
@@ -307,7 +328,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   any remote state is written and with no data lost; the recovery is the same `git worktree remove`, written
   in the binding. Measured across twenty-four template shapes by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd`.
-- **Five of the twenty-one are about the past.** `LOOKS_BACK` excludes `silence`, `stale-run-pointer`,
+- **Five of the twenty-two are about the past.** `LOOKS_BACK` excludes `silence`, `stale-run-pointer`,
   `prune`, `gate-version` and `store-records` from readiness: undecided past calls, another run's
   pointer, orphaned branches, a stale diagnostic binary and appends that already failed do not prove
   a fresh claim impossible. `store-records` reads counted append failures; a successful snapshot
