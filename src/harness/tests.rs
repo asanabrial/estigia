@@ -151,6 +151,66 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
 }
 
 #[test]
+fn powershell_is_read_as_the_shell_it_is() {
+    for command in [
+        "git push origin main",
+        "gh pr merge 54 --merge",
+        "git commit -m x",
+    ] {
+        let (via_bash, bash_sensitivity) = classify("Bash", &json!({ "command": command }));
+        let (via_powershell, powershell_sensitivity) =
+            classify("PowerShell", &json!({ "command": command }));
+        assert_eq!(
+            format!("{powershell_sensitivity:?}"),
+            format!("{bash_sensitivity:?}"),
+            "{command} through PowerShell is not read like the same line through Bash"
+        );
+        assert_eq!(
+            format!("{via_powershell:?}"),
+            format!("{via_bash:?}"),
+            "{command} through PowerShell is not read like the same line through Bash"
+        );
+    }
+}
+
+#[test]
+fn a_powershell_commit_from_an_unclaimed_session_is_refused_like_bash() {
+    let root = tempfile::tempdir().expect("a gate root");
+    let context = context(root.path());
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
+
+    let mut answers = Vec::new();
+    for tool in ["Bash", "PowerShell"] {
+        let body = json!({
+            "tool_name": tool,
+            "session_id": "claude-abcd1234",
+            "tool_input": {"command": "git commit -m x"},
+        })
+        .to_string();
+        let read = hook::read_input(std::io::Cursor::new(body));
+        let (action, how) = classify(&read.tool_name, &read.tool_input);
+        let mut run = Run::new("claude-abcd1234".to_owned());
+        let decision = decide(&context, &mut run, &action, how);
+        answers.push((tool, format!("{decision:?}")));
+    }
+    let (_, bash) = &answers[0];
+    let (_, powershell) = &answers[1];
+    assert!(
+        bash.contains("NothingSworn"),
+        "Bash no longer answers the unclaimed commit: {bash}"
+    );
+    assert_eq!(
+        powershell, bash,
+        "the same commit through PowerShell is not answered as it is through Bash"
+    );
+}
+
+#[test]
 fn an_unidentified_pr_merge_refusal_names_the_shape_that_clears_it() {
     let refusal = delivery_pr_unidentified(None);
     let Resolution::NoCommand { detail, .. } = &refusal.resolution else {

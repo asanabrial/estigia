@@ -332,7 +332,13 @@ pub const SHELL_TOOLS_POPULATION: Population = Population {
 /// Separated from the writing tools because their *argument* decides what they
 /// are: `git status` through one of these is a read, and `git push` through the
 /// same tool is a boundary.
-pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", "pre_run_command"];
+pub(crate) const SHELL_TOOLS: &[&str] = &[
+    "bash",
+    "powershell",
+    "run_shell_command",
+    "shell",
+    "pre_run_command",
+];
 
 /// The population and boundary `CONTROL_SURFACE` enforces.
 pub const CONTROL_SURFACE_POPULATION: Population = Population {

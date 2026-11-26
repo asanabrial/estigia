@@ -688,7 +688,12 @@ const AFFIRMED: &[(&str, u64)] = &[
     //
     // Re-read on 2026-08-28 for the same reason as `write-tools`: moved into
     // `SHELL_TOOLS_POPULATION`, words unchanged, still true.
-    ("shell-tools", 7235849314805658990),
+    //
+    // Re-read on 2026-11-26 when `powershell` joined the list: Claude Code's
+    // built-in shell tool on Windows, which the claim's population names and
+    // the list did not hold. The rule is unchanged and now covers one more
+    // built-in shell tool; the boundary it states was the reason to add it.
+    ("shell-tools", 8935453054679105903),
     // `irreversible-shell` — relabelled from fail-closed while reading it. A
     // spelling that is not on the list escapes, and escaping is not failing
     // closed. What is fail-closed is the substring *matching*, which is a
