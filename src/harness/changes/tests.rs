@@ -360,6 +360,26 @@ fn a_registered_checkout_that_was_deleted_is_reported_as_missing() {
 }
 
 #[test]
+fn a_checkout_the_filesystem_cannot_be_asked_about_is_unread_not_missing() {
+    let root = tempfile::tempdir().expect("a root");
+    let file = root.path().join("a-file");
+    std::fs::write(&file, "not a directory\n").expect("a file");
+
+    assert!(matches!(
+        super::presence(&file.join("child")),
+        super::Presence::Unreadable
+    ));
+    assert!(matches!(
+        super::presence(&root.path().join("gone")),
+        super::Presence::Gone
+    ));
+    assert!(matches!(
+        super::presence(root.path()),
+        super::Presence::Present
+    ));
+}
+
+#[test]
 fn a_staged_rename_is_one_uncommitted_file_in_the_start_notice() {
     let (root, main, trees) = fixture();
     let renamed = add_tree(&main, &trees, "issue-1-renamed");

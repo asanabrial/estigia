@@ -152,23 +152,40 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
 /// own path and comment prose: a hook installed by an Estigia that has since
 /// moved, or reworded by a later build, still answers.
 fn faithful(text: &str) -> bool {
-    comparable(text) == comparable(&script(Path::new("x")))
+    comparable(text) == comparable(&script(Path::new("/estigia")))
 }
 
 fn comparable(text: &str) -> Vec<String> {
+    let called = format!(" hook {HOOK}");
     text.lines()
         .map(str::trim_end)
         .filter(|line| !line.is_empty())
         // The shebang is a comment to this parser and not to the shell.
         .filter(|line| !line.trim_start().starts_with('#') || line.starts_with("#!"))
-        .map(|line| {
-            if line.ends_with(&format!(" hook {HOOK}")) {
-                format!("<executable> hook {HOOK}")
-            } else {
-                line.to_owned()
-            }
+        .map(|line| match line.strip_suffix(&called) {
+            Some(command) if names_a_path(command) => format!("<executable>{called}"),
+            _ => line.to_owned(),
         })
         .collect()
+}
+
+/// Whether `command` is one shell word naming a file, so its directory may
+/// move without changing what the hook does. A word naming no path — `true`,
+/// or a bare program name — is compared as written, because the install always
+/// spells the executable's path.
+fn names_a_path(command: &str) -> bool {
+    let unquoted = command
+        .strip_prefix('\'')
+        .and_then(|rest| rest.strip_suffix('\''))
+        .or_else(|| {
+            command
+                .strip_prefix('"')
+                .and_then(|rest| rest.strip_suffix('"'))
+        })
+        .unwrap_or(command);
+    let quoted = unquoted.len() != command.len();
+    let names_a_directory = unquoted.contains('/') || unquoted.contains('\\');
+    names_a_directory && (quoted || !unquoted.contains(char::is_whitespace))
 }
 
 /// Whether an uninstall may take this hook away.

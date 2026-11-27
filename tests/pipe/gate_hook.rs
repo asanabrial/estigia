@@ -3561,3 +3561,22 @@ fn a_claimed_run_is_refused_a_write_into_the_state_directory() {
         "the denial did not class the rule that said no: {answer}"
     );
 }
+
+#[test]
+fn a_push_the_hook_cannot_check_says_so_and_lets_it_through() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (out, err, ok) = run(home.path(), &["hook", "pre-push"], "");
+    let said = format!("{out}{err}");
+    assert!(
+        ok,
+        "a push the hook could not check was blocked instead of reported: {said}"
+    );
+    assert!(
+        said.contains("this push was not checked against any claim"),
+        "the hook let a push through without saying it could not check it: {said}"
+    );
+    assert!(
+        said.contains("run: estigia setup --all"),
+        "the note does not name the command that would make the hook answer: {said}"
+    );
+}

@@ -5308,7 +5308,7 @@ fn not_checked_note(refusal: &Refusal) -> String {
     said
 }
 
-/// Installs or removes the push guard, and says which of the ten things it did.
+/// Installs or removes the push guard, and says which of the eleven things it did.
 fn guard(uninstall: bool, dry_run: bool, json: bool) -> Result<(), Refusal> {
     let repo_dir = std::env::current_dir().map_err(|error| {
         Refusal::not_started(

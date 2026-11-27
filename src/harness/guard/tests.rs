@@ -291,7 +291,7 @@ fn a_pre_push_hook_nothing_can_read_is_not_a_repository_with_no_hook() {
     let repo = repository.path();
     let hooks = hooks_directory(repo).expect("a real repository has a hooks directory");
     let hook = hooks.join(HOOK);
-    let executable = Path::new("estigia");
+    let executable = Path::new("/usr/bin/estigia");
 
     // The floor first: with nothing there, this still installs. A fix that made
     // every repository unreadable would pass every assertion below.
@@ -1803,10 +1803,19 @@ fn a_hook_with_the_marker_and_no_guard_body_is_disarmed_and_doctor_says_so() {
         .into_iter()
         .find(|check| check.name == "push-guard")
         .expect("the push guard is reported");
+    let crate::harness::doctor::Health::Broken { detail, resolution } = &guard.health else {
+        panic!(
+            "a marker with no guard body was reported as health: {:?}",
+            guard.health
+        );
+    };
     assert!(
-        guard.health.is_broken(),
-        "a marker with no guard body was reported as health: {:?}",
-        guard.health
+        detail.contains("does not answer"),
+        "the finding does not say the gate does not answer: {detail}"
+    );
+    assert!(
+        matches!(resolution, crate::outcome::Resolution::Run { command } if command == "estigia guard"),
+        "a disarmed hook has a reinstall that clears it: {resolution:?}"
     );
 }
 
@@ -1819,6 +1828,26 @@ fn a_reworded_comment_does_not_disarm_an_intact_hook() {
     );
     assert!(super::faithful(&reworded), "{reworded}");
     assert_eq!(state_of(Some(&reworded), true), State::Installed);
+}
+
+#[test]
+fn a_hook_whose_call_line_runs_something_else_is_disarmed() {
+    let installed = super::script(Path::new("/usr/bin/estigia"));
+    let moved = super::script(Path::new("/opt/bin/estigia"));
+    assert!(
+        super::faithful(&moved),
+        "a moved install stopped being this build's hook"
+    );
+    for (replacement, expected) in [("true", State::Altered), ("estigia", State::Disarmed)] {
+        let line = format!("{replacement} hook pre-push");
+        let substituted = installed.replace("'/usr/bin/estigia' hook pre-push", &line);
+        assert_ne!(
+            installed, substituted,
+            "the call line is not where the test expects"
+        );
+        assert!(!super::faithful(&substituted), "{substituted}");
+        assert_eq!(state_of(Some(&substituted), true), expected);
+    }
 }
 
 #[test]
@@ -1852,10 +1881,50 @@ fn an_early_exit_appended_to_the_installed_hook_is_not_reported_in_force() {
         .into_iter()
         .find(|check| check.name == "push-guard")
         .expect("the push guard is reported");
+    let crate::harness::doctor::Health::Broken { detail, resolution } = &guard.health else {
+        panic!(
+            "a hook that exits before the gate was reported in force: {:?}",
+            guard.health
+        );
+    };
     assert!(
-        guard.health.is_broken(),
-        "a hook that exits before the gate was reported in force: {:?}",
-        guard.health
+        detail.contains("did not write"),
+        "the finding does not say the body and the lines are not Estigia's: {detail}"
+    );
+    assert!(
+        matches!(resolution, crate::outcome::Resolution::NoCommand { .. }),
+        "the reinstall refuses this file, so no command may be named: {resolution:?}"
+    );
+}
+
+#[test]
+fn somebody_elses_hook_under_a_custom_hooks_path_is_not_reported_as_estigias() {
+    let repo = repository();
+    crate::transport::run(
+        &["git", "config", "core.hooksPath", "pushchecks"],
+        Some(repo.path()),
+        crate::transport::How::write(),
+    )
+    .expect("the hooks path is configured");
+    let path = repo.path().join("pushchecks").join(super::HOOK);
+    std::fs::create_dir_all(path.parent().expect("a hooks parent")).expect("the hooks directory");
+    std::fs::write(&path, "#!/bin/sh\necho mine\n").expect("somebody's hook");
+    super::make_executable(&path).expect("the bit git needs");
+    assert_eq!(super::state(repo.path()), State::Foreign);
+
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    let crate::harness::doctor::Health::Skipped { detail } = &guard.health else {
+        panic!(
+            "somebody else's hook was reported as Estigia's guard: {:?}",
+            guard.health
+        );
+    };
+    assert!(
+        detail.contains("did not write"),
+        "the finding does not leave the file to its owner: {detail}"
     );
 }
 

@@ -259,10 +259,15 @@ pub fn examine(skill_root: Option<&Path>, repo_dir: &Path) -> Vec<Check> {
         .map(|hooks| hooks.join(super::guard::HOOK));
     let guard_outside_the_surface = guard_path
         .as_ref()
-        .is_some_and(|path| !super::is_control_surface(&path.to_string_lossy()));
-    let push_guard_health = if guard_outside_the_surface
-        && guard_state != super::guard::State::Absent
-    {
+        .is_some_and(|path| !super::is_control_surface(&path.to_string_lossy()))
+        && matches!(
+            guard_state,
+            super::guard::State::Installed
+                | super::guard::State::Inert
+                | super::guard::State::Disarmed
+                | super::guard::State::Altered
+        );
+    let push_guard_health = if guard_outside_the_surface {
         Health::broken(
             format!(
                 "the push guard sits at {}, which the gate does not read as control surface \

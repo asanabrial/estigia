@@ -310,9 +310,16 @@ fn orphan_notice_of(
             continue;
         }
         // A directory removed by hand stays registered until `git worktree prune`.
-        if !entry.path.exists() {
-            missing += 1;
-            continue;
+        match presence(&entry.path) {
+            Presence::Gone => {
+                missing += 1;
+                continue;
+            }
+            Presence::Unreadable => {
+                unread += 1;
+                continue;
+            }
+            Presence::Present => {}
         }
         if over_budget() {
             unread += 1;
@@ -391,6 +398,24 @@ fn orphan_notice_of(
 
 fn is_bare_repository(path: &Path) -> bool {
     !path.join(".git").exists() && path.join("HEAD").is_file() && path.join("objects").is_dir()
+}
+
+/// Whether a registered checkout is there, gone, or could not be asked.
+enum Presence {
+    Present,
+    Gone,
+    Unreadable,
+}
+
+/// `Gone` is only an answer the filesystem gave: a path that cannot be
+/// stat'ed — an unmounted volume, a directory reached through something that
+/// is not one — was not measured, and is never reported as holding nothing.
+fn presence(path: &Path) -> Presence {
+    match path.try_exists() {
+        Ok(true) => Presence::Present,
+        Ok(false) => Presence::Gone,
+        Err(_) => Presence::Unreadable,
+    }
 }
 
 fn quick_status(path: &Path) -> Option<usize> {
