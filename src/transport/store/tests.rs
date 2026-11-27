@@ -4219,3 +4219,41 @@ fn migration_twenty_eight_creates_the_rendered_texts_table() {
         .expect("names");
     assert_eq!(columns, ["key", "text", "at"]);
 }
+
+#[test]
+fn a_second_launch_of_one_job_reads_back_the_token_the_first_minted() {
+    let (_directory, store) = open();
+    let first = store
+        .mint_job_token("job-relaunched", 100)
+        .expect("the first mint");
+    let second = store
+        .mint_job_token("job-relaunched", 900)
+        .expect("the second mint");
+    assert_eq!(
+        second, first,
+        "the relaunch replaced the token, so a runner that finishes last writes one the store \
+         no longer holds and the collector refuses a genuine result"
+    );
+    assert_eq!(
+        store.job_token("job-relaunched").expect("the row reads"),
+        Some(first)
+    );
+}
+
+#[test]
+fn both_launches_of_one_job_are_admitted_by_the_collector() {
+    let (_directory, store) = open();
+    let first = store
+        .mint_job_token("job-twice", 100)
+        .expect("the first mint");
+    let second = store
+        .mint_job_token("job-twice", 200)
+        .expect("the second mint");
+    let expected = store.job_token("job-twice").expect("the row reads");
+    for written in [&first, &second] {
+        assert!(
+            crate::reviewer::job::bound_to(Some(written), expected.as_deref()),
+            "a runner launched for this job wrote a token the collector refuses: {written}"
+        );
+    }
+}
