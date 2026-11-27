@@ -403,7 +403,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   to add one they did not ask for. It says so and names the way out.
 - **A hook is what its body does, not what its marker says.** `guard::state_of` compares the file with
   the script this build writes, apart from the executable's own path and comment prose (so a later
-  build's reworded comments do not disarm an intact hook). A marker with no body is
+  build's reworded comments do not disarm an intact hook). The path may move, but it must be a path:
+  the install always spells one, so a call line replaced by `true` or by a bare program name is not
+  this build's body. A marker with no body is
   `Disarmed`; a different body carrying lines Estigia did not write is `Altered`. `doctor` reports both
   as broken, and names `estigia guard` for `Disarmed` but not for `Altered`, because the reinstall
   refuses a file carrying somebody's additions. `guard::hooks_directory` follows `core.hooksPath` while

@@ -1338,7 +1338,7 @@ fn full_reports_the_home_it_was_given_and_softens_the_push_guard_there() {
     // A throwaway checkout: the push guard lives in `.git/hooks`, so there
     // is no way to report on it without one.
     let repo = git_repo();
-    crate::harness::guard::install(repo.path(), Path::new("estigia"), false)
+    crate::harness::guard::install(repo.path(), Path::new("/usr/bin/estigia"), false)
         .expect("the push guard installs");
 
     let options = crate::setup::SetupOptions {
