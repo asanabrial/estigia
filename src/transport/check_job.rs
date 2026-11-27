@@ -162,6 +162,63 @@ fn tail_of(path: &Path) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
+const CHECKS_INHERITED: &[&str] = &[
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "ALLUSERSPROFILE",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "SHELL",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TERM",
+    "CARGO",
+    "CARGO_HOME",
+    "CARGO_TARGET_DIR",
+    "CARGO_INCREMENTAL",
+    "CARGO_NET_OFFLINE",
+    "CARGO_BUILD_TARGET",
+    "CARGO_BUILD_JOBS",
+    "RUSTUP_HOME",
+    "RUSTUP_TOOLCHAIN",
+    "RUSTFLAGS",
+    "RUSTDOCFLAGS",
+    "RUST_BACKTRACE",
+    "CC",
+    "CXX",
+    "AR",
+    "LD",
+    "PKG_CONFIG_PATH",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+];
+
+fn check_environment(
+    ambient: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    ambient
+        .into_iter()
+        .filter(|(name, _)| {
+            let name = name.to_string_lossy();
+            crate::transport::is_essential_env(&name)
+                || CHECKS_INHERITED
+                    .iter()
+                    .any(|kept| name.eq_ignore_ascii_case(kept))
+        })
+        .collect()
+}
+
 #[cfg(unix)]
 fn own_group(command: &mut Command) {
     use std::os::unix::process::CommandExt;
@@ -210,6 +267,8 @@ fn run_one(
     let mut command = Command::new(&check.command[0]);
     command
         .args(&check.command[1..])
+        .env_clear()
+        .envs(check_environment(std::env::vars_os()))
         .current_dir(directory)
         .stdin(Stdio::null())
         .stdout(out)

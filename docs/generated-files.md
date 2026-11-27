@@ -207,6 +207,15 @@ stopping the rest, under a 30 minute deadline for the whole job after which its 
 and the answer is `timed-out`. Each check records its `name`, `exit` (`null` when killed or never
 started), `seconds` and `tail`, the last 2,000 bytes of its combined stdout and stderr.
 
+**The environment a check runs in is built, not inherited.** `CHECKS_INHERITED` in
+`src/transport/check_job.rs` lists the names that reach a check — the platform essentials (`PATH`,
+`TMPDIR`, `SYSTEMROOT`, `COMSPEC`), the build's own (`CARGO_HOME`, `CARGO_TARGET_DIR`, `RUSTUP_HOME`,
+`RUSTUP_TOOLCHAIN`, `RUSTFLAGS`, `RUSTDOCFLAGS`, `CC`, `CXX`, `AR`, `LD`, `PKG_CONFIG_PATH`), the
+locale, the proxies, and `HOME`/`USERPROFILE` for a tool that writes a cache there. Everything else is
+cleared, so the session's own credentials — a tracker token, an agent's API key — do not reach a
+change's tests. A check that needs a variable outside the list cannot declare one yet; that road is
+open, and the list is measured against this repository's own three checks before it grows.
+
 **When it runs.** `start_review` on a publication calls it before launching any lens, waiting no time, so the first lens is never paid for bytes the declared checks reject. Running or failed, it launches none (`launch_skipped` `checks-running` / `checks-failed`; an unreadable declaration or a refused call is `checks-unavailable`), and `review_status` answers the same in place of a lens offer. With `launch`, a passing receipt starts every slot the status held back and reports them under `launched`; a red or running receipt starts none. `deliver` asks for that combination, so one call after a publication with checks carries the wait and the launch. Nothing declared launches as before. The answer's embedded `review_status` is read again after the launches, so no input offers a launch for a slot that same answer started, and the publication's own `next` is omitted: `start_review` did the transition and the launches it would have asked for.
 
 **The receipt.** A finished job is recorded as a `checks-receipt` marker in the issue's local ledger,

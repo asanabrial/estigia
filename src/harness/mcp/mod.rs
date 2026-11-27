@@ -2383,9 +2383,20 @@ pub(crate) fn apply_effect(
         .or_else(|| arguments.get("expect_state"))
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
-    let state = named_state
-        .clone()
-        .unwrap_or_else(|| "in-progress".to_owned());
+    let answered_state = body
+        .and_then(|body| body.get("state"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let answered_operation = body
+        .and_then(|body| body.get("operation_id"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let state = match effect {
+        PointerEffect::Swear => answered_state.as_ref().or(named_state.as_ref()),
+        _ => named_state.as_ref(),
+    }
+    .cloned()
+    .unwrap_or_else(|| "in-progress".to_owned());
     let to = arguments
         .get("to")
         .and_then(Value::as_str)
@@ -2479,6 +2490,9 @@ pub(crate) fn apply_effect(
                 run.issue = answered_issue.clone().or_else(|| issue.clone());
                 run.horizon.clone_from(&sworn_horizon);
                 run.state = Some(state.clone());
+                if let Some(operation) = &answered_operation {
+                    run.operation_id = Some(operation.clone());
+                }
                 run.repo_dir = Some(repo_dir.clone());
                 run.assisted = false;
                 run.branch = None;

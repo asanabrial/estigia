@@ -80,6 +80,30 @@ fn a_check_runs_in_its_cwd_inside_the_tree() {
 }
 
 #[test]
+fn a_check_sees_the_build_variables_and_nothing_else() {
+    let tree = tempfile::tempdir().expect("a tree");
+    let outcome = crate::test_env::with_process_env("ESTIGIA_LEAKED_TOKEN", "s3cret", || {
+        ran(
+            tree.path(),
+            &[
+                check("leak", "printf %s \"$ESTIGIA_LEAKED_TOKEN\""),
+                check("path", "printf %s \"$PATH\""),
+            ],
+            DEADLINE,
+        )
+    });
+    assert_eq!(
+        outcome.runs[0].tail, "",
+        "a check read a variable outside the allow-list, so it runs with the session's whole \
+         environment"
+    );
+    assert!(
+        !outcome.runs[1].tail.is_empty(),
+        "a check lost `PATH`, so nothing it runs can be found"
+    );
+}
+
+#[test]
 fn a_command_is_an_argv_and_no_shell_expands_it() {
     let tree = tempfile::tempdir().expect("a tree");
     let outcome = ran(

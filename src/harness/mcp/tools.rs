@@ -332,7 +332,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "state",
                 "string",
-                "The workflow state the run pointer records. Defaults to in-progress.",
+                "Pointer state; a takeover's answer wins. Defaults to in-progress.",
             )
             .of(crate::config::STATES),
             Argument::optional(

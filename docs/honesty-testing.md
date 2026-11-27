@@ -488,9 +488,12 @@ citation added in a form the test does not parse is prose held by review alone.
   `run_checks` keys its receipt on the clean-target digest `publish_review` binds and a SHA-256 of the
   declared commands ([`generated-files.md`](generated-files.md#declared-checks)). What it does not
   measure:
-  - **Inputs outside the digest are not in the key.** A gitignored file, an installed toolchain, an
-    environment variable or the network can change a check's result without changing either digest. A
-    receipt that failed is never rerun for the same digest; a new publication is the way to ask again.
+  - **Inputs outside the digest are not in the key.** A gitignored file, an installed toolchain, one of
+    the allow-listed environment variables (`CHECKS_INHERITED` in `src/transport/check_job.rs`) or the
+    network can change a check's result without changing either digest. What the allow-list does buy is
+    the other direction: the session's own credentials are cleared before a check runs, so a token that
+    is not on the list cannot change a result at all. A receipt that failed is never rerun for the same
+    digest; a new publication is the way to ask again.
   - **The checks run on the published head, not on the merge result CI tests.**
   - **Host MCP timeouts are not measured.** The wait is capped at 900 seconds, as a lens's is, and the
     default answers at once. Whether a host holds a call that long is the caller's question; the claim is
