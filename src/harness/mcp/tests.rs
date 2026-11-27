@@ -5,22 +5,30 @@ fn every_row() -> impl Iterator<Item = &'static tools::Tool> {
 /// The transport's source: the dispatcher that answers in this process — the
 /// flags a tool sends are checked against the code that reads them, not
 /// against a published schema alone.
-fn transport_source() -> String {
-    crate::source_text::code_of(
-        &std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src")
-                .join("transport")
-                .join("dispatch.rs"),
+fn transport_source() -> &'static str {
+    static SOURCE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    SOURCE.get_or_init(|| {
+        crate::source_text::code_of(
+            &std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join("transport")
+                    .join("dispatch.rs"),
+            )
+            .expect("the dispatcher is part of this crate"),
         )
-        .expect("the dispatcher is part of this crate"),
-    )
+    })
 }
 
 /// Every `.rs` file of the transport, one entry each and in path order, so a
 /// body can be found wherever it is without one file's text running into the
 /// next.
-fn transport_sources() -> Vec<String> {
+fn transport_sources() -> &'static [String] {
+    static SOURCES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    SOURCES.get_or_init(read_transport_sources)
+}
+
+fn read_transport_sources() -> Vec<String> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src")
         .join("transport");
@@ -1341,10 +1349,9 @@ fn every_executable_operation_the_binding_documents_is_exposed_or_declared() {
     let transport = transport_source();
 
     let mut operations: Vec<&str> = transport
-        .as_str()
         .match_indices("\n        \"")
         .map(|(at, marker)| {
-            let rest = &transport.as_str()[at + marker.len()..];
+            let rest = &transport[at + marker.len()..];
             &rest[..rest.find('"').unwrap_or(0)]
         })
         .filter(|name| !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '-'))

@@ -7885,11 +7885,14 @@ fn tantan_is_banded_from_top_to_bottom() {
 fn tantan_stops_short_of_the_footer_at_the_smallest_size_that_shows_it() {
     let mut app = App::new(Config::default());
     app.message = Some("a message that takes a line of the footer".to_owned());
-    let (width, height) = (60..200u16)
-        .flat_map(|width| (20..80u16).map(move |height| (width, height)))
-        .filter(|(width, height)| cat_rows_shown(&app, *width, *height) > 0)
-        .min_by_key(|(width, height)| (u32::from(*height), u32::from(*width)))
+    let shown = |width: u16, height: u16| cat_rows_shown(&app, width, height) > 0;
+    // Widening never hides the drawing, so the widest screen finds the smallest height.
+    let height = (20..80u16)
+        .find(|height| shown(199, *height))
         .expect("Tantan is drawn at no size");
+    let width = (60..200u16)
+        .find(|width| shown(*width, height))
+        .expect("Tantan is drawn at no width at its smallest height");
     assert_eq!(
         cat_rows_shown(&app, width, height),
         super::art::TANTAN.len(),
