@@ -117,7 +117,7 @@ fn publish_review_carries_the_payload_only_when_asked_and_never_truncates_it() {
         { "matches": "issue view", "stdout": timeline, "status": 0 },
         { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
         { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -435,7 +435,7 @@ fn publish_review_records_a_bare_inline_declaration_over_any_file_count() {
         { "matches": "issue view", "stdout": timeline, "status": 0 },
         { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
         { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -802,7 +802,7 @@ fn only_a_forbidden_dispatch_refuses_a_publication_and_the_other_states_report()
             { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
             { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
             { "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 },
-            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
             {
                 "matches": "api graphql",
                 "stdout": serde_json::json!({
@@ -1162,7 +1162,7 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         // failed read rather than a cleared lane.
         let lane = format!("commits/{head}/check-runs");
         script.extend([
-            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
             serde_json::json!({ "matches": lane, "stdout": answer, "status": status }),
             serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
         ]);
@@ -1486,7 +1486,7 @@ fn a_never_ran_lane_is_told_apart_from_one_that_ran_and_failed() {
         }
         script.extend([
             serde_json::json!({ "matches": "issue view", "stdout": timeline(true), "status": 0 }),
-            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
             serde_json::json!({ "matches": lane_path, "stdout": listing, "status": 0 }),
             serde_json::json!({ "matches": jobs_path, "stdout": jobs_answer, "status": 0 }),
             serde_json::json!({ "matches": annotations_path, "stdout": annotation, "status": 0 }),
@@ -1729,7 +1729,7 @@ fn an_unfinished_sibling_check_run_refuses_a_never_ran_clearance() {
     let lane_path = format!("commits/{head}/check-runs");
     let script = serde_json::to_string(&serde_json::json!([
         { "matches": "issue view", "stdout": timeline, "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": lane_path, "stdout": listing, "status": 0 },
         { "matches": "actions/runs/800000001/jobs", "stdout": never_ran_jobs, "status": 0 },
         { "matches": "check-runs/800100/annotations", "stdout": annotation, "status": 0 },
@@ -1927,7 +1927,7 @@ fn a_head_with_two_failing_runs_refuses_on_either_listing_order() {
         let log = trace.path().join(format!("{label}.log"));
         let script = serde_json::to_string(&serde_json::json!([
             { "matches": "issue view", "stdout": timeline, "status": 0 },
-            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
             { "matches": lane_path, "stdout": listing, "status": 0 },
             { "matches": "actions/runs/500000001/jobs", "stdout": never_ran_jobs, "status": 0 },
             { "matches": "actions/runs/500000002/jobs", "stdout": ran_jobs, "status": 0 },
@@ -2090,7 +2090,7 @@ fn a_blank_or_filler_never_ran_evidence_file_is_told_apart_from_no_file_at_all()
     let lane_path = format!("commits/{head}/check-runs");
     let script = serde_json::to_string(&serde_json::json!([
         { "matches": "issue view", "stdout": timeline, "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": lane_path, "stdout": listing, "status": 0 },
         { "matches": "actions/runs/900000001/jobs", "stdout": never_ran_jobs, "status": 0 },
         { "matches": "check-runs/900100/annotations", "stdout": annotation, "status": 0 },
@@ -2262,7 +2262,7 @@ fn a_partial_jobs_page_refuses_rather_than_clearing_the_head() {
     let lane_path = format!("commits/{head}/check-runs");
     let script = serde_json::to_string(&serde_json::json!([
         { "matches": "issue view", "stdout": timeline, "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": lane_path, "stdout": listing, "status": 0 },
         { "matches": "actions/runs/600000001/jobs", "stdout": partial_jobs, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
@@ -2504,7 +2504,8 @@ fn review_status_answers_the_lane_and_the_correction_state_over_the_real_mcp_ser
         "state": "open",
         "repository_url": "https://api.github.com/repos/o/r",
     });
-    let repo_view = "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}";
+    let repo_view =
+        "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}";
     let never_ran_run = serde_json::json!({
         "id": 700100_u64,
         "name": "check (never-ran)",
@@ -2718,7 +2719,7 @@ fn review_status_embeds_a_failed_sub_read_instead_of_aborting_the_answer() {
         { "matches": "api repos/{owner}/{repo}/issues/12/comments", "stdout": "{}", "status": 0 },
         { "matches": "api repos/{owner}/{repo}/issues/12", "stdout": issue.to_string(), "status": 0 },
         { "matches": "pr view", "stdout": pr.to_string(), "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": lane_path, "stdout": listing, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))

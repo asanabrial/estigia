@@ -2628,7 +2628,7 @@ fn a_successor_is_told_which_checkout_holds_the_branch() {
         { "matches": "issue develop", "stdout": "", "status": 1 },
         {
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },

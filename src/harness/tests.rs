@@ -5188,6 +5188,121 @@ fn each_way_the_gate_stands_aside_says_a_different_thing() {
 }
 
 #[test]
+fn retargeting_a_pull_request_is_a_boundary_and_a_title_edit_is_still_text() {
+    for command in [
+        "gh pr edit 7 --base main",
+        "gh pr edit 7 --title x --base main",
+        "gh pr edit 7 --base=main",
+        "gh pr edit 7 -t x --base release",
+    ] {
+        let input = serde_json::json!({ "command": command });
+        assert_eq!(
+            classify_with("Bash", &input, &[]).1,
+            Sensitivity::Boundary,
+            "{command} moved a pull request's base unwatched"
+        );
+    }
+
+    for command in ["gh pr edit 7 --title x", "gh pr edit 7 --body-file b.md"] {
+        let input = serde_json::json!({ "command": command });
+        let (action, how) = classify_with("Bash", &input, &[]);
+        assert!(
+            matches!(action, Action::Remote { .. }) && how == Sensitivity::Routine,
+            "{command} only replaces text, and was read as {action:?} at {how:?}"
+        );
+    }
+}
+
+#[test]
+fn a_hand_merge_on_a_pull_request_retargeted_away_from_the_reviewed_base_is_refused() {
+    use crate::outcome::RefusalClass;
+    let repo = tempfile::tempdir().expect("a temporary repository");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(["-c", "user.email=t@example.invalid", "-c", "user.name=t"])
+            .args(args)
+            .output()
+            .expect("git runs")
+    };
+    let oid = |args: &[&str]| String::from_utf8_lossy(&git(args).stdout).trim().to_owned();
+    git(&["init", "-q"]);
+    std::fs::write(repo.path().join("a.txt"), "one").expect("a file");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "main"]);
+    let main = oid(&["rev-parse", "HEAD"]);
+    git(&["checkout", "-qb", "side"]);
+    std::fs::write(repo.path().join("a.txt"), "two").expect("a change");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "side"]);
+    let reviewed_base = oid(&["rev-parse", "HEAD"]);
+    std::fs::write(repo.path().join("a.txt"), "three").expect("another change");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "head"]);
+    let reviewed_head = oid(&["rev-parse", "HEAD"]);
+    git(&["checkout", "-q", "main"]);
+    git(&["merge", "-q", "--ff-only", "side"]);
+    std::fs::write(repo.path().join("b.txt"), "advanced").expect("an advanced base");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "the base advances"]);
+    let advanced = oid(&["rev-parse", "HEAD"]);
+    assert_ne!(main, reviewed_base, "the fixture never retargeted");
+
+    let mut run = Run::new("claude-abcd1234".to_owned());
+    run.repo_dir = Some(repo.path().to_path_buf());
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: reviewed_head.clone(),
+        base: reviewed_base,
+        digest: "c".repeat(64),
+    });
+    let merge = Action::Boundary {
+        command: "gh pr merge".to_owned(),
+        pr: Some(54),
+        pr_unidentified_reason: None,
+        local_fast_forward_target: None,
+        is_exact_integration_merge: false,
+        runs_in: crate::harness::RunsIn::Session,
+        target: crate::harness::CommitTarget::Checkout,
+    };
+
+    let retargeted = |_: u64| {
+        Ok(PrBytes {
+            head: reviewed_head.clone(),
+            base: main.clone(),
+        })
+    };
+    let refusal = stale_verdict(&merge, &run, repo.path(), &retargeted)
+        .expect("a retargeted pull request spent the verdict");
+    assert_eq!(refusal.code, "verdict-bound-to-other-base");
+    assert_eq!(refusal.class, RefusalClass::Stale);
+
+    let advanced_base = |_: u64| {
+        Ok(PrBytes {
+            head: reviewed_head.clone(),
+            base: advanced.clone(),
+        })
+    };
+    assert!(
+        stale_verdict(&merge, &run, repo.path(), &advanced_base).is_none(),
+        "a base that advanced past the reviewed one was refused as a retarget"
+    );
+
+    let unknown_base = |_: u64| {
+        Ok(PrBytes {
+            head: reviewed_head.clone(),
+            base: "d".repeat(40),
+        })
+    };
+    let refusal = stale_verdict(&merge, &run, repo.path(), &unknown_base)
+        .expect("an unreadable base spent the verdict");
+    assert_eq!(refusal.code, "review-base-unreadable");
+    assert_eq!(refusal.class, RefusalClass::Unavailable);
+}
+
+#[test]
 fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
     let repo = tempfile::tempdir().expect("a temporary repository");
     let git = |args: &[&str]| {
@@ -5219,9 +5334,13 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
         digest: "c".repeat(64),
     });
     let reader_must_not_run =
-        |_: u64| -> Result<String, crate::transport::Failure> { panic!("reader must not run") };
-    let reviewed_pr_head =
-        |_: u64| -> Result<String, crate::transport::Failure> { Ok(reviewed.clone()) };
+        |_: u64| -> Result<PrBytes, crate::transport::Failure> { panic!("reader must not run") };
+    let reviewed_pr_head = |_: u64| -> Result<PrBytes, crate::transport::Failure> {
+        Ok(PrBytes {
+            head: reviewed.clone(),
+            base: "b".repeat(40),
+        })
+    };
 
     // Nothing has moved: the delivery is not this check's business.
     assert!(
@@ -5294,7 +5413,12 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
         );
     }
 
-    let moved_pr_head = |_: u64| -> Result<String, crate::transport::Failure> { Ok(now.clone()) };
+    let moved_pr_head = |_: u64| -> Result<PrBytes, crate::transport::Failure> {
+        Ok(PrBytes {
+            head: now.clone(),
+            base: String::new(),
+        })
+    };
     for delivery in ["gh pr merge", "git merge"] {
         let refusal = stale_verdict(
             &Action::Boundary {
@@ -6048,14 +6172,18 @@ fn assert_steered_delivery_child() {
         runs_in: crate::harness::RunsIn::Session,
         target: crate::harness::CommitTarget::Checkout,
     };
-    let reviewed_pr_head =
-        |_: u64| -> Result<String, crate::transport::Failure> { Ok(reviewed.clone()) };
+    let reviewed_pr_head = |_: u64| -> Result<PrBytes, crate::transport::Failure> {
+        Ok(PrBytes {
+            head: reviewed.clone(),
+            base: "b".repeat(40),
+        })
+    };
     assert!(
         stale_verdict(&delivery, &run, &repo, &reviewed_pr_head).is_none(),
         "a steered environment refused a delivery on the checkout that was reviewed"
     );
     let refusal = stale_verdict(&delivery, &run, &unrelated, &|_: u64| -> Result<
-        String,
+        PrBytes,
         crate::transport::Failure,
     > {
         panic!("reader must not run for an unrelated clone")
@@ -6127,15 +6255,24 @@ fn a_gh_pr_merge_is_bound_to_the_pr_head_the_tracker_reports_not_the_invoking_ch
         target: crate::harness::CommitTarget::Checkout,
     };
 
-    let matches_reviewed =
-        |_: u64| -> Result<String, crate::transport::Failure> { Ok(reviewed.clone()) };
+    let matches_reviewed = |_: u64| -> Result<PrBytes, crate::transport::Failure> {
+        Ok(PrBytes {
+            head: reviewed.clone(),
+            base: "b".repeat(40),
+        })
+    };
     assert!(
         stale_verdict(&delivery, &run, repo.path(), &matches_reviewed).is_none(),
         "a PR head matching the reviewed one was refused because the invoking checkout had moved"
     );
 
     let moved = "d".repeat(40);
-    let moved_pr_head = |_: u64| -> Result<String, crate::transport::Failure> { Ok(moved.clone()) };
+    let moved_pr_head = |_: u64| -> Result<PrBytes, crate::transport::Failure> {
+        Ok(PrBytes {
+            head: moved.clone(),
+            base: String::new(),
+        })
+    };
     let refusal = stale_verdict(&delivery, &run, repo.path(), &moved_pr_head)
         .expect("a moved PR head spent this run's verdict");
     assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
@@ -6147,7 +6284,7 @@ fn a_gh_pr_merge_is_bound_to_the_pr_head_the_tracker_reports_not_the_invoking_ch
         refusal.message
     );
 
-    let unreadable = |_: u64| -> Result<String, crate::transport::Failure> {
+    let unreadable = |_: u64| -> Result<PrBytes, crate::transport::Failure> {
         Err(crate::transport::Failure::Read(
             "gh pr view failed".to_owned(),
         ))
@@ -6157,7 +6294,7 @@ fn a_gh_pr_merge_is_bound_to_the_pr_head_the_tracker_reports_not_the_invoking_ch
     assert_eq!(refusal.code, "read-failed");
     assert!(!refusal.message.contains("other-bytes"));
 
-    let timed_out = |_: u64| -> Result<String, crate::transport::Failure> {
+    let timed_out = |_: u64| -> Result<PrBytes, crate::transport::Failure> {
         Err(crate::transport::Failure::Timeout(
             "gh pr view did not answer in time".to_owned(),
         ))
@@ -8910,6 +9047,7 @@ fn the_gate_refuses_a_hand_merge_that_does_not_spell_the_merge_commit() {
             "stdout": json!({
                 "number": 54,
                 "headRefOid": head,
+                "baseRefOid": "b".repeat(40),
                 "state": "OPEN",
                 "isDraft": false,
             })

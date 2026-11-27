@@ -876,6 +876,16 @@ fn inventory() -> Vec<Refusal> {
                 ),
             ),
         ),
+        Refusal::stale(
+            "verdict-bound-to-other-base",
+            "the review was published against one base and the pull request's base no longer \
+             descends from it",
+            Resolution::no_command(
+                NoCommandReason::HumanAuthority,
+                "a verdict on the change as it will land: publish it against the branch it is \
+                 meant to land on and ask for a verdict on that base",
+            ),
+        ),
         Refusal::unavailable(
             "flush-detach-failed",
             "the flush could not be started in the background",
@@ -887,6 +897,14 @@ fn inventory() -> Vec<Refusal> {
             Resolution::no_command(
                 NoCommandReason::WorldAction,
                 "a checkout whose head `git rev-parse HEAD` can read; then repeat the command",
+            ),
+        ),
+        Refusal::unavailable(
+            "review-base-unreadable",
+            "whether the pull request's base descends from the reviewed base is unreadable",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "a checkout git can read the two bases from; then repeat the command",
             ),
         ),
         Refusal::unavailable(
@@ -7292,7 +7310,7 @@ fn goal_completion_script(
         }),
         serde_json::json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         lane,

@@ -1609,22 +1609,28 @@ fn pr_merge_target(command: &str) -> Option<u64> {
     Some(pr)
 }
 
+/// The two refs of a pull request a verdict is bound to.
+pub(crate) struct PrBytes {
+    pub head: String,
+    pub base: String,
+}
+
 /// A delivery about to spend a verdict bound to bytes that have moved.
 ///
 /// **Additive, and only after a review exists.** No recorded head or a command
 /// that is not a delivery leaves the decision exactly as it was before this
 /// existed. It sees what this run published **through Estigia's own tools**.
 ///
-/// `gh pr merge` is bound to the PR head `pr_head` reports, not to
-/// `checkout`'s own `HEAD`; every other delivery in `DELIVERS`
-/// still compares against `checkout`, where `checkout` is the directory a git
-/// command's own `cd` or `-C` names. A `git tag`, and an exact `git merge
-/// --ff-only`, are also admitted on the run's own merge commit.
+/// `gh pr merge` is bound to the PR head and base `pr_bytes` reports, not to
+/// `checkout`'s own `HEAD`; every other delivery in `DELIVERS` still compares
+/// against `checkout`, where `checkout` is the directory a git command's own
+/// `cd` or `-C` names. A `git tag`, and an exact `git merge --ff-only`, are
+/// also admitted on the run's own merge commit.
 pub(crate) fn stale_verdict(
     action: &Action,
     run: &Run,
     checkout: &std::path::Path,
-    pr_head: &dyn Fn(u64) -> Result<String, crate::transport::Failure>,
+    pr_bytes: &dyn Fn(u64) -> Result<PrBytes, crate::transport::Failure>,
 ) -> Option<Refusal> {
     let Action::Boundary {
         command,
@@ -1664,15 +1670,17 @@ pub(crate) fn stale_verdict(
         if let Some(refusal) = checkout_refusal(covers_checkout(run, checkout), checkout) {
             return Some(refusal);
         }
-        return match pr_head(command_pr) {
-            Ok(found) if found == receipt.head => None,
+        return match pr_bytes(command_pr) {
+            Ok(found) if found.head == receipt.head => {
+                base_binding(checkout, &receipt.base, &found.base)
+            }
             Ok(found) => Some(Refusal::stale(
                 "verdict-bound-to-other-bytes",
                 format!(
                     "PR #{command_pr} was reviewed at {} and its head is now {} \u{2014} every \
                      push invalidates the verdict and the CI run that went with it",
                     short(&receipt.head),
-                    short(&found)
+                    short(&found.head)
                 ),
                 Resolution::no_command(
                     NoCommandReason::HumanAuthority,
@@ -1801,6 +1809,46 @@ pub(crate) fn stale_verdict(
     ))
 }
 
+/// Whether the pull request still lands on the bytes the review was published
+/// against: the receipt's base itself, or a base advanced past it, which is the
+/// placement `review_status` reads. A base that is neither has been retargeted,
+/// and the merge would land commits the review never saw.
+fn base_binding(checkout: &std::path::Path, reviewed: &str, current: &str) -> Option<Refusal> {
+    if current == reviewed {
+        return None;
+    }
+    match crate::transport::target::is_ancestor(checkout, reviewed, current) {
+        Ok(true) => None,
+        Ok(false) => Some(Refusal::stale(
+            "verdict-bound-to-other-base",
+            format!(
+                "the review was published against a base at {} and the pull request's base is \
+                 now {}, which does not descend from it \u{2014} a retarget changes what the \
+                 merge lands, and the commits between the two were never reviewed",
+                short(reviewed),
+                short(current)
+            ),
+            Resolution::no_command(
+                NoCommandReason::HumanAuthority,
+                "a verdict on the change as it will land: publish it against the branch it is \
+                 meant to land on and ask for a verdict on that base",
+            ),
+        )),
+        Err(failure) => Some(Refusal::unavailable(
+            "review-base-unreadable",
+            format!(
+                "whether the pull request's base {current} descends from the reviewed base \
+                 {reviewed} is unreadable, so nothing can be said about what the merge lands: {}",
+                failure.detail()
+            ),
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "a checkout git can read the two bases from; then repeat the command",
+            ),
+        )),
+    }
+}
+
 fn covers_checkout(run: &Run, checkout: &std::path::Path) -> Relation {
     let relations: Vec<Relation> = run
         .covered()
@@ -1845,16 +1893,16 @@ fn checkout_refusal(relation: Relation, checkout: &std::path::Path) -> Option<Re
     }
 }
 
-/// A reader of the PR head the tracker reports, pinning `GH_REPO` when the
-/// claim names a tracker repository, so `gh` resolves that repository rather
-/// than whatever the invoking checkout falls back to.
+/// A reader of the PR head and base the tracker reports, pinning `GH_REPO`
+/// when the claim names a tracker repository, so `gh` resolves that repository
+/// rather than whatever the invoking checkout falls back to.
 ///
 /// Everything here is deferred into the closure body: nothing runs until
 /// [`stale_verdict`] calls it, which is only for `gh pr merge` and only after
 /// the checks ahead of it in that function pass.
-pub(crate) fn live_pr_head_reader(
+pub(crate) fn live_pr_reader(
     context: &GateContext,
-) -> impl Fn(u64) -> Result<String, crate::transport::Failure> + '_ {
+) -> impl Fn(u64) -> Result<PrBytes, crate::transport::Failure> + '_ {
     move |number: u64| {
         let _gh_pin = gh_repo_pin();
         apply_gh_repo_locked(context.tracker.named_repo().as_deref());
@@ -1864,14 +1912,20 @@ pub(crate) fn live_pr_head_reader(
             context.tracker.named_repo(),
         );
         let pr = crate::transport::claim::view_pr(&transport, number)?;
-        pr.get("headRefOid")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned)
-            .ok_or_else(|| {
-                crate::transport::Failure::Read(format!(
-                    "gh pr view {number} returned no headRefOid"
-                ))
-            })
+        let field = |key: &str| {
+            pr.get(key)
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .ok_or_else(|| {
+                    crate::transport::Failure::Read(format!(
+                        "gh pr view {number} returned no {key}"
+                    ))
+                })
+        };
+        Ok(PrBytes {
+            head: field("headRefOid")?,
+            base: field("baseRefOid")?,
+        })
     }
 }
 
@@ -2001,6 +2055,22 @@ fn head_of(directory: &std::path::Path) -> Option<String> {
 fn mutates_through_the_api(normalized: &str) -> bool {
     !gh_calls(normalized, |call| {
         crate::transport::window::gh_api_writes(call).then_some(())
+    })
+    .is_empty()
+}
+
+/// Whether one of the commands in the line retargets a pull request.
+///
+/// A base is not text, so the text-edit exemption does not reach it: moving a
+/// pull request's base changes what its merge lands, which is a repository
+/// write whichever branch the change was reviewed against.
+fn retargets_a_pull_request(normalized: &str) -> bool {
+    !gh_calls(normalized, |call| {
+        (matches!(call, ["gh", "pr", "edit", ..])
+            && call
+                .iter()
+                .any(|word| *word == "--base" || word.starts_with("--base=")))
+        .then_some(())
     })
     .is_empty()
 }
@@ -2525,6 +2595,29 @@ pub fn classify_observing(
                 Sensitivity::Boundary,
                 CommandObserved {
                     matched: Established::Known("gh api".to_owned()),
+                    against,
+                    literal,
+                    boundary_source: None,
+                    disqualifying_byte: None,
+                    same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
+                },
+            );
+        }
+        if retargets_a_pull_request(&normalized) {
+            return (
+                Action::Boundary {
+                    command: "gh pr edit".to_owned(),
+                    pr: None,
+                    pr_unidentified_reason: None,
+                    local_fast_forward_target: None,
+                    is_exact_integration_merge: false,
+                    runs_in: crate::harness::RunsIn::Session,
+                    target: crate::harness::CommitTarget::Checkout,
+                },
+                Sensitivity::Boundary,
+                CommandObserved {
+                    matched: Established::Known("gh pr edit".to_owned()),
                     against,
                     literal,
                     boundary_source: None,
@@ -3829,14 +3922,10 @@ fn decide_observing(
         // `None` for want of a reviewed head to compare.
         if is_delivery(action)
             && (same_repository || run.review_transaction.is_some() || run.reviewed_head.is_some())
-            && let Some(refusal) = stale_verdict(
-                action,
-                run,
-                &context.repo_dir,
-                &live_pr_head_reader(context),
-            )
-            .or_else(|| merge_spelling(action, literal, run))
-            .or_else(|| unreleased_merge(action, run, &live_merge_reader(context)))
+            && let Some(refusal) =
+                stale_verdict(action, run, &context.repo_dir, &live_pr_reader(context))
+                    .or_else(|| merge_spelling(action, literal, run))
+                    .or_else(|| unreleased_merge(action, run, &live_merge_reader(context)))
         {
             return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
         }
@@ -3885,7 +3974,7 @@ fn decide_observing(
     // Always pin or clear: a prior call's `Some` must not stick when this one
     // names none. Production is one invocation per process;
     // `cargo test` is not. The pin covers apply-through-dispatch only — dropped
-    // before `stale_verdict`, whose `live_pr_head_reader` takes it again (a
+    // before `stale_verdict`, whose `live_pr_reader` takes it again (a
     // non-reentrant mutex would deadlock if this still held it).
     let answer = {
         let _gh_pin = gh_repo_pin();
@@ -3963,14 +4052,10 @@ fn decide_observing(
                 {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
                 }
-                if let Some(refusal) = stale_verdict(
-                    action,
-                    run,
-                    &context.repo_dir,
-                    &live_pr_head_reader(context),
-                )
-                .or_else(|| merge_spelling(action, literal, run))
-                .or_else(|| unreleased_merge(action, run, &live_merge_reader(context)))
+                if let Some(refusal) =
+                    stale_verdict(action, run, &context.repo_dir, &live_pr_reader(context))
+                        .or_else(|| merge_spelling(action, literal, run))
+                        .or_else(|| unreleased_merge(action, run, &live_merge_reader(context)))
                 {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
                 }

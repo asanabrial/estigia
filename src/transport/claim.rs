@@ -8924,6 +8924,19 @@ fn publish_with_sleep(
     }
     let at = worktree.unwrap_or(&context.repo_dir);
     checkout_on_branch(at, branch)?;
+    let default_branch = super::draft::default_branch(context)?;
+    if base != default_branch {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "publication-base-not-the-integration-branch",
+            "base": base,
+            "integration_branch": default_branch,
+            "action": "publish against the branch this repository integrates into: a pull \
+             request opened on a side branch reviews only the slice above it, and merging it \
+             later lands everything below. Nothing has been pushed and no pull request was \
+             opened",
+        })));
+    }
     super::run(
         &["git", "fetch", "origin", "--", base],
         Some(at),

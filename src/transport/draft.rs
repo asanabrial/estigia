@@ -656,7 +656,7 @@ fn mark_unconfirmed(branch: &str, head: &str, number: u64) -> Failure {
     }))
 }
 
-fn default_branch(context: &Context) -> Result<String, Failure> {
+pub(super) fn default_branch(context: &Context) -> Result<String, Failure> {
     super::gh_json(
         &["repo", "view", "--json", "defaultBranchRef"],
         Some(&context.repo_dir),

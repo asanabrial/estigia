@@ -59,6 +59,7 @@ const UNAVAILABLE: &[&str] = &[
     "recover-login-unresolved",
     "recover-permission-unreadable",
     "repository-configuration-unreadable",
+    "review-base-unreadable",
     "review-checkout-unreadable",
     "review-computed-verdict-readback-failed",
     "review-disposition-readback-failed",
@@ -116,6 +117,7 @@ const STALE: &[&str] = &[
     "ownership-kept-changing-before-projection",
     "payload-rebuild-mismatch",
     "publication-base-not-ancestor",
+    "publication-base-not-the-integration-branch",
     "publication-readback-disagrees",
     "published-transaction-mismatch",
     "reclaim-discarded",
@@ -150,6 +152,7 @@ const STALE: &[&str] = &[
     "unassign-metadata-mismatch",
     "unassign-operation-conflict",
     "unexpected-state",
+    "verdict-bound-to-other-base",
     "verdict-bound-to-other-bytes",
 ];
 const UNKNOWN: &[&str] = &[
@@ -627,7 +630,7 @@ mod tests {
     use super::*;
     use crate::harness::tracker::TRANSPORT_VOCABULARY;
 
-    const GATE_CODES: [&str; 13] = [
+    const GATE_CODES: [&str; 15] = [
         "merge-head-not-bound",
         "merge-method-not-a-merge-commit",
         "merge-option-not-admitted",
@@ -637,8 +640,10 @@ mod tests {
         "complete-review-transaction-missing",
         "delivery-pr-mismatch",
         "complete-review-transaction-not-selected",
+        "verdict-bound-to-other-base",
         "verdict-bound-to-other-bytes",
         "review-head-unreadable",
+        "review-base-unreadable",
         "review-checkout-unreadable",
         "verdict-bound-to-other-repository",
     ];

@@ -5730,7 +5730,7 @@ fn a_base_that_advanced_past_the_branchs_own_rebase_is_refused_before_the_payloa
     let bin = crate::test_env::scripted_gh();
     let script = crate::test_env::answers(&[
         crate::test_env::live_holder_issue(what.run_id, what.issue, what.expect_state),
-        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
         serde_json::json!({ "matches": "list --head fix/1-x", "stdout": "[]", "status": 0 }),
     ]);
     let failure = crate::test_env::with_scripted_gh(bin.path(), &script, || {
@@ -5789,6 +5789,80 @@ fn a_base_that_advanced_past_the_branchs_own_rebase_is_refused_before_the_payloa
 /// all of it moved to `review_transaction`; see `docs/review-cost.md`. A
 /// branch-link publication is the shape that used to add `mandatory_follow_up`
 /// on top of `autoclose`, so it is the one most likely to regress silently.
+#[test]
+fn a_publication_on_a_side_branch_is_refused_before_anything_is_pushed() {
+    let (_root, _remote, work) = repository_with_remote();
+    git(&work, &["push", "-q", "-u", "origin", "--", "main"]);
+    git(&work, &["checkout", "--quiet", "-b", "fix/1-x", "main"]);
+    std::fs::write(work.join("side.txt"), "side\n").expect("content");
+    git(&work, &["add", "side.txt"]);
+    git(&work, &["commit", "--quiet", "-m", "side"]);
+
+    let context = Context {
+        skill_dir: work.clone(),
+        repo_dir: work.clone(),
+        config: Vec::new(),
+        repo: None,
+    };
+    let what = Publication {
+        issue: 278,
+        run_id: "claude-abcd1234",
+        expect_state: "in-progress",
+        base: "side",
+        branch: "fix/1-x",
+        title: "example",
+        pr_body_file: None,
+        worktree: Some(&work),
+        inline_payload: false,
+        topology: None,
+        topology_reason: None,
+        integrate_reason: None,
+        focus: None,
+        declaration: Default::default(),
+        expected_epoch: None,
+        now: "2026-01-01T00:05:00Z",
+    };
+
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::live_holder_issue(what.run_id, what.issue, what.expect_state),
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}",
+            "status": 0,
+        }),
+    ]);
+    let failure = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        super::publish_review(&context, &what)
+    })
+    .expect_err("a pull request opened on a side branch was accepted");
+
+    let envelope = failure.envelope();
+    assert_eq!(
+        envelope["reason"],
+        "publication-base-not-the-integration-branch"
+    );
+    assert_eq!(envelope["base"], "side");
+    assert_eq!(envelope["integration_branch"], "main");
+    let branch_on_remote = crate::transport::run(
+        &[
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "origin",
+            "fix/1-x",
+        ],
+        Some(&work),
+        crate::transport::How::tolerated(),
+    )
+    .expect("ls-remote answers");
+    assert_ne!(
+        branch_on_remote.status, 0,
+        "the branch reached the remote despite the refusal"
+    );
+}
+
 #[test]
 fn a_branch_link_publication_keeps_the_follow_up_out_of_its_answer() {
     let (_root, remote, work) = repository_with_remote();
@@ -5851,7 +5925,7 @@ fn a_branch_link_publication_keeps_the_follow_up_out_of_its_answer() {
             .to_string(),
             "status": 0,
         }),
-        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
         serde_json::json!({
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -6852,7 +6926,7 @@ impl RepublishWorld {
                     "comments": distinct_ids(&timeline).iter().map(comment_json).collect::<Vec<_>>(),
                 }),
             ),
-            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
             serde_json::json!({
                 "matches": format!("list --head {REPUBLISH_BRANCH}"),
                 "stdout": serde_json::json!([pr(open_head, &self.base, serde_json::json!({}))]).to_string(),
@@ -7798,7 +7872,7 @@ fn a_push_whose_readback_disagrees_leaves_a_republishable_lease_target() {
             "stdout": serde_json::json!({ "object": { "sha": &branch_head } }).to_string(),
             "status": 0,
         }),
-        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
         serde_json::json!({
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -8137,7 +8211,7 @@ fn a_failed_pull_request_read_after_create_still_records_the_publication() {
         }),
         serde_json::json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         serde_json::json!({
@@ -8250,7 +8324,7 @@ fn a_pull_request_the_list_has_not_caught_up_with_is_still_recorded() {
         }),
         serde_json::json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         serde_json::json!({ "matches": "issue comment", "stdout": "", "status": 0 }),
@@ -8352,7 +8426,7 @@ fn a_readback_that_settles_elsewhere_says_the_head_moved() {
             "stdout": serde_json::json!({ "object": { "sha": &moved } }).to_string(),
             "status": 0,
         }),
-        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
         serde_json::json!({
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -16312,7 +16386,7 @@ fn lane_read_answers() -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         serde_json::json!({
@@ -19978,7 +20052,7 @@ fn recover_defaulting(
     let bin = crate::test_env::scripted_gh();
     let mut answers = vec![
         crate::test_env::issue_view_answer(42, stdout_with(&scene.comments)),
-        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
         permission,
         serde_json::json!({"matches": "issue comment 42", "stdout": "", "status": 0}),
     ];
@@ -21332,7 +21406,7 @@ fn release_ci_keeps_a_lane_that_will_run_on_ci_status() {
     let answers = [
         serde_json::json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         serde_json::json!({
@@ -21357,7 +21431,7 @@ fn release_ci_does_not_send_a_lane_it_could_not_read_to_the_merge() {
     let answers = [
         serde_json::json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         serde_json::json!({"matches": "check-runs", "stdout": "", "status": 1}),

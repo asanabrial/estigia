@@ -925,12 +925,12 @@ fn released_issue_view_entry_whose_verdict_went_stale(
 /// Ordered ahead of any `issue view` entry it is combined with: `matches` is a
 /// substring test, and `pr view {pr}`/`issue view` never overlap, but a widened
 /// matcher added later should still see this one first.
-fn pr_view_entry(pr: u64, head_ref_oid: &str) -> serde_json::Value {
+fn pr_view_entry(pr: u64, head_ref_oid: &str, base_ref_oid: &str) -> serde_json::Value {
     let view = serde_json::json!({
         "number": pr,
         "url": format!("https://example.invalid/pr/{pr}"),
         "headRefOid": head_ref_oid,
-        "baseRefOid": "b".repeat(40),
+        "baseRefOid": base_ref_oid,
         "state": "OPEN",
         "isDraft": false,
     });
@@ -1467,7 +1467,7 @@ fn correction_budget_ordinary_answers(pr: &serde_json::Value) -> Vec<serde_json:
         }),
         serde_json::json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         serde_json::json!({

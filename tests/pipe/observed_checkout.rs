@@ -1457,7 +1457,7 @@ fn one_server_survives_the_isolation_it_created() {
         { "matches": "issue develop", "stdout": "", "status": 1 },
         {
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         },
         {
@@ -2090,7 +2090,7 @@ fn each_publication_starts_one_lane_run_and_records_its_receipt_locally() {
         { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
         { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
         { "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -2369,7 +2369,7 @@ fn a_publication_dispatches_every_discovered_lane_and_records_the_width() {
         { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
         { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
         { "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -3851,7 +3851,7 @@ fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
         { "matches": "issue develop", "stdout": "", "status": 1 },
         {
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         },
         {
