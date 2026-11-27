@@ -87,6 +87,9 @@ expect_used = "warn"
 redundant_clone = "warn"
 needless_collect = "warn"
 
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
 codegen-units = 1
 lto = "thin"

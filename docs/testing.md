@@ -198,6 +198,17 @@ Per-test cost on Windows was not measured when this was written.
 
 The `node` drivers keep their own 120 s deadline above, which sits inside nextest's 180 s.
 
+## Why dependencies are optimised in the dev profile
+
+`Cargo.toml` sets `[profile.dev.package."*"] opt-level = 3`: every dependency is built optimised and
+this crate is not, so its own code keeps debug builds and quick rebuilds. The suite's slowest tests
+spend their time inside dependencies, not in this crate's code: `tests/guards.rs` parses every source
+with `syn`, the `tui` tests render through `ratatui`, and the store runs the bundled SQLite. Measured
+at the same machine load on 2026-11-27: `every_declaration_is_well_formed` went from 32.5 s to 1.1 s, and
+`tui::tests::no_window_a_terminal_can_be_makes_the_screen_panic` from 30.9 s to 7.7 s. The cost is a
+longer first build of the dependencies, which `Swatinem/rust-cache` keeps in CI until `Cargo.lock`
+changes.
+
 ## Interpreters, and what happens without one
 
 None of those skips when `node` is missing; all fail and say so, since a skip spelled as a pass is a
