@@ -806,12 +806,18 @@ pub fn review_tier_for_repair_declared(
                 && answer.get("level").and_then(|level| level.as_str()) != Some("high")
                 && let Some(object) = answer.as_object_mut()
             {
+                let mut roles = object
+                    .get("lens_roles")
+                    .and_then(serde_json::Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                let delta = serde_json::json!(crate::harness::roles::RESERVED_LENS);
+                if !roles.contains(&delta) {
+                    roles.push(delta);
+                }
+                object.insert("lenses".to_owned(), serde_json::json!(roles.len()));
+                object.insert("lens_roles".to_owned(), serde_json::Value::Array(roles));
                 object.insert("panel".to_owned(), serde_json::json!("lens"));
-                object.insert("lenses".to_owned(), serde_json::json!(1));
-                object.insert(
-                    "lens_roles".to_owned(),
-                    serde_json::json!([crate::harness::roles::RESERVED_LENS]),
-                );
             }
             answer
         }

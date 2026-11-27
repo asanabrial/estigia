@@ -591,6 +591,9 @@ fn licensed_lens_roles(
         return Ok(None);
     }
     let parent_standing = super::receipt_standing(comments, &lineage.parent)?;
+    if parent_standing.finding_lens.is_none() {
+        return Ok(None);
+    }
     let clearing = match parent_standing.clearing_finding {
         Some(class) => Some(class),
         None if parent_standing.standing == super::Standing::Unjudged
