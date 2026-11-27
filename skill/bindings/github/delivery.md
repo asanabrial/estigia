@@ -317,11 +317,12 @@ answering `stopped` with the `step`, a `reason` and `review_status`'s `next`. Th
 context), `authorisation` (`Merge by` is not `agent`, or `Delivery authorisation` is not `auto`),
 `ci` (`ci-red`; `head-moved`; `ci-absent`, no check ten minutes after the release; `appendix-required`),
 `base` (`base-advanced`: the base moved and does not merge clean; `base-unreadable`: the merge test
-itself failed; `base-fetch-failed`: the base could not be fetched), `version` (`version-changed`, so *Version tags* applies, a rename included;
-`version-unreadable`: a changed manifest could not be read), `merge` (the gate's refusal, GitHub's, or
+itself failed; `base-fetch-failed`: the base could not be fetched), `merge` (the gate's refusal, GitHub's, or
 a queue or approval rule that left it unmerged; `merge-not-covered`: no claim of this run covers the merge;
-`merge-unreadable`: merged, with no merge commit named; `merge-unknown`: no read-back answered, so the next
-call re-reads and never re-merges), `close` (`evidence-unwritable`: the evidence file could not be written)
+`merge-unreadable`: merged, no commit; `merge-unknown`: no read-back answered, so the next call
+re-reads), `version` (`version-changed`, **after** the merge, per *Version tags*, before the next call
+closes it, a rename included; `version-unreadable`: an unreadable manifest), `close` (`evidence-unwritable`:
+the evidence file could not be written)
 and `appendix` (`appendix-unreadable`: `appendix_file` could not be read). At any step that reads the pull
 request, `pull-request-unreadable` hands back the read that failed. A step that has to wait answers `pending` with `ask_after`
 when `wait_seconds` runs out. It reads the pull request's whole rollup as the required set, whatever the lane says (a
@@ -356,9 +357,9 @@ answer carries `lane`, the reading `review_status` gives, and `next`: `merge` wh
 `ci_released` is `true` only then.
 
 **Draft toggle is the flow's job, not a manual gesture.** `publish_review` / `republish_review` call
-`ensure_draft` before the push so a ready PR cannot emit the per-push pull-request event and expose
-the new head before the review barrier is restored; `release_ci` marks ready afterwards. An operator may still
-toggle draft → ready by hand to get checks onto a head; the flow does not require it. The publication lane's check runs do **not**
+`ensure_draft` before the push so a ready PR cannot expose the new head before the review barrier is
+restored; `release_ci` marks ready afterwards, and `deliver` repeats it while it is a draft, so a ready
+write that failed is retried. A person may still toggle draft → ready by hand. The publication lane's check runs do **not**
 populate the pull request merge box; only a `pull_request`
 event does. The workflow also carries `merge_group:` so a merge-queue entry can run the same suite
 after ready; whether that run satisfies required contexts is a live-repository

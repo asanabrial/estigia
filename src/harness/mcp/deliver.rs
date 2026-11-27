@@ -325,8 +325,8 @@ impl<H: Hands> Deliver<'_, H> {
                 let lane = self.release(&receipt)?;
                 let (view, ci) = self.ci(&receipt, &lane)?;
                 self.base(&receipt, &view)?;
-                self.version(&receipt)?;
                 let merged = self.merge(&receipt, &view)?;
+                self.version(&receipt, &merged)?;
                 self.close(&receipt, &merged, &ci)?
             }
         };
@@ -602,21 +602,28 @@ impl<H: Hands> Deliver<'_, H> {
                 self.released_at = crate::transport::ownership::parse_stamp(&stamp)
                     .and_then(|seconds| u64::try_from(seconds).ok())
                     .unwrap_or(0);
-            }
-            None => {
-                let mut arguments = self.receipt_arguments(receipt);
-                if let Some(worktree) = self.hands.worktree() {
-                    arguments["worktree"] = json!(worktree);
+                let view = self.read_pr("release", receipt, "isDraft")?;
+                if view["isDraft"].as_bool() == Some(true) {
+                    self.release_ci(receipt)?;
                 }
-                if let Some(file) = &self.request.never_ran_evidence {
-                    arguments["never_ran_evidence_file"] = json!(file);
-                }
-                self.released = Some(self.call("release", "release_ci", arguments)?);
-                self.done.push("release_ci");
-                self.released_at = self.hands.now();
             }
+            None => self.release_ci(receipt)?,
         }
         Ok(self.hands.lane(receipt))
+    }
+
+    fn release_ci(&mut self, receipt: &ReviewTransaction) -> Step<()> {
+        let mut arguments = self.receipt_arguments(receipt);
+        if let Some(worktree) = self.hands.worktree() {
+            arguments["worktree"] = json!(worktree);
+        }
+        if let Some(file) = &self.request.never_ran_evidence {
+            arguments["never_ran_evidence_file"] = json!(file);
+        }
+        self.released = Some(self.call("release", "release_ci", arguments)?);
+        self.done.push("release_ci");
+        self.released_at = self.hands.now();
+        Ok(())
     }
 
     fn read_pr(&self, step: &str, receipt: &ReviewTransaction, fields: &str) -> Step<Value> {
@@ -766,7 +773,7 @@ impl<H: Hands> Deliver<'_, H> {
         ))
     }
 
-    fn version(&self, receipt: &ReviewTransaction) -> Step<()> {
+    fn version(&self, receipt: &ReviewTransaction, merged: &Merged) -> Step<()> {
         let changed = self.git(
             "version",
             "version-unreadable",
@@ -814,8 +821,10 @@ impl<H: Hands> Deliver<'_, H> {
             "version-changed",
             json!({
                 "manifests": moved,
-                "detail": "a version changed between the reviewed base and head: the tag and \
-                           release are the agent's, per the binding's Version tags",
+                "merged": merged.sha,
+                "detail": "the merge landed; cut the release tag this change asks for, then \
+                           deliver again to close the issue — the tag and the release are the \
+                           agent's, per the binding's Version tags",
             }),
         ))
     }
