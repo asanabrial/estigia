@@ -722,14 +722,16 @@ pub(crate) fn repair_range(
 /// `clearing_finding` is the class of the `review_finding` that cleared the
 /// approved-republish gate on the parent receipt — `severe`, `warning` or
 /// `suggestion`, [`super::claim::FINDING_CLASSES`]'s own vocabulary; anything
-/// else is a read failure naming the allowed values. When it names a
-/// `warning` or a `suggestion` and the range this repair measured is the
-/// honest narrow one, the answer additionally carries `panel: "lens"`,
-/// `lenses: 1` — the delta lens alone reviews a repair of a
-/// non-blocking finding, in place of `level`'s own allocation — unless the
-/// repair's own level is `high`, where the hot-path shape keeps the tier's
-/// own panel. `level` keeps its ordinary meaning either way; only the panel
-/// size changes. A `severe` clearing finding, a `high` repair level, and the
+/// else is a read failure naming the allowed values. The ledger passes one only
+/// for a finding the panel recorded through capture: a finding a publishing run
+/// wrote about its own receipt clears no delta panel at all. When it names a
+/// `warning` or a `suggestion` and the range this repair measured is the honest
+/// narrow one, `review-lens` is added to the roles `level` allocates and the
+/// answer carries `panel: "lens"`, with `lenses` counting both — a repair of a
+/// non-blocking finding is read by the delta's own lens beside the delta lens —
+/// unless the repair's own level is `high`, where the hot-path shape keeps the
+/// tier's own panel. `level` keeps its ordinary meaning either way; only the
+/// panel gains a lens. A `severe` clearing finding, a `high` repair level, and the
 /// whole-change fallback (history rewritten, a base advance, a merged range or
 /// an empty repair range), all
 /// keep the tier's own allocation — see
