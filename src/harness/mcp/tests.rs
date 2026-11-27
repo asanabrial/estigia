@@ -445,6 +445,48 @@ fn a_claim_records_the_key_its_retry_depends_on() {
 }
 
 #[test]
+fn a_claim_that_adopts_a_written_claim_leaves_the_pointer_naming_it() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, root.path());
+    let minted = "b".repeat(32);
+    let adopted = "a".repeat(32);
+    let mut run = crate::harness::session::Run::new("claude-adopting0".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.operation_id = Some(minted);
+    run.state = Some("in-progress".to_owned());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let claim = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "claim")
+        .expect("the tool is listed");
+
+    super::apply_effect(
+        claim,
+        &json!({"issue": 12, "run_id": "claude-adopting0"}),
+        Some(&json!({
+            "ok": true,
+            "issue": 12,
+            "reused_existing_claim": true,
+            "operation_id": adopted,
+        })),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, "claude-adopting0");
+    assert_eq!(
+        after.operation_id.as_deref(),
+        Some(adopted.as_str()),
+        "the pointer kept the operation this call minted instead of the one the store adopted"
+    );
+    assert_eq!(
+        super::held_release_epoch(&after, 12, &[]),
+        Some(adopted),
+        "a release after the adopted claim names an epoch nothing holds"
+    );
+}
+
+#[test]
 fn releasing_another_issue_leaves_the_held_ones_retry_key_alone() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
@@ -4434,6 +4476,73 @@ fn reclaiming_review_leaves_the_pointer_reading_review() {
         defaulted.state.as_deref(),
         Some("in-progress"),
         "reclaim without state did not keep claim's documented default"
+    );
+}
+
+#[test]
+fn a_reclaim_records_the_state_its_answer_names() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, root.path());
+    let mut run = crate::harness::session::Run::new("claude-reclaimed0".to_owned());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let claim = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "claim")
+        .expect("the tool is listed");
+
+    super::apply_effect(
+        claim,
+        &json!({"issue": 35, "run_id": "claude-reclaimed0", "state": "in-progress"}),
+        Some(&json!({
+            "ok": true,
+            "issue": 35,
+            "reclaimed_from": "claude-gone0",
+            "state": "review",
+        })),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, "claude-reclaimed0");
+    assert_eq!(
+        after.state.as_deref(),
+        Some("review"),
+        "the pointer defaulted to in-progress instead of the state the takeover answered"
+    );
+}
+
+#[test]
+fn an_answer_naming_an_operation_does_not_rewrite_a_pointer_under_a_renew_effect() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, root.path());
+    let held = "b".repeat(32);
+    let mut run = crate::harness::session::Run::new("claude-renewing0".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(35));
+    run.operation_id = Some(held.clone());
+    run.state = Some("review".to_owned());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let verify = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "verify_claim")
+        .expect("the tool is listed");
+
+    super::apply_effect(
+        verify,
+        &json!({"issue": 35, "run_id": "claude-renewing0"}),
+        Some(&json!({
+            "ok": true,
+            "issue": 35,
+            "operation_id": "a".repeat(32),
+        })),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, "claude-renewing0");
+    assert_eq!(
+        after.operation_id.as_deref(),
+        Some(held.as_str()),
+        "a renewal took the operation id out of the answer it was given"
     );
 }
 
