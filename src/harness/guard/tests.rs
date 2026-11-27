@@ -1763,7 +1763,7 @@ fn a_hook_git_will_not_run_is_not_an_installed_one() {
     // platform this is being written on: git for Windows never consults the
     // mode, so `git_would_run` is always true there and the state is
     // unreachable. A decision nobody can reach is a decision nobody can check.
-    let ours = format!("#!/bin/sh\n# {MARKER}\nestigia hook pre-push\n");
+    let ours = super::script(Path::new("/usr/bin/estigia"));
     let theirs = "#!/bin/sh\nexec estigia hook pre-push \"$@\"\n";
     let strangers = "#!/bin/sh\nnpx some-linter\n";
 
@@ -1786,6 +1786,121 @@ fn a_hook_git_will_not_run_is_not_an_installed_one() {
     // And no file at all is absent, not inert.
     assert_eq!(state_of(None, true), State::Absent);
     assert_eq!(state_of(None, false), State::Absent);
+}
+
+#[test]
+fn a_hook_with_the_marker_and_no_guard_body_is_disarmed_and_doctor_says_so() {
+    // The marker says who wrote the file; it does not say what the file does.
+    // A marker with nothing after it was read as `Installed`, so `doctor`
+    // reported a gate in force and every push went out unchecked.
+    let repo = repository();
+    let path = super::hooks_directory(repo.path())
+        .expect("a hooks directory")
+        .join(super::HOOK);
+    std::fs::create_dir_all(path.parent().expect("a hooks parent")).expect("the hooks directory");
+    std::fs::write(&path, format!("#!/bin/sh\n{MARKER}\n")).expect("a disarmed hook");
+    super::make_executable(&path).expect("the bit git needs");
+
+    assert_eq!(super::state(repo.path()), State::Disarmed);
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    assert!(
+        guard.health.is_broken(),
+        "a marker with no guard body was reported as health: {:?}",
+        guard.health
+    );
+}
+
+#[test]
+fn a_reworded_comment_does_not_disarm_an_intact_hook() {
+    // An upgrade may reword the script's own prose. Comments decide nothing
+    // about whether the gate answers, so a body that still runs must not read
+    // as disarmed because a comment moved.
+    let installed = super::script(Path::new("/usr/bin/estigia"));
+    let reworded = installed.replace(
+        "# managed by estigia guard",
+        "# managed by estigia guard\n# a note a later build added",
+    );
+    assert!(super::faithful(&reworded), "{reworded}");
+    assert_eq!(state_of(Some(&reworded), true), State::Installed);
+}
+
+#[test]
+fn reinstalling_over_a_disarmed_hook_puts_the_body_back() {
+    // `doctor` names `estigia guard` as the way out of `Disarmed`, so that
+    // command has to clear it: the file carries only Estigia's own lines, and
+    // the install replaces them.
+    let repo = repository();
+    let path = super::hooks_directory(repo.path())
+        .expect("a hooks directory")
+        .join(super::HOOK);
+    std::fs::create_dir_all(path.parent().expect("a hooks parent")).expect("the hooks directory");
+    std::fs::write(&path, format!("#!/bin/sh\n{MARKER}\n")).expect("a disarmed hook");
+    super::make_executable(&path).expect("the bit git needs");
+    assert_eq!(super::state(repo.path()), State::Disarmed);
+
+    super::install(repo.path(), Path::new("/usr/bin/estigia"), false)
+        .expect("a disarmed hook of Estigia's was not rewritten");
+    assert_eq!(super::state(repo.path()), State::Installed);
+}
+
+#[test]
+fn an_early_exit_appended_to_the_installed_hook_is_not_reported_in_force() {
+    // The body is there and an added `exit 0` runs before it. Reading only the
+    // marker called this installed; what the file does is let every push
+    // through.
+    let repo = repository();
+    super::install(repo.path(), Path::new("/usr/bin/estigia"), false).expect("the guard installs");
+    let path = super::hooks_directory(repo.path())
+        .expect("a hooks directory")
+        .join(super::HOOK);
+    let installed = std::fs::read_to_string(&path).expect("the installed hook reads");
+    std::fs::write(&path, format!("{installed}\nexit 0\n")).expect("an early exit");
+
+    assert_eq!(super::state(repo.path()), State::Altered);
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    assert!(
+        guard.health.is_broken(),
+        "a hook that exits before the gate was reported in force: {:?}",
+        guard.health
+    );
+}
+
+#[test]
+fn a_guard_installed_outside_the_control_surface_is_reported() {
+    // `hooks_directory` follows `core.hooksPath`, while `CONTROL_SURFACE`
+    // spells `hooks/pre-push`: a guard installed in a custom directory is an
+    // ordinary file to the gate, so the agent that gate constrains could
+    // rewrite it. `doctor` is where that mismatch is visible.
+    let repo = repository();
+    crate::transport::run(
+        &["git", "config", "core.hooksPath", "pushchecks"],
+        Some(repo.path()),
+        crate::transport::How::write(),
+    )
+    .expect("the hooks path is configured");
+    super::install(repo.path(), Path::new("/usr/bin/estigia"), false).expect("the guard installs");
+    assert_eq!(super::state(repo.path()), State::Installed);
+
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    assert!(
+        guard.health.is_broken(),
+        "a guard outside the control surface was reported as health: {:?}",
+        guard.health
+    );
+    let said = format!("{:?}", guard.health);
+    assert!(
+        said.contains("control surface"),
+        "the finding does not say what the mismatch is: {said}"
+    );
 }
 
 #[test]

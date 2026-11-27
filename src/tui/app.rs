@@ -1145,7 +1145,9 @@ impl App {
     pub fn guard_removable(&self) -> bool {
         matches!(
             self.guard_state,
-            crate::harness::guard::State::Installed | crate::harness::guard::State::Inert
+            crate::harness::guard::State::Installed
+                | crate::harness::guard::State::Inert
+                | crate::harness::guard::State::Disarmed
         )
     }
 

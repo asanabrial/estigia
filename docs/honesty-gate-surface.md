@@ -152,9 +152,12 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `.opencode` is not it; Estigia reads nothing from a project-local plugin directory). `curl "-o<path>"`
   with the value attached **and quoted** is not seen as a write at all, upstream of `surface_of` in
   `shell::writes_a_file` (`wget "-O<path>"` is a `Boundary`). `harness::roles::definition_for` reads its five
-  definition roots from a hand-spelled list: `every_definition_root_is_a_boundary_on_both_roads` crosses all
-  five, but adding a sixth reddens nothing, and a definition not found is `Ok(None)`, which
-  `declared_policy` reads as *every tool allowed*. `gh`'s hosts file decides which account every tracker
+  static definition roots from a hand-spelled list, asks `$CLAUDE_CONFIG_DIR/agents` before
+  `~/.claude/agents` when the variable is set, and matches each `*.md` on the `name:` it declares rather
+  than on its file name: `every_definition_root_is_a_boundary_on_both_roads` crosses all five, but adding
+  a sixth reddens nothing, and a definition found in no root is `Ok(None)`, which `declared_policy` reads
+  as *every tool allowed*. An unreadable file is refused only when its file name is the role's, since a
+  file nothing can read has no declaration to match. `gh`'s hosts file decides which account every tracker
   call acts as and is named in `CONTROL_SURFACE` at its default location only: `GH_CONFIG_DIR` and
   `XDG_CONFIG_HOME` move it and those spellings answer `Routine` (measured at `/home/me/xdg/gh/hosts.yml`);
   `config.yml` stays `Routine` on purpose (default host and protocol, not the credential).
@@ -398,6 +401,14 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 - **The push guard refuses to replace somebody else's hook.** A `pre-push` is a test runner or a
   secret scanner as often as it is nothing, and Estigia will not take away a check somebody relies on
   to add one they did not ask for. It says so and names the way out.
+- **A hook is what its body does, not what its marker says.** `guard::state_of` compares the file with
+  the script this build writes, apart from the executable's own path and comment prose (so a later
+  build's reworded comments do not disarm an intact hook). A marker with no body is
+  `Disarmed`; a different body carrying lines Estigia did not write is `Altered`. `doctor` reports both
+  as broken, and names `estigia guard` for `Disarmed` but not for `Altered`, because the reinstall
+  refuses a file carrying somebody's additions. `guard::hooks_directory` follows `core.hooksPath` while
+  `CONTROL_SURFACE` spells `hooks/pre-push` only, so a guard installed under a custom path is a file
+  an agent could rewrite; `doctor`'s `push-guard` row reports that mismatch by name.
 - **The MCP server has never met a real client.** Every response is checked against the JSON-RPC
   envelope rules a client's parser enforces before any content matters, and the server is driven
   through a full session in tests. That proves the envelopes are legal and the answers are right; it

@@ -349,13 +349,39 @@ fn observe_heads(
         let merged = merged(view.context, oid.trim(), view.base);
         let closed_issue = issue.and_then(|issue| issue_closed(view.context, issue, states));
         let closed_pr = pr_closed(view.context, &branch_name);
-        let sweepable = match (merged, closed_issue, closed_pr) {
-            (Some(true), _, _) => Some(format!("`{branch_name}` is merged into {}", view.base)),
-            (_, Some(true), _) => Some(format!("issue #{} is closed", issue.unwrap_or_default())),
-            (_, _, Some(true)) => Some(format!(
+        // A merged head's commits are on the base. Anything else has to keep
+        // them somewhere: a closed issue or pull request says the work is over,
+        // not that deleting this ref is safe, and a commit reachable from no
+        // other ref is gone once the head is.
+        let elsewhere = (merged != Some(true))
+            .then(|| commits_held_elsewhere(view.context, oid.trim(), &branch_name))
+            .flatten();
+        let closed_reason = match (closed_issue, closed_pr) {
+            (Some(true), _) => Some(format!("issue #{} is closed", issue.unwrap_or_default())),
+            (_, Some(true)) => Some(format!(
                 "`{branch_name}`'s pull request is closed or merged"
             )),
             _ => None,
+        };
+        let (sweepable, kept) = if merged == Some(true) {
+            (
+                Some(format!("`{branch_name}` is merged into {}", view.base)),
+                None,
+            )
+        } else if let Some(reason) = closed_reason {
+            match elsewhere {
+                Some(true) => (Some(reason), None),
+                Some(false) => (
+                    Some(reason),
+                    Some("its commits exist on no other ref".to_owned()),
+                ),
+                None => (
+                    Some(reason),
+                    Some("whether its commits exist on another ref could not be read".to_owned()),
+                ),
+            }
+        } else {
+            (None, None)
         };
         observed.push(Observed {
             kind: Kind::RemoteHead,
@@ -367,7 +393,7 @@ fn observe_heads(
             unpublished: false,
             uncommitted: Vec::new(),
             held,
-            kept: None,
+            kept,
         });
     }
     Ok(observed)
@@ -721,6 +747,41 @@ fn pr_closed(context: &Context, branch: &str) -> Option<bool> {
             })
     });
     Some(all_closed)
+}
+
+/// Whether every commit reachable from `oid` is also reachable from some ref
+/// other than the remote branch `branch`.
+///
+/// `Some(false)` means this head holds at least one commit no other ref names,
+/// so deleting it would lose that commit. `None` is a failed read, which is
+/// never clearance: a head kept costs a branch, and an unknown result is not a
+/// reason to delete one.
+fn commits_held_elsewhere(context: &Context, oid: &str, branch: &str) -> Option<bool> {
+    let excluded = format!("refs/remotes/origin/{branch}");
+    let answer = run(
+        &[
+            "git",
+            "rev-list",
+            "--count",
+            oid,
+            "--not",
+            "--exclude",
+            &excluded,
+            "--all",
+        ],
+        Some(&context.repo_dir),
+        How::tolerated(),
+    )
+    .ok()?;
+    if answer.status != 0 {
+        return None;
+    }
+    answer
+        .stdout
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(|unique| unique == 0)
 }
 
 /// Whether a ref is an ancestor of the base. `None` when the read failed — a

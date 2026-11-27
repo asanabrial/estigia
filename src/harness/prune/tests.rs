@@ -857,6 +857,10 @@ fn a_fork_pull_request_with_the_same_head_name_does_not_close_a_head() {
 #[test]
 fn a_same_repository_closed_pull_request_still_closes_its_head() {
     let (root, clone, trees) = sweep_fixture();
+    // The closed pull request says the work is over. Its commits also have to
+    // live somewhere else before the head may go.
+    git(&clone, &["push", "origin", "issue-2-open:archive"]);
+    git(&clone, &["fetch", "--quiet", "origin"]);
     let skill = root.path().join("skill");
     std::fs::create_dir_all(&skill).expect("a skill root");
     let context = crate::transport::Context::live(skill, clone, None);
@@ -949,7 +953,7 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
     );
     assert!(
         find(Kind::RemoteHead, "issue-3-closed").delete,
-        "a closed head was kept"
+        "a closed head whose commit a local branch still holds was kept"
     );
     assert!(
         find(Kind::Worktree, "issue-1-merged").delete,
@@ -972,6 +976,78 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
     assert!(
         find(Kind::Worktree, "panel-1").delete,
         "a detached checkout no branch owns was kept"
+    );
+}
+
+#[test]
+fn a_closed_head_whose_commit_no_other_ref_holds_is_kept() {
+    let (root, clone, trees) = sweep_fixture();
+    let work = root.path().join("work");
+    git(&work, &["switch", "--quiet", "main"]);
+    git(&work, &["switch", "--quiet", "-c", "issue-5-only-there"]);
+    std::fs::write(work.join("only.txt"), "only\n").expect("a commit only this head has");
+    git(&work, &["add", "."]);
+    git(&work, &["commit", "--quiet", "-m", "only there"]);
+    git(&work, &["push", "--quiet", "origin", "issue-5-only-there"]);
+    // Fetched, so the object is here and the head is inspected rather than an
+    // unreadable oid; no other ref names it.
+    git(
+        &clone,
+        &["fetch", "--quiet", "origin", "issue-5-only-there"],
+    );
+
+    let skill = root.path().join("skill");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    let context = crate::transport::Context::live(skill, clone.clone(), None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(trees.as_path()),
+        ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
+    };
+    let script = crate::test_env::answers(&[
+        crate::test_env::open_but_unmatched_issue(1),
+        crate::test_env::open_but_unmatched_issue(2),
+        crate::test_env::closed_issue(3),
+        crate::test_env::open_but_unmatched_issue(4),
+        crate::test_env::closed_issue(5),
+        serde_json::json!({ "matches": "pr list", "stdout": "[]", "status": 0 }),
+    ]);
+    let bin = crate::test_env::scripted_gh();
+    let swept = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        sweep(&view).expect("the sweep reads the fixture")
+    });
+    let head = swept
+        .iter()
+        .find(|entry| entry.kind == Kind::RemoteHead && entry.name == "issue-5-only-there")
+        .unwrap_or_else(|| panic!("the closed head was not listed: {swept:?}"));
+    assert!(
+        !head.delete,
+        "a closed head carrying a commit no other ref holds was swept: {head:?}"
+    );
+    assert!(
+        head.reason.contains("no other ref"),
+        "the keep reason does not say why the closed head stays: {head:?}"
+    );
+
+    // The same commit under another ref: now deleting the head loses nothing.
+    git(
+        &work,
+        &["push", "--quiet", "origin", "issue-5-only-there:archive-5"],
+    );
+    git(&clone, &["fetch", "--quiet", "origin"]);
+    let swept = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        sweep(&view).expect("the sweep rereads the fixture")
+    });
+    let head = swept
+        .iter()
+        .find(|entry| entry.kind == Kind::RemoteHead && entry.name == "issue-5-only-there")
+        .unwrap_or_else(|| panic!("the closed head was not listed: {swept:?}"));
+    assert!(
+        head.delete,
+        "a closed head whose commit another ref holds was kept: {head:?}"
     );
 }
 

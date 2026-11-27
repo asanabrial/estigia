@@ -292,6 +292,7 @@ fn orphan_notice_of(
     mut over_budget: impl FnMut() -> bool,
 ) -> Option<String> {
     let mut dirty: Vec<(PathBuf, Option<String>, usize)> = Vec::new();
+    let mut missing = 0usize;
     let mut unread = 0usize;
     for entry in registered.values() {
         if entry.path.join(".git").is_dir()
@@ -308,6 +309,13 @@ fn orphan_notice_of(
         {
             continue;
         }
+        // A directory removed by hand stays registered until somebody runs
+        // `git worktree prune`. It holds nothing, and saying it "could not be
+        // read in time" described a read that never had a directory to read.
+        if !entry.path.exists() {
+            missing += 1;
+            continue;
+        }
         if over_budget() {
             unread += 1;
             continue;
@@ -320,7 +328,7 @@ fn orphan_notice_of(
             None => unread += 1,
         }
     }
-    if dirty.is_empty() && unread == 0 {
+    if dirty.is_empty() && missing == 0 && unread == 0 {
         return None;
     }
     dirty.sort();
@@ -350,6 +358,20 @@ fn orphan_notice_of(
             } else {
                 String::new()
             }
+        ));
+    }
+    if missing > 0 {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        text.push_str(&format!(
+            "{missing} checkout{} git still registers {} gone from disk \u{2014} `git worktree \
+             prune` forgets {}, and {} hold{} nothing.",
+            if missing == 1 { "" } else { "s" },
+            if missing == 1 { "is" } else { "are" },
+            if missing == 1 { "it" } else { "them" },
+            if missing == 1 { "it" } else { "they" },
+            if missing == 1 { "s" } else { "" }
         ));
     }
     if unread > 0 {
@@ -384,11 +406,20 @@ fn quick_status(path: &Path) -> Option<usize> {
     )
     .ok()?;
     (output.status == 0).then(|| {
-        output
-            .stdout
-            .split('\0')
-            .filter(|entry| entry.len() > 3)
-            .count()
+        // The `-z` rename shape is `R  new\0old\0`, one file with two names.
+        // Counting every entry read the old name as a second uncommitted file.
+        let mut entries = output.stdout.split('\0');
+        let mut count = 0usize;
+        while let Some(entry) = entries.next() {
+            if entry.len() <= 3 {
+                continue;
+            }
+            if entry.get(..2).is_some_and(|code| code.contains(['R', 'C'])) {
+                entries.next();
+            }
+            count += 1;
+        }
+        count
     })
 }
 

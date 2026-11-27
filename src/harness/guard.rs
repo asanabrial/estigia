@@ -50,6 +50,14 @@ pub enum State {
     /// consults the file mode, a hook without the execute bit is skipped
     /// **silently**.
     Inert,
+    /// Estigia's marker is there and the body this binary installs is not —
+    /// truncated, or replaced after the marker. The file is Estigia's, and the
+    /// gate in it is not the one this build writes.
+    Disarmed,
+    /// Estigia's marker is there, the installed body is not, and the file also
+    /// carries lines Estigia did not write. Which of them runs is anybody's
+    /// guess, and none of it is this build's gate.
+    Altered,
     /// Nothing is installed.
     Absent,
     /// A hook file is there and reading it failed — not `Absent`, and the
@@ -127,12 +135,51 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
     if !runnable {
         return State::Inert;
     }
+    // The marker says who wrote the file; the body is what the file does. A
+    // hook with the marker and nothing that answers is installed-looking and
+    // disarmed, and the difference is one an operator reads as health.
+    if ours(text) && !faithful(text) {
+        return if edited(Some(text)) {
+            State::Altered
+        } else {
+            State::Disarmed
+        };
+    }
     // Somebody else's hook that calls this one is `Chained`.
     if ours(text) {
         State::Installed
     } else {
         State::Chained
     }
+}
+
+/// Whether `text` is the hook this build writes, apart from the executable's
+/// own path and comment prose.
+///
+/// A hook installed by an Estigia that has since moved is still this build's:
+/// the call line names wherever the binary was, and comparing whole files would
+/// call every relocated install somebody else's. Comment prose is skipped for
+/// the same reason: a later build may reword it without changing what runs.
+fn faithful(text: &str) -> bool {
+    comparable(text) == comparable(&script(Path::new("x")))
+}
+
+fn comparable(text: &str) -> Vec<String> {
+    text.lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty())
+        // Comment prose is not load-bearing: a hook from an older build whose
+        // comments were reworded still answers. The shebang is a comment to
+        // this parser and not to the shell, so it stays.
+        .filter(|line| !line.trim_start().starts_with('#') || line.starts_with("#!"))
+        .map(|line| {
+            if line.ends_with(&format!(" hook {HOOK}")) {
+                format!("<executable> hook {HOOK}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect()
 }
 
 /// Whether an uninstall may take this hook away.
@@ -145,8 +192,10 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
 fn removable(state: State, text: Option<&str>) -> bool {
     let unchanged = |text: Option<&str>| text.is_some_and(ours) && !edited(text);
     match state {
-        State::Installed | State::Inert => unchanged(text),
-        State::Absent | State::Foreign | State::Chained | State::Unreadable => false,
+        State::Installed | State::Inert | State::Disarmed => unchanged(text),
+        State::Absent | State::Foreign | State::Chained | State::Unreadable | State::Altered => {
+            false
+        }
     }
 }
 
@@ -355,7 +404,9 @@ pub fn install(repo_dir: &Path, executable: &Path, dry_run: bool) -> Result<Stat
         // Estigia's own hook, with somebody's lines added to it: refused for
         // the same reason `Foreign` is — rewriting the file here would take
         // their lines away.
-        State::Installed | State::Inert if edited(fs::read_to_string(&path).ok().as_deref()) => {
+        State::Installed | State::Inert | State::Disarmed | State::Altered
+            if edited(fs::read_to_string(&path).ok().as_deref()) =>
+        {
             return Err(Refusal::not_started(
                 "push-hook-carries-your-lines",
                 format!("{} has lines Estigia did not write", path.display()),
@@ -369,6 +420,7 @@ pub fn install(repo_dir: &Path, executable: &Path, dry_run: bool) -> Result<Stat
             ));
         }
         State::Installed if dry_run => return Ok(State::Installed),
+        State::Disarmed if dry_run => return Ok(State::Disarmed),
         // Somebody else's hook that hands the push to Estigia: the gate is
         // already running, and the file around it is theirs.
         State::Chained => return Ok(State::Chained),

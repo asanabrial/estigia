@@ -2819,6 +2819,19 @@ fn println_guard(repo_dir: &std::path::Path, state: harness::guard::State) {
                  skips it; `estigia guard` puts it back"
             );
         }
+        harness::guard::State::Disarmed => {
+            say!(
+                "  push guard present and NOT running \u{2014} the hook carries Estigia's marker \
+                 and not the body this binary installs; `estigia guard` puts it back"
+            );
+        }
+        harness::guard::State::Altered => {
+            say!(
+                "  push guard present and NOT this build's \u{2014} the hook carries Estigia's \
+                 marker, a body this binary did not write, and lines Estigia did not write \
+                 either; it is left alone"
+            );
+        }
     }
 }
 
@@ -5220,8 +5233,12 @@ fn git_hook(event: harness::hook::Event) -> Result<(), Refusal> {
         );
         return Ok(());
     };
-    let Ok(context) = gate_context(&repo_dir.to_string_lossy()) else {
-        return Ok(());
+    let context = match gate_context(&repo_dir.to_string_lossy()) {
+        Ok(context) => context,
+        Err(refusal) => {
+            note!("{}", not_checked_note(&refusal));
+            return Ok(());
+        }
     };
     match event {
         harness::hook::Event::PrePush => {
@@ -5280,6 +5297,22 @@ fn git_hook(event: harness::hook::Event) -> Result<(), Refusal> {
     }
 }
 
+/// Why a hook that could not build a context let the push through unchecked.
+///
+/// The script is the one place a machine without Estigia is heard from, so this
+/// is the same stance one layer up: the push is not blocked, and it is not
+/// silent.
+fn not_checked_note(refusal: &Refusal) -> String {
+    let mut said = format!(
+        "estigia: this push was not checked against any claim \u{2014} {}",
+        refusal.message
+    );
+    if let Resolution::Run { command } = &refusal.resolution {
+        said.push_str(&format!("\n  run: {command}"));
+    }
+    said
+}
+
 /// Installs or removes the push guard, and says which of the ten things it did.
 fn guard(uninstall: bool, dry_run: bool, json: bool) -> Result<(), Refusal> {
     let repo_dir = std::env::current_dir().map_err(|error| {
@@ -5323,8 +5356,18 @@ fn guard(uninstall: bool, dry_run: bool, json: bool) -> Result<(), Refusal> {
                 format!("{shown} cannot be read and is left alone \u{2014} nothing was removed"),
                 false,
             ),
+            harness::guard::Removal::LeftAlone(harness::guard::State::Disarmed) => (
+                "left-alone-disarmed",
+                format!(
+                    "{shown} carries Estigia's marker and not the body this binary installs, \
+                     and is left alone \u{2014} nothing was removed"
+                ),
+                false,
+            ),
             harness::guard::Removal::LeftAlone(
-                harness::guard::State::Installed | harness::guard::State::Inert,
+                harness::guard::State::Installed
+                | harness::guard::State::Inert
+                | harness::guard::State::Altered,
             ) => (
                 "left-alone-edited",
                 format!(

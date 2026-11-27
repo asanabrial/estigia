@@ -253,10 +253,35 @@ pub fn examine(skill_root: Option<&Path>, repo_dir: &Path) -> Vec<Check> {
     });
 
     // Reported, never installed here: `doctor` is read-only.
-    checks.push(Check {
-        name: "push-guard",
-        about: "the pre-push hook that refuses a push no live claim authorises",
-        health: match super::guard::state(repo_dir) {
+    let guard_state = super::guard::state(repo_dir);
+    let guard_path = super::guard::hooks_directory(repo_dir)
+        .ok()
+        .map(|hooks| hooks.join(super::guard::HOOK));
+    let guard_outside_the_surface = guard_path
+        .as_ref()
+        .is_some_and(|path| !super::is_control_surface(&path.to_string_lossy()));
+    let push_guard_health = if guard_outside_the_surface
+        && guard_state != super::guard::State::Absent
+    {
+        Health::broken(
+            format!(
+                "the push guard sits at {}, which the gate does not read as control surface \
+                     \u{2014} an agent's write to that path is admitted, so the guard can be \
+                     disarmed by the thing it guards against",
+                guard_path
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_default()
+            ),
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "this checkout's hooks where the gate watches them: `git config \
+                     core.hooksPath` decides the directory, and the ordinary `hooks` one is a \
+                     control surface while a custom directory is not",
+            ),
+        )
+    } else {
+        match guard_state {
             super::guard::State::Installed => Health::Fine {
                 detail: "installed — a push from a checkout a live claim holds is refused \
                          unless that claim justifies it; \
@@ -300,7 +325,35 @@ pub fn examine(skill_root: Option<&Path>, repo_dir: &Path) -> Vec<Check> {
                  bit, so git skips it silently and every push goes through ungated",
                 Resolution::run("estigia guard"),
             ),
-        },
+            // Marker present, body gone or replaced. Nothing this build wrote
+            // answers, so the file is installed-looking and disarmed; the
+            // reinstall names the hook's own path and replaces a body carrying
+            // only Estigia's lines.
+            super::guard::State::Disarmed => Health::broken(
+                "the pre-push hook carries Estigia's marker and not the body this binary \
+                 installs, so the gate in it does not answer and every push goes out unchecked",
+                Resolution::run("estigia guard"),
+            ),
+            // Marker, a different body, and somebody's own lines: `estigia
+            // guard` refuses to rewrite those, so naming it would be a dead
+            // end.
+            super::guard::State::Altered => Health::broken(
+                "the pre-push hook carries Estigia's marker, a body this binary did not write, \
+                 and lines Estigia did not write either \u{2014} what runs on a push cannot be \
+                 shown to be this build's gate",
+                Resolution::no_command(
+                    NoCommandReason::OperatorKnowledge,
+                    "a decision about the lines Estigia did not write: move them into a hook of \
+                     your own and chain `estigia hook pre-push` from it, or take them out and \
+                     run `estigia guard` \u{2014} rewriting the file here would take them away",
+                ),
+            ),
+            }
+    };
+    checks.push(Check {
+        name: "push-guard",
+        about: "the pre-push hook that refuses a push no live claim authorises",
+        health: push_guard_health,
     });
 
     checks.push(Check {
