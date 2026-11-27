@@ -418,7 +418,8 @@ fn releasing_kills_the_reviewers_the_claim_still_had_running() {
         .mark_pull_review_slot_spawned(&held.epoch, "review-risk", child.id())
         .expect("the pid");
 
-    release(&rig.context, RUN).expect("the release");
+    let answer = release(&rig.context, RUN).expect("the release");
+    assert_eq!(answer["reviewers_killed"], 1, "{answer}");
 
     let mut child = child;
     let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
