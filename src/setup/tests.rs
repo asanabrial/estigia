@@ -21631,6 +21631,10 @@ const answer = (env) => {
   Object.assign(process.env, env);
 };
 
+// A context with no UI surface is answered before anything is spawned, so no
+// status or widget can arrive late and waiting for one measures the deadline.
+const NO_SURFACE = 0;
+
 const status = async (label, event, ctx, env, wait = 3000, via = handlers) => {
   answer(env);
   const before = statuses.length;
@@ -21668,7 +21672,7 @@ out.push(await status("no_exit", "session_start", ctxOf("sess-1"), { STUB_GOAL_M
 out.push(await status("exit_two", "session_start", ctxOf("sess-1"), { STUB_GOAL_EXIT: "2", STUB_GOAL_OUT: held }));
 out.push(await status("garbled", "session_start", ctxOf("sess-1"), { STUB_GOAL_OUT: "not json" }));
 out.push(await status("slow", "session_start", ctxOf("sess-1"), { STUB_GOAL_MODE: "sleep" }, 3000, quickHandlers));
-out.push(await status("headless", "session_start", ctxOf("sess-1", false), { STUB_GOAL_OUT: held }));
+out.push(await status("headless", "session_start", ctxOf("sess-1", false), { STUB_GOAL_OUT: held }, NO_SURFACE));
 process.env.ESTIGIA_PI_PARENT_SESSION = "root-9";
 process.env.ESTIGIA_PI_PARENT_PID = "1";
 out.push(await status("child", "session_start", ctxOf("child-3"), { STUB_GOAL_OUT: held }));
@@ -21682,8 +21686,8 @@ const shelved = [
   await widget("silent", "session_start", ctxOf("sess-1"), { STUB_CHANGES_EXIT: "3" }),
   await widget("garbled", "session_start", ctxOf("sess-1"), { STUB_CHANGES_OUT: "not json" }),
   await widget("slow", "session_start", ctxOf("sess-1"), { STUB_CHANGES_MODE: "sleep" }, 3000, quickHandlers),
-  await widget("headless", "session_start", ctxOf("sess-1", false), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"])) }),
-  await widget("no_widget_surface", "session_start", ctxOf("sess-1", true, false), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"])) }),
+  await widget("headless", "session_start", ctxOf("sess-1", false), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"])) }, NO_SURFACE),
+  await widget("no_widget_surface", "session_start", ctxOf("sess-1", true, false), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"])) }, NO_SURFACE),
 ];
 
 const refusal = async (label, ctx, tool, exit, err) => {
@@ -24400,6 +24404,12 @@ delete process.env.ESTIGIA_PI_PARENT_SESSION;
 delete process.env.ESTIGIA_PI_PARENT_PID;
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// A race's fallback, unreferenced: won early, it must not keep node alive until
+// the deadline it would have been.
+const guard = (ms, fallback) =>
+  new Promise((resolve) => {
+    setTimeout(() => resolve(fallback), ms).unref?.();
+  });
 const until = async (check, ms = 8000) => {
   for (let waited = 0; waited < ms; waited += 25) {
     const found = check();
@@ -24492,10 +24502,10 @@ await until(() => rowOf("gamma").join("\n").includes("1.5k tok"));
 const pid = Number(readFileSync(process.env.FAKE_PID, "utf8"));
 const aliveBefore = (() => { try { process.kill(pid, 0); return true; } catch { return false; } })();
 await agents.command.handler("stop all", ctx);
-const stopped = await Promise.race([hanging, pause(6000).then(() => ({ content: [{ type: "text", text: "still running" }], details: { status: "running" } }))]);
+const stopped = await Promise.race([hanging, guard(6000, { content: [{ type: "text", text: "still running" }], details: { status: "running" } })]);
 const gone = await until(() => { try { process.kill(pid, 0); return null; } catch { return true; } }, 6000);
 
-const timeout = pause(6000).then(() => ({ content: [{ type: "text", text: "still running" }], details: { status: "running" } }));
+const timeout = guard(6000, { content: [{ type: "text", text: "still running" }], details: { status: "running" } });
 const press = async (...keys) => { for (const key of keys) await view.handleInput(key); };
 const steers = () => seen().filter((entry) => entry.type === "steer");
 
