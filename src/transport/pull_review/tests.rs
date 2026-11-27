@@ -395,6 +395,48 @@ fn releasing_removes_the_worktree_and_the_row_and_reads_nothing_from_github() {
     assert!(store.pull_review_of(RUN).expect("a read").is_none());
 }
 
+#[cfg(unix)]
+#[test]
+fn releasing_kills_the_reviewers_the_claim_still_had_running() {
+    use std::os::unix::process::CommandExt;
+
+    let rig = rig();
+    claiming(&rig, RUN, pr_view(&rig, serde_json::json!({}))).expect("the claim");
+    let store = Store::open(&store_path().expect("a path")).expect("the store");
+    let held = store.pull_review_of(RUN).expect("a read").expect("a row");
+    let job = rig.root.path().join("job");
+    std::fs::create_dir_all(&job).expect("a job directory");
+    store
+        .insert_pull_review_slot(&held.epoch, "review-risk", &job.to_string_lossy(), 0)
+        .expect("a slot");
+    let child = std::process::Command::new("sh")
+        .args(["-c", "sleep 30"])
+        .process_group(0)
+        .spawn()
+        .expect("a reviewer");
+    store
+        .mark_pull_review_slot_spawned(&held.epoch, "review-risk", child.id())
+        .expect("the pid");
+
+    let answer = release(&rig.context, RUN).expect("the release");
+    assert_eq!(answer["reviewers_killed"], 1, "{answer}");
+
+    let mut child = child;
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            other => {
+                assert!(
+                    std::time::Instant::now() < until,
+                    "the reviewer outlived the claim that paid for it: {other:?}"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+    }
+}
+
 #[test]
 fn a_leftover_worktree_reads_as_carrying_nothing_unpublished() {
     let rig = rig();
