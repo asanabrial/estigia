@@ -92,6 +92,22 @@ answers and an empty registry offering no cursor; four store unit tests). What i
 - **A pointer is read through `holdings`, which finds a file only under the name its run id gives itself**: a
   run id with an uppercase letter is filed under a digested name, so its pointer and issue are not shown
   (minted ids from the hosts measured are lowercase; not fixed).
+- **A claim or a takeover hands the pointer what the store holds, and nothing reads the pointer back.** A
+  claim that finds this run already holding the issue under another key adopts that operation, and the
+  answer now names it, so the pointer stops carrying the key the call minted and a following `release`
+  targets the epoch the store kept (`a_claim_that_adopts_a_live_claim_answers_the_operation_it_adopted`,
+  `a_claim_that_adopts_a_written_claim_leaves_the_pointer_naming_it`). A takeover answers the state the
+  ledger holds and the review transaction the store recorded for the issue, and `apply_effect` prefers the
+  answer's state over the one the call named, so a reclaim of an issue in `review` renews in `review` and
+  can spend that receipt (`a_reclaim_answers_the_state_and_receipt_the_store_holds`,
+  `a_reclaim_records_the_state_its_answer_names`). A claim made while the git window is closed answers
+  that receipt too: the store read no longer waits for the window to open
+  (`a_claim_inside_a_closed_window_answers_the_stored_receipt`), which is the case a restart inside a
+  closed window reaches. What this does not close: the pointer stays a note on
+  one machine, freely written by `sqlite3` or a script — the state-directory refusal covers the tools'
+  own writes, not an interpreter handed code — and `apply_effect` only prefers the answer when the tool's
+  effect is `Swear`, so a call whose answer names a state under any other effect is still recorded with
+  the state the caller passed or the `in-progress` default.
 - **A bounded snapshot is a filtered re-read, not one consistent read of the machine.** Each page keeps rows
   whose `started_at <= taken_at`; the ordering key is immutable, so a traversal has neither omissions nor
   duplicates under the tested mutations, but `status` and `last_seen` are re-derived per page. Membership is

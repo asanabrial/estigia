@@ -445,6 +445,234 @@ fn a_claim_is_recorded_in_the_store_in_the_transaction_that_decides_it() {
 }
 
 #[test]
+fn a_claim_that_adopts_a_live_claim_answers_the_operation_it_adopted() {
+    let directory = tempfile::tempdir().expect("a directory for the counter");
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+    let adopted = "a".repeat(32);
+    let mine = dated(
+        "2",
+        "2026-07-28T02:00:00Z",
+        claim_body("claude-a", &adopted),
+    );
+    let script = claim_script(12, &[mine]);
+    let fresh = "b".repeat(32);
+
+    let answer = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        claim(
+            &context,
+            &Acquisition {
+                issue: 12,
+                run_id: "claude-a",
+                runtime: "claude",
+                horizon: RECLAIM_HORIZON,
+                operation_id: &fresh,
+                now: RECLAIM_NOW,
+            },
+        )
+        .expect("the lost key is adopted")
+    });
+
+    assert_eq!(
+        answer["operation_id"].as_str(),
+        Some(adopted.as_str()),
+        "the answer does not name the operation the store holds, so the pointer keeps the key \
+         this call minted and a following release names an epoch nothing holds: {answer}"
+    );
+    assert_eq!(answer["reused_existing_claim"], true, "{answer}");
+}
+
+#[test]
+fn a_reclaim_answers_the_state_and_receipt_the_store_holds() {
+    let directory = tempfile::tempdir().expect("a directory for the log");
+    crate::transport::store::forget_scratch_store();
+    let mut context = context_at(directory.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let now = "2026-07-28T20:00:00Z";
+    let receipt = ReviewTransaction {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let verdict = wrote(
+        "4",
+        super::super::markers::render(
+            "review-verdict",
+            &[
+                ("run-id", "claude-c"),
+                ("reviewer", "claude-d"),
+                ("op-id", &"d".repeat(32)),
+                ("epoch", &receipt.epoch),
+                ("pr", "7"),
+                ("head", &receipt.head),
+                ("base", &receipt.base),
+                ("digest", &receipt.digest),
+                ("outcome", "accepted"),
+            ],
+        )
+        .expect("a verdict marker"),
+    );
+    let script = crate::test_env::answers(&[
+        crate::test_env::issue_view_answer(
+            12,
+            issue_payload(
+                &[foreign_claim(), published(&receipt), verdict],
+                &["fixture"],
+                &["status:review"],
+            ),
+        ),
+        serde_json::json!({
+            "matches": "api user",
+            "stdout": "{\"login\":\"fixture\"}", "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "pr view",
+            "stdout": serde_json::json!({
+                "number": 7,
+                "url": "https://github.com/fixture/repo/pull/7",
+                "headRefOid": receipt.head,
+                "baseRefOid": receipt.base,
+                "state": "OPEN",
+                "isDraft": false,
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "CLEAN",
+            })
+            .to_string(),
+            "status": 0,
+        }),
+    ]);
+    let reclaim_of = |target: Option<&'static str>| Reclaim {
+        issue: 12,
+        run_id: "claude-a",
+        runtime: "claude",
+        horizon: "2026-07-29T09:00Z",
+        operation_id: "cccccccccccccccccccccccccccccccc",
+        target_operation: target,
+        force: false,
+        reason_file: None,
+        now,
+    };
+
+    let answer = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        crate::transport::window::with_mode(crate::transport::window::Mode::Open, || {
+            let target = reclaim(&context, &reclaim_of(None)).expect("the discovery answers")
+                ["target_operation"]
+                .as_str()
+                .expect("a target")
+                .to_owned();
+            let target: &'static str = Box::leak(target.into_boxed_str());
+            reclaim(&context, &reclaim_of(Some(target))).expect("the takeover lands")
+        })
+    });
+
+    assert_eq!(
+        answer["state"].as_str(),
+        Some("review"),
+        "the takeover of an issue in review answers no state, so the pointer falls back to \
+         in-progress and the next renewal stops unexpected-state: {answer}"
+    );
+    assert_eq!(
+        answer["review_transaction"]["epoch"].as_str(),
+        Some(receipt.epoch.as_str()),
+        "the takeover answers no receipt, so delivery after it stops receipt-missing: {answer}"
+    );
+    assert_eq!(answer["reused_existing_reclaim"], false, "{answer}");
+}
+
+#[test]
+fn a_claim_inside_a_closed_window_answers_the_stored_receipt() {
+    let directory = tempfile::tempdir().expect("a directory for the log");
+    crate::transport::store::forget_scratch_store();
+    let mut context = context_at(directory.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let receipt = ReviewTransaction {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let verdict = wrote(
+        "4",
+        super::super::markers::render(
+            "review-verdict",
+            &[
+                ("run-id", "claude-c"),
+                ("reviewer", "claude-d"),
+                ("op-id", &"d".repeat(32)),
+                ("epoch", &receipt.epoch),
+                ("pr", "7"),
+                ("head", &receipt.head),
+                ("base", &receipt.base),
+                ("digest", &receipt.digest),
+                ("outcome", "accepted"),
+            ],
+        )
+        .expect("a verdict marker"),
+    );
+    let script = crate::test_env::answers(&[
+        crate::test_env::issue_view_answer(
+            12,
+            issue_payload(
+                &[published(&receipt), verdict],
+                &[],
+                &["status:in-progress"],
+            ),
+        ),
+        serde_json::json!({
+            "matches": "api user",
+            "stdout": "{\"login\":\"fixture\"}", "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "pr view",
+            "stdout": serde_json::json!({
+                "number": 7,
+                "url": "https://github.com/fixture/repo/pull/7",
+                "headRefOid": receipt.head,
+                "baseRefOid": receipt.base,
+                "state": "OPEN",
+                "isDraft": false,
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "CLEAN",
+            })
+            .to_string(),
+            "status": 0,
+        }),
+    ]);
+    let key = "e".repeat(32);
+    let closed =
+        crate::config::GitOperationWindow::parse("enabled 09:00-17:00").expect("a schedule");
+
+    let answer = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        crate::transport::window::with_mode(crate::transport::window::Mode::Closed(closed), || {
+            claim(
+                &context,
+                &Acquisition {
+                    issue: 12,
+                    run_id: "claude-a",
+                    runtime: "claude",
+                    horizon: RECLAIM_HORIZON,
+                    operation_id: &key,
+                    now: RECLAIM_NOW,
+                },
+            )
+            .expect("a claim is not a git write")
+        })
+    });
+
+    assert_eq!(
+        answer["review_transaction"]["epoch"].as_str(),
+        Some(receipt.epoch.as_str()),
+        "a claim inside a closed window answers no receipt, so the pointer comes back without \
+         one and the merge stays refused after the window opens: {answer}"
+    );
+}
+
+#[test]
 fn a_fresh_claim_makes_no_label() {
     let directory = tempfile::tempdir().expect("a directory for the counter");
     let log = directory.path().join("gh.log");

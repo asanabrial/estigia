@@ -11744,6 +11744,7 @@ pub fn adjudicate(
     Ok(serde_json::json!({
         "ok": true,
         "run_id": run_id,
+        "operation_id": operation_id,
         "reused_existing_claim": reused,
         "claimed_at": active.created_at,
         "horizon": active.horizon,
@@ -11958,7 +11959,6 @@ pub(crate) fn claim_on(
         })
     })?;
 
-    let closed = super::outbox::is_closed(context);
     let (adjudication, event) = (decided.adjudication, decided.event);
     let mut answer = adjudication?;
     if let Ok(state) = ledger.state()
@@ -11979,16 +11979,35 @@ pub(crate) fn claim_on(
 
     answer["issue"] = serde_json::json!(what.issue);
     mark_deferred(&mut answer, deferred);
-    if !closed && let Ok(Some(current)) = current_review_transaction(context, what.issue) {
-        answer["review_transaction"] = serde_json::json!({
-            "epoch": current.epoch,
-            "pr": current.pr,
-            "head": current.head,
-            "base": current.base,
-            "digest": current.digest,
-        });
+    if let Some(transaction) = store_review_transaction(context, what.issue) {
+        answer["review_transaction"] = transaction;
     }
     Ok(answer)
+}
+
+fn store_review_transaction(context: &Context, issue: u64) -> Option<serde_json::Value> {
+    let current = current_review_transaction(context, issue).ok().flatten()?;
+    Some(serde_json::json!({
+        "epoch": current.epoch,
+        "pr": current.pr,
+        "head": current.head,
+        "base": current.base,
+        "digest": current.digest,
+    }))
+}
+
+fn carry_store_facts(
+    context: &Context,
+    issue: u64,
+    ledger: &Ledger,
+    answer: &mut serde_json::Value,
+) {
+    if let Ok(Some(state)) = ledger.state() {
+        answer["state"] = serde_json::json!(state);
+    }
+    if let Some(transaction) = store_review_transaction(context, issue) {
+        answer["review_transaction"] = transaction;
+    }
 }
 
 /// Moves the issue's assignee to the holder the store names and strips any `dev:` label,
@@ -13009,14 +13028,16 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
             return Ok(answer);
         }
         Reclaimed::Resumed { holder, forced } => {
-            return Ok(serde_json::json!({
+            let mut answer = serde_json::json!({
                 "ok": true,
                 "issue": what.issue,
                 "reclaimed_from": holder,
                 "run_id": what.run_id,
                 "forced": forced,
                 "reused_existing_reclaim": true,
-            }));
+            });
+            carry_store_facts(context, what.issue, &ledger, &mut answer);
+            return Ok(answer);
         }
         Reclaimed::Written { holder } => holder,
     };
@@ -13046,6 +13067,7 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
         "forced": forced,
         "reused_existing_reclaim": false,
     });
+    carry_store_facts(context, what.issue, &ledger, &mut answer);
     mark_deferred(&mut answer, deferred);
     Ok(answer)
 }
