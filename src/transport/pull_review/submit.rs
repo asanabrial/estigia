@@ -65,7 +65,6 @@ fn refuse(
     reason: &str,
     detail: String,
 ) -> Result<serde_json::Value, Failure> {
-    super::kill_reviewers(store, &held.epoch);
     let checkout = remove_worktree(context, &held.worktree);
     store.drop_pull_review(&held.run_id)?;
     Ok(serde_json::json!({
