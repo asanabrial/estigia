@@ -1833,12 +1833,7 @@ fn a_reworded_comment_does_not_disarm_an_intact_hook() {
 #[test]
 fn a_hook_whose_call_line_runs_something_else_is_disarmed() {
     let installed = super::script(Path::new("/usr/bin/estigia"));
-    let moved = super::script(Path::new("/opt/bin/estigia"));
-    assert!(
-        super::faithful(&moved),
-        "a moved install stopped being this build's hook"
-    );
-    for (replacement, expected) in [("true", State::Altered), ("estigia", State::Disarmed)] {
+    for replacement in ["true", "estigia", "/bin/true", "'/bin/true'"] {
         let line = format!("{replacement} hook pre-push");
         let substituted = installed.replace("'/usr/bin/estigia' hook pre-push", &line);
         assert_ne!(
@@ -1846,8 +1841,15 @@ fn a_hook_whose_call_line_runs_something_else_is_disarmed() {
             "the call line is not where the test expects"
         );
         assert!(!super::faithful(&substituted), "{substituted}");
-        assert_eq!(state_of(Some(&substituted), true), expected);
+        assert_eq!(state_of(Some(&substituted), true), State::Disarmed);
     }
+}
+
+#[test]
+fn a_hook_whose_record_and_call_line_both_name_another_binary_reads_installed() {
+    let moved = super::script(Path::new("/opt/bin/estigia"));
+    assert!(super::faithful(&moved), "{moved}");
+    assert_eq!(state_of(Some(&moved), true), State::Installed);
 }
 
 #[test]

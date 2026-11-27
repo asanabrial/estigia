@@ -148,44 +148,40 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
     }
 }
 
-/// Whether `text` is the hook this build writes, apart from the executable's
-/// own path and comment prose: a hook installed by an Estigia that has since
-/// moved, or reworded by a later build, still answers.
+/// The line naming the executable the hook was installed from, so the body can
+/// be compared exactly rather than by forgiving any path-shaped word.
+const EXECUTABLE: &str = "# estigia executable:";
+
+/// Whether `text` is the hook this build writes, apart from comment prose.
+///
+/// The call line is compared as written against the executable the file itself
+/// records: a substituted command — `true`, a bare name, any path — is not this
+/// build's body, and reading it as installed is the silent disarming the states
+/// exist to report. A hook written before the record line existed cannot be
+/// compared and is `Disarmed`, which names `estigia guard` as the way back.
 fn faithful(text: &str) -> bool {
-    comparable(text) == comparable(&script(Path::new("/estigia")))
+    let Some(executable) = recorded_executable(text) else {
+        return false;
+    };
+    instructions(text) == instructions(&script(Path::new(&executable)))
 }
 
-fn comparable(text: &str) -> Vec<String> {
-    let called = format!(" hook {HOOK}");
+fn recorded_executable(text: &str) -> Option<String> {
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix(EXECUTABLE))
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
+}
+
+/// The lines that decide what the hook does: comments are prose, except the
+/// shebang, which the shell reads.
+fn instructions(text: &str) -> Vec<&str> {
     text.lines()
         .map(str::trim_end)
         .filter(|line| !line.is_empty())
-        // The shebang is a comment to this parser and not to the shell.
         .filter(|line| !line.trim_start().starts_with('#') || line.starts_with("#!"))
-        .map(|line| match line.strip_suffix(&called) {
-            Some(command) if names_a_path(command) => format!("<executable>{called}"),
-            _ => line.to_owned(),
-        })
         .collect()
-}
-
-/// Whether `command` is one shell word naming a file, so its directory may
-/// move without changing what the hook does. A word naming no path — `true`,
-/// or a bare program name — is compared as written, because the install always
-/// spells the executable's path.
-fn names_a_path(command: &str) -> bool {
-    let unquoted = command
-        .strip_prefix('\'')
-        .and_then(|rest| rest.strip_suffix('\''))
-        .or_else(|| {
-            command
-                .strip_prefix('"')
-                .and_then(|rest| rest.strip_suffix('"'))
-        })
-        .unwrap_or(command);
-    let quoted = unquoted.len() != command.len();
-    let names_a_directory = unquoted.contains('/') || unquoted.contains('\\');
-    names_a_directory && (quoted || !unquoted.contains(char::is_whitespace))
 }
 
 /// Whether an uninstall may take this hook away.
@@ -206,24 +202,21 @@ fn removable(state: State, text: Option<&str>) -> bool {
 }
 
 /// Whether Estigia's hook carries somebody's additions: compared against every
-/// line this binary writes, not against a hash, because the script names the
-/// executable's path and two machines produce two different files.
+/// instruction this binary writes, not against a hash, because the script names
+/// the executable's path and two machines produce two different files.
 fn edited(text: Option<&str>) -> bool {
     let Some(text) = text else {
         return false;
     };
-    // Rendered for the path this file itself names, so the comparison is about
-    // *content*: a hook installed by an Estigia that has since moved is still
-    // unedited.
+    let called = format!(" hook {HOOK}");
     let rendered = script(Path::new("x"));
-    let mine: std::collections::BTreeSet<&str> = rendered
-        .lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty() && !line.contains("estigia"))
+    let mine: std::collections::BTreeSet<&str> = instructions(&rendered)
+        .into_iter()
+        .filter(|line| !line.ends_with(&called))
         .collect();
-    text.lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty() && !line.contains("estigia"))
+    instructions(text)
+        .into_iter()
+        .filter(|line| !line.ends_with(&called))
         .any(|line| !mine.contains(line))
 }
 
@@ -342,6 +335,7 @@ fn script(executable: &Path) -> String {
     [
         "#!/bin/sh",
         MARKER,
+        &format!("{EXECUTABLE} {}", executable.display()),
         "#",
         "# Refuses a push that no live claim authorises. Removed by",
         "# `estigia guard --uninstall`; bypassed by `git push --no-verify`,",

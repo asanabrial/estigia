@@ -401,11 +401,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 - **The push guard refuses to replace somebody else's hook.** A `pre-push` is a test runner or a
   secret scanner as often as it is nothing, and Estigia will not take away a check somebody relies on
   to add one they did not ask for. It says so and names the way out.
-- **A hook is what its body does, not what its marker says.** `guard::state_of` compares the file with
-  the script this build writes, apart from the executable's own path and comment prose (so a later
-  build's reworded comments do not disarm an intact hook). The path may move, but it must be a path:
-  the install always spells one, so a call line replaced by `true` or by a bare program name is not
-  this build's body. A marker with no body is
+- **A hook is what its body does, not what its marker says.** `guard::state_of` compares the file's
+  instructions with the script this build writes, apart from comment prose (so a later build's
+  reworded comments do not disarm an intact hook). The script records the executable path it was
+  installed from, and the call line is compared against it exactly: a substituted command — `true`, a
+  bare name, any other path — is not this build's body, and reading it as installed is the silent
+  disarming the states exist to report. A hook written before the record line existed cannot be
+  compared and is `Disarmed`, which names `estigia guard` as the way back. A marker with no body is
   `Disarmed`; a different body carrying lines Estigia did not write is `Altered`. `doctor` reports both
   as broken, and names `estigia guard` for `Disarmed` but not for `Altered`, because the reinstall
   refuses a file carrying somebody's additions. `guard::hooks_directory` follows `core.hooksPath` while

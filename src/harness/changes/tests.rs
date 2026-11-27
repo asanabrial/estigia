@@ -366,10 +366,6 @@ fn a_checkout_the_filesystem_cannot_be_asked_about_is_unread_not_missing() {
     std::fs::write(&file, "not a directory\n").expect("a file");
 
     assert!(matches!(
-        super::presence(&file.join("child")),
-        super::Presence::Unreadable
-    ));
-    assert!(matches!(
         super::presence(&root.path().join("gone")),
         super::Presence::Gone
     ));
@@ -377,6 +373,47 @@ fn a_checkout_the_filesystem_cannot_be_asked_about_is_unread_not_missing() {
         super::presence(root.path()),
         super::Presence::Present
     ));
+    // A path through a regular file is ENOTDIR where the filesystem says so.
+    // A platform that answers "not found" instead is a different answer, but
+    // it is never `Present`, and it never reaches the notice as a directory
+    // that was removed by hand.
+    assert!(!matches!(
+        super::presence(&file.join("child")),
+        super::Presence::Present
+    ));
+}
+
+#[test]
+fn a_registered_checkout_git_cannot_read_is_reported_unread_in_the_notice() {
+    let (root, main, trees) = fixture();
+    let broken = add_tree(&main, &trees, "issue-3-broken");
+    std::fs::remove_file(broken.join(".git")).expect("a worktree's .git is a file");
+
+    let notice = orphan_notice(&context(root.path(), &main), &[]).expect("a notice");
+    assert!(
+        notice.contains("could not be read in time"),
+        "a present checkout git cannot read was not reported as unread: {notice}"
+    );
+    assert!(
+        !notice.contains("gone from disk"),
+        "a checkout that is there was reported as removed by hand: {notice}"
+    );
+}
+
+#[test]
+fn a_notice_of_only_missing_checkouts_is_written_and_says_the_plural() {
+    let (root, main, trees) = fixture();
+    let first = add_tree(&main, &trees, "issue-1-gone");
+    let second = add_tree(&main, &trees, "issue-2-gone");
+    std::fs::remove_dir_all(&first).unwrap();
+    std::fs::remove_dir_all(&second).unwrap();
+
+    let notice = orphan_notice(&context(root.path(), &main), &[]).expect("a notice");
+    assert!(
+        notice.starts_with("2 checkouts git still registers are gone from disk"),
+        "{notice}"
+    );
+    assert!(!notice.contains("carries uncommitted work"), "{notice}");
 }
 
 #[test]
