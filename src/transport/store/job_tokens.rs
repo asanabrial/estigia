@@ -7,14 +7,15 @@ impl Store {
     /// under the job's id, answering the token to hand to that runner.
     ///
     /// The value comes from SQLite's own `randomblob`, so every platform reads
-    /// the same source and no dependency is added for it. A relaunch of the
-    /// same id — a check job whose runner died, whose directory is written
-    /// again — replaces the token rather than leaving the dead run's in place.
+    /// the same source and no dependency is added for it. The first mint for an
+    /// id is the token every later launch of that id is handed: two launches in
+    /// one second share a directory, and a replacement would leave the runner
+    /// that finishes last writing a value the store no longer holds.
     pub(crate) fn mint_job_token(&self, id: &str, at: u64) -> Result<String, Failure> {
         self.connection()
             .query_row(
                 "INSERT INTO job_tokens (id, token, at) VALUES (?1, lower(hex(randomblob(32))), ?2)
-                 ON CONFLICT (id) DO UPDATE SET token = excluded.token, at = excluded.at
+                 ON CONFLICT (id) DO UPDATE SET token = job_tokens.token
                  RETURNING token",
                 rusqlite::params![id, int(at)],
                 |row| row.get(0),
