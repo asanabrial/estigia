@@ -815,6 +815,88 @@ fn build_sweep_fixture(root: &std::path::Path) {
 }
 
 #[test]
+fn a_fork_pull_request_with_the_same_head_name_does_not_close_a_head() {
+    let (root, clone, trees) = sweep_fixture();
+    let skill = root.path().join("skill");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    let context = crate::transport::Context::live(skill, clone, None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(trees.as_path()),
+        ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
+    };
+    let script = crate::test_env::answers(&[
+        crate::test_env::open_but_unmatched_issue(1),
+        crate::test_env::open_but_unmatched_issue(2),
+        crate::test_env::closed_issue(3),
+        crate::test_env::open_but_unmatched_issue(4),
+        serde_json::json!({
+            "matches": "pr list",
+            "stdout": serde_json::json!([
+                {"state": "closed", "isCrossRepository": true}
+            ])
+            .to_string(),
+            "status": 0,
+        }),
+    ]);
+    let bin = crate::test_env::scripted_gh();
+    let swept = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        sweep(&view).expect("the sweep reads the fixture")
+    });
+    assert!(
+        !swept
+            .iter()
+            .any(|entry| entry.kind == Kind::RemoteHead && entry.name == "issue-2-open"),
+        "a fork's closed pull request swept an open head: {swept:?}"
+    );
+}
+
+#[test]
+fn a_same_repository_closed_pull_request_still_closes_its_head() {
+    let (root, clone, trees) = sweep_fixture();
+    let skill = root.path().join("skill");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    let context = crate::transport::Context::live(skill, clone, None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(trees.as_path()),
+        ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
+    };
+    let script = crate::test_env::answers(&[
+        crate::test_env::open_but_unmatched_issue(1),
+        crate::test_env::open_but_unmatched_issue(2),
+        crate::test_env::closed_issue(3),
+        crate::test_env::open_but_unmatched_issue(4),
+        serde_json::json!({
+            "matches": "pr list",
+            "stdout": serde_json::json!([
+                {"state": "closed", "isCrossRepository": true},
+                {"state": "closed", "isCrossRepository": false}
+            ])
+            .to_string(),
+            "status": 0,
+        }),
+    ]);
+    let bin = crate::test_env::scripted_gh();
+    let swept = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        sweep(&view).expect("the sweep reads the fixture")
+    });
+    let head = swept
+        .iter()
+        .find(|entry| entry.kind == Kind::RemoteHead && entry.name == "issue-2-open")
+        .unwrap_or_else(|| {
+            panic!("a same-repository closed pull request did not close its head: {swept:?}")
+        });
+    assert!(head.delete, "{head:?}");
+}
+
+#[test]
 fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
     let (root, clone, trees) = sweep_fixture();
     let skill = root.path().join("skill");

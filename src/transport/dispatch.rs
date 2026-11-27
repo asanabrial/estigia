@@ -1857,6 +1857,7 @@ fn run_operation(
                 base: f.need("base", operation)?,
                 digest: f.need("digest", operation)?,
                 worktree: f.path("worktree"),
+                never_ran_evidence_file: f.path("never-ran-evidence-file"),
                 now,
             },
         ),

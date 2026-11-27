@@ -78,6 +78,10 @@ const REASON_EMPTY_CONTENT: &str = "empty_content";
 /// [`risk_level_from_reasons`] agree on `Low` for a range nothing was ever
 /// read from.
 const REASON_NOTHING_MEASURED: &str = "nothing_measured";
+/// A path the base declares generated and this change touches. Its hunks are
+/// left out of the stats, so without this reason the remaining passive edits
+/// could answer `Low`.
+const REASON_GENERATED_PATH: &str = "generated_path";
 
 /// The extensions `isSemanticRiskEligible` and `stripSemanticPathExtension`
 /// treat as source, ported unchanged from `semanticSourceExtensions`
@@ -377,7 +381,8 @@ pub struct RiskReason {
     /// One of `hot_path`, `service_token`, `shell_source`,
     /// `executable_mode`, `process_boundary`, `process_scan_limit`,
     /// `dangerous_sink`, `non_executable_only`, `configuration_change`,
-    /// `executable_change`, `empty_content` or `nothing_measured`.
+    /// `executable_change`, `empty_content`, `nothing_measured` or
+    /// `generated_path`.
     pub code: &'static str,
     /// Set on `hot_path`, `service_token`, `shell_source`, `executable_mode`,
     /// `process_boundary`, `process_scan_limit` and `dangerous_sink`; unset on
@@ -878,9 +883,23 @@ fn review_tier_answer(
     stats.retain(|stat| !generated.contains(&stat.path));
     let active_content = active_passive_content_paths(at, &stats)?;
     let content_reasons = content_scan::content_scan_reasons(at, &base_oid, &head_oid, &stats)?;
-    let reasons = derive_snapshot_risk_reasons(&stats, &active_content, content_reasons);
+    let mut reasons = derive_snapshot_risk_reasons(&stats, &active_content, content_reasons);
+    if let Some(path) = generated.first() {
+        reasons.push(RiskReason {
+            code: REASON_GENERATED_PATH,
+            signal: None,
+            path: Some(path.clone()),
+        });
+        reasons = canonical_risk_reasons(reasons);
+    }
     let (only_passive, touches_configuration) = passive_and_configuration(&stats, &active_content);
-    let level = classify_risk(&stats, &reasons, only_passive, touches_configuration);
+    let level = classify_risk(
+        &stats,
+        &reasons,
+        only_passive,
+        touches_configuration,
+        !generated.is_empty(),
+    );
     explained_matches_level(level, &reasons)?;
     let computed_level = level;
     let level = match declared.raise {
@@ -954,10 +973,16 @@ fn classify_risk(
     reasons: &[RiskReason],
     only_passive: bool,
     touches_configuration: bool,
+    touches_generated: bool,
 ) -> RiskLevel {
     let has_signal = reasons.iter().any(|reason| reason.signal.is_some());
     if has_signal || touches_hot_path(stats) {
         return RiskLevel::High;
+    }
+    // A declared path's hunks are not in `stats`, so what remains can look
+    // passive; the declaration buys reproduction, never a lower tier.
+    if touches_generated {
+        return RiskLevel::Medium;
     }
     // An empty stat set makes `only_passive` vacuously true — nothing was
     // measured, so nothing was proven passive either — checked explicitly

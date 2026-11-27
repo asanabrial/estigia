@@ -34,7 +34,7 @@ fn classify(stats: &[DiffStat]) -> (RiskLevel, RiskLevel) {
     let active_content = BTreeSet::new();
     let reasons = derive_snapshot_risk_reasons(stats, &active_content, Vec::new());
     let (only_passive, touches_configuration) = passive_and_configuration(stats, &active_content);
-    let level = classify_risk(stats, &reasons, only_passive, touches_configuration);
+    let level = classify_risk(stats, &reasons, only_passive, touches_configuration, false);
     (level, risk_level_from_reasons(&reasons))
 }
 
@@ -1558,7 +1558,7 @@ fn classify_risk_over_an_empty_stat_set_never_answers_low() {
     let stats: [DiffStat; 0] = [];
     let reasons: [RiskReason; 0] = [];
     let only_passive = stats.iter().all(is_passive_content_candidate_stat);
-    let level = classify_risk(&stats, &reasons, only_passive, false);
+    let level = classify_risk(&stats, &reasons, only_passive, false, false);
     assert_ne!(level, RiskLevel::Low, "an empty measurement answered low");
     assert_eq!(level, RiskLevel::Medium, "{level:?}");
 }
@@ -1580,7 +1580,7 @@ fn the_two_classifiers_agree_the_empty_stat_set_is_not_the_zero_tier() {
     let stats: [DiffStat; 0] = [];
     let only_passive = stats.iter().all(is_passive_content_candidate_stat);
     let touches_configuration = false;
-    let level = classify_risk(&stats, &reasons, only_passive, touches_configuration);
+    let level = classify_risk(&stats, &reasons, only_passive, touches_configuration, false);
     let explained = risk_level_from_reasons(&reasons);
     assert_eq!(level, RiskLevel::Medium, "{level:?}");
     assert_eq!(explained, level, "{explained:?} != {level:?}");
@@ -1928,7 +1928,7 @@ fn shaped_stat(
 fn agree(stats: &[DiffStat], active_content: &BTreeSet<String>) -> (RiskLevel, RiskLevel) {
     let reasons = derive_snapshot_risk_reasons(stats, active_content, Vec::new());
     let (only_passive, touches_configuration) = passive_and_configuration(stats, active_content);
-    let level = classify_risk(stats, &reasons, only_passive, touches_configuration);
+    let level = classify_risk(stats, &reasons, only_passive, touches_configuration, false);
     (level, risk_level_from_reasons(&reasons))
 }
 
@@ -2352,17 +2352,23 @@ fn generated_tier_world(declared: bool) -> (tempfile::TempDir, String, String) {
 }
 
 #[test]
-fn a_declared_generated_path_is_left_out_of_the_tier_and_named_in_the_answer() {
+fn a_declared_generated_path_is_left_out_of_the_tier_and_never_reads_low() {
     let (root, base, head) = generated_tier_world(true);
 
     let answer =
         review_tier(&test_context(root.path()), &base, &head, None, None).expect("an answer");
 
-    assert_eq!(answer["level"], "low", "{answer}");
+    assert_eq!(answer["level"], "medium", "{answer}");
     assert_eq!(answer["changed_lines"], 2, "{answer}");
     assert_eq!(
         answer["generated_paths"],
         serde_json::json!(["docs/api.md"])
+    );
+    assert!(
+        answer["reasons"].as_array().is_some_and(|reasons| reasons
+            .iter()
+            .any(|reason| reason["code"] == "generated_path" && reason["path"] == "docs/api.md")),
+        "the tier did not name the declared path as its reason: {answer}"
     );
 }
 
@@ -2414,7 +2420,7 @@ fn a_repair_tier_leaves_out_what_the_receipt_base_declares() {
     .expect("an answer");
 
     assert_eq!(answer["range"], "repair", "{answer}");
-    assert_eq!(answer["level"], "low", "{answer}");
+    assert_eq!(answer["level"], "medium", "{answer}");
     assert_eq!(answer["changed_lines"], 2, "{answer}");
     assert_eq!(
         answer["generated_paths"],

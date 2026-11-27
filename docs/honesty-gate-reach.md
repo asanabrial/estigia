@@ -141,6 +141,16 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   broad on purpose: a commit message, `rg`, `git grep` or `git log --grep` naming `estigia` then `stand-down`
   and a patch body naming the record are refused with no lift; `cat` and the `Read` tool stay allowed.
 
+  **A setting that decides what an agent may do without a person is a person's act too.** An agent's shell
+  line that runs `estigia config set` over `Delivery authorisation`, `Transition authorisation`, `Merge by`,
+  `Decision mode` or `Issue required` is refused `config-set-is-for-a-person` on every road the deny runs
+  on, by label or by an alias the row answers to. The line is read for the verb pair and then for the
+  label, so a global option between `estigia` and `config` and a quoted label do not hide it, and a line
+  that merely spells both is refused too. `config set` over any other row keeps the disarm boundary it
+  had. The loop and the TUI write these rows through the library rather than a shell line, so a person still
+  sets them there. **Open by declaration:** an alias, a wrapper script or a renamed binary that never
+  writes `estigia config set`, and a label assembled from an expansion.
+
   Twenty `Population` consts in the source (`src/harness/population.rs` holds the type) name each legitimate population and what falls outside it, and that number is checked here.
 - **An issue is refused from a shell line, and the template is checked in one place.** `create` refuses a
   body whose first `##` heading outside a code fence is not `## Summary` followed by a

@@ -16756,6 +16756,7 @@ fn release_ci_denies_outside_the_period_before_reading_anything_else() {
         base: &receipt.base,
         digest: &receipt.digest,
         worktree: None,
+        never_ran_evidence_file: None,
         now: "2026-06-01T00:00Z",
     };
     let script = crate::test_env::answers(&[crate::test_env::live_holder_issue(
@@ -17025,6 +17026,7 @@ fn a_ci_release_on_an_imported_issue_reads_no_graphql_timeline() {
         base: &receipt.base,
         digest: &receipt.digest,
         worktree: None,
+        never_ran_evidence_file: None,
         now: "2026-08-31T00:00:00Z",
     };
 
@@ -17053,6 +17055,7 @@ fn a_ci_release_its_verdict_does_not_admit_records_no_release() {
         base: &receipt.base,
         digest: &receipt.digest,
         worktree: None,
+        never_ran_evidence_file: None,
         now: "2026-08-31T00:00:00Z",
     };
     let (_root, context) = context_with_no_repository();
@@ -17130,6 +17133,7 @@ fn an_escalated_receipt_stops_a_release_the_computed_verdict_would_clear() {
         base: &receipt.base,
         digest: &receipt.digest,
         worktree: None,
+        never_ran_evidence_file: None,
         now: "2026-08-31T00:00:00Z",
     };
     let failure =
@@ -17355,6 +17359,7 @@ fn a_release_refuses_an_escalated_transaction_with_its_own_reason() {
         base: &receipt.base,
         digest: &receipt.digest,
         worktree: None,
+        never_ran_evidence_file: None,
         now: "2026-08-31T00:00:00Z",
     };
     let (_root, context) = context_with_no_repository();
@@ -19169,6 +19174,105 @@ fn a_low_receipt_releases_on_the_recomputed_approval_with_or_without_a_marker() 
 }
 
 #[test]
+fn a_release_reproduces_a_declared_generated_path_and_refuses_a_mismatch() {
+    let root = tempfile::tempdir().expect("a directory");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("sub")).expect("the sub directory");
+    git(&repo, &["init", "--quiet", "-b", "main"]);
+    git(&repo, &["config", "user.email", "estigia@example.invalid"]);
+    git(&repo, &["config", "user.name", "Estigia test"]);
+    git(
+        &repo,
+        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
+    );
+    std::fs::write(
+        repo.join("estigia.generated.toml"),
+        "[[generated]]\npath = \"sub/lock.txt\"\ncwd = \"sub\"\ncommand = [\"sh\", \"-c\", \"printf 'locked\\\\n' > lock.txt\"]\n",
+    )
+    .expect("the declaration");
+    std::fs::write(repo.join("sub/lock.txt"), "old\n").expect("content");
+    std::fs::write(repo.join("notes.md"), "A line of prose.\n").expect("content");
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "--quiet", "-m", "base"]);
+    let base = head_of(&repo);
+    std::fs::write(repo.join("sub/lock.txt"), "hand edited\n").expect("content");
+    std::fs::write(repo.join("notes.md"), "A line, reworded.\n").expect("content");
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "--quiet", "-m", "head"]);
+    let receipt = ReviewTransaction {
+        head: head_of(&repo),
+        base,
+        ..ledger_receipt()
+    };
+    let context = Context {
+        repo: Some("fixture/repo".to_owned()),
+        ..context_at(&repo)
+    };
+    let comments = vec![
+        live_claim("claude-a"),
+        published(&receipt),
+        recorded_lens_report_for(&receipt, 3, RELIABILITY_LENS, None),
+        stored_computed_verdict(&receipt, "medium", "approved", "[]"),
+    ];
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(
+        42,
+        stdout_with(&comments),
+    )]);
+    let release = CiRelease {
+        issue: 42,
+        run_id: "claude-a",
+        epoch: &receipt.epoch,
+        pr: receipt.pr,
+        head: &receipt.head,
+        base: &receipt.base,
+        digest: &receipt.digest,
+        worktree: Some(&repo),
+        never_ran_evidence_file: None,
+        now: "2026-08-31T00:00:00Z",
+    };
+    let failure =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || release_ci(&context, &release))
+            .expect_err("a release cleared over a generated file nobody regenerated");
+    assert_eq!(reason(failure), "generated-reproduction-mismatch");
+}
+
+#[test]
+fn a_low_release_reads_the_publication_lane_before_it_clears() {
+    let (_root, context, receipt) = low_change();
+    let comments = vec![live_claim("claude-a"), published(&receipt)];
+    let mut answers = lane_read_answers();
+    answers.insert(
+        0,
+        crate::test_env::issue_view_answer(42, stdout_with(&comments)),
+    );
+    answers[2] = serde_json::json!({
+        "matches": "check-runs",
+        "stdout": check_runs(&[check_run("ci", "completed", Some("failure"))]).to_string(),
+        "status": 0,
+    });
+    let bin = crate::test_env::scripted_gh();
+    let release = CiRelease {
+        issue: 42,
+        run_id: "claude-a",
+        epoch: &receipt.epoch,
+        pr: receipt.pr,
+        head: &receipt.head,
+        base: &receipt.base,
+        digest: &receipt.digest,
+        worktree: None,
+        never_ran_evidence_file: None,
+        now: "2026-08-31T00:00:00Z",
+    };
+    let failure =
+        crate::test_env::with_scripted_gh(bin.path(), &crate::test_env::answers(&answers), || {
+            release_ci(&context, &release)
+        })
+        .expect_err("a low receipt skipped the red lane");
+    assert_eq!(reason(failure), "publication-lane-red");
+}
+
+#[test]
 fn a_low_receipt_with_an_open_finding_is_not_released() {
     let (_root, context, receipt) = low_change();
     let comments = vec![
@@ -19213,6 +19317,7 @@ fn ci_is_refused_on_an_escalated_ledger_whatever_a_legacy_verdict_says() {
         base: &receipt.base,
         digest: &receipt.digest,
         worktree: None,
+        never_ran_evidence_file: None,
         now: "2026-08-31T00:00:00Z",
     };
     let failure =
@@ -21103,8 +21208,18 @@ fn an_approval_over_a_regenerated_file_is_recorded() {
     for before in [Some("old\n"), None] {
         let (_root, context, receipt) = generated_change(GENERATE_NOTES, before, "generated\n");
 
-        let answer = approve_computed(&context, &receipt, Vec::new(), true)
-            .expect("the regenerated bytes match");
+        let answer = approve_computed(
+            &context,
+            &receipt,
+            vec![recorded_lens_report_for(
+                &receipt,
+                3,
+                RELIABILITY_LENS,
+                None,
+            )],
+            true,
+        )
+        .expect("the regenerated bytes match");
 
         assert_eq!(answer["outcome"], "approved", "{before:?}: {answer}");
     }
@@ -21115,8 +21230,18 @@ fn an_approval_over_hand_edited_generated_bytes_is_refused_naming_the_path() {
     for before in [Some("old\n"), None] {
         let (_root, context, receipt) = generated_change(GENERATE_NOTES, before, "hand edited\n");
 
-        let failure = approve_computed(&context, &receipt, Vec::new(), true)
-            .expect_err("bytes nobody regenerated were approved");
+        let failure = approve_computed(
+            &context,
+            &receipt,
+            vec![recorded_lens_report_for(
+                &receipt,
+                3,
+                RELIABILITY_LENS,
+                None,
+            )],
+            true,
+        )
+        .expect_err("bytes nobody regenerated were approved");
 
         let envelope = failure.envelope();
         assert_eq!(
@@ -21132,8 +21257,18 @@ fn an_approval_over_hand_edited_generated_bytes_is_refused_naming_the_path() {
 fn an_approval_whose_declared_command_fails_is_refused_as_unavailable() {
     let (_root, context, receipt) = generated_change("exit 3", Some("old\n"), "generated\n");
 
-    let failure = approve_computed(&context, &receipt, Vec::new(), true)
-        .expect_err("an unrun command was read as a match");
+    let failure = approve_computed(
+        &context,
+        &receipt,
+        vec![recorded_lens_report_for(
+            &receipt,
+            3,
+            RELIABILITY_LENS,
+            None,
+        )],
+        true,
+    )
+    .expect_err("an unrun command was read as a match");
 
     let envelope = failure.envelope();
     assert_eq!(
@@ -21161,14 +21296,33 @@ fn a_rejection_does_not_run_the_declared_command() {
         Some("introduced"),
     );
 
-    let answer = approve_computed(&context, &receipt, vec![finding], false)
-        .expect("the rejection is recorded");
+    let answer = approve_computed(
+        &context,
+        &receipt,
+        vec![
+            recorded_lens_report_for(&receipt, 3, RELIABILITY_LENS, None),
+            finding,
+        ],
+        false,
+    )
+    .expect("the rejection is recorded");
 
     assert_eq!(answer["outcome"], "rejected", "{answer}");
     assert!(!marker.exists(), "a rejection executed repository code");
 
     let (_root, context, receipt) = generated_change(&command, Some("old\n"), "generated\n");
-    approve_computed(&context, &receipt, Vec::new(), true).expect("the approval records");
+    approve_computed(
+        &context,
+        &receipt,
+        vec![recorded_lens_report_for(
+            &receipt,
+            3,
+            RELIABILITY_LENS,
+            None,
+        )],
+        true,
+    )
+    .expect("the approval records");
     assert!(
         marker.exists(),
         "an approval did not run the declared command"
