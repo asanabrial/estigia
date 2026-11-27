@@ -24,6 +24,18 @@ pub const FOLLOW_UP: &str = "Run `transition --to done` after the merge \u{2014}
      the local pointer this run wrote, and the delivering run is the only context that can drop \
      it without asking the tracker whose it was.";
 
+const NOTE_SHA_CHARS: usize = 12;
+
+/// The close evidence a delivery posts: the pull request and the merge that delivered it, in the
+/// summary language. `deliver` and a release that closes a hand merge post the same sentence.
+pub fn merged_note(pr: u64, merge_sha: &str, language: &str) -> String {
+    let sha: String = merge_sha.chars().take(NOTE_SHA_CHARS).collect();
+    match language {
+        "Español" => format!("Fusionado en #{pr} (`{sha}`)."),
+        _ => format!("Merged in #{pr} (`{sha}`)."),
+    }
+}
+
 const QUERY: &str = r#"
 query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
   repository(owner: $owner, name: $name) {

@@ -35,7 +35,7 @@ pub(crate) fn failure_refusal(failure: &Failure) -> Refusal {
 }
 pub(crate) use capture::{REFUTATION_BATCH, jobs_dir, reviewer_failure};
 pub use checks::{RunChecks, recorded_summary as checks_receipt_summary, run_checks};
-pub(crate) use close::verified_delivery;
+pub(crate) use close::{DeliveryClose, verified_delivery, verified_delivery_close};
 pub(crate) use computed::{Settled, settle_severe};
 pub use recover::{RecoverReview, host_repo_of, recover_review};
 pub use status::review_status;
@@ -10235,6 +10235,7 @@ fn published(
             Failure::Write("the published marker could not be rendered".to_owned())
         })?,
     );
+    super::branch::record_branch(ledger, run_id, branch, now)?;
     ledger.append(&note, now)?;
 
     // Two `next` sentences, not one edited by a flag check downstream. The
@@ -12497,7 +12498,8 @@ fn recorded_branches(comments: &[ownership::Comment], run_id: &str) -> Vec<Strin
 }
 
 /// The local half of a release: put down the checkout this run created, once
-/// the tracker has confirmed the delivery it is released from.
+/// the tracker attributes the issue's close to the delivery or, when it attributes
+/// the close to none, once the delivery's merge alone is verified.
 ///
 /// Never a refusal. The release has already landed when this runs, so a
 /// checkout that cannot be put down is kept and named in the answer rather than
@@ -12511,7 +12513,13 @@ fn put_down_checkout(
     run_id: &str,
     comments: &[ownership::Comment],
 ) -> serde_json::Value {
-    match close::delivery_close(context, issue, comments, None, None) {
+    let delivered = match close::delivery_close(context, issue, comments, None, None) {
+        Ok(None) => {
+            close::verified_delivery_close(context, comments).map(|found| found.map(|(own, _)| own))
+        }
+        other => other,
+    };
+    match delivered {
         Ok(Some(own)) => {
             // The remote heads first: the deletion pushes from this checkout,
             // and `retire_checkout` removes it. A release run from inside its
@@ -12556,8 +12564,16 @@ fn put_down_checkout(
             "removed": false,
             "outcome": "kept",
             "worktree": worktree.display().to_string(),
-            "detail": "the issue's close is not the registered delivery's merge, so the checkout is \
-                       preserved",
+            "detail": "neither the issue's close nor a verified merge of the registered \
+                       publication is this delivery, so the checkout is preserved",
+        }),
+        Err(Failure::Stop(verification)) => serde_json::json!({
+            "removed": false,
+            "outcome": "kept",
+            "worktree": worktree.display().to_string(),
+            "detail": "the merge of the registered publication was not verified, so the checkout \
+                       is preserved",
+            "verification": verification,
         }),
         Err(failure) => serde_json::json!({
             "removed": false,

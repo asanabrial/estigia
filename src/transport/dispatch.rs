@@ -640,6 +640,129 @@ fn post_close_evidence(
     super::commands::comment(context, issue, path, Some(run_id), Some("note"), now)
 }
 
+/// The verified merge of a release that brings no evidence, when this release is the one that
+/// has to close it: the repository is `autonomous`, the window is open, the issue is in `review`
+/// or `done`, the latest confirmed publication's merge joins its reviewed head, and the tracker
+/// still reads the issue `OPEN`.
+///
+/// A merge that does not verify answers `None`, the plain release; a read that fails is the error.
+fn open_hand_merge(
+    context: &Context,
+    ledger: &super::store::Ledger,
+    issue: u64,
+) -> Result<Option<super::claim::DeliveryClose>, Failure> {
+    if !closes_hand_merges(context) || super::outbox::is_closed(context) {
+        return Ok(None);
+    }
+    if !matches!(ledger.state()?.as_deref(), Some("review" | "done")) {
+        return Ok(None);
+    }
+    let delivered = match super::claim::verified_delivery_close(context, &ledger.timeline()?) {
+        Ok(Some((delivered, _))) => delivered,
+        Ok(None) | Err(Failure::Stop(_)) => return Ok(None),
+        Err(failure) => return Err(failure),
+    };
+    let state = super::commands::issue_view(context, issue, "state")?;
+    Ok((state["state"].as_str() == Some("OPEN")).then_some(delivered))
+}
+
+/// Whether a release may close the tracker issue of a delivery merged by hand: only an
+/// `autonomous` repository's, because an `assisted` one writes nothing to the tracker.
+fn closes_hand_merges(context: &Context) -> bool {
+    context.layered().workflow == crate::config::Workflow::Autonomous
+}
+
+/// Closes a delivery merged by hand and released without evidence: `done`, the evidence
+/// `deliver` would have posted, the issue's close read back, then the release.
+fn close_hand_merge(
+    context: &Context,
+    ledger: &super::store::Ledger,
+    departure: &Departure<'_>,
+    delivered: &super::claim::DeliveryClose,
+) -> Result<serde_json::Value, Failure> {
+    let (issue, run_id, now) = (departure.issue, departure.run_id, departure.now);
+    let mut done = serde_json::Map::new();
+    let mut landed = false;
+    let stopped = |done: &mut serde_json::Map<_, _>, step: &str, failure: Failure, landed| {
+        if landed {
+            Ok(close_incomplete(std::mem::take(done), step, &failure))
+        } else {
+            Err(failure)
+        }
+    };
+
+    match ledger.state() {
+        Ok(state) if state.as_deref() == Some("review") => {
+            match super::commands::transition_on(context, ledger, issue, "done", None, now) {
+                Ok(moved) => {
+                    landed = true;
+                    done.insert("transition".to_owned(), moved);
+                }
+                Err(failure) => return stopped(&mut done, "transition", failure, landed),
+            }
+        }
+        Ok(_) => {}
+        Err(failure) => return stopped(&mut done, "transition", failure, landed),
+    }
+
+    let note = super::closing::merged_note(
+        delivered.pr,
+        &delivered.delivering_sha,
+        context.layered().summary_language.as_str(),
+    );
+    let path = crate::paths::scratch_file(&format!("{issue}-close-evidence.md"));
+    if let Err(error) = crate::paths::replace_atomically(&path, &format!("{note}\n")) {
+        let failure = Failure::Write(format!("the close evidence could not be staged: {error}"));
+        return stopped(&mut done, "evidence", failure, landed);
+    }
+    let posted = post_close_evidence(context, issue, &path, run_id, now);
+    let _ = std::fs::remove_file(&path);
+    match posted {
+        Ok(posted) => {
+            landed = true;
+            done.insert("evidence".to_owned(), posted);
+        }
+        Err(failure) => return stopped(&mut done, "evidence", failure, landed),
+    }
+
+    match close_issue(context, issue) {
+        Ok(state) => {
+            done.insert(
+                "issue_close".to_owned(),
+                serde_json::json!({ "state": state }),
+            );
+        }
+        Err(failure) => return stopped(&mut done, "issue-close", failure, landed),
+    }
+
+    match super::claim::unassign_on(context, ledger, departure) {
+        Ok(serde_json::Value::Object(mut fields)) => {
+            fields.extend(done);
+            Ok(serde_json::Value::Object(fields))
+        }
+        Ok(other) => Ok(other),
+        Err(failure) => stopped(&mut done, "release", failure, true),
+    }
+}
+
+/// `gh issue close`, read back: the state the tracker reports afterwards, or a write whose
+/// outcome could not be confirmed.
+fn close_issue(context: &Context, issue: u64) -> Result<String, Failure> {
+    super::run(
+        &["gh", "issue", "close", &issue.to_string()],
+        Some(&context.repo_dir),
+        super::How::write(),
+    )?;
+    let read = super::commands::issue_view(context, issue, "state")?;
+    match read["state"].as_str() {
+        Some("CLOSED") => Ok("CLOSED".to_owned()),
+        seen => Err(Failure::Write(format!(
+            "issue {issue} was closed but reads back as {}",
+            seen.unwrap_or("no state")
+        ))),
+    }
+}
+
 /// A landed write followed by a refusal: the answer a release gives when its
 /// close stopped part-way. A refusal would clear what the pointer recorded
 /// about a claim that is still held, so the stop is named in the answer.
@@ -676,7 +799,11 @@ fn merged_release(
         super::claim::validate_spend(&record.review(issue, run_id, now))?;
     }
     if evidence.is_none() && spends.is_empty() {
-        return super::claim::unassign(context, departure);
+        let ledger = super::store::Ledger::open(context, issue, now)?;
+        return match open_hand_merge(context, &ledger, issue)? {
+            Some(delivered) => close_hand_merge(context, &ledger, departure, &delivered),
+            None => super::claim::unassign_on(context, &ledger, departure),
+        };
     }
     let ledger = super::store::Ledger::open(context, issue, now)?;
     for record in &spends {

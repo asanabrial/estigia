@@ -6995,6 +6995,25 @@ impl RepublishWorld {
 }
 
 #[test]
+fn a_publication_records_its_branch_for_the_release_that_delivers_it() {
+    let world = republish_world();
+    let head = world.commit("work.txt", 3);
+
+    let (result, bodies) = world.publish_logging(&[], &head);
+
+    result.expect("the publication lands");
+    let marker = crate::transport::markers::render(
+        "branch",
+        &[("run-id", REPUBLISH_RUN), ("branch", REPUBLISH_BRANCH)],
+    )
+    .expect("a branch marker");
+    assert!(
+        bodies.contains(&marker),
+        "no branch marker was recorded: {bodies}"
+    );
+}
+
+#[test]
 fn an_unneeded_base_integration_over_an_approved_parent_is_refused_and_pushes_nothing() {
     let world = republish_world().protected(NON_STRICT);
     let (parent, parent_head) = world.approved_parent_with_integrated_base("base-only.txt");

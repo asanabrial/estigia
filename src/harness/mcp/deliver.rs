@@ -20,7 +20,6 @@ use crate::transport::{self, Failure, How, Output};
 
 const CONFLICT_LINES: usize = 8;
 const DATE_CHARS: usize = 10;
-const SHA_CHARS: usize = 12;
 const MAX_WAIT_SECONDS: u64 = 900;
 const DEFAULT_WAIT_SECONDS: u64 = 20;
 const EMPTY_ROLLUP_WINDOW_SECONDS: u64 = 600;
@@ -1217,11 +1216,7 @@ fn join_strings(values: &[Value]) -> String {
 }
 
 fn summary(facts: &Facts) -> String {
-    let sha: String = facts.merge_sha.chars().take(SHA_CHARS).collect();
-    match facts.language.as_str() {
-        "Español" => format!("Fusionado en #{} (`{sha}`).", facts.receipt.pr),
-        _ => format!("Merged in #{} (`{sha}`).", facts.receipt.pr),
-    }
+    crate::transport::closing::merged_note(facts.receipt.pr, &facts.merge_sha, &facts.language)
 }
 
 pub(super) fn evidence(facts: &Facts) -> String {

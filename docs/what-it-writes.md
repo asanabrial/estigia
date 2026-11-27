@@ -14,7 +14,7 @@ staged beside the file the link names and replaces that file, so the link surviv
 the permission bits of the file it replaces (on Windows, the read-only flag), so a `0600`
 `~/.claude.json` stays `0600`; a new file gets the platform default. Windows ACLs and ownership are not carried over. The staging lives in `paths::replace_bytes_atomically`. Every staged write in the crate takes its name from `paths::staged_path` (`<stem>.estigia-<pid>-<sequence>.tmp`), unique per call, so two threads of one process stage apart as two runs do, and `is_staged_write` recognises a leftover.
 
-**Not only setup writes, and not only uninstall takes back.** A run records the branch it started as
+**Not only setup writes, and not only uninstall takes back.** A run records each branch it started or published as
 a `branch` marker in the local store. `release` — the last step of a delivery — deletes every
 remote head those markers name whose head the delivering commit contains, leased on the head it read and reading each one back, then puts down every isolated checkout those markers name that the run owns and the delivery
 contains, with its local branch. `estigia prune` is the sweep for what no delivery owned: merged or closed

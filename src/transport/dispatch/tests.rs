@@ -1857,3 +1857,27 @@ fn a_malformed_until_issue_refuses_instead_of_vanishing() {
         refused.envelope()
     );
 }
+
+#[test]
+fn only_an_autonomous_repository_closes_a_hand_merged_delivery() {
+    let repo = crate::test_env::repository_with_commit();
+    let skill = tempfile::tempdir().expect("a skill root");
+    crate::skill::install(skill.path(), &crate::config::Config::default(), false)
+        .expect("the contract installs");
+    let at = |root: &std::path::Path| crate::transport::Context {
+        skill_dir: skill.path().to_path_buf(),
+        repo_dir: root.to_path_buf(),
+        config: Vec::new(),
+        repo: None,
+    };
+    assert!(super::closes_hand_merges(&at(repo.path())));
+
+    let path = crate::skill::repository_config_path(repo.path());
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("the config directory");
+    std::fs::write(
+        &path,
+        "| Setting | Value |\n|---|---|\n| Claim workflow | assisted |\n",
+    )
+    .expect("the repository file");
+    assert!(!super::closes_hand_merges(&at(repo.path())));
+}

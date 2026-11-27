@@ -2034,6 +2034,304 @@ fn releasing_a_delivered_issue_puts_its_checkout_and_branch_down() {
     );
 }
 
+struct HandMerged {
+    _rig: TrackerRig,
+    released: serde_json::Value,
+    said: String,
+    calls: String,
+    checkout: std::path::PathBuf,
+}
+
+struct HandMerge<'a> {
+    repository_rows: Option<&'a str>,
+    state: &'a str,
+    merge_read_fails: bool,
+}
+
+const DONE_HAND_MERGE: HandMerge<'static> = HandMerge {
+    repository_rows: None,
+    state: "done",
+    merge_read_fails: false,
+};
+
+fn release_after_a_hand_merge(given: HandMerge<'_>) -> HandMerged {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let run_id = "claude-abcd1234";
+    let issue: u64 = 22;
+    let branch = "fix/22-hand-merged";
+    let claim_op = "a".repeat(32);
+    let release_op = "b".repeat(32);
+    let epoch = "c".repeat(32);
+    let digest = "d".repeat(64);
+    let head = rig.head.clone();
+    let base = rig.head.clone();
+    let merge_sha = "f".repeat(40);
+
+    if let Some(rows) = given.repository_rows {
+        let path = estigia::skill::repository_config_path(repo);
+        std::fs::create_dir_all(path.parent().expect("a parent")).expect("the config directory");
+        std::fs::write(&path, format!("| Setting | Value |\n|---|---|\n{rows}\n"))
+            .expect("the repository file");
+    }
+    let checkout = home.join("hand-merged-checkout");
+    checked_git(repo, &["branch", branch, "HEAD"]);
+    checked_git(
+        repo,
+        &[
+            "worktree",
+            "add",
+            "--",
+            checkout.to_str().expect("the fixture path is UTF-8"),
+            branch,
+        ],
+    );
+
+    let runs_dir = home.join(".estigia").join("runs");
+    estigia::harness::session::update(&runs_dir, run_id, |run| {
+        run.issue = Some(estigia::identity::Identity::Number(issue));
+        run.state = Some(given.state.to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        run.worktree = Some(checkout.clone());
+        run.release_id = Some(release_op.clone());
+        run.operation_id = Some(claim_op.clone());
+    });
+
+    let marker = |kind: &str, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let claim = comment(
+        "IC_claim",
+        "2026-01-01T00:00:00Z",
+        format!(
+            "Claimed.\n\n{}\n",
+            marker(
+                "claim",
+                &[
+                    ("run-id", run_id),
+                    ("runtime", "claude"),
+                    ("horizon", "2099-01-01T00:00Z"),
+                    ("op-id", &claim_op),
+                ],
+            )
+        ),
+    );
+    let published = comment(
+        "IC_publication",
+        "2026-01-01T01:00:00Z",
+        format!(
+            "published.\n\n{}\n",
+            marker(
+                "published",
+                &[
+                    ("run-id", run_id),
+                    ("epoch", &epoch),
+                    ("pr", "77"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                ],
+            )
+        ),
+    );
+    let unassign = comment(
+        "IC_unassign",
+        "2026-01-02T00:00:00Z",
+        format!(
+            "releasing.\n\n{}\n",
+            marker(
+                "unassign",
+                &[
+                    ("run-id", run_id),
+                    ("runtime", "claude"),
+                    ("op-id", &release_op),
+                    ("target-op", &claim_op),
+                ],
+            )
+        ),
+    );
+    let timeline = |state: &str, comments: Vec<serde_json::Value>| {
+        serde_json::json!({
+            "state": state,
+            "assignees": [],
+            "labels": [{ "name": format!("status:{}", given.state) }],
+            "comments": comments,
+        })
+        .to_string()
+    };
+    let no_closing_pull_request = serde_json::json!({
+        "data": { "repository": { "issue": {
+            "closedByPullRequestsReferences": {
+                "nodes": [],
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
+            },
+        } } },
+    })
+    .to_string();
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "--json state",
+            "nth": 1,
+            "stdout": serde_json::json!({ "state": "OPEN" }).to_string(),
+            "status": 0,
+        },
+        {
+            "matches": "--json state",
+            "stdout": serde_json::json!({ "state": "CLOSED" }).to_string(),
+            "status": 0,
+        },
+        { "matches": "issue close", "status": 0 },
+        { "matches": "issue comment", "status": 0 },
+        {
+            "matches": "--json assignees,labels,comments",
+            "nth": 1,
+            "stdout": timeline("OPEN", vec![claim.clone(), published.clone()]),
+            "status": 0,
+        },
+        {
+            "matches": "--json assignees,labels,comments",
+            "nth": 2,
+            "stdout": timeline("OPEN", vec![claim.clone(), published.clone()]),
+            "status": 0,
+        },
+        {
+            "matches": "issue view",
+            "stdout": timeline("CLOSED", vec![claim, published, unassign]),
+            "status": 0,
+        },
+        {
+            "matches": "repo view",
+            "stdout": serde_json::json!({ "owner": { "login": "o" }, "name": "n" }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api graphql", "stdout": no_closing_pull_request, "status": 0 },
+        {
+            "matches": "pr view 77",
+            "stdout": serde_json::json!({ "mergeCommit": { "oid": merge_sha } }).to_string(),
+            "stderr": if given.merge_read_fails { "HTTP 502" } else { "" },
+            "status": i32::from(given.merge_read_fails),
+        },
+        {
+            "matches": format!("api repos/o/n/commits/{merge_sha}"),
+            "stdout": serde_json::json!({ "parents": [{ "sha": base }, { "sha": head }] })
+                .to_string(),
+            "status": 0,
+        },
+        {
+            "matches": "api user",
+            "stdout": serde_json::json!({ "login": "fixture" }).to_string(),
+            "status": 0,
+        },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let log = trace.path().join("calls.log");
+    let output = tracker_command(home, repo, bin, &answers)
+        .args(["release", "--run-id", run_id, "--json"])
+        .env("ESTIGIA_FAKE_COUNT", trace.path().join("count.json"))
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .output()
+        .expect("estigia release runs");
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let said = format!("{stdout}{}", String::from_utf8_lossy(&output.stderr));
+    HandMerged {
+        _rig: rig,
+        released: serde_json::from_str(stdout.trim()).unwrap_or(serde_json::Value::Null),
+        said,
+        calls: std::fs::read_to_string(&log).unwrap_or_default(),
+        checkout,
+    }
+}
+
+#[test]
+fn an_autonomous_release_after_a_hand_merge_closes_the_issue_and_puts_the_checkout_down() {
+    let run = release_after_a_hand_merge(DONE_HAND_MERGE);
+    let said = &run.said;
+    assert_eq!(run.released["released"], true, "{said}");
+    assert!(
+        run.calls
+            .lines()
+            .any(|line| line.contains("issue close 22")),
+        "the open issue was not closed: {said}\n{}",
+        run.calls
+    );
+    assert_eq!(
+        comment_writes(&run.calls),
+        1,
+        "the close posted no evidence, or more than one comment: {}",
+        run.calls
+    );
+    assert_eq!(run.released["checkout"]["removed"], true, "{said}");
+    assert!(!run.checkout.exists(), "the checkout survived: {said}");
+}
+
+#[test]
+fn an_assisted_repository_never_closes_the_issue_a_release_finds_open() {
+    let run = release_after_a_hand_merge(HandMerge {
+        repository_rows: Some("| Claim workflow | assisted |"),
+        ..DONE_HAND_MERGE
+    });
+    assert!(
+        run.said.contains("workflow-assisted-writes-no-tracker"),
+        "the release was not refused as an assisted tracker write: {}",
+        run.said
+    );
+    assert!(
+        !run.calls.lines().any(|line| line.contains("issue close")),
+        "an assisted repository's issue was closed: {}",
+        run.calls
+    );
+    assert_eq!(
+        comment_writes(&run.calls),
+        0,
+        "an assisted release posted to the tracker: {}",
+        run.calls
+    );
+}
+
+#[test]
+fn a_release_from_in_progress_never_closes_an_issue_an_earlier_merge_delivered() {
+    let run = release_after_a_hand_merge(HandMerge {
+        state: "in-progress",
+        ..DONE_HAND_MERGE
+    });
+    assert!(
+        !run.calls.lines().any(|line| line.contains("issue close")),
+        "an issue still in progress was closed: {}",
+        run.calls
+    );
+    assert_eq!(comment_writes(&run.calls), 0, "{}", run.calls);
+}
+
+#[test]
+fn an_unreadable_merge_refuses_the_release_rather_than_leaving_the_issue_open() {
+    let run = release_after_a_hand_merge(HandMerge {
+        merge_read_fails: true,
+        ..DONE_HAND_MERGE
+    });
+    assert_ne!(run.released["released"], true, "{}", run.said);
+    assert!(
+        !run.calls.lines().any(|line| line.contains("issue close")),
+        "{}",
+        run.calls
+    );
+    assert!(
+        run.checkout.exists(),
+        "the checkout was put down: {}",
+        run.said
+    );
+}
+
 /// A delivery deletes every remote head its run recorded starting,
 /// not only the pull request's own — the branch linked by `claim`'s checkout is not
 /// always the branch published, and GitHub's `delete_branch_on_merge` removes
