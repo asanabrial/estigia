@@ -127,17 +127,26 @@ pub fn code_of(source: &str) -> String {
 ///
 /// `#[cfg(test)]` on `mod tests;` declares a file a walk skips anyway;
 /// `#[cfg(test)]` on `mod tests {` opens one right here. Only the second is a
-/// place to stop reading. `source` must be [`code_of`]'s output: a comment can
-/// move a boundary taken from raw text.
+/// place to stop reading, and the attribute has to be attached to that module:
+/// a test-only item — `#[cfg(test)] pub(crate) fn …` — followed later by the
+/// module is not the boundary. `source` must be [`code_of`]'s output: a comment
+/// can move a boundary taken from raw text.
 pub fn shipped_part(source: &str) -> &str {
     let mut at = 0;
     while let Some(found) = source[at..].find("#[cfg(test)]") {
         let start = at + found;
-        let rest = &source[start..];
-        let inline = rest
-            .find("mod tests")
-            .is_some_and(|mods| rest[mods..].starts_with("mod tests {"));
-        if inline {
+        let rest = source[start + "#[cfg(test)]".len()..].trim_start();
+        let Some(end) = rest.find(['{', ';']) else {
+            return source;
+        };
+        let head = &rest[..end];
+        let opens_here = rest.as_bytes()[end] == b'{';
+        let names_a_module = head.split_whitespace().count() >= 2
+            && head
+                .split_whitespace()
+                .nth_back(1)
+                .is_some_and(|word| word == "mod");
+        if opens_here && names_a_module {
             return &source[..start];
         }
         at = start + "#[cfg(test)]".len();
@@ -147,7 +156,7 @@ pub fn shipped_part(source: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::code_of;
+    use super::{code_of, shipped_part};
 
     #[test]
     fn a_trailing_line_comment_is_removed_but_the_code_before_it_stays() {
@@ -281,5 +290,32 @@ mod tests {
             stripped.matches("\r\n").count(),
             source.matches("\r\n").count()
         );
+    }
+
+    #[test]
+    fn an_inline_test_module_is_the_cut() {
+        let source = "fn ship() {}\n#[cfg(test)]\nmod tests {\n    fn only_tests() {}\n}\n";
+        assert_eq!(shipped_part(source), "fn ship() {}\n");
+    }
+
+    #[test]
+    fn a_test_only_item_before_the_module_is_not_the_cut() {
+        // The case that dropped the end of `src/paths.rs`: `#[cfg(test)]` on a
+        // helper, and the inline module much later. Cutting at the attribute
+        // removed shipping code the file ends with.
+        let source = "#[cfg(test)]\npub(crate) fn only_tests() {}\nfn ships() {}\n\
+                      #[cfg(test)]\nmod tests {\n    fn only_tests() {}\n}\n";
+        assert_eq!(
+            shipped_part(source),
+            "#[cfg(test)]\npub(crate) fn only_tests() {}\nfn ships() {}\n"
+        );
+    }
+
+    #[test]
+    fn a_module_declaration_is_not_the_cut() {
+        // `mod tests;` opens a file a walk skips anyway, so the rest of this
+        // file still ships.
+        let source = "fn ship() {}\n#[cfg(test)]\nmod tests;\nfn also_ships() {}\n";
+        assert_eq!(shipped_part(source), source);
     }
 }

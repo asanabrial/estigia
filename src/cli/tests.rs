@@ -52,6 +52,52 @@ fn merge_held_run() -> crate::harness::Run {
     run
 }
 
+#[test]
+fn a_hook_that_cannot_build_a_context_says_why_it_did_not_answer() {
+    let refusal = Refusal::not_started(
+        "home-not-resolvable",
+        "could not determine the user home directory",
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            "a HOME or USERPROFILE the process can read",
+        ),
+    );
+    let said = super::not_checked_note(&refusal);
+    assert!(said.contains("was not checked against any claim"), "{said}");
+    assert!(
+        said.contains("could not determine the user home directory"),
+        "the reason is not in the note: {said}"
+    );
+
+    let with_a_command = Refusal::not_started(
+        "not-a-repository",
+        "the checkout is not a git repository",
+        Resolution::run("estigia setup --all"),
+    );
+    let said = super::not_checked_note(&with_a_command);
+    assert!(said.contains("run: estigia setup --all"), "{said}");
+}
+
+/// Every code `ReviewerCode::code` can answer with, in one place: the class
+/// test below and the scan test that reads the enum both ask this list.
+const REVIEWER_CODES: [&str; 15] = [
+    "reviewer-cli-missing",
+    "reviewer-launch-failed",
+    "reviewer-exited-nonzero",
+    "reviewer-no-answer",
+    "reviewer-error-result",
+    "reviewer-output-too-large",
+    "reviewer-deadline",
+    "reviewer-unavailable",
+    "reviewer-result-malformed",
+    "reviewer-payload-mismatch",
+    "reviewer-input-too-large",
+    "reviewer-inspect-transaction-unresolved",
+    "reviewer-inspect-absent-side",
+    "reviewer-inspect-outside-correction",
+    "reviewer-inspect-unreadable",
+];
+
 fn inventory() -> Vec<Refusal> {
     let mut refusals = vec![
         setup::no_agent_named(),
@@ -92,6 +138,11 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::decision_mode::refusal(&[], true),
         crate::harness::issue_creation::refusal(Some("gh issue create"))
             .expect("a line that files an issue is refused"),
+        crate::config::dropped_routes_report(&[crate::config::DroppedRoute {
+            key: "implementer".to_owned(),
+            replacement: Some("developer"),
+        }]),
+        crate::config::legacy_workers_report("builder", &[]),
         crate::harness::provisional_read::refusal(Some("gh issue view 9000000000777"))
             .expect("a provisional number is answered from the store"),
         // The role gate's only refusal, by its real constructor.
@@ -1203,13 +1254,36 @@ fn commands_named() -> Vec<String> {
 
 /// Splits a suggestion into argv, dropping a trailing `# comment`.
 fn argv(command: &str) -> Vec<String> {
-    command
-        .split('#')
-        .next()
-        .unwrap_or_default()
-        .split_whitespace()
-        .map(str::to_owned)
-        .collect()
+    let command = command.split('#').next().unwrap_or_default();
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for ch in command.chars() {
+        if escaped {
+            word.push(ch);
+            escaped = false;
+            continue;
+        }
+        match (quote, ch) {
+            (Some(open), ch) if ch == open => quote = None,
+            (Some('\''), _) => word.push(ch),
+            (Some(_), '\\') => escaped = true,
+            (Some(_), ch) => word.push(ch),
+            (None, '\'' | '"') => quote = Some(ch),
+            (None, '\\') => escaped = true,
+            (None, ch) if ch.is_whitespace() => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            (None, ch) => word.push(ch),
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
 }
 
 /// one row; a screen that writes fourteen has fourteen chances to do it, so it
@@ -2243,23 +2317,6 @@ fn nothing_configured_is_unchanged_without_a_substitution() {
     );
 }
 
-///
-/// Named modules and not just `mod tests`, because `outcome.rs` calls its
-/// `mod message_shape`, and a rule that only knew one name would swap this
-/// blindness for a narrower one.
-fn shipped_part(source: &str) -> &str {
-    let mut at = 0;
-    while let Some(found) = source[at..].find("#[cfg(test)]") {
-        let start = at + found;
-        let rest = source[start + "#[cfg(test)]".len()..].trim_start();
-        if rest.starts_with("mod ") {
-            return &source[..start];
-        }
-        at = start + "#[cfg(test)]".len();
-    }
-    source
-}
-
 fn crate_sources() -> Vec<String> {
     let mut found = Vec::new();
     let mut pending = vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")];
@@ -2281,7 +2338,7 @@ fn crate_sources() -> Vec<String> {
             // Strip before splitting: a comment naming `#[cfg(test)]` would
             // otherwise move the cut in the raw text.
             let stripped = crate::source_text::code_of(&source);
-            found.push(shipped_part(&stripped).to_owned());
+            found.push(crate::source_text::shipped_part(&stripped).to_owned());
         }
     }
     assert!(
@@ -2352,6 +2409,22 @@ fn the_inventory_covers_every_code_the_crate_raises() {
                 "`{raised}` is raised but never put through the ratchet; add it to inventory()"
             );
         }
+    }
+}
+
+#[test]
+fn the_inventory_scans_every_code_reviewer_launch_can_answer_with() {
+    // The enum's codes come from `fn code(…) -> &'static str` arms, a shape the
+    // walk has to read.
+    let scanned: Vec<String> = crate_sources()
+        .iter()
+        .flat_map(|source| codes_in(source))
+        .collect();
+    for code in REVIEWER_CODES {
+        assert!(
+            scanned.iter().any(|found| found == code),
+            "`{code}` is not read by the refusal-code inventory: {scanned:?}"
+        );
     }
 }
 
@@ -3486,14 +3559,25 @@ fn resolution_argument(rest: &str) -> Option<(String, usize)> {
 fn string_literal(text: &str) -> Option<String> {
     let text = text.trim_start();
     if let Some(body) = text.strip_prefix('"') {
+        // The runtime string, not the source spelling: `Resolution::run` is a
+        // command a person pastes, so `\"Model routing\"` is one quoted word.
+        let mut value = String::new();
         let mut escaped = false;
-        for (at, ch) in body.char_indices() {
+        for ch in body.chars() {
             if escaped {
+                value.push(match ch {
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    other => other,
+                });
                 escaped = false;
             } else if ch == '\\' {
                 escaped = true;
             } else if ch == '"' {
-                return Some(body[..at].to_owned());
+                return Some(value);
+            } else {
+                value.push(ch);
             }
         }
         return None;
@@ -3556,7 +3640,7 @@ fn suggested_in_source(root: &std::path::Path) -> Suggested {
             // for the same reason this does: a comment naming `#[cfg(test)]`
             // would otherwise move the cut in the raw text.
             let stripped = crate::source_text::code_of(&text);
-            let text = shipped_part(&stripped);
+            let text = crate::source_text::shipped_part(&stripped);
             let mut rest = text;
             let mut consumed = 0usize;
             while let Some(at) = rest.find("Resolution::run(") {
@@ -10725,24 +10809,7 @@ fn every_code_the_crate_raises_has_a_class_and_the_class_agrees_with_the_outcome
         .collect();
     assert!(unclassed.is_empty(), "raised and unclassed: {unclassed:?}");
 
-    let reviewer = [
-        "reviewer-cli-missing",
-        "reviewer-launch-failed",
-        "reviewer-exited-nonzero",
-        "reviewer-no-answer",
-        "reviewer-error-result",
-        "reviewer-output-too-large",
-        "reviewer-deadline",
-        "reviewer-unavailable",
-        "reviewer-result-malformed",
-        "reviewer-payload-mismatch",
-        "reviewer-input-too-large",
-        "reviewer-inspect-transaction-unresolved",
-        "reviewer-inspect-absent-side",
-        "reviewer-inspect-outside-correction",
-        "reviewer-inspect-unreadable",
-    ];
-    for code in reviewer {
+    for code in REVIEWER_CODES {
         assert!(
             crate::harness::refusal_class::class_of(code).is_some(),
             "`{code}` has no class"
@@ -10752,7 +10819,7 @@ fn every_code_the_crate_raises_has_a_class_and_the_class_agrees_with_the_outcome
         .map(|(code, _)| code)
         .filter(|code| {
             !all.contains(*code)
-                && !reviewer.contains(code)
+                && !REVIEWER_CODES.contains(code)
                 && !crate::harness::tracker::TRANSPORT_VOCABULARY.contains(code)
                 && *code != "transport-refused"
         })

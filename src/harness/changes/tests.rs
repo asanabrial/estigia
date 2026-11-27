@@ -333,7 +333,7 @@ fn one_checkout_the_budget_did_not_reach_is_named_in_the_singular() {
 }
 
 #[test]
-fn a_registered_checkout_git_cannot_read_is_counted_as_unread() {
+fn a_registered_checkout_that_was_deleted_is_reported_as_missing() {
     let (root, main, trees) = fixture();
     let gone = add_tree(&main, &trees, "issue-1-gone");
     let dirty = add_tree(&main, &trees, "issue-2-dirty");
@@ -347,11 +347,90 @@ fn a_registered_checkout_git_cannot_read_is_counted_as_unread() {
     );
     assert!(
         notice.contains(
-            ". 1 checkout could not be read in time, so what it holds is unknown. `estigia changes`"
+            ". 1 checkout git still registers is gone from disk \u{2014} `git worktree prune` \
+             forgets it, and it holds nothing. `estigia changes`"
         ),
-        "{notice}"
+        "a deleted checkout was not reported as one: {notice}"
+    );
+    assert!(
+        !notice.contains("could not be read in time"),
+        "a directory that is gone was described as a read that ran out of time: {notice}"
     );
     assert!(!notice.contains("issue-1-gone"), "{notice}");
+}
+
+#[test]
+fn a_checkout_the_filesystem_cannot_be_asked_about_is_unread_not_missing() {
+    let root = tempfile::tempdir().expect("a root");
+    let file = root.path().join("a-file");
+    std::fs::write(&file, "not a directory\n").expect("a file");
+
+    assert!(matches!(
+        super::presence(&root.path().join("gone")),
+        super::Presence::Gone
+    ));
+    assert!(matches!(
+        super::presence(root.path()),
+        super::Presence::Present
+    ));
+    // A path through a regular file is ENOTDIR where the filesystem says so.
+    // A platform that answers "not found" instead is a different answer, but
+    // it is never `Present`, and it never reaches the notice as a directory
+    // that was removed by hand.
+    assert!(!matches!(
+        super::presence(&file.join("child")),
+        super::Presence::Present
+    ));
+}
+
+#[test]
+fn a_registered_checkout_git_cannot_read_is_reported_unread_in_the_notice() {
+    let (root, main, trees) = fixture();
+    let broken = add_tree(&main, &trees, "issue-3-broken");
+    std::fs::remove_file(broken.join(".git")).expect("a worktree's .git is a file");
+
+    let notice = orphan_notice(&context(root.path(), &main), &[]).expect("a notice");
+    assert!(
+        notice.contains("could not be read in time"),
+        "a present checkout git cannot read was not reported as unread: {notice}"
+    );
+    assert!(
+        !notice.contains("gone from disk"),
+        "a checkout that is there was reported as removed by hand: {notice}"
+    );
+}
+
+#[test]
+fn a_notice_of_only_missing_checkouts_is_written_and_says_the_plural() {
+    let (root, main, trees) = fixture();
+    let first = add_tree(&main, &trees, "issue-1-gone");
+    let second = add_tree(&main, &trees, "issue-2-gone");
+    std::fs::remove_dir_all(&first).unwrap();
+    std::fs::remove_dir_all(&second).unwrap();
+
+    let notice = orphan_notice(&context(root.path(), &main), &[]).expect("a notice");
+    assert!(
+        notice.starts_with("2 checkouts git still registers are gone from disk"),
+        "{notice}"
+    );
+    assert!(!notice.contains("carries uncommitted work"), "{notice}");
+}
+
+#[test]
+fn a_staged_rename_is_one_uncommitted_file_in_the_start_notice() {
+    let (root, main, trees) = fixture();
+    let renamed = add_tree(&main, &trees, "issue-1-renamed");
+    git(&renamed, &["mv", "kept.txt", "renamed.txt"]);
+
+    let notice = orphan_notice(&context(root.path(), &main), &[]).expect("a notice");
+    assert!(
+        notice.starts_with("1 checkout no run holds carries uncommitted work: "),
+        "{notice}"
+    );
+    assert!(
+        notice.contains("issue-1-renamed, 1 uncommitted file"),
+        "a staged rename was counted as two files: {notice}"
+    );
 }
 
 #[test]

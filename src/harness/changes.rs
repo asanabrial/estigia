@@ -292,6 +292,7 @@ fn orphan_notice_of(
     mut over_budget: impl FnMut() -> bool,
 ) -> Option<String> {
     let mut dirty: Vec<(PathBuf, Option<String>, usize)> = Vec::new();
+    let mut missing = 0usize;
     let mut unread = 0usize;
     for entry in registered.values() {
         if entry.path.join(".git").is_dir()
@@ -308,6 +309,18 @@ fn orphan_notice_of(
         {
             continue;
         }
+        // A directory removed by hand stays registered until `git worktree prune`.
+        match presence(&entry.path) {
+            Presence::Gone => {
+                missing += 1;
+                continue;
+            }
+            Presence::Unreadable => {
+                unread += 1;
+                continue;
+            }
+            Presence::Present => {}
+        }
         if over_budget() {
             unread += 1;
             continue;
@@ -320,7 +333,7 @@ fn orphan_notice_of(
             None => unread += 1,
         }
     }
-    if dirty.is_empty() && unread == 0 {
+    if dirty.is_empty() && missing == 0 && unread == 0 {
         return None;
     }
     dirty.sort();
@@ -352,6 +365,20 @@ fn orphan_notice_of(
             }
         ));
     }
+    if missing > 0 {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        text.push_str(&format!(
+            "{missing} checkout{} git still registers {} gone from disk \u{2014} `git worktree \
+             prune` forgets {}, and {} hold{} nothing.",
+            if missing == 1 { "" } else { "s" },
+            if missing == 1 { "is" } else { "are" },
+            if missing == 1 { "it" } else { "them" },
+            if missing == 1 { "it" } else { "they" },
+            if missing == 1 { "s" } else { "" }
+        ));
+    }
     if unread > 0 {
         if !text.is_empty() {
             text.push(' ');
@@ -373,6 +400,24 @@ fn is_bare_repository(path: &Path) -> bool {
     !path.join(".git").exists() && path.join("HEAD").is_file() && path.join("objects").is_dir()
 }
 
+/// Whether a registered checkout is there, gone, or could not be asked.
+enum Presence {
+    Present,
+    Gone,
+    Unreadable,
+}
+
+/// `Gone` is only an answer the filesystem gave: a path that cannot be
+/// stat'ed — an unmounted volume, a directory reached through something that
+/// is not one — was not measured, and is never reported as holding nothing.
+fn presence(path: &Path) -> Presence {
+    match path.try_exists() {
+        Ok(true) => Presence::Present,
+        Ok(false) => Presence::Gone,
+        Err(_) => Presence::Unreadable,
+    }
+}
+
 fn quick_status(path: &Path) -> Option<usize> {
     let output = run(
         &["git", "status", "--porcelain=v1", "-z", "-uall"],
@@ -384,11 +429,19 @@ fn quick_status(path: &Path) -> Option<usize> {
     )
     .ok()?;
     (output.status == 0).then(|| {
-        output
-            .stdout
-            .split('\0')
-            .filter(|entry| entry.len() > 3)
-            .count()
+        // The `-z` rename shape is `R  new\0old\0`, one file with two names.
+        let mut entries = output.stdout.split('\0');
+        let mut count = 0usize;
+        while let Some(entry) = entries.next() {
+            if entry.len() <= 3 {
+                continue;
+            }
+            if entry.get(..2).is_some_and(|code| code.contains(['R', 'C'])) {
+                entries.next();
+            }
+            count += 1;
+        }
+        count
     })
 }
 
