@@ -145,6 +145,34 @@ fn never(_: &Path, _: &str) -> Result<u32, Failure> {
     panic!("a job was started");
 }
 
+const RELEASE_LOOP_TICKS: u32 = 1200;
+
+fn release_loop(release: &Path, ticks: u32) -> String {
+    format!(
+        "i=0; while [ ! -e {} ] && [ $i -lt {ticks} ]; do i=$((i+1)); sleep 0.05; done",
+        release.display()
+    )
+}
+
+#[test]
+fn the_release_loop_ends_by_itself_when_nothing_writes_the_file() {
+    let held = tempfile::tempdir().expect("a directory");
+    let release = held.path().join("release");
+    let began = std::time::Instant::now();
+    let status = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(release_loop(&release, 4))
+        .status()
+        .expect("the loop runs");
+    assert!(status.success());
+    assert!(
+        began.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        began.elapsed()
+    );
+    assert!(!release.exists());
+}
+
 #[test]
 fn a_repository_that_declares_nothing_answers_so_records_nothing_and_clears_as_before() {
     crate::transport::store::forget_scratch_store();
@@ -259,7 +287,7 @@ fn a_running_job_answers_running_in_the_wait_it_was_given_and_is_never_started_t
     let release = held.path().join("release");
     let (_root, context, receipt) = checked_change(Some(&declaration_for(&[(
         "slow",
-        &format!("while [ ! -e {} ]; do sleep 0.05; done", release.display()),
+        &release_loop(&release, RELEASE_LOOP_TICKS),
     )])));
     let comments = timeline_of(&receipt);
     let starts = AtomicUsize::new(0);
@@ -370,7 +398,7 @@ fn a_running_checks_job_names_the_collect_that_waits_on_it() {
     let release = held.path().join("release");
     let (_root, context, receipt) = checked_change(Some(&declaration_for(&[(
         "slow",
-        &format!("while [ ! -e {} ]; do sleep 0.05; done", release.display()),
+        &release_loop(&release, RELEASE_LOOP_TICKS),
     )])));
     let comments = timeline_of(&receipt);
     let running = ask(
@@ -380,7 +408,7 @@ fn a_running_checks_job_names_the_collect_that_waits_on_it() {
         &on_a_thread,
     )
     .expect("a running job is an answer");
-    let _release = Release(release);
+    let release = Release(release);
     assert_eq!(running["state"], "running", "{running}");
 
     let held_back = super::super::checks::holding(&context, &comments, 42, &receipt)
@@ -393,6 +421,16 @@ fn a_running_checks_job_names_the_collect_that_waits_on_it() {
         "{held_back}"
     );
     assert_eq!(held_back["arguments"]["checks"], true, "{held_back}");
+
+    drop(release);
+    let done = ask(
+        &context,
+        &comments,
+        &request(30, &receipt.base),
+        &on_a_thread,
+    )
+    .expect("the released job is collected");
+    assert_eq!(done["state"], "finished", "{done}");
 }
 
 #[test]
