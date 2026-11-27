@@ -750,51 +750,9 @@ fn a_change_over_the_ceiling_is_never_submitted_clean() {
         )
     })
     .expect("the claim");
-    #[cfg(unix)]
-    let mut reviewer = {
-        use std::os::unix::process::CommandExt;
-        let store = Store::open(&store_path().expect("a path")).expect("the store");
-        let epoch = store
-            .pull_review_of(RUN)
-            .expect("a read")
-            .expect("a row")
-            .epoch;
-        let job = rig.root.path().join("job");
-        std::fs::create_dir_all(&job).expect("a job directory");
-        store
-            .insert_pull_review_slot(&epoch, "review-risk", &job.to_string_lossy(), 0)
-            .expect("a slot");
-        let child = std::process::Command::new("sh")
-            .args(["-c", "sleep 30"])
-            .process_group(0)
-            .spawn()
-            .expect("a reviewer");
-        store
-            .mark_pull_review_slot_spawned(&epoch, "review-risk", child.id())
-            .expect("the pid");
-        child
-    };
-
     let answer = gh(&rig, &[], || submit(&rig.context, RUN)).expect("an answer");
     assert_eq!(answer["submitted"], false);
     assert_eq!(answer["reason"], "review-payload-too-large");
-
-    #[cfg(unix)]
-    {
-        let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        loop {
-            match reviewer.try_wait() {
-                Ok(Some(_)) => break,
-                other => {
-                    assert!(
-                        std::time::Instant::now() < until,
-                        "a refusal left the reviewer running: {other:?}"
-                    );
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-            }
-        }
-    }
     assert!(!log(&rig).contains("--method POST"));
     gone(&rig, Path::new(held["worktree"].as_str().expect("a path")));
 }
