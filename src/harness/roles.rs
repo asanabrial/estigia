@@ -832,6 +832,8 @@ fn permission_rules(frontmatter: &str) -> Vec<(String, Verdict)> {
 /// choosing that one, and reading the home copy instead would enforce a list
 /// nobody in this checkout wrote.
 ///
+/// Each file is matched on the `name:` it declares, not on `<agent>.md`.
+///
 /// Returns the file's text, not a path: everything downstream is about what it
 /// says, and handing back a path invites a second read that could disagree with
 /// the first.
@@ -851,10 +853,8 @@ pub fn definition_for(
     home: Option<&std::path::Path>,
     agent: &str,
 ) -> Result<Option<String>, Refusal> {
-    // The name arrives from the host and lands in a path. A name with a
-    // separator or a parent segment would read a file outside the agents
-    // directory entirely, and the list it found there would be enforced as
-    // though somebody had written it for this role.
+    // A name carrying a separator or a parent segment is not one a host asks
+    // for, and must not be read as a path.
     if agent.is_empty()
         || agent.contains(['/', '\\'])
         || agent.contains("..")
@@ -876,6 +876,11 @@ pub fn definition_for(
         repo_dir.join(".opencode").join("agents"),
     ];
     if let Some(home) = home {
+        // With `CLAUDE_CONFIG_DIR` set, `~/.claude/agents` is a file the host
+        // never loads.
+        if let Some(claude_config_dir) = crate::setup::claude_config_dir() {
+            roots.push(claude_config_dir.join("agents"));
+        }
         roots.push(home.join(".claude").join("agents"));
         // OpenCode keeps its own under the XDG config directory, not the home
         // root — verified against a real installation. And **the** XDG config
@@ -903,22 +908,61 @@ pub fn definition_for(
         if let Some(moved) = crate::setup::xdg_config_home() {
             roots.push(moved.join("opencode").join("agents"));
         }
-        // Beside the default, never instead — the same loosening as the
-        // OpenCode root above, one configuration over.
-        if let Some(claude_config_dir) = crate::setup::claude_config_dir() {
-            roots.push(claude_config_dir.join("agents"));
+    }
+    for root in roots {
+        if let Some(text) = definition_named(&root, agent)? {
+            return Ok(Some(text));
         }
     }
-    for file in roots
-        .into_iter()
-        .map(|root| root.join(format!("{agent}.md")))
-    {
+    Ok(None)
+}
+
+/// The definition in one agents directory whose declared `name:` is `agent`.
+///
+/// A host loads these by the name each file declares, not by its file name, so
+/// opening `<root>/<agent>.md` found a renamed definition nowhere — and nothing
+/// found is read as *every tool allowed*. A file whose frontmatter declares no
+/// name is still matched by its stem, which is the convention a host falls back
+/// to. Only a file named for this role is a reason to refuse: an unrelated
+/// definition that nothing can read is not this sub-agent's list.
+fn definition_named(root: &std::path::Path, agent: &str) -> Result<Option<String>, Refusal> {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(Refusal::not_started(
+                "agent-definition-unreadable",
+                format!("{}: {error}", root.display()),
+                Resolution::no_command(
+                    NoCommandReason::OperatorKnowledge,
+                    "that agents directory readable \u{2014} which definition this host would \
+                     load from it cannot be learned while nothing can list it",
+                ),
+            ));
+        }
+    };
+    let mut files: Vec<std::path::PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|kind| kind == "md"))
+        .collect();
+    files.sort();
+    for file in files {
         match std::fs::read_to_string(&file) {
-            Ok(text) => return Ok(Some(text)),
-            // Almost every candidate is absent — five roots are searched and at
-            // most one holds the file.
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => {
+            Ok(text) => {
+                let declared = declared_name(&text).ok().flatten().or_else(|| {
+                    file.file_stem()
+                        .and_then(|stem| stem.to_str())
+                        .map(str::to_owned)
+                });
+                if declared.as_deref() == Some(agent) {
+                    return Ok(Some(text));
+                }
+            }
+            // A definition this role would use and nothing can read: the
+            // caller gets a refusal rather than the next file, because
+            // stepping over it hands the sub-agent every tool.
+            Err(error) if file.file_stem().and_then(|stem| stem.to_str()) == Some(agent) => {
                 return Err(Refusal::not_started(
                     "agent-definition-unreadable",
                     format!("{}: {error}", file.display()),
@@ -930,6 +974,7 @@ pub fn definition_for(
                     ),
                 ));
             }
+            Err(_) => continue,
         }
     }
     Ok(None)

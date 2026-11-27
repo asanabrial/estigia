@@ -1410,10 +1410,12 @@ was verified from OpenCode's own documentation, and from Pi's, which is read fro
 the example subagent extension and not from Pi's core (see [`honesty.md`](honesty.md)).
 
 Claude Code's row is where `setup` writes the reviewer definition, and OpenCode's and Pi's are
-where it writes the two delegated workers. `harness::roles::definition_for` is where the gate reads the
-reviewer definition back, at the home-relative `~/.claude/agents` and beside it at
-`$CLAUDE_CONFIG_DIR/agents`; `docs/honesty.md`'s entry on `CLAUDE_CONFIG_DIR` carries the full account, including
-`authorize_review_blind_launch`'s canonical-reviewer proof and the control-surface fragments.
+where it writes the two delegated workers. `harness::roles::definition_for` is where the gate reads a
+definition back: it matches each `*.md` in its roots on the `name:` the file declares rather than on its
+file name, and asks `$CLAUDE_CONFIG_DIR/agents` before the home-relative `~/.claude/agents` when the
+variable is set. [`honesty-review-tier.md`](honesty-review-tier.md)'s entry on `CLAUDE_CONFIG_DIR` carries the
+full account, including `authorize_review_blind_launch`'s canonical-reviewer proof and the
+control-surface fragments.
 
 ## Which runtime word each agent's hook derives
 
