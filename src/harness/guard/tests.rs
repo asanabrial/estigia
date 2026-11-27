@@ -291,7 +291,7 @@ fn a_pre_push_hook_nothing_can_read_is_not_a_repository_with_no_hook() {
     let repo = repository.path();
     let hooks = hooks_directory(repo).expect("a real repository has a hooks directory");
     let hook = hooks.join(HOOK);
-    let executable = Path::new("estigia");
+    let executable = Path::new("/usr/bin/estigia");
 
     // The floor first: with nothing there, this still installs. A fix that made
     // every repository unreadable would pass every assertion below.
@@ -1763,7 +1763,7 @@ fn a_hook_git_will_not_run_is_not_an_installed_one() {
     // platform this is being written on: git for Windows never consults the
     // mode, so `git_would_run` is always true there and the state is
     // unreachable. A decision nobody can reach is a decision nobody can check.
-    let ours = format!("#!/bin/sh\n# {MARKER}\nestigia hook pre-push\n");
+    let ours = super::script(Path::new("/usr/bin/estigia"));
     let theirs = "#!/bin/sh\nexec estigia hook pre-push \"$@\"\n";
     let strangers = "#!/bin/sh\nnpx some-linter\n";
 
@@ -1786,6 +1786,176 @@ fn a_hook_git_will_not_run_is_not_an_installed_one() {
     // And no file at all is absent, not inert.
     assert_eq!(state_of(None, true), State::Absent);
     assert_eq!(state_of(None, false), State::Absent);
+}
+
+#[test]
+fn a_hook_with_the_marker_and_no_guard_body_is_disarmed_and_doctor_says_so() {
+    let repo = repository();
+    let path = super::hooks_directory(repo.path())
+        .expect("a hooks directory")
+        .join(super::HOOK);
+    std::fs::create_dir_all(path.parent().expect("a hooks parent")).expect("the hooks directory");
+    std::fs::write(&path, format!("#!/bin/sh\n{MARKER}\n")).expect("a disarmed hook");
+    super::make_executable(&path).expect("the bit git needs");
+
+    assert_eq!(super::state(repo.path()), State::Disarmed);
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    let crate::harness::doctor::Health::Broken { detail, resolution } = &guard.health else {
+        panic!(
+            "a marker with no guard body was reported as health: {:?}",
+            guard.health
+        );
+    };
+    assert!(
+        detail.contains("does not answer"),
+        "the finding does not say the gate does not answer: {detail}"
+    );
+    assert!(
+        matches!(resolution, crate::outcome::Resolution::Run { command } if command == "estigia guard"),
+        "a disarmed hook has a reinstall that clears it: {resolution:?}"
+    );
+}
+
+#[test]
+fn a_reworded_comment_does_not_disarm_an_intact_hook() {
+    let installed = super::script(Path::new("/usr/bin/estigia"));
+    let reworded = installed.replace(
+        "# managed by estigia guard",
+        "# managed by estigia guard\n# a note a later build added",
+    );
+    assert!(super::faithful(&reworded), "{reworded}");
+    assert_eq!(state_of(Some(&reworded), true), State::Installed);
+}
+
+#[test]
+fn a_hook_whose_call_line_runs_something_else_is_disarmed() {
+    let installed = super::script(Path::new("/usr/bin/estigia"));
+    for replacement in ["true", "estigia", "/bin/true", "'/bin/true'"] {
+        let line = format!("{replacement} hook pre-push");
+        let substituted = installed.replace("'/usr/bin/estigia' hook pre-push", &line);
+        assert_ne!(
+            installed, substituted,
+            "the call line is not where the test expects"
+        );
+        assert!(!super::faithful(&substituted), "{substituted}");
+        assert_eq!(state_of(Some(&substituted), true), State::Disarmed);
+    }
+}
+
+#[test]
+fn a_hook_whose_record_and_call_line_both_name_another_binary_reads_installed() {
+    let moved = super::script(Path::new("/opt/bin/estigia"));
+    assert!(super::faithful(&moved), "{moved}");
+    assert_eq!(state_of(Some(&moved), true), State::Installed);
+}
+
+#[test]
+fn reinstalling_over_a_disarmed_hook_puts_the_body_back() {
+    let repo = repository();
+    let path = super::hooks_directory(repo.path())
+        .expect("a hooks directory")
+        .join(super::HOOK);
+    std::fs::create_dir_all(path.parent().expect("a hooks parent")).expect("the hooks directory");
+    std::fs::write(&path, format!("#!/bin/sh\n{MARKER}\n")).expect("a disarmed hook");
+    super::make_executable(&path).expect("the bit git needs");
+    assert_eq!(super::state(repo.path()), State::Disarmed);
+
+    super::install(repo.path(), Path::new("/usr/bin/estigia"), false)
+        .expect("a disarmed hook of Estigia's was not rewritten");
+    assert_eq!(super::state(repo.path()), State::Installed);
+}
+
+#[test]
+fn an_early_exit_appended_to_the_installed_hook_is_not_reported_in_force() {
+    let repo = repository();
+    super::install(repo.path(), Path::new("/usr/bin/estigia"), false).expect("the guard installs");
+    let path = super::hooks_directory(repo.path())
+        .expect("a hooks directory")
+        .join(super::HOOK);
+    let installed = std::fs::read_to_string(&path).expect("the installed hook reads");
+    std::fs::write(&path, format!("{installed}\nexit 0\n")).expect("an early exit");
+
+    assert_eq!(super::state(repo.path()), State::Altered);
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    let crate::harness::doctor::Health::Broken { detail, resolution } = &guard.health else {
+        panic!(
+            "a hook that exits before the gate was reported in force: {:?}",
+            guard.health
+        );
+    };
+    assert!(
+        detail.contains("did not write"),
+        "the finding does not say the body and the lines are not Estigia's: {detail}"
+    );
+    assert!(
+        matches!(resolution, crate::outcome::Resolution::NoCommand { .. }),
+        "the reinstall refuses this file, so no command may be named: {resolution:?}"
+    );
+}
+
+#[test]
+fn somebody_elses_hook_under_a_custom_hooks_path_is_not_reported_as_estigias() {
+    let repo = repository();
+    crate::transport::run(
+        &["git", "config", "core.hooksPath", "pushchecks"],
+        Some(repo.path()),
+        crate::transport::How::write(),
+    )
+    .expect("the hooks path is configured");
+    let path = repo.path().join("pushchecks").join(super::HOOK);
+    std::fs::create_dir_all(path.parent().expect("a hooks parent")).expect("the hooks directory");
+    std::fs::write(&path, "#!/bin/sh\necho mine\n").expect("somebody's hook");
+    super::make_executable(&path).expect("the bit git needs");
+    assert_eq!(super::state(repo.path()), State::Foreign);
+
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    let crate::harness::doctor::Health::Skipped { detail } = &guard.health else {
+        panic!(
+            "somebody else's hook was reported as Estigia's guard: {:?}",
+            guard.health
+        );
+    };
+    assert!(
+        detail.contains("did not write"),
+        "the finding does not leave the file to its owner: {detail}"
+    );
+}
+
+#[test]
+fn a_guard_installed_outside_the_control_surface_is_reported() {
+    let repo = repository();
+    crate::transport::run(
+        &["git", "config", "core.hooksPath", "pushchecks"],
+        Some(repo.path()),
+        crate::transport::How::write(),
+    )
+    .expect("the hooks path is configured");
+    super::install(repo.path(), Path::new("/usr/bin/estigia"), false).expect("the guard installs");
+    assert_eq!(super::state(repo.path()), State::Installed);
+
+    let guard = crate::harness::doctor::examine(Some(repo.path()), repo.path())
+        .into_iter()
+        .find(|check| check.name == "push-guard")
+        .expect("the push guard is reported");
+    assert!(
+        guard.health.is_broken(),
+        "a guard outside the control surface was reported as health: {:?}",
+        guard.health
+    );
+    let said = format!("{:?}", guard.health);
+    assert!(
+        said.contains("control surface"),
+        "the finding does not say what the mismatch is: {said}"
+    );
 }
 
 #[test]

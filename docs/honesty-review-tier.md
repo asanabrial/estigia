@@ -440,7 +440,9 @@ review tier, the lens and the finding do not establish.
 - **`CLAUDE_CONFIG_DIR` is followed by `setup` and the gate, and is deliberately not contained-checked.**
   `resolve_paths`, `definition_for`, `authorize_review_blind_launch` and
   `harness::matches_relocated_claude_config` all resolve under `$CLAUDE_CONFIG_DIR` when it is set.
-  `authorize_review_blind_launch` proves the canonical reviewer against `$CLAUDE_CONFIG_DIR/agents`
+  `definition_for` asks that directory **first** and keeps `~/.claude/agents` after it, so a same-named
+  file the host never loads cannot decide the role while a definition only the home tree has is still
+  found. `authorize_review_blind_launch` proves the canonical reviewer against `$CLAUDE_CONFIG_DIR/agents`
   alone and never against `~/.claude/agents`, which belongs to the profile the operator is not running
   under. The relocated-root match requires the root to begin at a path boundary and asks the shell
   road's folded spelling of the root with one separator and with two, so a root containing a space or

@@ -50,6 +50,12 @@ pub enum State {
     /// consults the file mode, a hook without the execute bit is skipped
     /// **silently**.
     Inert,
+    /// Estigia's marker is there and the body this binary installs is not —
+    /// truncated, or replaced after the marker.
+    Disarmed,
+    /// Estigia's marker is there, the installed body is not, and the file also
+    /// carries lines Estigia did not write.
+    Altered,
     /// Nothing is installed.
     Absent,
     /// A hook file is there and reading it failed — not `Absent`, and the
@@ -127,12 +133,55 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
     if !runnable {
         return State::Inert;
     }
+    if ours(text) && !faithful(text) {
+        return if edited(Some(text)) {
+            State::Altered
+        } else {
+            State::Disarmed
+        };
+    }
     // Somebody else's hook that calls this one is `Chained`.
     if ours(text) {
         State::Installed
     } else {
         State::Chained
     }
+}
+
+/// The line naming the executable the hook was installed from, so the body can
+/// be compared exactly rather than by forgiving any path-shaped word.
+const EXECUTABLE: &str = "# estigia executable:";
+
+/// Whether `text` is the hook this build writes, apart from comment prose.
+///
+/// The call line is compared as written against the executable the file itself
+/// records: a substituted command — `true`, a bare name, any path — is not this
+/// build's body, and reading it as installed is the silent disarming the states
+/// exist to report. A hook written before the record line existed cannot be
+/// compared and is `Disarmed`, which names `estigia guard` as the way back.
+fn faithful(text: &str) -> bool {
+    let Some(executable) = recorded_executable(text) else {
+        return false;
+    };
+    instructions(text) == instructions(&script(Path::new(&executable)))
+}
+
+fn recorded_executable(text: &str) -> Option<String> {
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix(EXECUTABLE))
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
+}
+
+/// The lines that decide what the hook does: comments are prose, except the
+/// shebang, which the shell reads.
+fn instructions(text: &str) -> Vec<&str> {
+    text.lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty())
+        .filter(|line| !line.trim_start().starts_with('#') || line.starts_with("#!"))
+        .collect()
 }
 
 /// Whether an uninstall may take this hook away.
@@ -145,30 +194,29 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
 fn removable(state: State, text: Option<&str>) -> bool {
     let unchanged = |text: Option<&str>| text.is_some_and(ours) && !edited(text);
     match state {
-        State::Installed | State::Inert => unchanged(text),
-        State::Absent | State::Foreign | State::Chained | State::Unreadable => false,
+        State::Installed | State::Inert | State::Disarmed => unchanged(text),
+        State::Absent | State::Foreign | State::Chained | State::Unreadable | State::Altered => {
+            false
+        }
     }
 }
 
 /// Whether Estigia's hook carries somebody's additions: compared against every
-/// line this binary writes, not against a hash, because the script names the
-/// executable's path and two machines produce two different files.
+/// instruction this binary writes, not against a hash, because the script names
+/// the executable's path and two machines produce two different files.
 fn edited(text: Option<&str>) -> bool {
     let Some(text) = text else {
         return false;
     };
-    // Rendered for the path this file itself names, so the comparison is about
-    // *content*: a hook installed by an Estigia that has since moved is still
-    // unedited.
+    let called = format!(" hook {HOOK}");
     let rendered = script(Path::new("x"));
-    let mine: std::collections::BTreeSet<&str> = rendered
-        .lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty() && !line.contains("estigia"))
+    let mine: std::collections::BTreeSet<&str> = instructions(&rendered)
+        .into_iter()
+        .filter(|line| !line.ends_with(&called))
         .collect();
-    text.lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty() && !line.contains("estigia"))
+    instructions(text)
+        .into_iter()
+        .filter(|line| !line.ends_with(&called))
         .any(|line| !mine.contains(line))
 }
 
@@ -287,6 +335,7 @@ fn script(executable: &Path) -> String {
     [
         "#!/bin/sh",
         MARKER,
+        &format!("{EXECUTABLE} {}", executable.display()),
         "#",
         "# Refuses a push that no live claim authorises. Removed by",
         "# `estigia guard --uninstall`; bypassed by `git push --no-verify`,",
@@ -355,7 +404,9 @@ pub fn install(repo_dir: &Path, executable: &Path, dry_run: bool) -> Result<Stat
         // Estigia's own hook, with somebody's lines added to it: refused for
         // the same reason `Foreign` is — rewriting the file here would take
         // their lines away.
-        State::Installed | State::Inert if edited(fs::read_to_string(&path).ok().as_deref()) => {
+        State::Installed | State::Inert | State::Disarmed | State::Altered
+            if edited(fs::read_to_string(&path).ok().as_deref()) =>
+        {
             return Err(Refusal::not_started(
                 "push-hook-carries-your-lines",
                 format!("{} has lines Estigia did not write", path.display()),
@@ -369,6 +420,7 @@ pub fn install(repo_dir: &Path, executable: &Path, dry_run: bool) -> Result<Stat
             ));
         }
         State::Installed if dry_run => return Ok(State::Installed),
+        State::Disarmed if dry_run => return Ok(State::Disarmed),
         // Somebody else's hook that hands the push to Estigia: the gate is
         // already running, and the file around it is theirs.
         State::Chained => return Ok(State::Chained),

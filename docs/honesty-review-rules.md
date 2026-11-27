@@ -152,7 +152,11 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
     authorisation, passed by the operator or by an agent (finished cleanup is the run's to execute), but
     `--no-verify` is the rail the guard's own script names, so anything that can run `estigia prune` can
     delete a remote head without a claim. The listing before the deletion, and the rule that a live claim's
-    head or a checkout with unpublished commits is never marked, bound it.
+    head, a checkout with unpublished commits, or a head whose commits are reachable from no other ref is
+    never marked, bound it. The last rule answers a closed issue or pull request, which says the work is
+    over and not that deleting the only ref holding its commits is safe; `commits_held_elsewhere` reads
+    `git rev-list --count <oid> --not --exclude=refs/remotes/origin/<branch> --all` and a failed read keeps
+    the head.
   - `Evidence standard` is one row for one shipped reviewer definition, not per role: the delegated roles
     carry fixed grants, and a repository wanting a different grant for one has no way to say so.
 
@@ -225,6 +229,12 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   claim's checkout beside the worktree, so Estigia's own tools no longer *produce* such a pointer; it stands
   for a run whose `repo_dir` genuinely is a worktree or a hand-written record. Whether the fix is naming the
   file or widening what a worktree run covers is open.
+
+  A guard installed under a custom `core.hooksPath` is now visible even though it is not closed:
+  `guard::hooks_directory` follows the row while `CONTROL_SURFACE` spells `hooks/pre-push` only, so the
+  `push-guard` row of `doctor` answers broken and names the path when the installed hook is not a path the
+  gate reads as control surface. A **write** to that hook is still admitted; the matcher is static and does
+  not consult the checkout's git configuration.
 
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does not
   appear only once a handoff exists (else deleting the handoff comment would lower the bar from *a computed

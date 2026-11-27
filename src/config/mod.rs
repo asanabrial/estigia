@@ -2044,7 +2044,7 @@ pub(crate) fn dropped_routes_report(dropped: &[DroppedRoute]) -> Refusal {
 }
 
 /// What a read did with a retired `Delegated workers` row.
-fn legacy_workers_report(value: &str, migrated: &[&str]) -> Refusal {
+pub(crate) fn legacy_workers_report(value: &str, migrated: &[&str]) -> Refusal {
     let message = if migrated.is_empty() {
         format!(
             "`{LEGACY_WORKERS_LABEL}` is {value:?}, which is not a value it ever took; the row is \

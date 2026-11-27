@@ -640,6 +640,76 @@ fn a_name_from_the_host_never_reads_outside_the_agents_directory() {
 }
 
 #[test]
+fn a_definition_is_found_by_its_declared_name_not_by_its_file_name() {
+    // The host loads a definition under the `name:` it declares, so a file
+    // called `renamed.md` that declares `name: builder` is the builder role.
+    // Looking only for `builder.md` found nothing, and nothing is read as
+    // every tool allowed.
+    let root = tempfile::tempdir().expect("a temporary root");
+    let agents = root.path().join(".claude/agents");
+    std::fs::create_dir_all(&agents).expect("the directory");
+    std::fs::write(
+        agents.join("renamed.md"),
+        "---\nname: builder\ntools: Read\n---\n",
+    )
+    .expect("the definition");
+    // And the reverse: a file named for the role whose declaration names a
+    // different one is the other role, not this one.
+    std::fs::write(
+        agents.join("builder.md"),
+        "---\nname: architect\ntools: Grep\n---\n",
+    )
+    .expect("a second definition");
+
+    let found = definition_for(root.path(), None, "builder")
+        .expect("a readable search")
+        .expect("the definition declaring the name was not found");
+    assert_eq!(allowlist(&found).expect("a list"), ["Read"]);
+    assert!(
+        gate(Some("builder"), "Bash", Some(&found)).is_some(),
+        "the declared list was not enforced"
+    );
+    let architect = definition_for(root.path(), None, "architect")
+        .expect("a readable search")
+        .expect("the file named for `builder` declares `architect` and was not found");
+    assert_eq!(allowlist(&architect).expect("a list"), ["Grep"]);
+}
+
+#[test]
+fn the_host_directory_wins_over_the_home_directory_when_claude_config_dir_is_set() {
+    // With `CLAUDE_CONFIG_DIR` set, Claude reads definitions from there, not
+    // from `~/.claude/agents`. A same-named file the host never loads must not
+    // decide the role.
+    let home = tempfile::tempdir().expect("a home");
+    let relocated = tempfile::tempdir().expect("a relocated CLAUDE_CONFIG_DIR");
+    let repo = tempfile::tempdir().expect("a checkout");
+
+    let host = relocated.path().join("agents");
+    let default = home.path().join(".claude").join("agents");
+    std::fs::create_dir_all(&host).expect("the host directory");
+    std::fs::create_dir_all(&default).expect("the default directory");
+    std::fs::write(
+        host.join("builder.md"),
+        "---\nname: builder\ntools: Read\n---\n",
+    )
+    .expect("the host's definition");
+    std::fs::write(default.join("builder.md"), BUILDER).expect("the home's definition");
+
+    let found = with_process_env(
+        "CLAUDE_CONFIG_DIR",
+        &relocated.path().display().to_string(),
+        || definition_for(repo.path(), Some(home.path()), "builder"),
+    )
+    .expect("a readable search")
+    .expect("found");
+    assert_eq!(
+        allowlist(&found).expect("a list"),
+        ["Read"],
+        "the definition at the directory Claude reads was not the one enforced"
+    );
+}
+
+#[test]
 fn the_project_definition_wins_over_the_operators_own() {
     // A repository that ships its own `builder` is choosing that one, and
     // enforcing the home copy instead would hold a list nobody in this
