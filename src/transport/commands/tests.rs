@@ -111,7 +111,7 @@ fn assess_autoclose_reports_a_linked_branch_as_the_cause() {
     let issue = 12;
     let base = "main";
     let answers = serde_json::to_string(&serde_json::json!([
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -166,7 +166,7 @@ fn an_unreadable_commit_range_is_a_failure_and_never_a_branch_link() {
 
     let base = "no-such-base";
     let answers = serde_json::to_string(&serde_json::json!([
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({

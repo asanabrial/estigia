@@ -174,7 +174,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   - **A title or body edit is admitted with no claim, under any claim and under `Issue required`**
     (`harness::text_edit`): one plain `gh issue edit` or `gh pr edit` carrying only `--title`, `--body`,
     `--body-file` and `--repo`, or a `gh api` `PATCH` of one issue or pull request whose fields are only `title`
-    and `body`. A label, an assignee, a base, a state, a comment, GraphQL, `--input`, an expansion or a second
+    and `body`. A base is not text: `gh pr edit` carrying `--base` is classified as the boundary `gh pr edit`
+    and needs the claim any boundary needs, so a run cannot move a pull request's base unwatched. A label, an
+    assignee, a state, a comment, GraphQL, `--input`, an expansion or a second
     command on the line keeps the answer it had, and a closed window holds it
     (`a_plain_title_or_body_edit_is_one`, `anything_more_than_a_title_or_a_body_is_not`,
     `a_title_or_body_edit_passes_under_an_assisted_claim`, `an_unclaimed_title_or_body_edit_passes_under_on`,

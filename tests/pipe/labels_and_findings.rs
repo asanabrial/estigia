@@ -63,7 +63,7 @@ fn a_transition_to_the_state_an_issue_already_holds_keeps_its_label() {
             "status": 0,
         },
         { "matches": "projectItems", "stdout": items, "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "issue view", "labels": true, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
@@ -181,7 +181,7 @@ fn a_label_readback_that_fails_after_the_edit_landed_reports_the_write_and_names
     .expect("the issue's labels are written");
 
     let answers = serde_json::to_string(&serde_json::json!([
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "issue view", "labels": true, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
@@ -295,7 +295,7 @@ fn the_repair_a_failed_read_back_names_clears_the_item_it_was_named_over() {
     .expect("the issue's labels are written");
 
     let answers = serde_json::to_string(&serde_json::json!([
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "issue view", "labels": true, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
@@ -1112,7 +1112,7 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
             { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
             { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
             { "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 },
-            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
             {
                 "matches": "api graphql",
                 "stdout": serde_json::json!({

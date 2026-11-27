@@ -1499,6 +1499,42 @@ fn a_merge_tree_that_fails_is_unreadable_not_an_advanced_base() {
 }
 
 #[test]
+fn a_base_that_does_not_descend_from_the_reviewed_one_hands_back_as_moved() {
+    let world = world_over(&[("b.txt", "one\n")], |dir| {
+        commit(dir, "c.txt", "two\n", "topic")
+    });
+    let first = git(
+        world.work.path(),
+        &["rev-parse", &format!("{}^", world.base)],
+    );
+    git(
+        world.work.path(),
+        &[
+            "push",
+            "--quiet",
+            "origin",
+            &format!("{first}:refs/heads/side"),
+        ],
+    );
+    let mut script = green_script(&world);
+    script[0] = json!({
+        "matches": "statusCheckRollup",
+        "stdout": json!({
+            "statusCheckRollup": [check("COMPLETED", "SUCCESS")],
+            "mergeStateStatus": "CLEAN",
+            "headRefOid": world.head,
+            "baseRefOid": first,
+            "baseRefName": "side",
+        })
+        .to_string(),
+        "status": 0,
+    });
+    let ran = drive(&fake(&world), &script, &request());
+    assert_eq!(stopped(&ran), ("base", "base-moved"));
+    assert!(!merged_by_gh(&ran));
+}
+
+#[test]
 fn a_checks_receipt_that_cannot_be_read_is_said_so_in_the_evidence() {
     let world = world("b.txt", "two\n");
     let mut held = fake(&world);
@@ -1724,10 +1760,10 @@ fn store_holder_at(
     session::store(&context.state_root, &run).expect("the pointer writes");
 }
 
-fn pr_head_answer(head: &str) -> Value {
+fn pr_head_answer(head: &str, base: &str) -> Value {
     json!({
         "matches": "pr view 7",
-        "stdout": json!({"headRefOid": head}).to_string(),
+        "stdout": json!({"headRefOid": head, "baseRefOid": base}).to_string(),
         "status": 0,
     })
 }
@@ -1778,7 +1814,7 @@ fn the_live_merge_decision_names_its_caller_when_another_live_run_holds_the_same
     let script = answers(&[
         crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
         crate::test_env::live_holder_issue("claude-bystander", 34, "in-progress"),
-        pr_head_answer(&receipt.head),
+        pr_head_answer(&receipt.head, &receipt.base),
     ]);
     let allowed = crate::transport::store::with_store_at(&store, || {
         crate::test_env::with_scripted_gh(bin.path(), &script, || {
@@ -1853,7 +1889,7 @@ fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_unreadable
         bin.path(),
         &answers(&[
             crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
-            pr_head_answer(&"f".repeat(40)),
+            pr_head_answer(&"f".repeat(40), &holder_receipt().base),
         ]),
         || {
             live_for(&context, "claude-caller000")
@@ -1880,7 +1916,7 @@ fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_unreadable
             bin.path(),
             &answers(&[
                 crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
-                pr_head_answer(&holder_receipt().head),
+                pr_head_answer(&holder_receipt().head, &holder_receipt().base),
             ]),
             || {
                 let transport = transport::Context::live(
@@ -2018,7 +2054,7 @@ fn a_release_that_stopped_part_way_is_not_read_as_delivered_beside_a_notice() {
     let script = answers(&[
         json!({
             "matches": "repo view",
-            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}",
             "status": 0,
         }),
         json!({
@@ -2153,7 +2189,7 @@ fn the_live_merge_decision_reads_the_window_the_repository_answers_now() {
     let bin = scripted_gh();
     let script = answers(&[
         crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
-        pr_head_answer(&receipt.head),
+        pr_head_answer(&receipt.head, &receipt.base),
     ]);
     let decide = |window: &str| {
         std::fs::write(

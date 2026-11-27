@@ -691,6 +691,7 @@ Closes #464",
                 "status": 0,
             },
             { "matches": "pr list", "stdout": listed, "status": 0 },
+            { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
             { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
         ]))
         .expect("the fake tracker script serialises");
@@ -928,7 +929,7 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
             "stdout": serde_json::json!({ "body": remote_body }).to_string(),
             "status": 0,
         },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -1160,7 +1161,7 @@ fn a_closing_keyword_naming_another_issue_refuses_after_the_push_on_a_reused_pr(
         // The remote body the local scan cannot see: a closing keyword naming
         // another issue.
         { "matches": "json body", "stdout": serde_json::json!({ "body": "Closes #464" }).to_string(), "status": 0 },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({
@@ -1364,6 +1365,7 @@ fn an_unreadable_pr_body_refuses_before_the_remote_is_touched() {
             }]).to_string(),
             "status": 0,
         },
+        { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
@@ -1488,6 +1490,7 @@ fn a_closed_issue_still_refuses_a_write_inside_the_checkout() {
             }).to_string(),
             "status": 0,
         },
+        { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
@@ -1763,7 +1766,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
             serde_json::json!({ "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 }),
             serde_json::json!({ "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 }),
             serde_json::json!({ "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 }),
-            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
             serde_json::json!({
                 "matches": "api graphql",
                 "stdout": serde_json::json!({
@@ -2038,6 +2041,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
     let unreadable = serde_json::to_string(&serde_json::json!([
         { "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 },
         { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
+        { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         // The readback `ensure_draft` makes, and nothing after it: this is the
         // first `pr view` of the operation, so failing it stops exactly there.
         { "matches": "headRefOid", "stdout": "", "status": 1 },
@@ -2087,6 +2091,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
         // `--undo` is unmatched, so it "succeeds"; the readback disagrees.
         { "matches": "headRefOid", "stdout": ready_pr.to_string(), "status": 0 },
+        { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
@@ -2135,6 +2140,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         // The draft readback succeeds, so `ensure_draft` returns having written.
         { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
         { "matches": "pr edit", "stdout": "", "status": 1 },
+        { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
@@ -2208,6 +2214,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
                 "matches": "pr list", "nth": 2, "store_append": second_run_writes(&store_path),
                 "stdout": "[]", "status": 0,
             }),
+            { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
             serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
         ]))
         .expect("the fake tracker script serialises")
@@ -2282,6 +2289,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
             }),
             // The readback `ensure_draft` makes after `--undo`: now a draft.
             serde_json::json!({ "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 }),
+            { "matches": "repo view", "stdout": "{\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
             serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
         ]))
         .expect("the fake tracker script serialises")
@@ -2481,7 +2489,7 @@ fn a_rebased_republish_records_history_rewritten_instead_of_the_parent_range() {
         serde_json::json!({ "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 }),
         serde_json::json!({ "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 }),
         serde_json::json!({ "matches": "json body", "stdout": serde_json::json!({"body": format!("Refs #{issue}.\n")}).to_string(), "status": 0 }),
-        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+        serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 }),
         serde_json::json!({
             "matches": "api graphql",
             "stdout": serde_json::json!({

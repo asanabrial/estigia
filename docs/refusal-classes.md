@@ -174,6 +174,11 @@ Judgement calls that could have gone the other way:
   and on every other delivery alike. A `cd` the gate cannot read, or a checkout git cannot say
   anything about (so it is neither known to be the same repository nor known to be another), is
   `review-checkout-unreadable` (`unavailable`).
+- `verdict-bound-to-other-base` is `stale`: the pull request's base no longer descends from the base
+  the receipt recorded, so the merge would land commits no review saw. `review-base-unreadable` is
+  `unavailable` for the ancestry that could not be read. `publication-base-not-the-integration-branch`
+  is `refused`: the `--base` named is not the repository's default branch, which is the rule and not
+  a moved target.
 - Not writing (`*-unwritable`, `*-not-writable`) is `refused`: the file system said no before
   anything was attempted, and repeating the command repeats the answer until it is fixed.
   `store-unwritable` is this class: the store's directory sits on a network filesystem whose

@@ -183,7 +183,7 @@ fn world(
             }).to_string(),
             "status": 0,
         },
-        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\",\"defaultBranchRef\":{\"name\":\"main\"}}", "status": 0 },
         {
             "matches": "api graphql",
             "stdout": serde_json::json!({

@@ -249,7 +249,10 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   the covered directory selected for this call, not inferred from the pointer, whose worktree can be absent
   after a handoff. A `gh pr merge` is refused against the PR head the tracker reports (one `gh pr view
   <number>` read per attempt), never the invoking checkout's `HEAD`, which under Claude Code is structurally
-  the launch checkout. A linked sibling sharing the pointer checkout's Git common directory can reach that
+  the launch checkout. The same read carries the PR's base: a base that is neither the receipt's base nor a
+  descendant of it refuses `verdict-bound-to-other-base`, and an ancestry the checkout cannot read refuses
+  `review-base-unreadable`, so a pull request retargeted after its review no longer merges past it. A linked
+  sibling sharing the pointer checkout's Git common directory can reach that
   verification: the classifier retains one positive numeric PR only from one literal `gh pr merge <number>
   ...`, candidates are filtered by complete `receipt.pr == command PR`, exactly one holder must remain, and
   only then are the tracker's PR head and that holder's claim compared. Refusals name the cause:
