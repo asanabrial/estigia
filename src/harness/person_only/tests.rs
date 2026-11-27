@@ -1053,3 +1053,82 @@ fn a_stand_down_still_lifts_another_deny_beside_a_recovery_refusal() {
         "{decision:?}"
     );
 }
+
+#[test]
+fn every_spelling_that_sets_a_governing_row_is_named() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = test_context(root.path());
+    for line in [
+        "estigia config set \"Delivery authorisation\" auto",
+        "estigia --json config set \"Transition authorisation\" ask",
+        "cd repo && estigia config set \"Merge by\" person",
+        "estigia config set \"Decision mode\" auto --repo",
+        "estigia config set \"Issue required\" off",
+        "estigia config set \"Unclaimed write policy\" off",
+        "estigia config set \"Delivery authorisation (per agent)\" auto",
+    ] {
+        assert_eq!(
+            named_in(&line.to_ascii_lowercase()).map(|command| command.code),
+            Some(SETTING.code),
+            "`{line}` was not named"
+        );
+        denied_by_every_road_with(
+            &context,
+            root.path(),
+            "Bash",
+            &serde_json::json!({ "command": line }),
+            SETTING.target,
+        );
+    }
+}
+
+#[test]
+fn a_setting_that_does_not_govern_writes_is_not_person_only() {
+    for line in [
+        "estigia config set \"Model routing\" developer=opus",
+        "estigia config set \"Workflow\" autonomous",
+        "estigia config set \"Summary language\" Español",
+        "estigia config list",
+        "estigia config repos",
+    ] {
+        assert!(
+            !named_in(&line.to_ascii_lowercase())
+                .is_some_and(|command| command.code == SETTING.code),
+            "`{line}` was refused as a governing setting"
+        );
+    }
+}
+
+#[test]
+fn a_governing_setting_is_refused_with_the_persons_command() {
+    let refusal = refusal(&Action::Write {
+        target: SETTING.target.to_owned(),
+    })
+    .expect("refused");
+    assert_eq!(refusal.code, SETTING.code);
+    assert!(
+        refusal.to_string().contains("estigia config set"),
+        "{refusal}"
+    );
+}
+
+#[test]
+fn the_settings_a_person_only_rule_names_are_the_rows_that_govern_writes() {
+    let labels: Vec<&str> = GOVERNING_SETTINGS
+        .iter()
+        .map(|setting| setting.label())
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            "Delivery authorisation",
+            "Transition authorisation",
+            "Merge by",
+            "Decision mode",
+            "Issue required",
+        ]
+    );
+    for setting in GOVERNING_SETTINGS {
+        assert_eq!(Setting::from_label(setting.label()), Some(*setting));
+    }
+}

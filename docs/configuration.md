@@ -697,6 +697,12 @@ another directory read nothing.
 - `config set "Delivery authorisation" ask --repo` (and `ask 30m`) writes only that row into the
   repository's file. `config list` in that repository shows the value and marks the row
   `(repository)`; the agent's own row is unchanged.
+- An agent's shell line cannot set the five rows that decide what an agent may do without a person:
+  `Delivery authorisation`, `Transition authorisation`, `Merge by`, `Decision mode` and `Issue
+  required` are refused `config-set-is-for-a-person` there, and a person runs the command in their own
+  shell. The same rule does not reach the loop or the TUI, which write through the library rather
+  than a shell line, nor an agent's other settings, which stay gated writes rather than person-only
+  ones ([what the gate reaches](honesty-gate-reach.md)).
 - `auto --repo` over an `ask` any layer holds is refused (`repository-cannot-loosen`), naming the
   file that holds the `ask` — the operator's `estigia.local.md`, the agent's own file, or the
   contract — and naming a command only where running it clears the block. The agent's own file gets

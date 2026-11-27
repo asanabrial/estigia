@@ -1,7 +1,18 @@
 //! The commands that are a person's decision and never an agent's.
 
 use super::Population;
+use crate::config::Setting;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
+
+/// The five settings that decide what an agent may do without a person. An
+/// agent's own shell line does not set them; the operator's does.
+pub const GOVERNING_SETTINGS: &[Setting] = &[
+    Setting::Delivery,
+    Setting::Transitions,
+    Setting::MergeBy,
+    Setting::DecisionMode,
+    Setting::IssueRequirement,
+];
 
 /// One command only a person may run, and what the gate says when an agent's line does.
 pub struct PersonOnly {
@@ -44,6 +55,18 @@ pub const COMMANDS: &[PersonOnly] = &[
         command: "estigia hand-over <issue> --to <run-id> --reason \"<why>\"",
     },
 ];
+
+/// The row a shell line setting one of [`GOVERNING_SETTINGS`] is refused under.
+pub const SETTING: PersonOnly = PersonOnly {
+    verb: "config set",
+    target: "estigia config set <a row that governs what an agent may do>",
+    code: "config-set-is-for-a-person",
+    why: "`Delivery authorisation`, `Transition authorisation`, `Merge by`, `Decision mode` and \
+          `Issue required` decide what an agent may do without a person, so setting one is a \
+          person's decision and an agent's shell line is not one: the gate refuses it on every \
+          host",
+    command: "estigia config set \"<row>\" \"<value>\"",
+};
 
 /// The record a stand-down is read from, which an agent may not write either.
 pub const RECORD: PersonOnly = PersonOnly {
@@ -203,8 +226,11 @@ pub const PERSON_ONLY_POPULATION: Population = Population {
     disposition: super::Disposition::TooTight,
     subject: "named_in",
     text: "the shell spellings of the commands only a person may run, `estigia stand-down`, which lifts every \
-           refusal the gate makes, `estigia recover`, which puts an escalated review back in play, and \
-           `estigia hand-over`, which confirms taking a live claim from another run. \
+           refusal the gate makes, `estigia recover`, which puts an escalated review back in play, \
+           `estigia hand-over`, which confirms taking a live claim from another run, and \
+           `estigia config set` over a row that decides what an agent may do without a person \
+           (`Delivery authorisation`, `Transition authorisation`, `Merge by`, `Decision mode`, \
+           `Issue required`). \
            Legitimate population: every command line that runs one, with options allowed between the \
            two words, and every line whose command word is left to the shell by an expansion or a \
            glob, which the gate cannot read. Boundary: matched on any word whose basename is \
@@ -213,9 +239,11 @@ pub const PERSON_ONLY_POPULATION: Population = Population {
            would run, and a line that merely names both, such as a commit message, is refused too; \
            a word after `estigia` that carries `$`, a backtick, `{`, `*`, `?` or `[` where the verb \
            stands is refused as either command, since neither can be told from the line, while a \
-           quoted span is one word of data and no invocation; an alias, a wrapper script or a \
-           renamed binary that never writes `estigia <verb>` as two words is not matched \u{2014} \
-           the same standing every shell rule of this gate has, which `docs/honesty.md` records.",
+           quoted span is one word of data and no invocation; a `config set` line is read for one \
+           of those five labels or an alias, so a line setting any other row is not this rule's. \
+           An alias, a wrapper script or a renamed binary that never writes `estigia <verb>` as two \
+           words is not matched \u{2014} the same standing every shell rule of this gate has, which \
+           `docs/honesty.md` records.",
 };
 
 fn in_a_word(c: char) -> bool {
@@ -282,6 +310,38 @@ fn unreadable_verb(text: &str) -> bool {
     })
 }
 
+/// Whether an `estigia config set` line names a row in [`GOVERNING_SETTINGS`],
+/// by its label or by one of the labels it answers to.
+fn sets_a_governing_setting(view: &str) -> bool {
+    let words = words_of(view);
+    let runs_config_set = words.iter().enumerate().any(|(at, word)| {
+        super::binary_name(word) == "estigia" && {
+            let mut after = words[at + 1..].iter().filter(|word| !word.starts_with('-'));
+            after.next().is_some_and(|next| *next == "config")
+                && after.next().is_some_and(|next| *next == "set")
+        }
+    });
+    if !runs_config_set {
+        return false;
+    }
+    let text = dequoted(view).to_ascii_lowercase();
+    GOVERNING_SETTINGS.iter().any(|setting| {
+        std::iter::once(setting.label())
+            .chain(setting.aliases().iter().copied())
+            .any(|label| names_phrase(&text, label))
+    })
+}
+
+fn names_phrase(text: &str, phrase: &str) -> bool {
+    let phrase = phrase.to_ascii_lowercase();
+    text.match_indices(&phrase).any(|(at, _)| {
+        let before = at == 0 || !text.as_bytes()[at - 1].is_ascii_alphanumeric();
+        let after = at + phrase.len() == text.len()
+            || !text.as_bytes()[at + phrase.len()].is_ascii_alphanumeric();
+        before && after
+    })
+}
+
 /// The command a lowercased line runs, wherever the binary stands and however its words are glued:
 /// any word whose basename is `estigia`, then the verb after any `-` options. A word after
 /// `estigia` that carries a shell expansion or a glob is answered as [`UNREADABLE`], because the
@@ -292,6 +352,9 @@ fn unreadable_verb(text: &str) -> bool {
 pub fn named_in(view: &str) -> Option<&'static PersonOnly> {
     if unreadable_verb(view) {
         return Some(&UNREADABLE);
+    }
+    if sets_a_governing_setting(view) {
+        return Some(&SETTING);
     }
     let dequoted = dequoted(view);
     let plain = words_of(view);
@@ -315,7 +378,7 @@ pub fn refusal(action: &super::Action) -> Option<Refusal> {
     };
     let command = COMMANDS
         .iter()
-        .chain([&RECORD, &LIFT, &UNREADABLE])
+        .chain([&RECORD, &LIFT, &UNREADABLE, &SETTING])
         .find(|command| command.target == target)?;
     Some(Refusal::not_started(
         command.code,

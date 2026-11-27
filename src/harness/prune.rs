@@ -686,13 +686,29 @@ fn issue_closed(
 fn pr_closed(context: &Context, branch: &str) -> Option<bool> {
     let data = crate::transport::gh_json(
         &[
-            "pr", "list", "--head", branch, "--state", "all", "--json", "state",
+            "pr",
+            "list",
+            "--head",
+            branch,
+            "--state",
+            "all",
+            "--json",
+            "state,isCrossRepository",
         ],
         Some(&context.repo_dir),
     )
     .ok()
     .flatten()?;
-    let entries = data.as_array()?;
+    let entries: Vec<&serde_json::Value> = data
+        .as_array()?
+        .iter()
+        .filter(|entry| {
+            entry
+                .get("isCrossRepository")
+                .and_then(serde_json::Value::as_bool)
+                == Some(false)
+        })
+        .collect();
     if entries.is_empty() {
         return None;
     }

@@ -604,8 +604,14 @@ impl<H: Hands> Deliver<'_, H> {
                     .unwrap_or(0);
             }
             None => {
-                self.released =
-                    Some(self.call("release", "release_ci", self.receipt_arguments(receipt))?);
+                let mut arguments = self.receipt_arguments(receipt);
+                if let Some(worktree) = self.hands.worktree() {
+                    arguments["worktree"] = json!(worktree);
+                }
+                if let Some(file) = &self.request.never_ran_evidence {
+                    arguments["never_ran_evidence_file"] = json!(file);
+                }
+                self.released = Some(self.call("release", "release_ci", arguments)?);
                 self.done.push("release_ci");
                 self.released_at = self.hands.now();
             }

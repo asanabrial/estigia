@@ -1825,6 +1825,12 @@ pub const INTERNAL: &[Tool] = &[
             RECEIPT_BASE,
             RECEIPT_DIGEST,
             Argument::optional("worktree", "string", "The isolated checkout."),
+            Argument::optional(
+                "never_ran_evidence_file",
+                "string",
+                "On the structural-readback road a `low` receipt takes, the operator's evidence \
+                 for a lane whose runs never executed a step.",
+            ),
         ],
         effect: PointerEffect::Renew,
         writes: true,

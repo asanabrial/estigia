@@ -4051,6 +4051,7 @@ fn handoff_resolved(
             .any(|recorder| !forbidden.contains(recorder)))
 }
 
+#[derive(PartialEq, Eq)]
 enum ReleaseBasis {
     Computed,
     StructuralReadback,
@@ -4132,12 +4133,22 @@ fn release_basis(
     }
     if computed::has_computed_evidence(comments, receipt) {
         computed::require_computed_clearance(context, comments, receipt, worktree)?;
+        crate::transport::generated::require_reproduction(
+            worktree.unwrap_or(&context.repo_dir),
+            &receipt.base,
+            &receipt.head,
+        )?;
         return Ok(ReleaseBasis::Computed);
     }
     let low = computed::policy_for(context, comments, receipt, worktree)
         .is_ok_and(|policy| policy.level == super::tier::RiskLevel::Low);
     if low {
         computed::require_computed_clearance(context, comments, receipt, worktree)?;
+        crate::transport::generated::require_reproduction(
+            worktree.unwrap_or(&context.repo_dir),
+            &receipt.base,
+            &receipt.head,
+        )?;
         return Ok(ReleaseBasis::StructuralReadback);
     }
     Err(Failure::Stop(serde_json::json!({
@@ -10477,6 +10488,9 @@ pub struct CiRelease<'a> {
     pub digest: &'a str,
     /// The checkout whose clean target is re-derived.
     pub worktree: Option<&'a std::path::Path>,
+    /// The operator's evidence for a lane whose runs never executed a step,
+    /// on the structural-readback road a `low` receipt takes.
+    pub never_ran_evidence_file: Option<&'a std::path::Path>,
     /// The moment the timeline is judged against.
     ///
     /// Read from the machine, never from the run being judged. A test may pass
@@ -10514,6 +10528,24 @@ pub fn release_ci(
     // and it can never read as a missing review.
     require_un_escalated_terminal(&comments, &supplied)?;
     let basis = release_basis(context, &comments, &supplied, release.worktree)?;
+    if basis == ReleaseBasis::StructuralReadback {
+        require_cleared_publication_lane(
+            context,
+            release.pr,
+            release.head,
+            release.base,
+            release.never_ran_evidence_file,
+        )?;
+    }
+    verify_held(
+        context,
+        &ledger,
+        release.issue,
+        release.run_id,
+        "review",
+        release.now,
+        None,
+    )?;
 
     // A `warning` or a `suggestion` on this receipt is informational: it never
     // opened a correction and nothing about delivery waits on it. A run may

@@ -24,7 +24,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   have answered for it.
 - **A merge recomputes the verdict at the line, over the store as it stands then.** `clearance_holds`
   asks the same `release_basis` `release_ci` asked, so a finding, a correction or a tier change recorded
-  after the release refuses the merge instead of being delivered. It does not make the merge atomic
+  after the release refuses the merge instead of being delivered. The recomputation also regenerates
+  every declared generated file the receipt touches, so a generated mismatch refuses the merge
+  ([generated files](generated-files.md#the-approval-gate)). It does not make the merge atomic
   with the read: a finding recorded between the recomputation and the `gh` call is merged. The
   recomputation reads the checkout named by the gate (not `release_ci`'s `worktree`), so a change whose
   base and head are not in that checkout refuses rather than clears.

@@ -251,6 +251,7 @@ const REFUSED: &[&str] = &[
     "computed-verdict-incomplete",
     "computed-verdict-rejected",
     "computed-verdict-unrecorded",
+    "config-set-is-for-a-person",
     "config-value-unrecognised",
     "config-value-untableable",
     "config-value-would-be-cut",

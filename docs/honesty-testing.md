@@ -434,21 +434,25 @@ citation added in a form the test does not parse is prose held by review alone.
 
 - **A declared generated file is reviewed by reproduction at approval time, not by reading.** The
   payload shows it as a manifest line and `review_computed_verdict` regenerates it before recording
-  `approved`; the digest still binds the real head blob ([`generated-files.md`](generated-files.md) has
+  `approved`; `release_ci` regenerates it again before clearing CI, and a hand merge's recomputation
+  does too. The digest still binds the real head blob
+  ([`generated-files.md`](generated-files.md) has
   the format). What this measures is that the head blob equals what the base's declared command writes,
-  when the verdict is recorded. What it does not measure:
+  when the verdict is recorded and again when the receipt is released. What it does not measure:
   - **The head is trusted only through that comparison.** No judge reads a manifest path's bytes, so a
     command that regenerates something harmful passes; the declaration is trusted because the base it is
     read from was reviewed.
-  - **Drift.** The gate runs when the verdict is recorded, not at merge. A registry that moved between
-    the two makes an honest file mismatch (refused) or a stale one match (approved) at that moment only.
+  - **Drift.** The comparison runs at recording, at release and at the hand merge's recomputation, never
+    continuously. Between two of those moments a registry that moved makes an honest file mismatch
+    (refused) or a stale one match (approved) at the comparison only.
   - **The network and the host.** The command inherits the caller's environment and `PATH` and may reach
-    the network, so the answer depends on the machine that recorded the verdict. `unavailable` refuses;
-    it is never a match. An honest file can mismatch (a lockfile resolved against a registry that moved):
-    `mismatch` means the bytes differ, not that the change is wrong.
+    the network, so the answer depends on the machine that recorded the verdict or released it.
+    `unavailable` refuses; it is never a match. An honest file can mismatch (a lockfile resolved against
+    a registry that moved): `mismatch` means the bytes differ, not that the change is wrong.
   - **The command is repository code, run by this binary.** A declaration in the head is ignored, and
     nothing sandboxes it. A verdict read runs it only with `reproduce: true`; the approval gate runs it
-    unconditionally, under the claim.
+    under the claim and reads the claim again afterwards, and `release_ci` does the same after
+    reproduction. A hand merge's recomputation runs it under the merge gate's own claim check.
   - **A reviewer can still comment on a manifest path.** Finding locations are checked against the real
     diff, so a finding there is allowed; the prompt only asks reviewers not to.
   - **Attribute conversions are not applied to the comparison**, and the tests drive `sh` with `printf`,
@@ -460,10 +464,11 @@ citation added in a form the test does not parse is prose held by review alone.
   spends the 200-line allowance. Both read `generated::manifested_paths`, and the tier answer names the
   paths in `generated_paths`. What it does not measure:
   - **Trust moves to reproduction.** A hot-path name, a shebang or a dangerous sink inside a manifest
-    path no longer raises the tier; only the approval gate's byte comparison stands between that content
-    and a merge.
-  - **A generated-only change is `medium`.** With nothing measured the tier keeps its empty-diff answer;
-    it is not read as `low` because the reproduction that would justify that runs only at approval.
+    path no longer raises the tier; the approval gate's byte comparison, repeated at release and at a
+    hand merge's recomputation, stands between that content and a merge.
+  - **A change touching a declared path is never `low`.** It reads `medium` whether it changes nothing
+    but generated files or hides them beside a passive edit, and its reasons carry `generated_path`;
+    the reproduction that justifies the manifest is the reason for the gate, not for the zero tier.
   - **A correction can change a generated file without limit.** A repair that edits a manifest path by
     hand is bounded only by the reproduction mismatch it would cause, not by the budget.
   - **Anchors still see the real diff**: a finding on a manifest path is accepted, because a reviewer

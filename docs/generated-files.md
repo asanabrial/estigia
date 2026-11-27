@@ -6,15 +6,18 @@ repository declares one, which commit that declaration is read from, and what th
 also covers the other thing a repository declares, `[[check]]` commands: how `run_checks` runs them
 in the background and binds a receipt to the reviewed digest, and how the verdict gate reads it.
 
-Two places read the declaration. The review payload shows a declared path as a manifest line instead
-of its hunks, and `record_computed_verdict` refuses to record `approved` unless each such path
-regenerates byte-identically. The two ship together: a manifest without the gate would let content
+Three places read the declaration. The review payload shows a declared path as a manifest line instead
+of its hunks, `record_computed_verdict` refuses to record `approved` unless each such path
+regenerates byte-identically, and `release_ci` reproduces every declared path the receipt's
+`base..head` touches before it clears, so a verdict recorded through another door cannot carry
+unreproduced bytes into CI. The three ship together: a manifest without the gate would let content
 skip review. `review_read` with `view: verdict` also carries the result as `generated_files`; it
-executes nothing unless the caller passes `reproduce: true`, because the command is repository code
-that may use the network and a read needs no claim. Without it each touched declared path reads
-`not-run`. [`honesty.md`](honesty.md) says what that leaves open. The payload also carries two
-manifest lines this document does not own: `# estigia-moved` for a verbatim move between paths and
-`# estigia-deleted` for a whole-file deletion, neither of which a declared command regenerates.
+executes nothing unless the caller passes `reproduce: true`, because the
+command is repository code that may use the network and a read needs no claim. Without it each
+touched declared path reads `not-run`. [`honesty.md`](honesty.md) says what that leaves open. The
+payload also carries two manifest lines this document does not own: `# estigia-moved` for a verbatim
+move between paths and `# estigia-deleted` for a whole-file deletion, neither of which a declared
+command regenerates.
 
 ## The declaration
 
@@ -128,6 +131,15 @@ refuses `generated-reproduction-unavailable`, and the refusal names each failing
 A `rejected` or `escalated` computation runs nothing. The command runs under the claim, the claim is
 read again afterwards, and nothing is written to the worktree.
 
+`release_ci` makes the comparison again before it clears a receipt, whichever basis clears it: the
+computed verdict and the `low` structural readback both call `generated::require_reproduction` over the
+receipt's `base..head`. A hand merge's recomputation (`clearance_holds`) takes the same reproduction
+road, so a generated file that no longer reproduces refuses the merge too. `release_ci`'s `low`
+structural readback also reads the publication lane, which the verdict always did and that road used
+to skip; a lane whose run genuinely ran and failed refuses `publication-lane-red`, and one that never
+ran refuses `publication-lane-never-ran` unless the caller passes the operator's evidence. The
+release marker is written only after both answer.
+
 ## What the tier, the budget and the anchors count
 
 A path the payload shows as a manifest line is a path nobody is shown hunks for, so two figures that
@@ -138,9 +150,11 @@ receipt's base, added or modified as a regular file, and not a deletion or mode 
 - **`review_tier`.** `changed_lines` and the content scan that derives the reasons, and therefore the
   level and the lens count, are computed over the diff without those paths. The answer names them in
   `generated_paths` (an empty list when there are none), so the exclusion is visible rather than
-  silent. A repair's narrow range uses the declaration of the receipt's base, as its payload does. A
-  change of nothing but generated files measures no path and reads `medium`, the answer an empty
-  measurement has always had, not `low`.
+  silent. A change that touches a declared path is **never `low`**: it reads `medium` even when the
+  remaining edits are passive, and its reasons carry `generated_path` naming one of the paths, because
+  the declaration buys reproduction rather than a lower tier. A repair's narrow range uses the
+  declaration of the receipt's base, as its payload does. A change of nothing but generated files
+  measures no path and also reads `medium`, the answer an empty measurement has always had.
 - **The correction budget.** The original candidate's changed lines, which freeze the budget, and each
   repair's changed lines, which are charged against it, leave those paths out. A correction that
   regenerates a lockfile is charged for its other edits, not for the lockfile's churn. The scope rule

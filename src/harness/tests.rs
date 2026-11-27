@@ -8762,8 +8762,8 @@ fn a_quoted_command_word_is_the_word_it_spells() {
         ("\"gi\"t push origin main", "git push origin main"),
         ("git $'push' origin main", "git push origin main"),
         (
-            "estigia config 'set' \"Issue required\" off",
-            "estigia config set \"Issue required\" off",
+            "estigia config 'set' \"Model routing\" developer=opus",
+            "estigia config set \"Model routing\" developer=opus",
         ),
     ] {
         assert!(boundary_command(plain).is_some(), "control: {plain}");

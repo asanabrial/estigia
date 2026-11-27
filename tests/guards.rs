@@ -885,7 +885,11 @@ const AFFIRMED: &[(&str, u64)] = &[
     // matched exactly as the other two are, so the boundary is unchanged: an
     // alias, a wrapper script or a renamed binary is still not matched, and a
     // quoted span is still data. Affirmed.
-    ("person-only-shell", 6450570850165452283),
+    // Re-read on 2026-11-27. `estigia config set` over the five rows that decide
+    // what an agent may do without a person joins them; the read adds the label
+    // after the verb pair and keeps the same boundary, so an alias, wrapper or
+    // renamed binary is still not matched. Affirmed.
+    ("person-only-shell", 9506538772667895980),
     // Read on 2026-08-04 and affirmed. The fragments name the files this
     // harness reads its own answers from, and every one is crossed against
     // what `resolve_paths` produces per adapter — five of eleven were wrong

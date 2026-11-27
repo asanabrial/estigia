@@ -128,7 +128,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   - **What the prune sweep cannot see.** It attributes a head or checkout to an issue by the `issue-<n>-…`
     convention in a branch name or by a run pointer, so a head naming no issue and carrying no pointer is
     listed only when merged into the base, while a checkout is always listed, kept when nothing says it is
-    finished. The orphan route recognises a clean checkout whose commits remain on any refreshed
+    finished. A pull request closes a head only when its head repository is this repository: a fork's
+    closed pull request that reused the head's branch name does not close that head
+    (`a_fork_pull_request_with_the_same_head_name_does_not_close_a_head`). The orphan route recognises a clean checkout whose commits remain on any refreshed
     remote ref even when the branch is neither merged nor closed, and one whose upstream is still present
     when its head is contained in what that upstream lists
     ([what-it-writes.md](what-it-writes.md#explicit-orphan-pruning);
