@@ -145,8 +145,11 @@ runs, and every file write that lands in this repository, the review's own workt
 `review-claim-admits-no-write`. That covers push, merge, `gh pr review`, `gh pr comment`, `gh api`
 mutations and any shell worktree command. A writing tool outside the road is refused the same way,
 `collect_review_input` with `checks: true` among them, because running a repository's checks executes the reviewed bytes. A note
-outside every repository stands aside. `pr_review` `release` puts the claim down and removes the
-worktree, reading nothing from GitHub, so a pull request that has gone does not strand it.
+outside every repository stands aside. `pr_review` `release` puts the claim down, kills the reviewers
+still running under it, and removes the worktree, reading nothing from GitHub, so a pull request that
+has gone does not strand it. `pr_review` `submit` refuses by the same road. A reviewer outliving its
+claim is killed by the process group it was spawned into, the same call the collect's deadline uses,
+and a slot that already answered or never got a pid is left alone.
 
 The pull request number is never written to `Run.issue`. Every reader of that field asks the tracker
 about an issue, and it is what keeps this claim out of `holders_for_action`, so a merge finds no

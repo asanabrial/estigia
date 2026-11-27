@@ -347,6 +347,19 @@ pub(crate) fn remove_worktree(context: &Context, worktree: &str) -> serde_json::
     }
 }
 
+/// Kills the reviewers a claim still has running, by the process group each was
+/// spawned into. A slot that already answered, or never got a pid, is left alone.
+pub(crate) fn kill_reviewers(store: &Store, epoch: &str) {
+    let Ok(slots) = store.pull_review_slots(epoch) else {
+        return;
+    };
+    for slot in slots.iter().filter(|slot| slot.state == "running") {
+        if let Some(pid) = slot.pid {
+            crate::reviewer::job::kill_group(pid);
+        }
+    }
+}
+
 /// `pr-review-release`: puts the claim down and removes its worktree. Answers
 /// from the store alone, so a pull request that is gone does not strand it.
 pub fn release(context: &Context, run_id: &str) -> Result<serde_json::Value, Failure> {
@@ -358,6 +371,7 @@ pub fn release(context: &Context, run_id: &str) -> Result<serde_json::Value, Fai
             "detail": format!("{run_id} holds no review-only claim"),
         }));
     };
+    kill_reviewers(&store, &held.epoch);
     let checkout = remove_worktree(context, &held.worktree);
     store.drop_pull_review(run_id)?;
     Ok(serde_json::json!({
