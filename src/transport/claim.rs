@@ -13028,16 +13028,14 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
             return Ok(answer);
         }
         Reclaimed::Resumed { holder, forced } => {
-            let mut answer = serde_json::json!({
+            return Ok(serde_json::json!({
                 "ok": true,
                 "issue": what.issue,
                 "reclaimed_from": holder,
                 "run_id": what.run_id,
                 "forced": forced,
                 "reused_existing_reclaim": true,
-            });
-            carry_store_facts(context, what.issue, &ledger, &mut answer);
-            return Ok(answer);
+            }));
         }
         Reclaimed::Written { holder } => holder,
     };

@@ -4492,7 +4492,7 @@ fn a_reclaim_records_the_state_its_answer_names() {
 
     super::apply_effect(
         claim,
-        &json!({"issue": 35, "run_id": "claude-reclaimed0"}),
+        &json!({"issue": 35, "run_id": "claude-reclaimed0", "state": "in-progress"}),
         Some(&json!({
             "ok": true,
             "issue": 35,
@@ -4508,6 +4508,41 @@ fn a_reclaim_records_the_state_its_answer_names() {
         after.state.as_deref(),
         Some("review"),
         "the pointer defaulted to in-progress instead of the state the takeover answered"
+    );
+}
+
+#[test]
+fn an_answer_naming_an_operation_does_not_rewrite_a_pointer_under_a_renew_effect() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = bare_context(&root, root.path());
+    let held = "b".repeat(32);
+    let mut run = crate::harness::session::Run::new("claude-renewing0".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(35));
+    run.operation_id = Some(held.clone());
+    run.state = Some("review".to_owned());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+    let verify = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "verify_claim")
+        .expect("the tool is listed");
+
+    super::apply_effect(
+        verify,
+        &json!({"issue": 35, "run_id": "claude-renewing0"}),
+        Some(&json!({
+            "ok": true,
+            "issue": 35,
+            "operation_id": "a".repeat(32),
+        })),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, "claude-renewing0");
+    assert_eq!(
+        after.operation_id.as_deref(),
+        Some(held.as_str()),
+        "a renewal took the operation id out of the answer it was given"
     );
 }
 
