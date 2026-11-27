@@ -266,7 +266,7 @@ Clean up only after delivery is verified or abandonment is explicitly recorded. 
 the isolated checkout this run created, and the local branch checked out there, once the tracker
 recognises the issue's close as the registered delivery — the newest confirmed publication's
 `published` marker, the closing
-pull request, and a merge whose second parent is the reviewed head and whose first parent descends from the reviewed base — or, for a pull request that only references the issue, once that merge alone is verified, and the checkout carries no
+pull request, and a merge whose second parent is the reviewed head and whose first parent descends from the reviewed base — or, when the tracker attributes the close to none, once that merge alone is verified, and the checkout carries no
 unpublished work: its head is the delivered head and `git status --porcelain` is empty. Anything that
 does not clear that bar is kept, and the release answer names the check it failed. A delivery in
 slices starts one checkout per slice and the pointer names only the last, so `release` also puts

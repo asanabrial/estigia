@@ -641,10 +641,11 @@ fn post_close_evidence(
 }
 
 /// The verified merge of a release that brings no evidence, when this release is the one that
-/// has to close it: the repository is `autonomous`, the window is open, the latest confirmed
-/// publication's merge joins its reviewed head, and the tracker still reads the issue `OPEN`.
+/// has to close it: the repository is `autonomous`, the window is open, the issue is in `review`
+/// or `done`, the latest confirmed publication's merge joins its reviewed head, and the tracker
+/// still reads the issue `OPEN`.
 ///
-/// Anything unproven answers `None`, which is the plain release this road replaces.
+/// A merge that does not verify answers `None`, the plain release; a read that fails is the error.
 fn open_hand_merge(
     context: &Context,
     ledger: &super::store::Ledger,
@@ -653,10 +654,13 @@ fn open_hand_merge(
     if !closes_hand_merges(context) || super::outbox::is_closed(context) {
         return Ok(None);
     }
-    let Ok(Some((delivered, _))) =
-        super::claim::verified_delivery_close(context, &ledger.timeline()?)
-    else {
+    if !matches!(ledger.state()?.as_deref(), Some("review" | "done")) {
         return Ok(None);
+    }
+    let delivered = match super::claim::verified_delivery_close(context, &ledger.timeline()?) {
+        Ok(Some((delivered, _))) => delivered,
+        Ok(None) | Err(Failure::Stop(_)) => return Ok(None),
+        Err(failure) => return Err(failure),
     };
     let state = super::commands::issue_view(context, issue, "state")?;
     Ok((state["state"].as_str() == Some("OPEN")).then_some(delivered))

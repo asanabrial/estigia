@@ -12498,8 +12498,8 @@ fn recorded_branches(comments: &[ownership::Comment], run_id: &str) -> Vec<Strin
 }
 
 /// The local half of a release: put down the checkout this run created, once
-/// the tracker attributes the issue's close to the delivery, or the delivery's
-/// merge alone is verified for a pull request that only references the issue.
+/// the tracker attributes the issue's close to the delivery or, when it attributes
+/// the close to none, once the delivery's merge alone is verified.
 ///
 /// Never a refusal. The release has already landed when this runs, so a
 /// checkout that cannot be put down is kept and named in the answer rather than
@@ -12514,11 +12514,9 @@ fn put_down_checkout(
     comments: &[ownership::Comment],
 ) -> serde_json::Value {
     let delivered = match close::delivery_close(context, issue, comments, None, None) {
-        Ok(None) => match close::verified_delivery_close(context, comments) {
-            Ok(found) => Ok(found.map(|(own, _)| own)),
-            Err(Failure::Stop(_)) => Ok(None),
-            Err(failure) => Err(failure),
-        },
+        Ok(None) => {
+            close::verified_delivery_close(context, comments).map(|found| found.map(|(own, _)| own))
+        }
         other => other,
     };
     match delivered {
@@ -12568,6 +12566,14 @@ fn put_down_checkout(
             "worktree": worktree.display().to_string(),
             "detail": "neither the issue's close nor a verified merge of the registered \
                        publication is this delivery, so the checkout is preserved",
+        }),
+        Err(Failure::Stop(verification)) => serde_json::json!({
+            "removed": false,
+            "outcome": "kept",
+            "worktree": worktree.display().to_string(),
+            "detail": "the merge of the registered publication was not verified, so the checkout \
+                       is preserved",
+            "verification": verification,
         }),
         Err(failure) => serde_json::json!({
             "removed": false,
