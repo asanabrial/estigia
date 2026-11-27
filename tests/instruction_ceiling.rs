@@ -35,7 +35,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/bindings/github/refusals.md", 68393),
     ("skill/bindings/github/setup.md", 1586),
     ("skill/bindings/linear.md", 7291),
-    ("skill/policies/blind-judges.md", 43364),
+    ("skill/policies/blind-judges.md", 43406),
     ("skill/policies/judgment-day.md", 16022),
     ("skill/protocols/rdd.md", 7863),
     ("skill/references/analyst.md", 3169),

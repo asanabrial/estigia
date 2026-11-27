@@ -1060,14 +1060,13 @@ fn a_repair_rounds_own_delta_answers_low_while_the_whole_change_answers_medium()
     );
 }
 
-/// A repair of a `warning` or a `suggestion` after an accepted
-/// verdict is reviewed by the delta lens alone, once the narrow range is the
-/// honest one — `panel: "lens"`, one lens, in place of `level`'s
-/// own allocation (`src/lib.rs` here is never passive, so the whole range and
-/// the repair range both carry a medium-or-higher level absent the override, and
-/// the fixture proves the override rather than the tier's own answer).
+/// A repair of a `warning` or a `suggestion` after an accepted verdict keeps
+/// the delta's own tier and has `review-lens` added to it, never in place of
+/// it. `src/lib.rs` here is never passive, so the delta's own level is
+/// `medium`: the panel is the medium lens *and* the delta lens, so code the
+/// clearing finding never mentioned is still somebody's question.
 #[test]
-fn a_warning_or_suggestion_cleared_narrow_repair_is_reviewed_by_the_lens_alone() {
+fn a_warning_or_suggestion_cleared_narrow_repair_adds_the_delta_lens_to_its_own() {
     let root = repo();
     let at = root.path();
     let base = commit_file(at, "src/lib.rs", b"fn main() {}\n", false);
@@ -1097,11 +1096,24 @@ fn a_warning_or_suggestion_cleared_narrow_repair_is_reviewed_by_the_lens_alone()
         )
         .expect("a warning or suggestion clearing_finding is not refused");
         assert_eq!(repair["range"], "repair", "{class}: {repair}");
-        assert_eq!(repair["panel"], "lens", "{class}: {repair}");
-        assert_eq!(repair["lenses"], 1, "{class}: {repair}");
+        let roles: Vec<&str> = repair["lens_roles"]
+            .as_array()
+            .expect("roles")
+            .iter()
+            .filter_map(|role| role.as_str())
+            .collect();
+        let delta = crate::harness::roles::RESERVED_LENS;
+        assert!(
+            roles.contains(&delta),
+            "{class}: the delta lens was substituted away: {repair}"
+        );
+        assert!(
+            roles.iter().any(|role| *role != delta),
+            "{class}: no lens of the repair's own tier ran beside the delta lens: {repair}"
+        );
         assert_eq!(
-            repair["lens_roles"],
-            serde_json::json!(["review-lens"]),
+            repair["lenses"],
+            serde_json::json!(roles.len()),
             "{class}: {repair}"
         );
         assert!(repair.get("judges").is_none(), "{class}: {repair}");
@@ -1140,11 +1152,11 @@ fn a_warning_or_suggestion_cleared_narrow_repair_is_reviewed_by_the_lens_alone()
 }
 
 /// A repair answer states the forecast line over the panel it actually answers: the
-/// tier's own for an ordinary repair, and the one delta lens once a `warning` or
-/// `suggestion` cleared the gate. Forecasting before the lens override would still
-/// price the tier's own lenses, not the one the answer licenses.
+/// tier's own for an ordinary repair, and the tier's own plus the delta lens once a
+/// `warning` or `suggestion` cleared the gate. Forecasting before the panel is
+/// widened would price the delta lens alone, which the answer no longer licenses.
 #[test]
-fn a_repair_answer_forecasts_the_panel_it_licenses_and_the_lens_alone_prices_one_lens() {
+fn a_repair_answer_forecasts_the_panel_it_licenses_and_the_delta_lens_prices_two() {
     let root = repo();
     let at = root.path();
     let base = commit_file(at, "src/lib.rs", b"fn main() {}\n", false);
@@ -1183,12 +1195,12 @@ fn a_repair_answer_forecasts_the_panel_it_licenses_and_the_lens_alone_prices_one
     let severe = repair(&context, Some("severe"));
     assert_eq!(severe["forecast"], ordinary["forecast"], "{severe}");
 
-    let lens_only = repair(&context, Some("warning"));
-    assert_eq!(lens_only["panel"], "lens", "{lens_only}");
+    let widened = repair(&context, Some("warning"));
+    assert_eq!(widened["panel"], "lens", "{widened}");
     assert_eq!(
-        lens_only["forecast"],
-        "medium: 1 lens (review-lens), about 150000 tokens against a Review budget of 150000 per context",
-        "{lens_only}"
+        widened["forecast"],
+        "medium: 2 lenses (review-reliability, review-lens), about 300000 tokens against a Review budget of 150000 per context",
+        "{widened}"
     );
 
     let mut unbudgeted = test_context(at);
@@ -1200,7 +1212,7 @@ fn a_repair_answer_forecasts_the_panel_it_licenses_and_the_lens_alone_prices_one
     let lens_only = repair(&unbudgeted, Some("suggestion"));
     assert_eq!(
         lens_only["forecast"],
-        "medium: 1 lens (review-lens), no Review budget is declared, so no spend is forecast",
+        "medium: 2 lenses (review-reliability, review-lens), no Review budget is declared, so no spend is forecast",
         "{lens_only}"
     );
 }

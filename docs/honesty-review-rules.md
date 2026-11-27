@@ -256,8 +256,11 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   forced base advance** (the integration is the lineage's correction when it is the first, refused when the
   parent already was one; how often the base moves is not measured); **a republish over an approved
   receipt** (zeroes the count, spends no correction, still bounded by budget and scope and refusable
-  `correction-outside-reviewed-scope`; a warning- or suggestion-cleared one is narrowed to one lens and no
-  judge by `review_tier_for_repair`); and **the escalation that follows** (`escalate_review` opens when
+  `correction-outside-reviewed-scope`; a warning- or suggestion-cleared one is read by the delta's
+  own tier with `review-lens` added to it and no judge, by `review_tier_for_repair`, and only a finding
+  the panel recorded through capture clears anything — a finding the publishing run wrote about its own
+  receipt leaves the whole change's tier, so a note an author writes cannot buy new code a reader of its
+  own); and **the escalation that follows** (`escalate_review` opens when
   `repair_rounds` answers `correction_spent`, whether or not the publication was refused, and nothing reads
   whether the person escalating had cause). Nothing refuses a panel launched over a spent lineage or
   requires `repair_rounds` to be called, and Estigia cannot prove a panel ran, so it cannot prove a
