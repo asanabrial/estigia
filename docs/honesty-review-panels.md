@@ -306,7 +306,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   32-byte token in `job_tokens`, hands it to its runner in `ESTIGIA_JOB_TOKEN`, and the collector
   compares the token the result carries with the store's, refusing `capture-result-unbound` a result
   that does not match; a job no launch of this binary recorded a token for — a rendering job, or one an
-  older binary started — is read as before. A job directory written again — a job id that recurs, as a
+  older binary started — is read as before. Two launches of one job id in one second compute the same
+  directory from `job_id`, and they now share one token: `mint_job_token` records the first and answers
+  it to every later launch of that id, so whichever runner takes the lock last writes a value the store
+  still holds (`a_second_launch_of_one_job_reads_back_the_token_the_first_minted`,
+  `both_launches_of_one_job_are_admitted_by_the_collector`). What that does not give is two answers: the
+  launches still share one directory and one `result.json`, so a launch whose runner never writes leaves
+  the earlier attempt's cleared directory behind rather than a result of its own. A job directory written again — a job id that recurs, as a
   resumed claim's does — is cleared first: `write_job` deletes the previous attempt's `result.json`,
   `started`, `usage.json` and `relayed` marker, so the new launch cannot read the dead attempt's answer
   as its own, and `check_job::write_job` does the same for a checks job. **Not proven:** the token is

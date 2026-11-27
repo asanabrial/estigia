@@ -169,6 +169,44 @@ fn a_result_in_another_format_is_not_read() {
 }
 
 #[test]
+fn a_relaunched_job_writes_a_token_the_store_still_holds() {
+    let root = tempfile::tempdir().expect("a directory");
+    let store = crate::transport::store::Store::open(&root.path().join("state.db"))
+        .expect("the store opens");
+    let dir = root.path().join("job");
+    let first = store
+        .mint_job_token("job-two-launches", 100)
+        .expect("the first token");
+    write_job(&dir, &invocation()).expect("the job is written");
+    let spawner = OnThread(echo);
+    spawner
+        .start_with(&dir, &first)
+        .expect("the first runner starts");
+    match finished(&dir) {
+        JobResult::Answer { token, .. } => assert_eq!(token.as_deref(), Some(first.as_str())),
+        other => panic!("{other:?}"),
+    }
+
+    let second = store
+        .mint_job_token("job-two-launches", 200)
+        .expect("the relaunch's token");
+    write_job(&dir, &invocation()).expect("the directory is written again");
+    spawner
+        .start_with(&dir, &second)
+        .expect("the second runner starts");
+    let held = store.job_token("job-two-launches").expect("the row reads");
+    let written = match finished(&dir) {
+        JobResult::Answer { token, .. } => token,
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        crate::reviewer::job::bound_to(written.as_deref(), held.as_deref()),
+        "the runner that finished last wrote a token the store no longer holds: {written:?} \
+         against {held:?}"
+    );
+}
+
+#[test]
 fn a_slow_reviewer_is_running_after_the_start_returns_and_finished_when_it_answers() {
     struct Waits(std::sync::Arc<std::sync::Mutex<mpsc::Receiver<()>>>);
     impl Adapter for Waits {
