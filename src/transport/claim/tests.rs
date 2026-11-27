@@ -17773,6 +17773,50 @@ fn recorded_finding_by(
     evidence_class: Option<&str>,
     causal: Option<&str>,
 ) -> ownership::Comment {
+    finding_by(
+        reviewer,
+        receipt,
+        n,
+        id,
+        class,
+        evidence_class,
+        causal,
+        None,
+    )
+}
+
+fn lens_finding_on(
+    receipt: &ReviewTransaction,
+    n: u32,
+    id: &str,
+    class: &str,
+    evidence_class: Option<&str>,
+    causal: Option<&str>,
+    lens: &str,
+) -> ownership::Comment {
+    finding_by(
+        "codex-b",
+        receipt,
+        n,
+        id,
+        class,
+        evidence_class,
+        causal,
+        Some(lens),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finding_by(
+    reviewer: &str,
+    receipt: &ReviewTransaction,
+    n: u32,
+    id: &str,
+    class: &str,
+    evidence_class: Option<&str>,
+    causal: Option<&str>,
+    lens: Option<&str>,
+) -> ownership::Comment {
     let operation = op(100 + n);
     let pr = receipt.pr.to_string();
     let mut attributes: Vec<(&str, &str)> = vec![
@@ -17794,6 +17838,9 @@ fn recorded_finding_by(
     }
     if let Some(value) = causal {
         attributes.push(("causal-disposition", value));
+    }
+    if let Some(value) = lens {
+        attributes.push(("lens", value));
     }
     wrote(
         &n.to_string(),
@@ -18504,19 +18551,25 @@ fn delta_lens_repair_world() -> (
     (root, context, parent, repair)
 }
 
-/// A `warning`/`suggestion`-cleared narrow repair is reviewed by the delta lens
-/// alone, so the computed verdict licenses `review-lens` and nothing else: with
-/// the lens reported it reads `approved`, and a version that fell back to the
-/// whole change's own tier would demand `review-reliability` instead and read
-/// `incomplete`. Forcing `licensed_lens_roles` to answer `None` here turns this
-/// red.
+/// A finding the panel recorded through capture licenses the delta lens: the
+/// repair's own `parent_head..head` range is prose here, so the delta's tier
+/// licenses nothing of its own and `review-lens` is what the ledger demands.
+/// Forcing `licensed_lens_roles` to answer `None` here turns this red.
 #[test]
 fn a_delta_lens_repair_licenses_the_delta_lens_alone() {
     let (_root, context, parent, repair) = delta_lens_repair_world();
     let base = vec![
         published(&parent),
         computed_by("codex-b", &parent, "approved"),
-        recorded_finding_on(&parent, 6, "f-1", "suggestion", None, None),
+        lens_finding_on(
+            &parent,
+            6,
+            "f-1",
+            "suggestion",
+            None,
+            None,
+            "review-reliability",
+        ),
         published_with_narrow_lineage("claude-a", &repair, &parent, &"0".repeat(64)),
     ];
 
@@ -18549,6 +18602,37 @@ fn a_delta_lens_repair_licenses_the_delta_lens_alone() {
     cleared.push(stored_computed_verdict(&repair, "medium", "approved", "[]"));
     let basis = release_basis_of(&context, &repair, &cleared).expect("the repair releases");
     assert_eq!(basis.word(), "computed-verdict");
+}
+
+/// The finding a run records about its own publication narrows nothing: the
+/// repair is read under the whole change's own tier, so no delta lens is
+/// licensed and `review-lens` alone cannot approve code nobody else read.
+#[test]
+fn a_finding_the_publishing_run_recorded_does_not_license_the_delta_lens() {
+    let (_root, context, parent, repair) = delta_lens_repair_world();
+    let base = vec![
+        published(&parent),
+        computed_by("codex-b", &parent, "approved"),
+        recorded_finding_on(&parent, 6, "f-1", "suggestion", None, None),
+        published_with_narrow_lineage("claude-a", &repair, &parent, &"0".repeat(64)),
+    ];
+
+    let (level, ledger) =
+        computed::computed_for(&context, &base, &repair, None).expect("the repair's panel reads");
+    assert_eq!(level, RiskLevel::Medium, "the whole change is still medium");
+    assert!(
+        !ledger.missing_roles.is_empty(),
+        "a hand finding left the repair with no reader at all: {ledger:?}"
+    );
+    assert_ne!(
+        ledger.missing_roles,
+        vec!["review-lens".to_owned()],
+        "the publishing run's own note bought the delta lens alone: {ledger:?}"
+    );
+    assert!(
+        !ledger.missing_roles.contains(&"review-lens".to_owned()),
+        "the whole change's tier does not license the delta lens: {ledger:?}"
+    );
 }
 
 /// A `medium` repair over a `high` whole change licenses its own one lens, not
@@ -18596,13 +18680,14 @@ fn a_repair_over_a_higher_whole_change_licenses_only_its_own_panel() {
     let comments = vec![
         published(&parent),
         computed_by("codex-b", &parent, "approved"),
-        recorded_finding_on(
+        lens_finding_on(
             &parent,
             6,
             "f-1",
             "severe",
             Some("deterministic"),
             Some("introduced"),
+            "review-reliability",
         ),
         published_with_narrow_lineage("claude-a", &repair, &parent, &"0".repeat(64)),
     ];

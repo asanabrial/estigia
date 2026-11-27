@@ -177,7 +177,8 @@ review tier, the lens and the finding do not establish.
   alone; a lens finding that is also `severe` with `introduced`/`worsened` owes the line containment
   every severe causal finding owes, refused as `finding-location-outside-the-change`. The five-lens set
   is a divergence: the source project ships four, and `review-lens` has no counterpart there. The tier
-  allocates the source's `0`/`1`/`4`; only the delta-lens repair round launches `review-lens`.
+  allocates the source's `0`/`1`/`4`; only a repair the panel cleared adds `review-lens` to them, and
+  a repair a finding the publishing run wrote leaves the whole change's tier rather than narrowing.
 
   A lens decides its own severity. What decides whether a finding blocks is `evidence_class`
   (`FINDING_EVIDENCE_CLASSES`): `deterministic` qualifies a rejection alone, `inferential` needs

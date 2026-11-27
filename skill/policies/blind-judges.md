@@ -362,24 +362,24 @@ own publish call outright — before anything is pushed — when the correction 
 to exceeds the size budget or leaves the reviewed paths. `skill/bindings/github.md` names which
 refusals these are and what each one measures.
 
-**A republish that a `warning` or a `suggestion` licensed, rather than a `severe` finding, buys the
-delta lens alone.** The finding that licenses the republish is never one the panel itself
-recorded — panel-recorded warnings and suggestions are delivered as informational and elect nothing on
-their own. It is the author's own finding, recorded against the parent receipt since its verdict,
-declaring a defect the panel did not weigh — any class recorded there satisfies the gate — and once
-that declaration is not `severe`, the repair answering it is not the shape the full panel exists
-for: `review_tier` with `parent_head`
-takes that finding's own class as `clearing_finding`, and when it names `warning` or `suggestion`
-over the repair's own honest narrow range whose level is not `high`, the answer carries `panel: "lens"`, one `review-lens`,
-in place of `level`'s own allocation. That lens's report and findings are what the
-computed verdict reads. A `severe` clearing finding still buys the full panel — it is what
-blocks, and a fix for it is read the same way the original finding was — and so does a `high`
-repair even when a `warning` or a `suggestion` cleared it, and so does a repair whose
-own range is not honestly recoverable (`range: "whole-change"`, history rewritten, a base that moved
-and was merged in, or an empty repair range): the delta lens substitutes for a range it can actually measure, never for one that
-fell back to the whole change and never for a hot-path delta. A `severe` finding that round's lens records — `deterministic` or
-`inferential` — buys the same full panel of lenses:
-the repair returns to them, which is where the ledger settles it.
+**A republish that a `warning` or a `suggestion` licensed reads the repair's own tier and adds the
+delta lens to it.** Two separate sentences, and the first is the one that matters: **only a finding
+the panel recorded through capture clears a repair at all.** A finding the publishing run wrote about
+its own receipt — any class — licenses the republish and nothing narrower: `licensed_lens_roles` answers
+no delta panel, so the whole change's own tier runs, which is what keeps an author from buying new code
+a reader of its own. When the clearing finding does come from the panel, `review_tier` with
+`parent_head` takes its class as `clearing_finding`, and when it names `warning` or `suggestion` over
+the repair's own honest narrow range whose level is not `high`, `review-lens` is **added** to the
+lenses `level` allocates rather than put in their place: the delta tier's own lens runs beside it at
+`medium`, and both reports are what the computed verdict reads. A `severe` clearing finding still
+buys the tier's own panel unchanged — it is what blocks, and a fix for it is read the same way the
+original finding was — and so does a `high` repair even when a `warning` or a `suggestion` cleared it,
+and so does a repair whose own range is not honestly recoverable (`range: "whole-change"`, history
+rewritten, a base that moved and was merged in, or an empty repair range): the delta lens is added only
+where the range it measures is the repair's own, never over one that fell back to the whole change and
+never over a hot-path delta. A `severe` finding that round's lens records — `deterministic` or
+`inferential` — buys the same full panel of lenses: the repair returns to them, which is where the
+ledger settles it.
 
 **A republish no finding blocked is one the author elected, and it costs a full cycle.** An author who
 sees an approval and then republishes anyway to tidy what the panel merely noted spends a new epoch

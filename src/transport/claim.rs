@@ -3647,6 +3647,10 @@ struct ReceiptStanding {
     /// The class of the newest finding recorded against the receipt after its
     /// newest lens report, whether or not a verdict exists.
     finding_since_reports: Option<String>,
+    /// The lens that recorded the newest finding, when one did. A finding a run
+    /// wrote by hand carries no lens, and a finding the panel recorded always
+    /// does.
+    finding_lens: Option<String>,
 }
 
 /// A `rejected` aggregate verdict and a local `escalated` receipt stand over any later marker.
@@ -3660,6 +3664,7 @@ fn receipt_standing(
     let mut aggregate_rejected = false;
     let mut finding_at: Option<usize> = None;
     let mut finding_class: Option<String> = None;
+    let mut finding_lens: Option<String> = None;
     let mut report_at: Option<usize> = None;
     for (position, comment) in comments.iter().enumerate() {
         if !comment.viewer_did_author || comment.includes_created_edit {
@@ -3693,6 +3698,7 @@ fn receipt_standing(
                     {
                         finding_at = Some(position);
                         finding_class = Some(recorded.class);
+                        finding_lens = recorded.lens;
                     }
                 }
                 _ => {}
@@ -3732,6 +3738,7 @@ fn receipt_standing(
             _ => None,
         },
         clearing_finding: if answered { finding_class } else { None },
+        finding_lens,
     })
 }
 

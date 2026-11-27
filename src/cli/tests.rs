@@ -3804,8 +3804,8 @@ fn every_code_the_inventory_carries_is_one_the_crate_raises() {
 #[test]
 fn an_entry_names_the_same_kind_of_way_out_as_the_code_that_raises_it() {
     /// The resolution kind written beside a code in the crate's own source.
-    fn kind_in_source(code: &str) -> Option<&'static str> {
-        for source in &crate_sources() {
+    fn kind_in_source(sources: &[String], code: &str) -> Option<&'static str> {
+        for source in sources {
             let mut rest = source.as_str();
             while let Some(at) = rest.find(&format!("\"{code}\"")) {
                 rest = &rest[at + code.len() + 2..];
@@ -3828,9 +3828,10 @@ fn an_entry_names_the_same_kind_of_way_out_as_the_code_that_raises_it() {
         None
     }
 
+    let sources = crate_sources();
     let mut compared = 0;
     for refusal in inventory().into_iter().chain(after_writing()) {
-        let Some(theirs) = kind_in_source(refusal.code) else {
+        let Some(theirs) = kind_in_source(&sources, refusal.code) else {
             continue;
         };
         let ours = match refusal.resolution {
