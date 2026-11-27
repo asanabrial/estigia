@@ -103,7 +103,12 @@ answers and an empty registry offering no cursor; four store unit tests). What i
   `a_reclaim_records_the_state_its_answer_names`). A claim made while the git window is closed answers
   that receipt too: the store read no longer waits for the window to open
   (`a_claim_inside_a_closed_window_answers_the_stored_receipt`), which is the case a restart inside a
-  closed window reaches. What this does not close: the pointer stays a note on
+  closed window reaches. A claim after this run's own live takeover adopts that marker rather than
+  meeting a kind conflict (`a_claim_after_this_runs_own_live_reclaim_is_admitted`), and a release
+  naming a parked issue takes its epoch and receipt from the record the pointer kept for that claim,
+  so it writes in one call instead of a discovery round trip
+  (`a_parked_release_names_the_epoch_and_receipt_the_pointer_records_for_it`). What this does not
+  close: the pointer stays a note on
   one machine, freely written by `sqlite3` or a script — the state-directory refusal covers the tools'
   own writes, not an interpreter handed code — and `apply_effect` only prefers the answer when the tool's
   effect is `Swear`, so a call whose answer names a state under any other effect is still recorded with

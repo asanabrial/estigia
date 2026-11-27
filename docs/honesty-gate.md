@@ -110,7 +110,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   covered and verified. Nothing checks that a parked issue's work is built, only that the window
   was closed when it was parked. A parked claim's horizon passes unrenewed, and once it has lapsed
   another run may `reclaim` it without `force`. A release puts down only the claim it names: the
-  parked list outlives the active claim, a release naming an issue the run does not hold changes nothing, and the pointer goes once nothing is left on it. A pointer that still lists parked claims is kept when storing it fails; no test injects that failure. `SessionEnd` forgets the pointer and the parked list
+  parked list outlives the active claim, a release naming an issue the run holds neither actively
+  nor in its parked list changes nothing, one naming a parked issue ends it under the epoch and
+  receipt the pointer kept for that claim, and the pointer goes once nothing is left on it. A pointer that still lists parked claims is kept when storing it fails; no test injects that failure. `SessionEnd` forgets the pointer and the parked list
   with it, as it does a single claim, so after that a parked issue is found again only from the
   store. The tests are `park_tests` in `src/harness/mcp/tests/`, plus the prune and rekey cases that
   name a parked claim.
