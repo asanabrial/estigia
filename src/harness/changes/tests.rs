@@ -361,8 +361,6 @@ fn a_registered_checkout_that_was_deleted_is_reported_as_missing() {
 
 #[test]
 fn a_staged_rename_is_one_uncommitted_file_in_the_start_notice() {
-    // The `-z` rename entry carries both names, and counting entries read the
-    // old name as a second dirty file.
     let (root, main, trees) = fixture();
     let renamed = add_tree(&main, &trees, "issue-1-renamed");
     git(&renamed, &["mv", "kept.txt", "renamed.txt"]);

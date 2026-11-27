@@ -54,10 +54,6 @@ fn merge_held_run() -> crate::harness::Run {
 
 #[test]
 fn a_hook_that_cannot_build_a_context_says_why_it_did_not_answer() {
-    // The hook script says a guard that does not answer says so. The branch
-    // that could not build a context returned `Ok(())` with nothing on either
-    // stream, so a push went out looking checked and nobody could learn
-    // otherwise.
     let refusal = Refusal::not_started(
         "home-not-resolvable",
         "could not determine the user home directory",
@@ -73,8 +69,6 @@ fn a_hook_that_cannot_build_a_context_says_why_it_did_not_answer() {
         "the reason is not in the note: {said}"
     );
 
-    // And a refusal whose way out is a command carries it, so the note can be
-    // acted on rather than only read.
     let with_a_command = Refusal::not_started(
         "not-a-repository",
         "the checkout is not a git repository",
@@ -2420,11 +2414,8 @@ fn the_inventory_covers_every_code_the_crate_raises() {
 
 #[test]
 fn the_inventory_scans_every_code_reviewer_launch_can_answer_with() {
-    // The code the enum hands out is a third shape the walk had to be taught:
-    // a `fn code(…) -> &'static str` whose arms are the codes. The walk is
-    // what the inventory test uses, so it is what this asks: the cut used to
-    // stop at the `mod tests;` declaration on line 31 and the whole enum was
-    // never read.
+    // The enum's codes come from `fn code(…) -> &'static str` arms, a shape the
+    // walk has to read.
     let scanned: Vec<String> = crate_sources()
         .iter()
         .flat_map(|source| codes_in(source))
@@ -3569,8 +3560,7 @@ fn string_literal(text: &str) -> Option<String> {
     let text = text.trim_start();
     if let Some(body) = text.strip_prefix('"') {
         // The runtime string, not the source spelling: `Resolution::run` is a
-        // command a person pastes, so `\"Model routing\"` is one quoted word
-        // and not two backslashed ones.
+        // command a person pastes, so `\"Model routing\"` is one quoted word.
         let mut value = String::new();
         let mut escaped = false;
         for ch in body.chars() {

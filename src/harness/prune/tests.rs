@@ -857,8 +857,6 @@ fn a_fork_pull_request_with_the_same_head_name_does_not_close_a_head() {
 #[test]
 fn a_same_repository_closed_pull_request_still_closes_its_head() {
     let (root, clone, trees) = sweep_fixture();
-    // The closed pull request says the work is over. Its commits also have to
-    // live somewhere else before the head may go.
     git(&clone, &["push", "origin", "issue-2-open:archive"]);
     git(&clone, &["fetch", "--quiet", "origin"]);
     let skill = root.path().join("skill");
@@ -989,8 +987,7 @@ fn a_closed_head_whose_commit_no_other_ref_holds_is_kept() {
     git(&work, &["add", "."]);
     git(&work, &["commit", "--quiet", "-m", "only there"]);
     git(&work, &["push", "--quiet", "origin", "issue-5-only-there"]);
-    // Fetched, so the object is here and the head is inspected rather than an
-    // unreadable oid; no other ref names it.
+    // Fetched, so the head's object is here rather than an unreadable oid.
     git(
         &clone,
         &["fetch", "--quiet", "origin", "issue-5-only-there"],
@@ -1032,7 +1029,6 @@ fn a_closed_head_whose_commit_no_other_ref_holds_is_kept() {
         "the keep reason does not say why the closed head stays: {head:?}"
     );
 
-    // The same commit under another ref: now deleting the head loses nothing.
     git(
         &work,
         &["push", "--quiet", "origin", "issue-5-only-there:archive-5"],

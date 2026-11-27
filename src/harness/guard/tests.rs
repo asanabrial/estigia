@@ -1790,9 +1790,6 @@ fn a_hook_git_will_not_run_is_not_an_installed_one() {
 
 #[test]
 fn a_hook_with_the_marker_and_no_guard_body_is_disarmed_and_doctor_says_so() {
-    // The marker says who wrote the file; it does not say what the file does.
-    // A marker with nothing after it was read as `Installed`, so `doctor`
-    // reported a gate in force and every push went out unchecked.
     let repo = repository();
     let path = super::hooks_directory(repo.path())
         .expect("a hooks directory")
@@ -1815,9 +1812,6 @@ fn a_hook_with_the_marker_and_no_guard_body_is_disarmed_and_doctor_says_so() {
 
 #[test]
 fn a_reworded_comment_does_not_disarm_an_intact_hook() {
-    // An upgrade may reword the script's own prose. Comments decide nothing
-    // about whether the gate answers, so a body that still runs must not read
-    // as disarmed because a comment moved.
     let installed = super::script(Path::new("/usr/bin/estigia"));
     let reworded = installed.replace(
         "# managed by estigia guard",
@@ -1829,9 +1823,6 @@ fn a_reworded_comment_does_not_disarm_an_intact_hook() {
 
 #[test]
 fn reinstalling_over_a_disarmed_hook_puts_the_body_back() {
-    // `doctor` names `estigia guard` as the way out of `Disarmed`, so that
-    // command has to clear it: the file carries only Estigia's own lines, and
-    // the install replaces them.
     let repo = repository();
     let path = super::hooks_directory(repo.path())
         .expect("a hooks directory")
@@ -1848,9 +1839,6 @@ fn reinstalling_over_a_disarmed_hook_puts_the_body_back() {
 
 #[test]
 fn an_early_exit_appended_to_the_installed_hook_is_not_reported_in_force() {
-    // The body is there and an added `exit 0` runs before it. Reading only the
-    // marker called this installed; what the file does is let every push
-    // through.
     let repo = repository();
     super::install(repo.path(), Path::new("/usr/bin/estigia"), false).expect("the guard installs");
     let path = super::hooks_directory(repo.path())
@@ -1873,10 +1861,6 @@ fn an_early_exit_appended_to_the_installed_hook_is_not_reported_in_force() {
 
 #[test]
 fn a_guard_installed_outside_the_control_surface_is_reported() {
-    // `hooks_directory` follows `core.hooksPath`, while `CONTROL_SURFACE`
-    // spells `hooks/pre-push`: a guard installed in a custom directory is an
-    // ordinary file to the gate, so the agent that gate constrains could
-    // rewrite it. `doctor` is where that mismatch is visible.
     let repo = repository();
     crate::transport::run(
         &["git", "config", "core.hooksPath", "pushchecks"],

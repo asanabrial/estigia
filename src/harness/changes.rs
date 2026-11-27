@@ -309,9 +309,7 @@ fn orphan_notice_of(
         {
             continue;
         }
-        // A directory removed by hand stays registered until somebody runs
-        // `git worktree prune`. It holds nothing, and saying it "could not be
-        // read in time" described a read that never had a directory to read.
+        // A directory removed by hand stays registered until `git worktree prune`.
         if !entry.path.exists() {
             missing += 1;
             continue;
@@ -407,7 +405,6 @@ fn quick_status(path: &Path) -> Option<usize> {
     .ok()?;
     (output.status == 0).then(|| {
         // The `-z` rename shape is `R  new\0old\0`, one file with two names.
-        // Counting every entry read the old name as a second uncommitted file.
         let mut entries = output.stdout.split('\0');
         let mut count = 0usize;
         while let Some(entry) = entries.next() {

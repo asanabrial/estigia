@@ -349,10 +349,8 @@ fn observe_heads(
         let merged = merged(view.context, oid.trim(), view.base);
         let closed_issue = issue.and_then(|issue| issue_closed(view.context, issue, states));
         let closed_pr = pr_closed(view.context, &branch_name);
-        // A merged head's commits are on the base. Anything else has to keep
-        // them somewhere: a closed issue or pull request says the work is over,
-        // not that deleting this ref is safe, and a commit reachable from no
-        // other ref is gone once the head is.
+        // A closed issue or pull request says the work is over, not that
+        // deleting this ref is safe.
         let elsewhere = (merged != Some(true))
             .then(|| commits_held_elsewhere(view.context, oid.trim(), &branch_name))
             .flatten();

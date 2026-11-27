@@ -325,18 +325,13 @@ pub fn examine(skill_root: Option<&Path>, repo_dir: &Path) -> Vec<Check> {
                  bit, so git skips it silently and every push goes through ungated",
                 Resolution::run("estigia guard"),
             ),
-            // Marker present, body gone or replaced. Nothing this build wrote
-            // answers, so the file is installed-looking and disarmed; the
-            // reinstall names the hook's own path and replaces a body carrying
-            // only Estigia's lines.
+            // The reinstall replaces a body carrying only Estigia's lines.
             super::guard::State::Disarmed => Health::broken(
                 "the pre-push hook carries Estigia's marker and not the body this binary \
                  installs, so the gate in it does not answer and every push goes out unchecked",
                 Resolution::run("estigia guard"),
             ),
-            // Marker, a different body, and somebody's own lines: `estigia
-            // guard` refuses to rewrite those, so naming it would be a dead
-            // end.
+            // `estigia guard` refuses to rewrite somebody else's lines.
             super::guard::State::Altered => Health::broken(
                 "the pre-push hook carries Estigia's marker, a body this binary did not write, \
                  and lines Estigia did not write either \u{2014} what runs on a push cannot be \

@@ -832,9 +832,7 @@ fn permission_rules(frontmatter: &str) -> Vec<(String, Verdict)> {
 /// choosing that one, and reading the home copy instead would enforce a list
 /// nobody in this checkout wrote.
 ///
-/// Each directory is read for the `name:` a definition declares, not for
-/// `<agent>.md`: that is the name the host loads a definition under, so a file
-/// called something else and declaring `name: builder` is the builder role.
+/// Each file is matched on the `name:` it declares, not on `<agent>.md`.
 ///
 /// Returns the file's text, not a path: everything downstream is about what it
 /// says, and handing back a path invites a second read that could disagree with
@@ -855,9 +853,8 @@ pub fn definition_for(
     home: Option<&std::path::Path>,
     agent: &str,
 ) -> Result<Option<String>, Refusal> {
-    // The name arrives from the host and is matched, not joined, but a name
-    // with a separator or a parent segment is not one a host asks for, and
-    // refusing its shape here keeps a later reader from using it as a path.
+    // A name carrying a separator or a parent segment is not one a host asks
+    // for, and must not be read as a path.
     if agent.is_empty()
         || agent.contains(['/', '\\'])
         || agent.contains("..")
@@ -879,10 +876,8 @@ pub fn definition_for(
         repo_dir.join(".opencode").join("agents"),
     ];
     if let Some(home) = home {
-        // The directory the host actually reads comes first when the launcher
-        // moved it: with `CLAUDE_CONFIG_DIR` set, `~/.claude/agents` is a file
-        // the host never loads, and letting a same-named file there decide
-        // enforced a list nobody in this profile wrote.
+        // With `CLAUDE_CONFIG_DIR` set, `~/.claude/agents` is a file the host
+        // never loads.
         if let Some(claude_config_dir) = crate::setup::claude_config_dir() {
             roots.push(claude_config_dir.join("agents"));
         }

@@ -51,12 +51,10 @@ pub enum State {
     /// **silently**.
     Inert,
     /// Estigia's marker is there and the body this binary installs is not —
-    /// truncated, or replaced after the marker. The file is Estigia's, and the
-    /// gate in it is not the one this build writes.
+    /// truncated, or replaced after the marker.
     Disarmed,
     /// Estigia's marker is there, the installed body is not, and the file also
-    /// carries lines Estigia did not write. Which of them runs is anybody's
-    /// guess, and none of it is this build's gate.
+    /// carries lines Estigia did not write.
     Altered,
     /// Nothing is installed.
     Absent,
@@ -135,9 +133,6 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
     if !runnable {
         return State::Inert;
     }
-    // The marker says who wrote the file; the body is what the file does. A
-    // hook with the marker and nothing that answers is installed-looking and
-    // disarmed, and the difference is one an operator reads as health.
     if ours(text) && !faithful(text) {
         return if edited(Some(text)) {
             State::Altered
@@ -154,12 +149,8 @@ fn state_of(text: Option<&str>, runnable: bool) -> State {
 }
 
 /// Whether `text` is the hook this build writes, apart from the executable's
-/// own path and comment prose.
-///
-/// A hook installed by an Estigia that has since moved is still this build's:
-/// the call line names wherever the binary was, and comparing whole files would
-/// call every relocated install somebody else's. Comment prose is skipped for
-/// the same reason: a later build may reword it without changing what runs.
+/// own path and comment prose: a hook installed by an Estigia that has since
+/// moved, or reworded by a later build, still answers.
 fn faithful(text: &str) -> bool {
     comparable(text) == comparable(&script(Path::new("x")))
 }
@@ -168,9 +159,7 @@ fn comparable(text: &str) -> Vec<String> {
     text.lines()
         .map(str::trim_end)
         .filter(|line| !line.is_empty())
-        // Comment prose is not load-bearing: a hook from an older build whose
-        // comments were reworded still answers. The shebang is a comment to
-        // this parser and not to the shell, so it stays.
+        // The shebang is a comment to this parser and not to the shell.
         .filter(|line| !line.trim_start().starts_with('#') || line.starts_with("#!"))
         .map(|line| {
             if line.ends_with(&format!(" hook {HOOK}")) {

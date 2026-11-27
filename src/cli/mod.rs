@@ -5297,11 +5297,6 @@ fn git_hook(event: harness::hook::Event) -> Result<(), Refusal> {
     }
 }
 
-/// Why a hook that could not build a context let the push through unchecked.
-///
-/// The script is the one place a machine without Estigia is heard from, so this
-/// is the same stance one layer up: the push is not blocked, and it is not
-/// silent.
 fn not_checked_note(refusal: &Refusal) -> String {
     let mut said = format!(
         "estigia: this push was not checked against any claim \u{2014} {}",
