@@ -35,8 +35,8 @@ transition's own refusals follow; omitting the flag claims without moving, which
 `transition` call available.
 
 `--branch` and `--base` (with `--worktree-root` and `--no-link`) then create the isolated checkout in
-the same call. A refused claim creates no checkout; a failed checkout is reported under
-`claim` with `branch` while the claim stands.
+the same call. A refused claim creates no checkout; a failed checkout is reported in the claim
+answer's start_branch field while the claim stands.
 
 A run holds one active claim and a second is refused. The MCP tool's `park: true`
 is the exception, and it is the server's bookkeeping, never a transport flag. While the git operation

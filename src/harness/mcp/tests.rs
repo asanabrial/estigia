@@ -1833,6 +1833,39 @@ fn the_retired_name_check_flags_the_lines_the_skill_must_not_carry() {
 }
 
 #[test]
+fn every_estigia_command_the_skill_names_is_a_subcommand() {
+    let mut commands: Vec<String> = Vec::new();
+    cli_names(
+        &<crate::cli::Cli as clap::CommandFactory>::command(),
+        &mut commands,
+    );
+    let mut missing = Vec::new();
+    for file in crate::skill::FILES {
+        for line in file.contents.lines() {
+            for (_, _, span) in backticked(line) {
+                let Some((command, rest)) = span.split_once(' ') else {
+                    continue;
+                };
+                if command != "estigia" {
+                    continue;
+                }
+                let Some(subcommand) = rest.split_whitespace().next() else {
+                    continue;
+                };
+                if !commands.iter().any(|name| name == &spelling(subcommand)) {
+                    missing.push(format!("{}: `{span}`", file.path));
+                }
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "these name an `estigia` command that is not a subcommand:\n{}",
+        missing.join("\n")
+    );
+}
+
+#[test]
 fn the_absorption_map_names_only_operations_no_tool_performs_and_answers_with_one_that_exists() {
     let callable = callable_names();
     let binding = crate::skill::FILES
