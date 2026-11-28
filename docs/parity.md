@@ -112,6 +112,12 @@ decision recorded where a reader looks for it:
   installed as its two judges. One divergence is declared rather than closed: v4 has no ledger a
   judge could write to, and Estigia's `record_review_finding` would accept a judge's finding,
   which the policy forbids and nothing enforces — [`honesty.md`](honesty.md) records it.
+- **The review tier.** Settled: a hot-path token counts only for a path the semantic-risk gate
+  admits, both content scans skip an added line that is a comment, and the process-spawn
+  alternation gains Rust's `Command::new(`, which the ported catalogue did not carry. A prose line
+  naming `auth` or `--exec` therefore no longer buys four lenses, and a Rust spawn reads `high` as
+  its counterparts in other languages do. The measurements, the rule and the cost of each are in
+  [`honesty-review-tier.md`](honesty-review-tier.md).
 - **Reviewer distinctness.** Settled: v4 carries none, and Estigia keeps four
   rules as declared divergences, each because Estigia has a mechanism v4 does not. A handoff is
   resolved only by a recorder outside the publisher and requester set (v4 has no handoff). An
