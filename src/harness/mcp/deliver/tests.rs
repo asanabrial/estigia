@@ -1149,6 +1149,36 @@ fn the_deliver_after_a_version_stop_lands_closes_without_merging_again() {
 }
 
 #[test]
+fn an_unreadable_draft_read_hands_back_before_the_release() {
+    let world = world("b.txt", "two\n");
+    let mut fake = fake(&world);
+    fake.stamp = Some("2026-10-25T09:00:00Z".into());
+    let ran = drive(
+        &fake,
+        &[json!({"matches": "isDraft", "stdout": "", "status": 0})],
+        &request(),
+    );
+    assert_eq!(stopped(&ran), ("release", "pull-request-unreadable"));
+    assert!(!called(&fake).contains(&"release_ci".to_owned()));
+}
+
+#[test]
+fn a_draft_read_without_the_field_releases_nothing_again() {
+    let world = world("b.txt", "two\n");
+    let mut fake = fake(&world);
+    fake.stamp = Some("2026-10-25T09:00:00Z".into());
+    let mut script = vec![json!({"matches": "isDraft", "stdout": "{}", "status": 0})];
+    script.extend(green_script(&world));
+    let ran = drive(&fake, &script, &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert!(
+        !called(&fake).contains(&"release_ci".to_owned()),
+        "a field the read did not carry was read as a draft: {:?}",
+        called(&fake)
+    );
+}
+
+#[test]
 fn an_empty_rollup_is_pending_inside_the_window_and_absent_past_it() {
     let world = world("b.txt", "two\n");
     let inside = fake(&world);
