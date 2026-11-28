@@ -203,13 +203,16 @@ pub fn shipped_part(source: &str) -> String {
 }
 
 fn blank_line_before(source: &str) -> usize {
-    if source.ends_with("\r\n\r\n") {
+    let last = if source.ends_with("\r\n") {
         2
-    } else if source.ends_with("\n\n") {
+    } else if source.ends_with('\n') {
         1
     } else {
-        0
-    }
+        return 0;
+    };
+    let at = source.len() - last;
+    let blank = at > 0 && (source[..at].ends_with('\n') || source[..at].ends_with("\r\n"));
+    if blank { last } else { 0 }
 }
 
 fn line_start(source: &str, at: usize) -> Option<usize> {
@@ -421,7 +424,17 @@ mod tests {
     #[test]
     fn a_literal_brace_of_any_shape_does_not_close_the_test_module() {
         for literal in [
-            "\"}\"", "\"{\"", "'}'", "'{'", "r#\"}\"#", "r\"{\"", "\"\\}\"", "'\\''",
+            "\"}\"",
+            "\"{\"",
+            "'}'",
+            "'{'",
+            "r#\"}\"#",
+            "r\"{\"",
+            "r#\"\"}\"#",
+            "r\"\\\"",
+            "\"\\}\"",
+            "\"\\\"}\"",
+            "'\\''",
         ] {
             let source = format!(
                 "fn ship() {{}}\n#[cfg(test)]\nmod tests {{\n    let held = {literal};\n    fn a() {{}}\n}}\nfn after() {{}}\n"
@@ -435,11 +448,13 @@ mod tests {
     }
 
     #[test]
-    fn an_lf_and_a_crlf_blank_line_before_the_module_leave_the_same_shape() {
+    fn a_blank_line_before_the_module_loses_one_break_whatever_the_endings() {
         let lf = "fn ship() {}\n\n#[cfg(test)]\nmod tests {\n    fn a() {}\n}\n\nfn after() {}\n";
         let crlf = "fn ship() {}\r\n\r\n#[cfg(test)]\r\nmod tests {\r\n    fn a() {}\r\n}\r\n\r\nfn after() {}\r\n";
+        let mixed = "fn ship() {}\n\r\n#[cfg(test)]\r\nmod tests {\r\n    fn a() {}\r\n}\r\n\r\nfn after() {}\n";
         assert_eq!(shipped_part(lf), "fn ship() {}\n\nfn after() {}\n");
         assert_eq!(shipped_part(crlf), "fn ship() {}\r\n\r\nfn after() {}\r\n");
+        assert_eq!(shipped_part(mixed), "fn ship() {}\n\r\nfn after() {}\n");
     }
 
     #[test]
