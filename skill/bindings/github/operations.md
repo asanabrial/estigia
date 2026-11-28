@@ -542,8 +542,8 @@ a lens report is `qualifying-review-verdict-missing`. A `review-verdict` clears 
 `accepted` one is ignored, and a distinct reviewer's `rejected` one refuses as
 `legacy-verdict-rejected` at every tier, because the marker binds those exact bytes; a republish is a new receipt and starts without it.
 The answer's `basis` names which route cleared it.
-The clean target is re-derived from the named `worktree`, else the marked checkout **at the published
-head**, else a primary there, else that marked checkout; else `release-checkout-unresolved`.
+The clean target comes from the named `worktree`, else the marked checkout **at the published
+head**, else the primary there, else that marked checkout; else `release-checkout-unresolved`.
 
 ## Deriving the review tier
 
