@@ -641,7 +641,7 @@ pub(crate) fn with_decisions(context: &GateContext, run_id: &str, mut answer: Va
     if answer.get("decision").is_some() {
         return answer;
     }
-    let Some(report) = super::decision_mode::report(&context.state_root, run_id) else {
+    let Some(report) = super::decision_mode::report(context, run_id) else {
         return answer;
     };
     if let Some(fields) = answer.as_object_mut() {

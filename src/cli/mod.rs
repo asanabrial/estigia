@@ -7803,6 +7803,26 @@ fn claim_reading(
             stop_after,
         };
     }
+    if run.within_window(context.window) {
+        return GoalReading {
+            issue: Some(issue),
+            state,
+            standing: "passed",
+            live: true,
+            reason: None,
+            claimable: None,
+            dischargeable: None,
+            held: None,
+            pending: None,
+            unconditioned: None,
+            unadmitted: None,
+            next: None,
+            opens_at: None,
+            waiting: None,
+            completed,
+            stop_after,
+        };
+    }
     match harness::tracker_answer_for_pointer(
         &context.skill_root,
         &context.repo_dir,
@@ -7924,8 +7944,22 @@ struct Queues {
     next: Option<String>,
 }
 
-/// Every count `estigia goal` reports about the queues, from one read of each
-/// queue: `review`, `ready`, `blocked` and `in-progress`.
+impl Queues {
+    fn unread() -> Self {
+        Self {
+            claimable: None,
+            dischargeable: None,
+            held: None,
+            pending: None,
+            unconditioned: None,
+            unadmitted: None,
+            next: None,
+        }
+    }
+}
+
+/// Every count `estigia goal` reports about the queues, from one open-issue
+/// listing partitioned into `review`, `ready`, `blocked` and `in-progress`.
 ///
 /// `None` for a count whose queue could not be read, never zero — a queue nobody
 /// could read is not a queue with nothing in it. `claimable` is the `review` and
@@ -7945,54 +7979,43 @@ fn queue_reading(context: &harness::GateContext, run_id: &str) -> Queues {
         if let crate::config::Tracker::Linear { team } = &context.tracker {
             return linear_queue(context, team);
         }
-        return Queues {
-            claimable: None,
-            dischargeable: None,
-            held: None,
-            pending: None,
-            unconditioned: None,
-            unadmitted: None,
-            next: None,
-        };
+        return Queues::unread();
     }
-    let read = |state: &str| {
-        harness::queue_read(
-            &context.skill_root,
-            &context.repo_dir,
-            &context.tracker,
-            run_id,
-            state,
-        )
+    let Some(queues) = harness::queues_read(
+        &context.skill_root,
+        &context.repo_dir,
+        &context.tracker,
+        run_id,
+    ) else {
+        return Queues::unread();
     };
-    let number = |answer: &Option<serde_json::Value>, key: &str| {
-        answer
-            .as_ref()
+    let answer = |state: &str| {
+        queues
+            .get(state)
+            .filter(|answer| answer.get("ok") == Some(&serde_json::Value::Bool(true)))
+    };
+    let number = |state: &str, key: &str| {
+        answer(state)
             .and_then(|answer| answer.get(key))
             .and_then(serde_json::Value::as_u64)
     };
-    let review = read("review");
-    let ready = read("ready");
-    let blocked = read("blocked");
-    let in_progress = read("in-progress");
-    let claimable = number(&review, "count")
-        .zip(number(&ready, "count"))
+    let claimable = number("review", "count")
+        .zip(number("ready", "count"))
         .map(|(review, ready)| review + ready);
-    let held = number(&review, "open")
-        .zip(number(&review, "count"))
-        .zip(number(&in_progress, "open"))
+    let held = number("review", "open")
+        .zip(number("review", "count"))
+        .zip(number("in-progress", "open"))
         .map(|((open, claimable), in_progress)| in_progress + open.saturating_sub(claimable));
     Queues {
         claimable,
-        dischargeable: number(&blocked, "dischargeable"),
+        dischargeable: number("blocked", "dischargeable"),
         held,
-        pending: number(&blocked, "pending"),
-        unconditioned: number(&blocked, "unconditioned"),
-        unadmitted: ready.as_ref().map(|answer| {
-            answer
-                .get("unadmitted")
-                .and_then(serde_json::Value::as_array)
-                .map_or(0, |list| list.len() as u64)
-        }),
+        pending: number("blocked", "pending"),
+        unconditioned: number("blocked", "unconditioned"),
+        unadmitted: answer("ready")
+            .and_then(|answer| answer.get("unadmitted"))
+            .and_then(serde_json::Value::as_array)
+            .map(|list| list.len() as u64),
         next: None,
     }
 }
@@ -8001,15 +8024,7 @@ fn queue_reading(context: &harness::GateContext, run_id: &str) -> Queues {
 /// order it is worked, less every issue a live claim on this machine already holds.
 fn linear_queue(context: &harness::GateContext, team: &str) -> Queues {
     let Ok(queue) = crate::transport::linear::read_queue(team) else {
-        return Queues {
-            claimable: None,
-            dischargeable: None,
-            held: None,
-            pending: None,
-            unconditioned: None,
-            unadmitted: None,
-            next: None,
-        };
+        return Queues::unread();
     };
     let taken: Vec<String> = harness::session::holdings(&context.state_root)
         .into_iter()

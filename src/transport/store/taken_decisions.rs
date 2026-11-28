@@ -24,6 +24,18 @@ impl Store {
         Ok(())
     }
 
+    pub(crate) fn any_unreported(&self, run_id: &str) -> Result<bool, Failure> {
+        self.connection()
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM taken_decisions
+                 WHERE run_id = ?1 AND reported_at IS NULL)",
+                [run_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|found| found != 0)
+            .map_err(unreadable("read the unreported decisions"))
+    }
+
     pub(crate) fn decisions_reported(
         &self,
         run_id: &str,

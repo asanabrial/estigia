@@ -9736,6 +9736,86 @@ fn a_claude_stop_with_a_stored_loop_continues_with_the_slash_prompt() {
     );
 }
 
+/// One loop stop lists the open issues once, and every queue is a partition of
+/// that one answer.
+#[test]
+fn one_loop_stop_lists_the_open_issues_once_for_every_queue() {
+    let (_root, context, _) = stop_rig("codex-stop-one-listing");
+    seed_store(&[
+        (21, "ready", "Body.", Vec::new()),
+        (22, "blocked", "Body.", Vec::new()),
+        (23, "in-progress", "Body.", Vec::new()),
+    ]);
+    let script = crate::test_env::answers(&queues(serde_json::json!([
+        claimable_issue(21),
+        claimable_issue(22),
+        claimable_issue(23),
+    ])));
+    let log_directory = tempfile::tempdir().expect("a directory for the call log");
+    let log = log_directory.path().join("gh.log");
+    let bin = crate::test_env::scripted_gh();
+    let answer = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        super::loop_stop::answer(
+            harness::hook::Dialect::ClaudeCode,
+            Some("codex"),
+            harness::hook::Event::Stop,
+            &stop_input("codex-stop-one-listing", false),
+            Some(&context),
+        )
+    });
+    assert_eq!(
+        answer["decision"], "block",
+        "the stop did not reach the queues: {answer}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    let listings = calls
+        .lines()
+        .filter(|line| line.contains("issues?state=open"))
+        .count();
+    assert_eq!(
+        listings, 1,
+        "one loop stop listed the open issues {listings} times: {calls}"
+    );
+}
+
+/// Inside the renewal window the plain `Stop` answers from the pointer, and a
+/// loop's `Stop` does too: no tracker is asked.
+#[test]
+fn a_loop_stop_inside_the_renewal_window_reads_no_tracker() {
+    let (_root, context, run_id) = claude_loop_rig("claude-loop-window", None);
+    let mut run = harness::session::load(&context.state_root, &run_id);
+    run.mark_verified();
+    assert!(
+        harness::session::store(&context.state_root, &run).expect("the pointer writes"),
+        "the fixture pointer was not stored"
+    );
+    assert!(
+        run.within_window(context.window),
+        "the fixture is outside the renewal window it is about"
+    );
+    let log_directory = tempfile::tempdir().expect("a directory for the call log");
+    let log = log_directory.path().join("gh.log");
+    let bin = crate::test_env::scripted_gh();
+    let answer = crate::test_env::with_logging_gh(bin.path(), "[]", &log, || {
+        super::loop_stop::answer(
+            harness::hook::Dialect::ClaudeCode,
+            Some("claude-code"),
+            harness::hook::Event::Stop,
+            &stop_input("claude-loop-window", false),
+            Some(&context),
+        )
+    });
+    assert_eq!(
+        answer["decision"], "block",
+        "a claim read from the pointer did not keep the loop going: {answer}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        calls.is_empty(),
+        "a loop stop inside the renewal window read the tracker: {calls}"
+    );
+}
+
 #[test]
 fn a_claude_stop_with_a_stopped_loop_stands_aside() {
     let (_root, context, run_id) = claude_loop_rig("claude-loop-stopped", None);
@@ -10020,7 +10100,11 @@ fn a_codex_stop_retries_an_unconfirmed_claim_before_it_continues_or_stops() {
             false,
             [Some(5), Some(0), Some(0), Some(0), Some(0)],
         ),
-        reading("unreadable", false, [None; 5]),
+        reading(
+            "unread",
+            false,
+            [Some(5), Some(0), Some(0), Some(0), Some(0)],
+        ),
         reading("passed", true, [None; 5]),
     ]);
     assert_eq!(asked, 3, "an unconfirmed read was not retried: {answer}");
@@ -10063,6 +10147,34 @@ fn a_codex_stop_retries_an_unconfirmed_claim_before_it_continues_or_stops() {
     // A confirmed first read is asked for once and only once.
     let (_, asked) = decided(vec![reading("passed", true, [None; 5])]);
     assert_eq!(asked, 1, "a confirmed answer was asked for twice");
+}
+
+#[test]
+fn an_unreadable_answer_is_not_retried() {
+    let mut asked = 0;
+    let mut pauses = 0;
+    let answer = super::loop_stop::decide(
+        "codex-abc",
+        crate::harness::loop_text::Invocation::Mention,
+        None,
+        None,
+        || pauses += 1,
+        || {
+            asked += 1;
+            reading("unreadable", false, [None; 5])
+        },
+    )
+    .into_value();
+    assert_eq!(
+        asked, 1,
+        "an answer from the pointer, which cannot change, was asked again"
+    );
+    assert_eq!(pauses, 0, "an unreadable answer paused before one attempt");
+    let said = answer["systemMessage"].as_str().unwrap_or_default();
+    assert!(
+        said.contains("could not confirm") && said.contains("unreadable"),
+        "{answer}"
+    );
 }
 
 fn unadmitted_reading(unadmitted: Option<u64>) -> super::GoalReading {

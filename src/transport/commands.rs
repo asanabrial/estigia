@@ -19,6 +19,7 @@ pub const SCRIPTED: &[&str] = &[
     "flush",
     "create",
     "list-state",
+    "list-states",
     "list-identities",
     "claim",
     "reclaim",
@@ -575,20 +576,83 @@ pub fn list_state(
     limit: u32,
     now: &str,
 ) -> Result<serde_json::Value, Failure> {
-    let ceiling = u64::from(limit);
-    let (items, _open) = open_items(context, limit as usize)?;
+    let listing = queue_listing(context, limit as usize)?;
+    state_answer(&listing, state, run_id, limit, now)
+}
+
+/// The queues [`QUEUES`] names, each one [`list_state`]'s answer, from a single
+/// open-issue listing and a single store read.
+///
+/// A queue whose own answer could not be read is its failure envelope, never an
+/// absent key: the same distinction between `None` and zero [`list_state`]
+/// keeps, per queue.
+pub fn list_states(
+    context: &Context,
+    run_id: &str,
+    limit: u32,
+    now: &str,
+) -> Result<serde_json::Value, Failure> {
+    let listing = queue_listing(context, limit as usize)?;
+    let mut answers = serde_json::Map::new();
+    for state in QUEUES {
+        let answer = state_answer(&listing, state, run_id, limit, now)
+            .unwrap_or_else(|failure| failure.envelope());
+        answers.insert((*state).to_owned(), answer);
+    }
+    Ok(serde_json::Value::Object(answers))
+}
+
+/// The queues [`list_states`] answers, in the order the loop reads them.
+pub const QUEUES: [&str; 4] = ["review", "ready", "blocked", "in-progress"];
+
+/// The open issues and the store rows every queue partitions.
+struct QueueListing {
+    items: Vec<serde_json::Value>,
+    repo: super::store::Repo,
+    store: Option<super::store::Store>,
+    states: std::collections::BTreeMap<u64, Option<String>>,
+    provisional: Vec<serde_json::Value>,
+}
+
+fn queue_listing(context: &Context, limit: usize) -> Result<QueueListing, Failure> {
+    let (items, _open) = open_items(context, limit)?;
     let repo = super::claim::repo_of(context)?;
     let store = super::store::open_for_read(&super::store::store_path()?)?;
     let rows = match &store {
         Some(store) => store.issue_rows(&repo)?,
         None => Vec::new(),
     };
-    let states: std::collections::BTreeMap<u64, Option<String>> = rows
+    let states = rows
         .iter()
         .map(|row| (row.number, row.state.clone()))
         .collect();
     let provisional = provisional_items(store.as_ref(), &repo)?;
-    let candidates: Vec<serde_json::Value> = items.iter().cloned().chain(provisional).collect();
+    Ok(QueueListing {
+        items,
+        repo,
+        store,
+        states,
+        provisional,
+    })
+}
+
+fn state_answer(
+    listing: &QueueListing,
+    state: &str,
+    run_id: &str,
+    limit: u32,
+    now: &str,
+) -> Result<serde_json::Value, Failure> {
+    let ceiling = u64::from(limit);
+    let repo = &listing.repo;
+    let store = listing.store.as_ref();
+    let states = &listing.states;
+    let candidates: Vec<serde_json::Value> = listing
+        .items
+        .iter()
+        .chain(&listing.provisional)
+        .cloned()
+        .collect();
 
     let mut eligible = Vec::new();
     let mut excluded = Vec::new();
@@ -610,8 +674,8 @@ pub fn list_state(
             continue;
         }
         open += 1;
-        let comments = match &store {
-            Some(store) => store.timeline(&repo, number)?,
+        let comments = match store {
+            Some(store) => store.timeline(repo, number)?,
             None => Vec::new(),
         };
         if super::claim::holding(&comments, now).holder.is_some() {
@@ -666,7 +730,7 @@ pub fn list_state(
                 .ok_or_else(|| {
                     Failure::Read("a blocked queue candidate had no issue number".to_owned())
                 })?;
-            let conditions = blocked_conditions(store.as_ref(), &repo, number, &states);
+            let conditions = blocked_conditions(store, repo, number, states);
             let holds = !conditions.is_empty()
                 && conditions.iter().all(|condition| {
                     condition.get("holds") == Some(&serde_json::Value::Bool(true))
@@ -702,7 +766,7 @@ pub fn list_state(
         // and an empty answer must not read as an empty queue. `count` may be
         // lower after requester exclusion, so this deliberately uses the
         // pre-filter list.
-        "at_limit": items.len() as u64 >= ceiling,
+        "at_limit": listing.items.len() as u64 >= ceiling,
         "partitions": partitions,
         "note": "ordering inside a partition needs the domain's scale contract — apply it yourself",
     });

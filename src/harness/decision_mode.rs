@@ -139,10 +139,20 @@ fn record(state_root: &Path, run_id: &str, taken: &[TakenDecision]) -> bool {
 }
 
 /// The decisions `run_id` took since the last report, marked reported, as the
-/// text shown to the person. `None` when there are none or the store cannot be read.
-pub fn report(state_root: &Path, run_id: &str) -> Option<String> {
-    let path = store::beside(state_root);
-    store::open_for_read(&path).ok()??;
+/// text shown to the person. `None` when the mode is not `auto`, when there are
+/// none, or when the store cannot be read.
+pub fn report(context: &GateContext, run_id: &str) -> Option<String> {
+    if context.decision_mode != DecisionMode::Auto {
+        return None;
+    }
+    let path = store::beside(&context.state_root);
+    let unreported = store::open_for_read(&path)
+        .ok()??
+        .any_unreported(run_id)
+        .ok()?;
+    if !unreported {
+        return None;
+    }
     let now = session::now_seconds()?;
     let taken = store::Store::open(&path)
         .ok()?

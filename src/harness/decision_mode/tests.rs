@@ -112,7 +112,8 @@ fn a_question_under_ask_is_left_to_the_person() {
         Some(&context(DecisionMode::Ask, &root)),
     );
     assert_eq!(answer, json!({}));
-    assert_eq!(report(&root, "claude-abcd1234"), None);
+    let ask = context(DecisionMode::Ask, &root);
+    assert_eq!(report(&ask, "claude-abcd1234"), None);
 }
 
 #[test]
@@ -150,7 +151,26 @@ fn a_stop_that_blocks_keeps_the_decisions_for_the_next_one() {
         json!({"decision": "block", "reason": "keep going"}),
     );
     assert!(blocked.get("systemMessage").is_none(), "{blocked}");
-    assert!(report(&root, "claude-abcd1234").is_some());
+    assert!(report(&auto, "claude-abcd1234").is_some());
+}
+
+#[test]
+fn a_report_under_ask_lists_nothing_and_leaves_the_decisions_unreported() {
+    let (_directory, root) = state();
+    let auto = context(DecisionMode::Auto, &root);
+    assert!(record(&root, "claude-abcd1234", &recommended(&asked())));
+    let ask = context(DecisionMode::Ask, &root);
+    assert_eq!(
+        report(&ask, "claude-abcd1234"),
+        None,
+        "a report under ask listed decisions nobody asked it to take"
+    );
+    let reported = report(&auto, "claude-abcd1234")
+        .expect("the auto report did not find the decision the ask report left alone");
+    assert!(
+        reported.contains("→ SQLite — survives a restart"),
+        "{reported}"
+    );
 }
 
 #[test]

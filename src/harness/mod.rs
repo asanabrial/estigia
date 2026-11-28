@@ -4247,24 +4247,20 @@ pub(crate) fn tracker_answer_for_pointer(
     Some(answer)
 }
 
-/// One queue this run could act on, read through the transport's own read-only
-/// `list-state`, on the same [`crate::transport::Context::live`] and `GH_REPO`
+/// The four queues [`crate::transport::commands::QUEUES`] names, read through
+/// the transport's own read-only `list-states` from one open-issue listing and
+/// one store read, on the same [`crate::transport::Context::live`] and `GH_REPO`
 /// pin as [`tracker_answer_for_pointer`].
 ///
-/// **One shape, four queues.** `estigia goal` asks it for `review`, `ready`,
-/// `blocked` and `in-progress`; a second copy of this preamble is the copy this
-/// file's own history keeps finding.
-///
-/// `None` when nothing could be read — no transport for this tracker, no
-/// readable clock, or a list that failed — never zero. A queue a fault emptied
-/// is not an empty queue, and the loop these answer would stop on the fault as
-/// though the work were gone.
-pub(crate) fn queue_read(
+/// `None` when the listing itself could not be read — no transport for this
+/// tracker, no readable clock, or a list that failed — never zero. A queue
+/// inside the answer is its own failure envelope, which the caller reads as no
+/// count: one state failing must not read as four failures.
+pub(crate) fn queues_read(
     skill_root: &Path,
     repo_dir: &Path,
     tracker: &crate::config::Tracker,
     run_id: &str,
-    state: &str,
 ) -> Option<serde_json::Value> {
     tracker.transport()?;
     let seconds = session::now_seconds()?;
@@ -4275,13 +4271,13 @@ pub(crate) fn queue_read(
         repo_dir.to_path_buf(),
         tracker.named_repo(),
     );
-    let flags: Vec<String> = ["--state", state, "--run-id", run_id]
+    let flags: Vec<String> = ["--run-id", run_id]
         .iter()
         .map(|part| (*part).to_owned())
         .collect();
     crate::transport::dispatch::dispatch(
         &transport,
-        "list-state",
+        "list-states",
         &flags,
         &session::stamp_of(seconds),
     )
@@ -4291,7 +4287,7 @@ pub(crate) fn queue_read(
 /// How many issues this run's own delivery has closed, read from the tracker.
 ///
 /// `None` when nothing could be read — no transport for this tracker, or a
-/// count that failed — never zero, for the reason [`queue_read`] gives.
+/// count that failed — never zero, for the reason [`queues_read`] gives.
 pub(crate) fn completed_work(
     skill_root: &Path,
     repo_dir: &Path,

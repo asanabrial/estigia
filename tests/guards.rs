@@ -1274,11 +1274,11 @@ const AFFIRMED: &[(&str, u64)] = &[
     // `harness::doctor::stale_run_pointers`'s `Skipped` row,
     // `harness::mcp::run_tool`'s tracker arm, `harness::decide_observing`'s
     // `NoTracker` aside, `harness::tracker_answer_for_pointer`,
-    // `harness::queue_read` and `harness::completed_work`;
+    // `harness::queues_read` and `harness::completed_work`;
     // `harness::unclaimed::applies` and `harness::issue_requirement::in_force`
     // left the list for `Tracker::adjudicates_unclaimed_writes` (a follow-up), which holds the refusals under Linear. Deliberately
     // too-tight: a call site added before a further variant lands is not caught.
-    ("tracker-transport-absent", 17163727701946764455),
+    ("tracker-transport-absent", 14898082231946401564),
     // `own-delivery-close-spelling` — new on 2026-10-05. The
     // `closed-by-own-delivery` token the transport writes into `checked[0]` and
     // the harness reads back had two spellings with nothing crossing them; they
