@@ -1622,7 +1622,11 @@ pub(super) fn deliver(
             .map(ToOwned::to_owned),
     };
     let live = Live::new(context, named.id, context.repository_host.named_repo());
-    Ok(result_of(run(&live, &request), compact))
+    let mut answer = run(&live, &request);
+    if compact {
+        super::compact_deliver(&mut answer);
+    }
+    Ok(result_of(answer, compact))
 }
 
 fn until_of(arguments: &Value) -> Result<Option<Until>, ToolFailure> {
