@@ -211,8 +211,11 @@ fn blank_line_before(source: &str) -> usize {
         return 0;
     };
     let at = source.len() - last;
-    let blank = at > 0 && (source[..at].ends_with('\n') || source[..at].ends_with("\r\n"));
-    if blank { last } else { 0 }
+    if source[..at].ends_with('\n') || source[..at].ends_with("\r\n") {
+        last
+    } else {
+        0
+    }
 }
 
 fn line_start(source: &str, at: usize) -> Option<usize> {
@@ -452,9 +455,20 @@ mod tests {
         let lf = "fn ship() {}\n\n#[cfg(test)]\nmod tests {\n    fn a() {}\n}\n\nfn after() {}\n";
         let crlf = "fn ship() {}\r\n\r\n#[cfg(test)]\r\nmod tests {\r\n    fn a() {}\r\n}\r\n\r\nfn after() {}\r\n";
         let mixed = "fn ship() {}\n\r\n#[cfg(test)]\r\nmod tests {\r\n    fn a() {}\r\n}\r\n\r\nfn after() {}\n";
+        let other_mixed = "fn ship() {}\r\n\n#[cfg(test)]\r\nmod tests {\r\n    fn a() {}\r\n}\r\n\r\nfn after() {}\r\n";
         assert_eq!(shipped_part(lf), "fn ship() {}\n\nfn after() {}\n");
         assert_eq!(shipped_part(crlf), "fn ship() {}\r\n\r\nfn after() {}\r\n");
         assert_eq!(shipped_part(mixed), "fn ship() {}\n\r\nfn after() {}\n");
+        assert_eq!(
+            shipped_part(other_mixed),
+            "fn ship() {}\r\n\r\nfn after() {}\r\n"
+        );
+    }
+
+    #[test]
+    fn a_blank_first_line_stays_and_the_module_after_it_goes() {
+        let source = "\n#[cfg(test)]\nmod tests {\n    fn a() {}\n}\nfn after() {}\n";
+        assert_eq!(shipped_part(source), "\nfn after() {}\n");
     }
 
     #[test]
