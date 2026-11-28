@@ -142,7 +142,7 @@ pub struct Tool {
     pub arguments: &'static [Argument],
     /// What a success does to the run pointer.
     pub effect: PointerEffect,
-    /// Whether this tool writes to the tracker.
+    /// Whether this tool writes to the tracker or the local store.
     ///
     /// Exposed in the schema as `readOnlyHint`, so an agent can tell a safe
     /// retry apart from one without reading this file.
@@ -2375,6 +2375,12 @@ pub fn is_local_store(name: &str) -> bool {
 /// Whether a tool writes to the tracker or the repository host.
 pub fn writes_the_tracker(name: &str) -> bool {
     TRACKER_WRITERS.contains(&name)
+}
+
+/// Whether a tool changes the local store or the tracker, so its call waits for the mutations
+/// that arrived before it.
+pub fn mutates(name: &str) -> bool {
+    find(name).is_some_and(|tool| tool.writes)
 }
 
 /// Whether a tool is offered only under `Workflow: assisted`.

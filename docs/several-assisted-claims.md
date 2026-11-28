@@ -70,7 +70,8 @@ the worktree as a boundary, whatever it names; [`honesty.md`](honesty.md) says s
 - **Two repositories need two sessions.** `assist` takes no repository; the server's context is the
   directory it was launched in.
 - **Subagents share one MCP server** (measured, in [`honesty.md`](honesty.md)), so a long
-  `review_stages` `wait_seconds` from one worker delays its siblings' tool calls. Prefer short waits.
+  `review_stages` `wait_seconds` from one worker delays its siblings' calls that change the store or
+  the tracker; a read answers at once. Prefer short waits.
 - **The orchestrator's turn stays open.** The rule in `SKILL.md` that no turn ends waiting on a
   background delegation still holds: wait for the workers, or do without their answers.
 - **A pointer with no session row** is listed by `estigia sessions` as `unregistered`, the class every

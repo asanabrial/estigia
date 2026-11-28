@@ -469,8 +469,9 @@ about before any row is written, through MCP elicitation (protocol `2025-06-18`)
   was never asked and the refusal must not read as their decision.
 - An address that names nobody live, or several, is refused before the question is put, with the candidates
   and nothing recorded.
-- While the server waits, any other line from the client is queued and served after the tool call answers. Requests
-  are still served one at a time.
+- While the server waits, a read is answered at once, and every other line goes to the call whose id it names. Calls
+  that change the store or the tracker run in arrival order, one at a time, so a reply cannot overtake the send it
+  answers.
 - The tool has no argument that skips the question, and the binary cannot tell whether a person asked the agent to
   send. A person who wants no prompt sends from the CLI.
 
