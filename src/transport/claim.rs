@@ -10609,13 +10609,6 @@ pub fn release_ci(
     }))
 }
 
-/// The checkout whose clean target `release_ci` re-derives: the one named, else
-/// the one whose ownership marker names this issue, else the primary checkout
-/// when it stands at the published head.
-///
-/// Refuses `release-checkout-unresolved` rather than reading a primary checkout
-/// on another commit, which would answer `release-target-mismatch` about bytes
-/// nobody published from.
 fn head_at(directory: &std::path::Path) -> Option<String> {
     super::run(
         &["git", "rev-parse", "--verify", "HEAD^{commit}"],
@@ -10627,6 +10620,14 @@ fn head_at(directory: &std::path::Path) -> Option<String> {
     .map(|answer| answer.stdout.trim().to_owned())
 }
 
+/// The checkout whose clean target `release_ci` re-derives: the one named, else
+/// the one whose ownership marker names this issue when it stands at the
+/// published head, else the primary checkout when it stands there, else that
+/// marked checkout so a mismatch names its own target.
+///
+/// Refuses `release-checkout-unresolved` rather than reading a primary checkout
+/// on another commit, which would answer `release-target-mismatch` about bytes
+/// nobody published from.
 fn release_checkout(
     context: &Context,
     release: &CiRelease<'_>,

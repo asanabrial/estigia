@@ -22246,6 +22246,43 @@ fn a_release_named_no_worktree_derives_the_target_from_the_issues_marked_checkou
 }
 
 #[test]
+fn a_named_worktree_wins_over_a_marked_checkout_at_the_published_head() {
+    let (root, context, receipt) = medium_change();
+    let marked = root.path().join("marked");
+    mark_worktree_for(&context.repo_dir, &marked, &receipt.head, 42);
+    let named = root.path().join("named");
+    let mut release = release_of(&receipt);
+    release.worktree = Some(named.as_path());
+
+    assert_eq!(
+        release_checkout(&context, &release).expect("the checkout resolves"),
+        Some(named)
+    );
+}
+
+#[test]
+fn a_marked_checkout_whose_head_cannot_be_read_falls_through_to_the_primary() {
+    let (root, context, receipt) = medium_change();
+    let marked = root.path().join("removed");
+    mark_worktree_for(&context.repo_dir, &marked, &receipt.head, 42);
+    git(
+        &context.repo_dir,
+        &[
+            "worktree",
+            "remove",
+            "--force",
+            &marked.display().to_string(),
+        ],
+    );
+
+    assert_eq!(
+        release_checkout(&context, &release_of(&receipt)).expect("the checkout resolves"),
+        None,
+        "a marked checkout whose head cannot be read was taken as standing at the published head"
+    );
+}
+
+#[test]
 fn a_stale_marked_checkout_gives_way_to_a_primary_checkout_at_the_published_head() {
     let (root, context, receipt) = medium_change();
     let checkout = root.path().join("left-behind");
