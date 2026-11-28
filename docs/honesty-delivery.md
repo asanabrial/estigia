@@ -203,7 +203,8 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   reinstall and session restart, so its note names no ineffective in-session command or `Resolution`.
   These are code readings; no test here proves the note stays current during a session.
 - **The compact `task` answer is chosen by skill prose, not by adapter code.** It carries `version`
-  (`COMPACT_TASK_VERSION`) and the changed row; a retried acknowledgment answers the same row and a
+  (`COMPACT_TASK_VERSION`) and the changed row, without the `text` and `evidence` the caller sent; a
+  retried acknowledgment answers the same row and a
   reopen keeps the closing commit (`a_lost_compact_acknowledgment_retried_answers_the_same_row_in_the_same_place`).
   No adapter sends `compact` on `task` by itself. Two connections writing one checklist at once lose no
   row and keep each writer's order, and a row both revise keeps one writer's whole revision
@@ -213,11 +214,17 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `src/harness/mcp/mod.rs` fills `pr`, `head`, `base` and `digest` for a call that names only `epoch`
   when the calling run's pointer holds that epoch's review transaction for the issue
   (`a_receipt_named_by_its_epoch_is_filled_from_the_pointer_holding_it`). Another run, or a pointer that
-  lost its transaction, gets the old missing-argument answer. The compact view carries `compact_version`;
-  `collect`, `stop` and an unpublished answer keep what they cannot rebuild, and a compacted `execute`
-  expands back to its arguments (`a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped`);
-  an `expected_epoch` and a mixed collect's slots, jobs and deadlines pass through unchanged. There is no
-  CLI `review_status` to compact: the view exists over MCP only.
+  lost its transaction, gets the old missing-argument answer. The compact view carries `compact_version`
+  (`2`), and `compact_answer` removes the facts an answer says twice: a publication's embedded receipt,
+  tier range and slot echoes; a claim's ownership copy, `labels_after` and board repetitions; a collect's
+  per-slot `ok`, `issue` and shared `epoch`, its `findings_recorded` and each finding's `lens`; a checks
+  answer's `digest` and `commands`; a deliver's `release` receipt where the answer names the same value
+  at its top, its second `lane`, `transition.delivery` and echoed `spend`; and a task's echoed `text`
+  and `evidence`. `collect`, `stop` and an unpublished answer keep what they cannot rebuild, and a
+  compacted `execute` expands back to its arguments
+  (`a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped`); an `expected_epoch` and a
+  mixed collect's slots, jobs and deadlines pass through unchanged. There is no CLI `review_status` to
+  compact: the view exists over MCP only.
 
 - **A phantom holder is reconciled against the tracker only where the ambiguity is real.**
   `guard::adjudicate_action` asks the tracker about each named holder before refusing
