@@ -833,6 +833,7 @@ mod tests {
                     "flag": true,
                     "listed": ["a", "b"],
                     "object_field": {"reason": "inner"},
+                    "mixed_list": [{"path": "a"}, "b"],
                     "null_field": null,
                 }),
             ),
@@ -846,6 +847,7 @@ mod tests {
             "count: 3",
             "flag: true",
             "listed: a | b",
+            r#"mixed_list: [{"path":"a"},"b"]"#,
         ] {
             assert!(
                 refusal.message.contains(repeated),

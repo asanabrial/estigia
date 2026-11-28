@@ -22277,3 +22277,135 @@ fn a_release_with_no_marked_checkout_reads_a_primary_checkout_at_the_published_h
         None
     );
 }
+
+#[test]
+fn a_release_prefers_a_primary_checkout_at_the_head_over_a_marked_one_elsewhere() {
+    let (root, context, receipt) = medium_change();
+    mark_worktree_for(
+        &context.repo_dir,
+        &root.path().join("stale"),
+        &receipt.base,
+        42,
+    );
+
+    assert_eq!(
+        release_checkout(&context, &release_of(&receipt)).expect("the primary checkout"),
+        None
+    );
+}
+
+#[test]
+fn a_release_with_nothing_at_the_head_reads_the_marked_checkout_so_the_mismatch_is_its_own() {
+    let (root, context, receipt) = medium_change();
+    let stale = root.path().join("stale");
+    mark_worktree_for(&context.repo_dir, &stale, &receipt.base, 42);
+    git(
+        &context.repo_dir,
+        &["checkout", "--quiet", "--detach", &receipt.base],
+    );
+
+    let resolved = release_checkout(&context, &release_of(&receipt))
+        .expect("the marked checkout")
+        .expect("not the primary checkout");
+    assert_eq!(
+        resolved.canonicalize().expect("resolves"),
+        stale.canonicalize().expect("resolves")
+    );
+}
+
+#[test]
+fn a_release_reads_the_worktree_it_is_named_before_any_marker() {
+    let (root, context, receipt) = medium_change();
+    mark_worktree_for(
+        &context.repo_dir,
+        &root.path().join("marked"),
+        &receipt.head,
+        42,
+    );
+    let named = root.path().join("named");
+    let release = CiRelease {
+        worktree: Some(&named),
+        ..release_of(&receipt)
+    };
+
+    assert_eq!(
+        release_checkout(&context, &release).expect("the named worktree"),
+        Some(named.clone())
+    );
+}
+
+fn release_ci_script(receipt: &ReviewTransaction, comments: &[ownership::Comment]) -> String {
+    let view = |draft: bool| {
+        serde_json::json!({
+            "number": receipt.pr,
+            "url": "https://github.com/fixture/repo/pull/7",
+            "headRefOid": receipt.head,
+            "baseRefOid": receipt.base,
+            "state": "OPEN",
+            "isDraft": draft,
+            "mergeable": "MERGEABLE",
+            "mergeStateStatus": "CLEAN",
+        })
+        .to_string()
+    };
+    crate::test_env::answers(&[
+        crate::test_env::issue_view_answer(42, stdout_with(comments)),
+        serde_json::json!({"matches": "pr view", "nth": 1, "stdout": view(true), "status": 0}),
+        serde_json::json!({"matches": "pr ready", "stdout": "", "status": 0}),
+        serde_json::json!({"matches": "pr view", "stdout": view(false), "status": 0}),
+    ])
+}
+
+#[test]
+fn release_ci_named_no_worktree_releases_the_marked_checkouts_target_with_the_primary_elsewhere() {
+    let (root, context, published_receipt) = medium_change();
+    let checkout = root.path().join("published-from");
+    mark_worktree_for(&context.repo_dir, &checkout, &published_receipt.head, 42);
+    git(
+        &context.repo_dir,
+        &["checkout", "--quiet", "--detach", &published_receipt.base],
+    );
+    let target =
+        super::super::target::clean_target(&context, &published_receipt.base, Some(&checkout))
+            .expect("the marked checkout derives a target");
+    let receipt = ReviewTransaction {
+        digest: target["digest"].as_str().expect("a digest").to_owned(),
+        ..published_receipt
+    };
+    let comments = reported_and_recorded(&receipt, "medium");
+    let bin = crate::test_env::scripted_gh();
+    let count = root.path().join("count");
+
+    let answer = crate::test_env::with_counting_gh(
+        bin.path(),
+        &release_ci_script(&receipt, &comments),
+        &count,
+        || release_ci(&context, &release_of(&receipt)),
+    )
+    .expect("the release read the checkout the publication was made from");
+
+    assert_eq!(answer["ok"], true);
+    assert_eq!(answer["draft"], false);
+}
+
+#[test]
+fn release_ci_with_no_checkout_at_the_head_refuses_the_missing_checkout_not_a_mismatch() {
+    let (root, context, receipt) = medium_change();
+    git(
+        &context.repo_dir,
+        &["checkout", "--quiet", "--detach", &receipt.base],
+    );
+    let comments = reported_and_recorded(&receipt, "medium");
+    let bin = crate::test_env::scripted_gh();
+    let count = root.path().join("count");
+
+    let failure = crate::test_env::with_counting_gh(
+        bin.path(),
+        &release_ci_script(&receipt, &comments),
+        &count,
+        || release_ci(&context, &release_of(&receipt)),
+    )
+    .expect_err("a primary checkout on the base was released as the published head");
+
+    assert_eq!(reason(failure), "release-checkout-unresolved");
+}
