@@ -68,6 +68,7 @@ pub(super) trait Hands {
     fn exec(&self, args: &[&str], how: How) -> Result<Output, Failure>;
     fn merge_decision(&self, pr: u64) -> Result<(), Value>;
     fn receipt(&self) -> Option<ReviewTransaction>;
+    fn collectable(&self, issue: u64, receipt: &ReviewTransaction) -> Result<Vec<String>, Value>;
     fn worktree(&self) -> Option<String>;
     fn settings(&self) -> Settings;
     fn release_stamp(&self, receipt: &ReviewTransaction) -> Result<Option<String>, Value>;
@@ -374,6 +375,13 @@ impl<H: Hands> Deliver<'_, H> {
     }
 
     fn until(&mut self, until: Until, receipt: &ReviewTransaction) -> Step<Value> {
+        let names = self
+            .hands
+            .collectable(self.request.issue, receipt)
+            .map_err(|refusal| refused("review", refusal))?;
+        if !names.is_empty() {
+            self.collect_names("review", names)?;
+        }
         let verdict = self.record_verdict("verdict", receipt)?;
         let mut answer = json!({
             "ok": true,
@@ -409,6 +417,31 @@ impl<H: Hands> Deliver<'_, H> {
             "digest": receipt.digest,
             "compact": true,
         })
+    }
+
+    fn collect_names(&mut self, step: &str, names: Vec<String>) -> Step<()> {
+        self.call(
+            step,
+            "collect_review_input",
+            json!({
+                "issue": self.request.issue,
+                "run_id": self.request.run_id,
+                "names": names,
+                "compact": true,
+            }),
+        )?;
+        self.done.push("collect_review_input");
+        Ok(())
+    }
+
+    fn collect(&mut self, step: &str, next: &Value, collected: &mut Vec<String>) -> Step<()> {
+        let names = finished(next, collected);
+        if names.is_empty() {
+            return Ok(());
+        }
+        self.collect_names(step, names.clone())?;
+        collected.extend(names);
+        Ok(())
     }
 
     fn record_spends(&mut self, step: &str, receipt: &ReviewTransaction) -> Step<()> {
@@ -503,19 +536,7 @@ impl<H: Hands> Deliver<'_, H> {
                 "stop" if reason == "released" => return Ok(Position::Open),
                 "stop" if reason == "delivered" => return Ok(Position::Delivered),
                 "collect" if !finished(&next, &collected).is_empty() => {
-                    let names = finished(&next, &collected);
-                    self.call(
-                        "review",
-                        "collect_review_input",
-                        json!({
-                            "issue": self.request.issue,
-                            "run_id": self.request.run_id,
-                            "names": names,
-                            "compact": true,
-                        }),
-                    )?;
-                    self.done.push("collect_review_input");
-                    collected.extend(names);
+                    self.collect("review", &next, &mut collected)?;
                 }
                 "collect" if all_running(&next) => {
                     self.wait("review", "inputs-running", next["ask_after"].as_u64())?;
@@ -1500,6 +1521,12 @@ impl Hands for Live<'_> {
         session::load(&self.context.state_root, self.run_id)
             .review_transaction
             .filter(ReviewTransaction::is_complete)
+    }
+
+    fn collectable(&self, issue: u64, receipt: &ReviewTransaction) -> Result<Vec<String>, Value> {
+        let now = session::stamp_of(self.now());
+        transport::claim::collectable_inputs(&self.transport, issue, receipt, &now)
+            .map_err(|failure| failure.envelope())
     }
 
     fn worktree(&self) -> Option<String> {

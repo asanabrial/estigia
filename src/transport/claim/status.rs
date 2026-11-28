@@ -511,6 +511,40 @@ fn issue_of(bound: &Value) -> u64 {
     bound["issue"].as_u64().unwrap_or_default()
 }
 
+/// The finished review inputs this receipt still owes, read from the store and
+/// the job records alone: no pull request, lane or repository-host read. A
+/// receipt whose objects cannot be read collects nothing here; the verdict that
+/// follows is what refuses.
+pub(crate) fn collectable_inputs(
+    context: &Context,
+    issue: u64,
+    receipt: &ReviewTransaction,
+    now: &str,
+) -> Result<Vec<String>, Failure> {
+    let ledger = Ledger::open(context, issue, now)?;
+    let comments = ledger.timeline()?;
+    let Ok((_, computed)) = computed::computed_for(context, &comments, receipt, None) else {
+        return Ok(Vec::new());
+    };
+    if computed.missing_roles.is_empty() {
+        return Ok(Vec::new());
+    }
+    let inputs = annotated(
+        context,
+        issue,
+        receipt,
+        computed
+            .missing_roles
+            .iter()
+            .map(|role| (role.as_str(), None)),
+    )?;
+    Ok(inputs
+        .into_iter()
+        .filter(|input| input["capture"] == COLLECT_REVIEW_INPUT)
+        .filter_map(|input| input["name"].as_str().map(ToOwned::to_owned))
+        .collect())
+}
+
 fn annotated<'a>(
     context: &Context,
     issue: u64,

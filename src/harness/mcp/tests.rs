@@ -7524,7 +7524,7 @@ fn transitioning_the_held_issue_updates_its_state_and_renews_it() {
 
 #[test]
 fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() {
-    const PREFIXES: [&str; 3] = ["review_", "record_", "spend_"];
+    const PREFIXES: [&str; 4] = ["review_", "record_", "spend_", "start_"];
     const DATA: [&str; 3] = [
         "review_findings",
         "review_finding",

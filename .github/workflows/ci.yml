@@ -89,7 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
 
@@ -154,18 +154,18 @@ jobs:
         if: needs.reuse.outputs.run == ''
         run: cargo test --doc --all-features --locked
 
-  # Windows runs the suite in three partitions, because a `git` process costs
+  # Windows runs the suite in four partitions, because a `git` process costs
   # about 100 ms there and the one-job step set the wall time of every run.
   # `check (windows-latest)` below is the required context; it passes only when
   # every partition did.
   windows-tests:
-    name: check (windows-latest, ${{ matrix.partition }}/3)
+    name: check (windows-latest, ${{ matrix.partition }}/4)
     needs: reuse
     if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2, 3]
+        partition: [1, 2, 3, 4]
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -224,7 +224,7 @@ jobs:
       # target must not hide every later one, `tests/pipe.rs` most of all.
       - name: tests
         if: needs.reuse.outputs.run == ''
-        run: cargo nextest run --profile ci --all-features --no-fail-fast --locked --partition count:${{ matrix.partition }}/3
+        run: cargo nextest run --profile ci --all-features --no-fail-fast --locked --partition count:${{ matrix.partition }}/4
 
       - name: doc tests
         if: needs.reuse.outputs.run == '' && matrix.partition == 1
@@ -242,6 +242,66 @@ jobs:
       - name: every partition passed
         env:
           PARTITIONS: ${{ needs.windows-tests.result }}
+        run: test "$PARTITIONS" = success
+
+  # macOS runs the suite in three partitions: in one job its test step alone set
+  # the wall time of every run. `check (macos-latest)` below is the required
+  # context; it passes only when every partition did.
+  macos-tests:
+    name: check (macos-latest, ${{ matrix.partition }}/3)
+    needs: reuse
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3]
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+        if: needs.reuse.outputs.run == ''
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        if: needs.reuse.outputs.run == ''
+        with:
+          node-version: '22'
+
+      - uses: Swatinem/rust-cache@v2
+        if: needs.reuse.outputs.run == ''
+        with:
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@v2
+        if: needs.reuse.outputs.run == ''
+        with:
+          tool: nextest
+
+      - name: fixtures
+        if: needs.reuse.outputs.run == ''
+        run: cargo build --bins --examples --all-features --locked
+
+      - name: tests
+        if: needs.reuse.outputs.run == ''
+        run: cargo nextest run --profile ci --all-features --no-fail-fast --locked --partition count:${{ matrix.partition }}/3
+
+      - name: doc tests
+        if: needs.reuse.outputs.run == '' && matrix.partition == 1
+        run: cargo test --doc --all-features --locked
+
+  check-macos:
+    name: check (macos-latest)
+    needs: [reuse, macos-tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: every partition passed
+        env:
+          PARTITIONS: ${{ needs.macos-tests.result }}
         run: test "$PARTITIONS" = success
 
   # Per platform, because `cfg(windows)` and `cfg(unix)` code is only linted and

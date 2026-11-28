@@ -58,6 +58,14 @@ when GitHub closed the issue. The opt-out does not remove a link that already ex
 branch started earlier without it still takes the reopen path in `skill/bindings/github/delivery.md`
 *Closing*. Which slice is last is the operator's to know: nothing in the transport records a chain.
 
+A merged call refuses the arguments it would not use. `claim` with `takeover` refuses
+`transition_to`, `branch`, `base`, `worktree_root` and `no_link`: a takeover displaces a holder and
+starts no checkout, so none of them has a step to reach. Without `takeover`, `no_link` and
+`worktree_root` are refused when no `branch` names the checkout they belong to. `release` refuses
+`evidence_file` and `spend` when it names no `target_operation` and the run is not the issue's live
+holder: a close binds one exact epoch, and a discovery call writes nothing for those arguments to
+close.
+
 ## Why `done` verifies the merge
 
 `done` means merged and verified, and the verification used to be the operator remembering to read the merge

@@ -85,8 +85,9 @@ validator result is refused `recorded-by-capture-only`, so a slot
 Over MCP, the two rows above always name `deliver`, in `review_status`'s own answer and in the one a
 publication or a collect carries: with `{issue, wait_seconds: 50}` where `Merge by` is the agent and
 `Delivery authorisation` is `auto`, since `deliver` records the verdict and releases CI as its own first
-steps; with `{issue, until: verdict}` and `{issue, until: ci}` otherwise, which stop after the
-verdict and after the release and leave the merge to the person. `reason_code` is unchanged, and it is
+steps; with `{issue, until: verdict}` and `{issue, until: ci}` otherwise, which first collect any
+finished lens, then stop after the verdict and after the release and leave the merge to the person.
+`reason_code` is unchanged, and it is
 what `deliver` and `record_verdict` read.
 | Rejected, correction unspent | `execute` | `correction-due` | `publish_review`, `expected_epoch: <this epoch>`; when the targeted validator failed the correction, the answer carries a plain `why` naming what it found |
 | Rejected, correction spent | `execute` | `correction-spent` | `escalate_review` with the receipt; the answer carries a plain `why` |
