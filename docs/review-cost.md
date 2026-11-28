@@ -296,6 +296,11 @@ receipt, criteria and diff is never cache-read, so the role's position in it can
 never shared. Concurrent lenses would also not reuse a prefix the first had not yet returned, and
 serialising them is out of scope.
 
+A lens inherits `CLAUDE_CODE_PROMPT_CACHE_TTL` from the environment it is launched in since
+2026-11-28, when the name joined `INHERITED` in `src/reviewer/run.rs`; before that the launcher
+dropped it and a lens fell back to the CLI's own default lifetime. An orchestrator that sets the
+five-minute cache the T arm above measured therefore has it reach the lens.
+
 ## Preserving the reviewer CLI's own usage
 
 `parse_result` in `src/reviewer/adapters.rs` used to drop the CLI's `usage` object. The runner now

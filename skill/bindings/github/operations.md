@@ -542,8 +542,8 @@ a lens report is `qualifying-review-verdict-missing`. A `review-verdict` clears 
 `accepted` one is ignored, and a distinct reviewer's `rejected` one refuses as
 `legacy-verdict-rejected` at every tier, because the marker binds those exact bytes; a republish is a new receipt and starts without it.
 The answer's `basis` names which route cleared it.
-The clean target is re-derived from the named `worktree`, else the checkout marked for the issue,
-else a primary checkout at the published head; else `release-checkout-unresolved`.
+The clean target is re-derived from the named `worktree`, else the marked checkout **at the published
+head**, else a primary there, else that marked checkout; else `release-checkout-unresolved`.
 
 ## Deriving the review tier
 
@@ -585,8 +585,8 @@ Ordinary review licenses lenses only: the answer carries no judge count at any t
 still decides nothing itself — acquiring the lenses is developer step 5's to do, stated in prose there
 rather than derived here.
 `forecast` is the one line the run says before it launches anything: the tier, the lens count and the
-expected spend, which is the `Review budget` figure times the lenses the answer licenses
-(or a plain statement that no budget is declared). It is stated, never put to anybody for approval,
+spend ceiling, which is the `Review budget` figure stated as an upper bound per context rather than
+multiplied by the lenses (or a plain statement that no budget is declared). It is stated, never put to anybody for approval,
 and the same line is carried by `review_read` with `view: tier` and `parent_head`.
 Reads `base..head`, the whole change — a first publication's own range; a repair round reads a
 narrower one through `review_read` with `view: tier` and `parent_head` instead, when that narrower range is honestly

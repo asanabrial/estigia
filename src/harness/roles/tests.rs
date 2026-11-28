@@ -1372,6 +1372,7 @@ fn every_finding_vocabulary_the_transport_accepts_is_named_in_every_reviewer_tha
         }
         examined += 1;
 
+        let template = crate::skill::with_lens_rules(template);
         for (const_name, values) in vocabularies {
             for value in *values {
                 assert!(
@@ -1388,7 +1389,7 @@ fn every_finding_vocabulary_the_transport_accepts_is_named_in_every_reviewer_tha
             crate::config::Seal::Unsealed => crate::config::Evidence::all(),
         };
         for grant in grants {
-            let rendered = crate::setup::render_reviewer_agent(template, grant, seal, name);
+            let rendered = crate::setup::render_reviewer_agent(&template, grant, seal, name);
 
             for field in field_names {
                 assert!(
