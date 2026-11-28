@@ -511,7 +511,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   | `skill/policies/blind-judges.md` | 43,571 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 43,069 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 43,051 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` when `review_status` stops as escalated or a correction is owed,
