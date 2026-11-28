@@ -16581,11 +16581,15 @@ fn a_disposition_batch_is_recorded_and_a_retry_reads_it_back() {
 /// here because that helper answers a whole `gh issue view` payload on its
 /// own and this fixture needs several more comments beside it.
 fn live_claim(run_id: &str) -> ownership::Comment {
+    live_claim_until(run_id, "2099-01-01T00:00Z")
+}
+
+fn live_claim_until(run_id: &str, horizon: &str) -> ownership::Comment {
     wrote(
         "1",
         format!(
             "Claimed by {run_id}.\n\n<!-- issue-flow: claim run-id={run_id} runtime=claude \
-             horizon=2099-01-01T00:00Z op-id={} -->\n",
+             horizon={horizon} op-id={} -->\n",
             "a".repeat(32)
         ),
     )

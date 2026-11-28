@@ -280,6 +280,7 @@ fn collected(
     base: &str,
     ledger: &Ledger,
     request: &RunChecks<'_>,
+    waited: std::time::Duration,
     dir: &Path,
     digest: &str,
     commands: &str,
@@ -341,7 +342,7 @@ fn collected(
         request.issue,
         request.run_id,
         "review",
-        request.now,
+        &post_wait_clock(request.now, waited),
         None,
     )?;
     record(ledger, request, digest, commands, passed, &outcome.runs)?;
@@ -505,6 +506,7 @@ pub(super) fn run_checks_with(
                     base,
                     &ledger,
                     request,
+                    began.elapsed(),
                     &dir,
                     &digest,
                     &commands,
@@ -537,6 +539,18 @@ pub(super) fn run_checks_with(
             }),
         }
         status = check_job::status(&dir)?;
+    }
+}
+
+/// The caller's clock carried past the wait, so the claim is judged at the
+/// moment the job finished rather than at the moment the call started.
+fn post_wait_clock(now: &str, waited: std::time::Duration) -> String {
+    match crate::transport::ownership::parse_stamp(now) {
+        Some(at) => {
+            let advanced = at.saturating_add(waited.as_secs() as i64).max(0) as u64;
+            crate::harness::session::stamp_of(advanced)
+        }
+        None => now.to_owned(),
     }
 }
 
