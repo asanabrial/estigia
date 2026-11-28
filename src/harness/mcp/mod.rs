@@ -2979,16 +2979,18 @@ fn compact_checks(body: &mut Value) {
 }
 
 fn compact_deliver(body: &mut Value) {
-    let lane = body.get("lane").is_some();
+    let named: Vec<(&str, Value)> = ["issue", "epoch", "pr", "head", "base", "digest", "lane"]
+        .into_iter()
+        .filter_map(|field| Some((field, body.get(field)?.clone())))
+        .collect();
     let Some(release) = body.get_mut("release").and_then(Value::as_object_mut) else {
         return;
     };
-    for field in ["issue", "epoch", "pr", "head", "base", "digest"] {
-        release.remove(field);
-    }
-    if lane {
-        release.remove("lane");
-    }
+    release.retain(|field, value| {
+        !named
+            .iter()
+            .any(|(name, outer)| name == field && *outer == *value)
+    });
     if let Some(transition) = release.get_mut("transition").and_then(Value::as_object_mut) {
         transition.remove("delivery");
         if let Some(board) = transition.get_mut("board") {

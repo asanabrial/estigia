@@ -218,9 +218,10 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   (`2`), and `compact_answer` removes the facts an answer says twice: a publication's embedded receipt,
   tier range and slot echoes; a claim's ownership copy, `labels_after` and board repetitions; a collect's
   per-slot `ok`, `issue` and shared `epoch`, its `findings_recorded` and each finding's `lens`; a checks
-  answer's `digest` and `commands`; a deliver's `release` receipt, second `lane`, `transition.delivery`
-  and echoed `spend`; and a task's echoed `text` and `evidence`. `collect`, `stop` and an unpublished
-  answer keep what they cannot rebuild, and a compacted `execute` expands back to its arguments
+  answer's `digest` and `commands`; a deliver's `release` receipt where the answer names the same value
+  at its top, its second `lane`, `transition.delivery` and echoed `spend`; and a task's echoed `text`
+  and `evidence`. `collect`, `stop` and an unpublished answer keep what they cannot rebuild, and a
+  compacted `execute` expands back to its arguments
   (`a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped`); an `expected_epoch` and a
   mixed collect's slots, jobs and deadlines pass through unchanged. There is no CLI `review_status` to
   compact: the view exists over MCP only.

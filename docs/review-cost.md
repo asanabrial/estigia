@@ -203,11 +203,13 @@ name still dispatches and refuses with its own typed reason.
   they have left the menu altogether, their calls carried by arguments of `collect_review_input` and
   `deliver`, which are marked.
 - **`compact: true`** omits `build` from an answer and drops from `review_status`'s `next.arguments`
-  the receipt fields but `epoch`. A receipt-taking call that sends `epoch` and leaves out `pr`, `head`,
-  `base` or `digest` has them filled by the server from this run's pointer when it holds that epoch's
-  review transaction for the issue (`expanded_receipt`), and is refused for another epoch, so the model
-  never rebuilds a receipt; a compact answer names its shape in `compact_version`, now `2`. Without
-  it every answer is byte-identical to before.
+  the receipt fields, keeping `epoch`, which is the one a receipt-taking call names. A publication's
+  embedded status whose `next` is a `collect` also drops `epoch`, which a collect does not take. A
+  receipt-taking call that sends `epoch` and leaves out `pr`, `head`, `base` or `digest` has them
+  filled by the server from this run's pointer when it holds that epoch's review transaction for the
+  issue (`expanded_receipt`), and is refused for another epoch, so the model never rebuilds a
+  receipt; a compact answer names its shape in `compact_version`, now `2`. Without it every answer is
+  byte-identical to before.
 
   The compact pass (`compact_answer` in `src/harness/mcp/mod.rs`) removes the facts an answer says
   twice, by operation:
@@ -223,9 +225,9 @@ name still dispatches and refuses with its own typed reason.
     is the slot's `name`. A collected slot keeps its `job`, and launch answers keep `launch` and
     `name`.
   - `run_checks`: `digest` and `commands`, which no next call takes.
-  - `deliver`: the six receipt fields and `lane` from `release` where the answer's own top level names
-    them; `release.transition.delivery`, which repeats `merged`; and the `spend` record the caller
-    sent.
+  - `deliver`: `issue`, `epoch`, `pr`, `head`, `base`, `digest` and `lane` from `release` where the
+    answer's own top level holds the same value; `release.transition.delivery`, which repeats
+    `merged`; and the `spend` record the caller sent.
   - `task`: the `text` and `evidence` the caller sent.
 
   Measured through the MCP server, both answers to the fixtures named beside them:

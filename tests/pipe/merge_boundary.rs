@@ -2085,9 +2085,17 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding_compac
     let released = &answer["release"];
     assert_eq!(released["ci_released"], true, "{transcript}");
     assert!(
-        released.get("epoch").is_none() && released.get("lane").is_none(),
-        "the compact delivery repeats its receipt and lane: {transcript}"
+        released.get("lane").is_none(),
+        "the compact delivery repeats the lane its top level names: {transcript}"
     );
+    assert_eq!(
+        released["epoch"], epoch,
+        "the compact delivery dropped the receipt it names nowhere else: {transcript}"
+    );
+    assert_eq!(released["pr"], 7, "{transcript}");
+    assert_eq!(released["head"], head, "{transcript}");
+    assert_eq!(released["base"], base, "{transcript}");
+    assert_eq!(released["digest"], digest, "{transcript}");
     assert!(
         answer["lane"]["state"].is_string(),
         "the compact delivery lost the lane it names once: {transcript}"

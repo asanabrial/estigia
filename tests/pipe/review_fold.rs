@@ -245,6 +245,25 @@ fn gated_reviewer(dir: &std::path::Path) -> String {
     )
 }
 
+fn finding_reviewer(dir: &std::path::Path, location: &str) -> String {
+    let said = serde_json::json!({
+        "type": "result", "subtype": "success", "is_error": false,
+        "result": serde_json::json!({"findings": [{
+            "id": "F1",
+            "class": "suggestion",
+            "evidence": "the changed line reads this way",
+            "impact": "a reader pays for the repetition",
+            "location": location,
+        }]})
+        .to_string(),
+    });
+    std::fs::write(dir.join("said.json"), said.to_string()).expect("the canned answer");
+    format!(
+        "#!/bin/sh\n/bin/cat > /dev/null\n/bin/cat '{}'\n",
+        dir.join("said.json").display()
+    )
+}
+
 fn offered(rig: &TrackerRig, world: &World) -> Vec<String> {
     let status = answer(&ask(
         rig,
@@ -407,7 +426,7 @@ fn a_compact_collect_names_the_slot_fields_once() {
         "src/auth.rs",
         "review",
         lane,
-        &instant_reviewer(reviewer.path()),
+        &finding_reviewer(reviewer.path(), "src/auth.rs:1"),
         false,
     );
     let names = offered(&rig, &world);
@@ -433,6 +452,7 @@ fn a_compact_collect_names_the_slot_fields_once() {
         .as_array()
         .expect("the batch is answered");
     assert!(!slots.is_empty(), "{collected}");
+    let mut findings = 0;
     for slot in slots {
         for repeated in ["ok", "issue", "epoch"] {
             assert!(
@@ -449,6 +469,99 @@ fn a_compact_collect_names_the_slot_fields_once() {
             "a collected slot lost the running job id: {slot}"
         );
         assert!(!epoch.is_empty(), "{collected}");
+        for finding in slot["findings"].as_array().into_iter().flatten() {
+            findings += 1;
+            assert!(
+                finding.get("lens").is_none(),
+                "a finding repeats the slot's name: {finding}"
+            );
+            assert!(
+                finding.get("id").is_some() && finding.get("location").is_some(),
+                "a finding lost what it alone says: {finding}"
+            );
+        }
+    }
+    assert_eq!(
+        findings,
+        slots.len(),
+        "a lens reported no finding: {collected}"
+    );
+    std::fs::write(reviewer.path().join("release"), "").expect("the reviewer is released");
+}
+
+#[test]
+fn a_compact_checks_answer_drops_the_target_and_every_launched_slot_echo() {
+    let rig = tracker_rig();
+    let reviewer = tempfile::tempdir().expect("a reviewer directory");
+    declare_check(&rig, "exit 0");
+    let lane = serde_json::json!({"total_count": 1, "check_runs": [{
+        "name": "ci", "status": "completed", "conclusion": "success",
+    }]});
+    let world = published_world(
+        &rig,
+        "src/auth.rs",
+        lane,
+        &instant_reviewer(reviewer.path()),
+    );
+    let mut arguments = publish_arguments(&rig, &world);
+    arguments
+        .as_object_mut()
+        .expect("the publish arguments")
+        .remove("start_review");
+    let published = answer(&ask(&rig, &world, "publish_review", arguments));
+    assert!(published.get("review_start").is_none(), "{published}");
+    answer(&ask(
+        &rig,
+        &world,
+        "transition",
+        serde_json::json!({
+            "issue": 12, "run_id": RUN_ID, "from": "in-progress", "to": "review",
+        }),
+    ));
+
+    let mut settled = serde_json::Value::Null;
+    for _ in 0..40 {
+        settled = answer(&ask(
+            &rig,
+            &world,
+            "collect_review_input",
+            serde_json::json!({
+                "issue": 12, "run_id": RUN_ID, "checks": true, "launch": true,
+                "wait_seconds": 5, "compact": true,
+            }),
+        ));
+        if settled["state"] != "running" {
+            break;
+        }
+    }
+    assert_eq!(settled["state"], "finished", "{settled}");
+    assert_eq!(settled["declared"], true, "{settled}");
+    assert_eq!(settled["passed"], true, "{settled}");
+    assert!(
+        settled.get("digest").is_none(),
+        "the compact checks answer repeats the target no next call takes: {settled}"
+    );
+    assert!(
+        settled.get("commands").is_none(),
+        "the compact checks answer repeats the commands no next call takes: {settled}"
+    );
+    let launched = settled["launched"]
+        .as_array()
+        .expect("the held-back slots are launched");
+    assert_eq!(launched.len(), 4, "{settled}");
+    for slot in launched {
+        for repeated in ["ok", "issue", "epoch"] {
+            assert!(
+                slot.get(repeated).is_none(),
+                "a launched slot repeats {repeated}: {slot}"
+            );
+        }
+        for kept in ["name", "job", "deadline_at"] {
+            assert!(
+                slot.get(kept).is_some(),
+                "a launched slot lost its {kept}: {slot}"
+            );
+        }
     }
     std::fs::write(reviewer.path().join("release"), "").expect("the reviewer is released");
 }
