@@ -334,6 +334,10 @@ fn pr_view(world: &World, rollup: Value) -> Value {
     })
 }
 
+fn draft_view(is_draft: bool) -> Value {
+    json!({"matches": "isDraft", "stdout": json!({"isDraft": is_draft}).to_string(), "status": 0})
+}
+
 fn merged_view(world: &World) -> Vec<Value> {
     vec![json!({
         "matches": "mergeCommit",
@@ -912,7 +916,7 @@ fn until_ci_that_finds_the_release_recorded_releases_nothing_again() {
     let world = world("b.txt", "two\n");
     let mut fake = fake(&world);
     fake.stamp = Some(session::stamp_of(NOW - 30));
-    let ran = drive(&fake, &[], &until(Until::Ci));
+    let ran = drive(&fake, &[draft_view(false)], &until(Until::Ci));
 
     assert_eq!(ran.answer["reached"], "ci", "{}", ran.answer);
     assert_eq!(ran.answer["release"], json!({"released_earlier": true}));
@@ -1087,7 +1091,9 @@ fn a_running_check_answers_pending_and_a_second_call_resumes_without_repeating_a
         vec![status(&receipt, halt("released"))],
     );
     second.stamp = Some("2026-10-25T09:00:00Z".into());
-    let ran = drive(&second, &green_script(&world), &request());
+    let mut script = vec![draft_view(false)];
+    script.extend(green_script(&world));
+    let ran = drive(&second, &script, &request());
     assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
     let calls = called(&second);
     assert!(
@@ -1095,6 +1101,51 @@ fn a_running_check_answers_pending_and_a_second_call_resumes_without_repeating_a
         "{calls:?}"
     );
     assert!(!calls.contains(&"release_ci".to_owned()), "{calls:?}");
+}
+
+#[test]
+fn a_ready_step_that_failed_is_retried_while_the_pull_request_is_a_draft() {
+    let world = world("b.txt", "two\n");
+    let mut fake = fake(&world);
+    fake.stamp = Some("2026-10-25T09:00:00Z".into());
+    let mut script = vec![draft_view(true)];
+    script.extend(green_script(&world));
+    let ran = drive(&fake, &script, &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert_eq!(
+        ran.answer["done"][1], "release_ci",
+        "the retry is not one of the steps deliver accounts for: {}",
+        ran.answer["done"]
+    );
+}
+
+#[test]
+fn the_deliver_after_a_version_stop_lands_closes_without_merging_again() {
+    let cargo = world(
+        "Cargo.toml",
+        "[package]\nname = \"x\"\nversion = \"1.2.3\"\n",
+    );
+    let first = fake(&cargo);
+    let ran = drive(&first, &green_script(&cargo), &request());
+    assert_eq!(stopped(&ran), ("version", "version-changed"));
+    assert!(merged_by_gh(&ran));
+
+    let second = fake(&cargo);
+    let receipt = receipt_of(&cargo);
+    second.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![status(&receipt, halt("delivered"))],
+    );
+    let mut script = merged_view(&cargo);
+    script.extend(issue_views());
+    let ran = drive(&second, &script, &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert!(!merged_by_gh(&ran), "the call after the stop merged again");
+    assert!(
+        called(&second).contains(&"release".to_owned()),
+        "the call after the stop never closed the issue: {:?}",
+        called(&second)
+    );
 }
 
 #[test]
@@ -1112,7 +1163,11 @@ fn an_empty_rollup_is_pending_inside_the_window_and_absent_past_it() {
         vec![status(&receipt, halt("released"))],
     );
     past.stamp = Some(crate::harness::session::stamp_of(NOW - 601));
-    let ran = drive(&past, &[pr_view(&world, json!([]))], &request());
+    let ran = drive(
+        &past,
+        &[draft_view(false), pr_view(&world, json!([]))],
+        &request(),
+    );
     assert_eq!(stopped(&ran), ("ci", "ci-absent"));
     assert!(!merged_by_gh(&ran));
 
@@ -1122,7 +1177,11 @@ fn an_empty_rollup_is_pending_inside_the_window_and_absent_past_it() {
         vec![status(&receipt, halt("released"))],
     );
     edge.stamp = Some(crate::harness::session::stamp_of(NOW - 599));
-    let ran = drive(&edge, &[pr_view(&world, json!([]))], &request());
+    let ran = drive(
+        &edge,
+        &[draft_view(false), pr_view(&world, json!([]))],
+        &request(),
+    );
     assert_eq!(ran.answer["pending"]["reason"], "checks-not-started");
 }
 
@@ -1163,7 +1222,7 @@ fn an_advanced_base_passes_when_it_merges_clean_and_hands_back_on_a_conflict() {
 }
 
 #[test]
-fn a_changed_manifest_version_hands_back_before_the_merge() {
+fn a_changed_manifest_version_merges_and_hands_back_for_the_tag() {
     let cargo = world(
         "Cargo.toml",
         "[package]\nname = \"x\"\nversion = \"1.2.3\"\n",
@@ -1172,7 +1231,12 @@ fn a_changed_manifest_version_hands_back_before_the_merge() {
     let ran = drive(&held, &green_script(&cargo), &request());
     assert_eq!(stopped(&ran), ("version", "version-changed"));
     assert_eq!(ran.answer["stopped"]["manifests"][0]["path"], "Cargo.toml");
-    assert!(!merged_by_gh(&ran));
+    assert_eq!(ran.answer["stopped"]["manifests"][0]["to"], "1.2.3");
+    assert!(
+        merged_by_gh(&ran),
+        "a version bump stared at its own difference and never merged"
+    );
+    assert_eq!(ran.answer["stopped"]["merged"], cargo.merge);
 
     let npm = world(
         "package.json",
@@ -1181,6 +1245,7 @@ fn a_changed_manifest_version_hands_back_before_the_merge() {
     let held = fake(&npm);
     let ran = drive(&held, &green_script(&npm), &request());
     assert_eq!(stopped(&ran), ("version", "version-changed"));
+    assert!(merged_by_gh(&ran));
 }
 
 #[test]
