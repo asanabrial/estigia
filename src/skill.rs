@@ -1742,6 +1742,10 @@ pub(crate) struct RepositoryLayer {
 }
 
 impl RepositorySnapshot {
+    pub(crate) fn document(&self) -> &str {
+        &self.document
+    }
+
     pub(crate) fn edit_scope_over(&self, base: &Config) -> Config {
         Config::read_scope_over_keeping_what_parses(
             base,
@@ -1968,48 +1972,73 @@ pub(crate) fn installed_config_in_keeping_what_parses_apart(
     root: &Path,
     repo_dir: &Path,
 ) -> KeptWhatParses {
-    let contract_config = match installed_config(root) {
-        Ok(config) => config,
-        Err(failure) => {
-            let base = match installed_config_with(root, |versioned, local| {
-                Ok(Config::read_keeping_what_parses(versioned, local))
-            }) {
-                Ok(base) => base,
-                Err(_) => {
-                    let file =
-                        layer_repository_keeping_what_parses(&Config::default(), repo_dir).err();
-                    return KeptWhatParses {
-                        config: Config::default(),
+    let contract = contract_text(root);
+    let repository = repository_snapshot(repo_dir);
+    installed_config_in_keeping_what_parses_apart_from(
+        root,
+        contract.as_deref(),
+        repository.as_ref().map(Option::as_ref),
+    )
+}
+
+pub(crate) fn installed_config_in_keeping_what_parses_apart_from(
+    root: &Path,
+    contract: Result<&str, &Refusal>,
+    repository: Result<Option<&RepositorySnapshot>, &Refusal>,
+) -> KeptWhatParses {
+    let contract_text = contract.map_err(Clone::clone);
+    let contract_config = match &contract_text {
+        Ok(text) => match installed_config_from_text(root, text) {
+            Ok(config) => config,
+            Err(failure) => {
+                let base = match installed_config_with_text(root, text, |versioned, local| {
+                    Ok(Config::read_keeping_what_parses(versioned, local))
+                }) {
+                    Ok(base) => base,
+                    Err(_) => {
+                        let file = layer_snapshot_keeping(repository, &Config::default()).err();
+                        return KeptWhatParses {
+                            config: Config::default(),
+                            contract: Some(failure),
+                            row: None,
+                            file,
+                        };
+                    }
+                };
+                return match layer_snapshot_keeping(repository, &base) {
+                    Ok(config) => KeptWhatParses {
+                        config,
                         contract: Some(failure),
                         row: None,
-                        file,
-                    };
-                }
-            };
-            return match layer_repository_keeping_what_parses(&base, repo_dir) {
-                Ok(config) => KeptWhatParses {
-                    config,
-                    contract: Some(failure),
-                    row: None,
-                    file: None,
-                },
-                Err(file) => KeptWhatParses {
-                    config: base,
-                    contract: Some(failure),
-                    row: None,
-                    file: Some(file),
-                },
+                        file: None,
+                    },
+                    Err(file) => KeptWhatParses {
+                        config: base,
+                        contract: Some(failure),
+                        row: None,
+                        file: Some(file),
+                    },
+                };
+            }
+        },
+        Err(failure) => {
+            let file = layer_snapshot_keeping(repository, &Config::default()).err();
+            return KeptWhatParses {
+                config: Config::default(),
+                contract: Some(failure.clone()),
+                row: None,
+                file,
             };
         }
     };
-    match layer_repository(&contract_config, repo_dir) {
+    match layer_snapshot(repository, &contract_config) {
         Ok(config) => KeptWhatParses {
             config,
             contract: None,
             row: None,
             file: None,
         },
-        Err(failure) => match layer_repository_keeping_what_parses(&contract_config, repo_dir) {
+        Err(failure) => match layer_snapshot_keeping(repository, &contract_config) {
             Ok(config) => KeptWhatParses {
                 config,
                 contract: None,
@@ -2023,6 +2052,38 @@ pub(crate) fn installed_config_in_keeping_what_parses_apart(
                 file: Some(file),
             },
         },
+    }
+}
+
+fn installed_config_from_text(root: &Path, text: &str) -> Result<Config, Refusal> {
+    Ok(config_layers_with(root, None, None, None, Some(text))?
+        .0
+        .unlayered()
+        .clone())
+}
+
+fn installed_config_with_text(root: &Path, text: &str, read: Reader) -> Result<Config, Refusal> {
+    let local = local_overrides(root)?;
+    read(text, local.as_ref().map(|(_, text)| text.as_str()))
+}
+
+fn layer_snapshot(
+    repository: Result<Option<&RepositorySnapshot>, &Refusal>,
+    base: &Config,
+) -> Result<Config, Refusal> {
+    match repository.map_err(Clone::clone)? {
+        Some(snapshot) => Ok(snapshot.layer_over(base)?.config),
+        None => Ok(base.clone()),
+    }
+}
+
+fn layer_snapshot_keeping(
+    repository: Result<Option<&RepositorySnapshot>, &Refusal>,
+    base: &Config,
+) -> Result<Config, Refusal> {
+    match repository.map_err(Clone::clone)? {
+        Some(snapshot) => Ok(snapshot.layer_over_keeping_what_parses(base).config),
+        None => Ok(base.clone()),
     }
 }
 
@@ -2044,26 +2105,18 @@ pub fn layer_repository(base: &Config, repo_dir: &Path) -> Result<Config, Refusa
     Ok(snapshot.layer_over(base)?.config)
 }
 
-fn layer_repository_keeping_what_parses(base: &Config, repo_dir: &Path) -> Result<Config, Refusal> {
-    let Some(snapshot) = repository_snapshot(repo_dir)? else {
-        return Ok(base.clone());
-    };
-    Ok(snapshot.layer_over_keeping_what_parses(base).config)
-}
-
 /// Reads the configuration currently installed under `root`.
 pub fn installed_config(root: &Path) -> Result<Config, Refusal> {
     Ok(config_layers(root, None, None)?.unlayered().clone())
 }
 
-fn installed_config_with(root: &Path, read: Reader) -> Result<Config, Refusal> {
-    let text = contract_text(root)?;
-    let local = local_overrides(root)?;
-    read(&text, local.as_ref().map(|(_, text)| text.as_str()))
-}
-
 fn contract_text(root: &Path) -> Result<String, Refusal> {
     contract_text_for(root, None)
+}
+
+/// The contract's text, for a caller that has already decided this is the root.
+pub(crate) fn contract_text_at(root: &Path) -> Result<String, Refusal> {
+    contract_text(root)
 }
 
 /// The same, told which agent is being asked about.
@@ -2225,7 +2278,7 @@ pub(crate) fn config_layers_for_reporting(
     slug: Option<&str>,
     repo_dir: Option<&Path>,
 ) -> Result<(ConfigLayers, Option<Refusal>), Refusal> {
-    config_layers_with(root, slug, repo_dir, None)
+    config_layers_with(root, slug, repo_dir, None, None)
 }
 
 /// Reads all existing layers while treating a genuinely absent contract as the
@@ -2236,7 +2289,7 @@ pub fn config_layers_for_install(
     slug: Option<&str>,
     repo_dir: Option<&Path>,
 ) -> Result<(ConfigLayers, Option<Refusal>), Refusal> {
-    config_layers_with(root, slug, repo_dir, Some(&Config::default()))
+    config_layers_with(root, slug, repo_dir, Some(&Config::default()), None)
 }
 
 /// One adapter's installed contract, with the fold it was read through.
@@ -2257,6 +2310,7 @@ fn config_layers_with(
     slug: Option<&str>,
     repo_dir: Option<&Path>,
     absent_contract: Option<&Config>,
+    contract_text: Option<&str>,
 ) -> Result<(ConfigLayers, Option<Refusal>), Refusal> {
     let mut report = None;
     let mut contract_settings = Vec::new();
@@ -2273,7 +2327,10 @@ fn config_layers_with(
             )
         })?
     } else {
-        let text = contract_text_for(root, slug)?;
+        let text = match contract_text {
+            Some(text) => text.to_owned(),
+            None => contract_text_for(root, slug)?,
+        };
         contract_settings = explicit_settings(&text);
         let (config, folded) = Config::read_folding_retired_workers(&text, None)
             .map_err(|refusal| named_by(refusal, &contract_path))?;

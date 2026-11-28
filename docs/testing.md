@@ -241,6 +241,10 @@ test requires `bash`, ten require `python3` on Unix, and nothing else does but t
 spawn; all of those read a
 missing interpreter as a broken build rather than an unbuilt fixture.
 
+One Unix test in [`tests/pipe/gate_hook.rs`](../tests/pipe/gate_hook.rs),
+`post_tool_use_answers_without_reading_the_contract`, needs `mkfifo` to place a contract that blocks
+when read. It fails, never skips, without it.
+
 ## Why `cargo doc` is on the list
 
 `cargo doc --no-deps` is one of the four commands [`AGENTS.md`](../AGENTS.md) requires, and it was

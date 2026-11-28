@@ -283,11 +283,7 @@ fn taken(state_root: &Path, run_id: &str, through: i64) -> Result<Option<String>
     let Some(reader) = store::open_for_read(&path).map_err(|_| ())? else {
         return Ok(None);
     };
-    if !reader
-        .messages_waiting_for()
-        .map_err(|_| ())?
-        .contains_key(run_id)
-    {
+    if !reader.message_waiting_for(run_id).map_err(|_| ())? {
         return Ok(None);
     }
     let taken = store::Store::open(&path)
@@ -482,6 +478,22 @@ mod tests {
             .expect("the waiting mail is returned");
         assert!(text.contains("wake up"), "{text}");
         assert_eq!(waiting(&state_root, "claude-aaaa"), None);
+    }
+
+    #[test]
+    fn delivering_asks_for_one_recipient_rather_than_every_recipient() {
+        let (_directory, state_root) = rig();
+        leave(&state_root, "claude-bbbb", "theirs");
+        leave(&state_root, "claude-aaaa", "mine");
+
+        let before = store::waiting_for_all_queries();
+        let text = deliver(&state_root, "claude-aaaa").expect("this recipient's mail is delivered");
+        assert!(text.contains("mine"), "{text}");
+        assert_eq!(
+            store::waiting_for_all_queries(),
+            before,
+            "delivery counted every recipient's undelivered mail"
+        );
     }
 
     #[test]

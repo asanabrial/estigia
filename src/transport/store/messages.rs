@@ -102,6 +102,17 @@ fn counted(store: &Store, sql: &str, what: &'static str) -> Result<BTreeMap<Stri
         .map_err(unreadable(what))
 }
 
+#[cfg(test)]
+thread_local! {
+    static WAITING_FOR_ALL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many times this test thread has asked for every recipient's waiting count.
+#[cfg(test)]
+pub(crate) fn waiting_for_all_queries() -> u64 {
+    WAITING_FOR_ALL.with(std::cell::Cell::get)
+}
+
 impl Store {
     #[cfg(test)]
     pub(crate) fn message_sent(&self, sent: &MessageSent<'_>, now: u64) -> Result<i64, Failure> {
@@ -263,12 +274,25 @@ impl Store {
     }
 
     pub(crate) fn messages_waiting_for(&self) -> Result<BTreeMap<String, u64>, Failure> {
+        #[cfg(test)]
+        WAITING_FOR_ALL.with(|calls| calls.set(calls.get() + 1));
         counted(
             self,
             "SELECT recipient_run_id, COUNT(*) FROM messages WHERE delivered_at IS NULL
              GROUP BY recipient_run_id",
             "count the waiting messages",
         )
+    }
+
+    pub(crate) fn message_waiting_for(&self, recipient_run_id: &str) -> Result<bool, Failure> {
+        self.connection()
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM messages
+                 WHERE recipient_run_id = ?1 AND delivered_at IS NULL)",
+                rusqlite::params![recipient_run_id],
+                |row| row.get(0),
+            )
+            .map_err(unreadable("count the waiting messages"))
     }
 
     pub(crate) fn messages_undelivered_from(&self) -> Result<BTreeMap<String, u64>, Failure> {

@@ -5157,6 +5157,12 @@ fn hook(event: &str, dialect: &str, agent: Option<&str>, wait_mail: bool) -> Res
     if harness::hook::is_git(event) {
         return git_hook(event);
     }
+    // Answered before the payload is read and before `gate_context` builds:
+    // this event decides nothing, so nothing it would read can change `{}`.
+    if event == harness::hook::Event::PostToolUse {
+        say!("{{}}");
+        return Ok(());
+    }
 
     let input = harness::hook::read_input(std::io::stdin());
     let context = gate_context(&input.cwd).ok();
@@ -5582,16 +5588,21 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     };
     // Never a refusal: a missing transport is a decision `gate` makes, not a
     // reason to have no context to decide in. See `harness::control_surface`.
-    let skill_root = harness::control_surface();
+    let (skill_root, contract_text) = harness::control_surface_with_contract();
     // Defaults rather than refusing, with this repository's rows layered on top.
     // Told apart: a contract that did not parse leaves nothing standing, while a
     // repository file that did not read keeps the rows underneath it.
+    let repository = skill::repository_snapshot(&repo_dir);
     let skill::KeptWhatParses {
         config: installed,
         contract,
         row,
         file,
-    } = skill::installed_config_in_keeping_what_parses_apart(&skill_root, &repo_dir);
+    } = skill::installed_config_in_keeping_what_parses_apart_from(
+        &skill_root,
+        contract_text.as_deref(),
+        repository.as_ref().map(Option::as_ref),
+    );
     let complaint = contract.as_ref().or(row.as_ref()).or(file.as_ref());
     let unreadable = complaint.is_some();
     let repository_unknown = file.is_some();
@@ -5619,10 +5630,13 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
         workflow: effective_workflow(contract_unreadable, repository_unknown, installed.workflow),
         // Read off `installed` so the crossing in `tests/honesty.rs` sees which
         // row this field answers.
-        operation_window: harness::operation_window::effective_in(
-            &repo_dir,
-            &installed.git_operation_window,
-        ),
+        operation_window: match repository.as_ref() {
+            Ok(snapshot) => harness::operation_window::effective_from_document(
+                snapshot.as_ref().map(|snapshot| snapshot.document()),
+                &installed.git_operation_window,
+            ),
+            Err(_) => crate::config::GitOperationWindow::Unreadable,
+        },
         // Empty is not a flag: a variable set to nothing is how a shell says
         // "unset", and treating it as a declaration would open the gate for
         // anybody who exported it once and forgot.
