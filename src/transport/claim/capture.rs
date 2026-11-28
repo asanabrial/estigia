@@ -767,13 +767,19 @@ pub(super) fn prepare_with(
         digest: receipt.digest.clone(),
         payload_digest,
     };
-    let prompt = prompt::build(&PromptInput {
-        role,
-        receipt: &reviewed,
-        payload: payload.text.as_bytes(),
-        criteria: &criteria,
-        findings: &parent_findings,
-    })
+    let shown = refuter
+        .then(|| prompt::payload_for_candidates(&parent_findings, payload.text.as_bytes()))
+        .flatten();
+    let prompt = prompt::build_showing(
+        &PromptInput {
+            role,
+            receipt: &reviewed,
+            payload: payload.text.as_bytes(),
+            criteria: &criteria,
+            findings: &parent_findings,
+        },
+        shown.as_deref(),
+    )
     .map_err(reviewer_failure)?;
     let attempt = validator.then(|| (inconclusive_attempts(&comments, &receipt) + 1).to_string());
     Ok(Prepared {

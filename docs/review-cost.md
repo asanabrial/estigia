@@ -324,6 +324,16 @@ A lens inherits `CLAUDE_CODE_PROMPT_CACHE_TTL` from the environment it is launch
 dropped it and a lens fell back to the CLI's own default lifetime. An orchestrator that sets the
 five-minute cache the T arm above measured therefore has it reach the lens.
 
+## The refuter reads only the files its candidates cite
+
+A refuter used to be handed the whole published payload for one candidate on one hunk. `prepare_with`
+now cuts the diff to the file sections the candidates' `location`s name — the whole file diff, not
+only the cited hunk — and falls back to the whole payload when any candidate names no location or a
+path the diff does not carry; `payload_for_candidates` in `src/reviewer/prompt.rs` owns the cut, and
+`build_showing` still verifies the digest of the whole payload before displaying it. The saving is the
+published payload minus the uncited files, which on a multi-file change is most of it. A refuter whose
+candidate cites one file no longer reads the other files the lenses read.
+
 ## Preserving the reviewer CLI's own usage
 
 `parse_result` in `src/reviewer/adapters.rs` used to drop the CLI's `usage` object. The runner now
