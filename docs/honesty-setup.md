@@ -137,16 +137,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   tell). It cannot see a foreign push landing inside the window: a run that pushes, waits through lag and
   reads agreement may be reading a pull request that settled onto a head it did not push, and the receipt
   binds that head either way.
-- **An exit-2 refusal with no `action` is still sent to `estigia config list`, and nothing checks that the
-  command clears it.** `translate`'s code-2 arm carries the transport's own `action` for every reason the
-  table does not answer; the fallback repeats every non-null envelope field beside the ones the refusal is
-  built from, an object or a nested list as compact JSON
-  (`an_envelope_object_is_rendered_as_json_a_null_is_dropped_and_a_scalar_is_repeated`), and runs for
-  **every** code whose envelope carries no `detail`. What is left is the last resort: a
-  `Failure::ConfigDefect` or code-2 `Failure::Stop` without an `action` or a `malformed_argument` entry
-  (`invalid-finding-class`, `missing-argument`, `incomplete-review-transaction` and their neighbours, none of
-  which the configuration has any part in) reaches the caller as `run: estigia config list`, a dead end that
-  only a per-reason decision can replace.
+- **An unexplained configuration defect's refusal cannot name the row, and nothing checks that it
+  could.** `translate`'s code-2 arm answers an unexplained `Failure::ConfigDefect` or code-2
+  `Failure::Stop` — `invalid-finding-class`, `missing-argument`, `incomplete-review-transaction` and
+  their neighbours, none of which the configuration has any part in — as `no_command` with
+  `operator-knowledge`: the row is the operator's to decide, and no command the binary has was going
+  to clear it. The transport named no setting, so the sentence says only that the row is the
+  operator's; naming the right one needs a per-reason decision this fallback does not have.
 - **Skill directories are verified for four entries** (`claude-code`, `codex`, `deepseek-harness` and the
   neutral `~/.agents` root); the other adapters (OpenCode, Pi, Cursor, ZCode) have an unverified skill
   directory, so their skill lands in the shared root and the directive names the path, which `estigia setup`

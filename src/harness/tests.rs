@@ -3372,13 +3372,13 @@ fn every_event_name_resolves_to_exactly_one_event() {
 }
 
 #[test]
-fn a_mistyped_argument_is_not_sent_to_read_the_configuration() {
+fn no_exit_two_refusal_is_sent_to_read_the_configuration() {
     use super::tracker::{Answer, translate};
 
     // Exit `2` carries two different faults — the operator's configuration and
-    // the caller's own typo — and both used to be answered with `estigia config
-    // list`. Running it discharges the first and does nothing whatever for the
-    // second, which is the ratchet's one rule about naming a command.
+    // the caller's own typo. `estigia config list` discharges neither: it
+    // reports the table, and the table is not what fixes a bad horizon nor a
+    // configuration row the transport could not name.
     //
     // Measured on the real binary: `estigia claim 1 --horizon "not a date"`
     // answered `invalid-horizon` and then sent the operator to read a table
@@ -3413,9 +3413,7 @@ fn a_mistyped_argument_is_not_sent_to_read_the_configuration() {
     assert!(!message.contains("estigia config list"), "{message}");
     assert!(message.contains("32"), "{message}");
 
-    // And a configuration fault on the same code still names the command that
-    // does fix it. Narrowing the resolution must not take it from the one case
-    // it was right for.
+    // And the fault the transport did not explain is no better served by it.
     let refusal = translate(
         &Answer {
             code: 2,
@@ -3424,9 +3422,14 @@ fn a_mistyped_argument_is_not_sent_to_read_the_configuration() {
         "claim",
     )
     .expect("exit 2 is a refusal");
+    let message = format!("{refusal}");
     assert!(
-        format!("{refusal}").contains("estigia config list"),
-        "the configuration case lost the command that fixes it"
+        !message.contains("estigia config list"),
+        "an unexplained configuration fault still names a command that cannot clear it: {message}"
+    );
+    assert!(
+        message.contains("operator-knowledge"),
+        "the configuration fault does not say the row is the operator's to decide: {message}"
     );
 }
 

@@ -794,7 +794,14 @@ const AFFIRMED: &[(&str, u64)] = &[
     // and maps `5` and the unnamed codes to `unknown`, never to a named state.
     // Re-read the next day, after review: only exit `1` reads the class table, so a
     // code outside `0` to `5` is `unknown` in class as it already was in outcome.
-    ("exit-code", 929166899009124012),
+    //
+    // Re-read on 2026-11-28: `translate` takes its replay from the class table
+    // instead of writing `NotReplayable` beside every exit-1 stop, and an
+    // exit-1 refused action naming a tool is `StatusRequired`. The population —
+    // codes `0` through `5` — and the `_` arm to `Unknown` are untouched, so the
+    // claim and its boundary still hold; the fingerprint moved for the replay
+    // rule alone.
+    ("exit-code", 7312196111808656723),
     // `writing-shell` — new on 2026-08-01, closing the hole `repository-shell`
     // used to claim and never covered. Read against the function: the four
     // shapes it names (redirect, in-place edit, inline code, the copy/move/

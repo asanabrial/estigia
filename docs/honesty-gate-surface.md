@@ -47,7 +47,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   CI release, escaping and the four markers' field shapes did redden tests. Exact-whitespace guards in
   `claim.rs` can falsely attribute line-ending changes to a caught mutation.
 - **Four stops around `ensure_draft` and the closing-keyword scan are unheld.** No test holds the
-  `[world-action]` guidance's `Refs #<n>`. `Answer::already_wrote`, which selects `translate`'s exit arm,
+  world-action resolution's `Refs #<n>`. `Answer::already_wrote`, which selects `translate`'s exit arm,
   lies outside the `exit-code` fingerprint; its `StatusRequired` axis has only the fingerprint tripwire.
   The shared range scan reads different checkouts: isolated publication versus repository-root
   `assess_autoclose`. `keyword_sources` exposes two shapes under one key, with no parser today.

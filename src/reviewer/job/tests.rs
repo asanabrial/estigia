@@ -168,6 +168,15 @@ fn a_result_in_another_format_is_not_read() {
     assert_eq!(FORMAT, 1);
 }
 
+struct Gated(std::sync::Arc<std::sync::Mutex<mpsc::Receiver<()>>>);
+
+impl Adapter for Gated {
+    fn review(&self, invocation: &Invocation) -> Result<Vec<u8>, Refusal> {
+        let _ = self.0.lock().expect("the gate").recv();
+        Echo.review(invocation)
+    }
+}
+
 #[test]
 fn a_relaunched_job_writes_a_token_the_store_still_holds() {
     let root = tempfile::tempdir().expect("a directory");
@@ -178,31 +187,32 @@ fn a_relaunched_job_writes_a_token_the_store_still_holds() {
         .mint_job_token("job-two-launches", 100)
         .expect("the first token");
     write_job(&dir, &invocation()).expect("the job is written");
-    let spawner = OnThread(echo);
-    spawner
+
+    let (release, gate) = mpsc::channel();
+    let gate = std::sync::Arc::new(std::sync::Mutex::new(gate));
+    let waiting = std::sync::Arc::clone(&gate);
+    let slow = move || -> Result<Box<dyn Adapter>, Refusal> {
+        Ok(Box::new(Gated(std::sync::Arc::clone(&waiting))))
+    };
+    OnThread(slow)
         .start_with(&dir, &first)
         .expect("the first runner starts");
-    match finished(&dir) {
-        JobResult::Answer { token, .. } => assert_eq!(token.as_deref(), Some(first.as_str())),
-        other => panic!("{other:?}"),
-    }
 
-    let second = store
+    store
         .mint_job_token("job-two-launches", 200)
         .expect("the relaunch's token");
-    write_job(&dir, &invocation()).expect("the directory is written again");
-    spawner
-        .start_with(&dir, &second)
-        .expect("the second runner starts");
-    let held = store.job_token("job-two-launches").expect("the row reads");
+    release
+        .send(())
+        .expect("the earlier runner finishes after the relaunch");
+
     let written = match finished(&dir) {
         JobResult::Answer { token, .. } => token,
         other => panic!("{other:?}"),
     };
+    let held = store.job_token("job-two-launches").expect("the row reads");
     assert!(
         crate::reviewer::job::bound_to(written.as_deref(), held.as_deref()),
-        "the runner that finished last wrote a token the store no longer holds: {written:?} \
-         against {held:?}"
+        "the runner that finished last wrote a token the store no longer holds: {written:?} against {held:?}"
     );
 }
 

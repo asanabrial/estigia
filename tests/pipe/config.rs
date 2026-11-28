@@ -123,9 +123,16 @@ fn a_configured_value_this_build_cannot_read_is_not_reported_as_a_stale_skill() 
         "the session was sent to a command that refuses this contract: {session}"
     );
     assert!(
-        session.contains("does not recognise") && session.contains("estigia doctor"),
-        "the session was not told the gate is running on its defaults, nor where the row is: \
-         {session}"
+        session.contains("does not recognise") && session.contains("running on its defaults"),
+        "the session was not told the gate is running on its defaults: {session}"
+    );
+    assert!(
+        !session.contains("estigia doctor"),
+        "the session was sent to `doctor`, which reports the row but does not clear it: {session}"
+    );
+    assert!(
+        session.contains("corrected where it is written"),
+        "the session did not say what the caller has to do instead: {session}"
     );
 
     // And `sync` really is the dead end, or the paragraph above is a story

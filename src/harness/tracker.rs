@@ -23,9 +23,9 @@
 //!
 //! `0` the check passed. `1` the control surface was read and answered stop.
 //! `2` the operator's configuration is wrong, **or the caller's argument was**
-//! — two faults on one code, and only the first has a command that fixes it, so
-//! [`translate`] takes the table's row, then the transport's own `action`, and
-//! names a command only when neither exists. `3` the control surface answered **nothing**. `4` and
+//! — two faults on one code, and neither is cleared by a command this binary
+//! keeps, so [`translate`] takes the table's row, then the transport's own
+//! `action`, and answers `no_command`. `3` the control surface answered **nothing**. `4` and
 //! `5` something may have been written and nobody knows.
 //!
 //! Translating those into one boolean would throw away the distinction that
@@ -37,7 +37,9 @@
 use serde_json::Value;
 
 use super::population::{Disposition, Population};
-use crate::outcome::{MutationOutcome, NoCommandReason, Refusal, Replayability, Resolution};
+use crate::outcome::{
+    MutationOutcome, NoCommandReason, Refusal, RefusalClass, Replayability, Resolution,
+};
 
 /// Where an [`Answer`] stands: a code that reads as success, a code-1 stop
 /// naming its reason, or anything a caller can read as neither.
@@ -206,6 +208,7 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
         .detail()
         .map(str::to_owned)
         .unwrap_or_else(|| envelope_detail(answer, context));
+    let class = super::refusal_class::class_of_answer(answer.code, reason);
 
     // See the `exit-code` population declaration on this function.
     let (outcome, replay, resolution) = match answer.code {
@@ -227,7 +230,12 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
         // identical command repeats the answer.
         1 => (
             MutationOutcome::NotStarted,
-            Replayability::NotReplayable,
+            match answer.action() {
+                Some(action) if class == RefusalClass::Refused && names_a_tool(action) => {
+                    Replayability::StatusRequired
+                }
+                _ => class.replay(),
+            },
             match answer.action() {
                 Some(action) => Resolution::no_command(NoCommandReason::WorldAction, action),
                 None => Resolution::no_command(
@@ -242,7 +250,7 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
         // was, so it is asked.
         2 => (
             MutationOutcome::NotStarted,
-            Replayability::ExactReplaySafe,
+            class.replay(),
             match (
                 answer.reason().and_then(malformed_argument),
                 answer.action(),
@@ -250,7 +258,11 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
                 (Some(wanted), _) | (None, Some(wanted)) => {
                     Resolution::no_command(NoCommandReason::OperatorKnowledge, wanted)
                 }
-                (None, None) => Resolution::run("estigia config list"),
+                (None, None) => Resolution::no_command(
+                    NoCommandReason::OperatorKnowledge,
+                    "the configuration row the transport disagreed with: it named no setting, and \
+                     no command it answers with clears this",
+                ),
             },
         ),
         // Nothing was answered. Not a stand-down and never clearance. A `gh`
@@ -274,7 +286,7 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
         ),
         3 => (
             MutationOutcome::NotStarted,
-            Replayability::ExactReplaySafe,
+            class.replay(),
             Resolution::no_command(
                 NoCommandReason::WorldAction,
                 "the tracker could not be read; write nothing and retry the read",
@@ -284,7 +296,7 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
         // rather than assume.
         _ => (
             MutationOutcome::Unknown,
-            Replayability::StatusRequired,
+            class.replay(),
             match answer.action() {
                 Some(action) => Resolution::no_command(NoCommandReason::WorldAction, action),
                 None => Resolution::no_command(
@@ -301,11 +313,29 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
         outcome,
         replay,
         resolution,
-        class: super::refusal_class::class_of_answer(answer.code, reason),
+        class,
         observed: None,
     };
-    let class = refusal.class;
     Some(refusal.classed(class))
+}
+
+/// Whether the transport's own instruction names another tool to call, such as
+/// ``call `collect_review_input` again``, rather than a command or a world
+/// change. A tool is a call the caller may make again; a command is a line a
+/// person types, and the two do not share replay advice.
+fn names_a_tool(action: &str) -> bool {
+    let mut rest = action;
+    while let Some(at) = rest.find('`') {
+        rest = &rest[at + 1..];
+        let Some(end) = rest.find('`') else {
+            return false;
+        };
+        if crate::harness::mcp::tools::find(&rest[..end]).is_some() {
+            return true;
+        }
+        rest = &rest[end + 1..];
+    }
+    false
 }
 
 /// Rewrites the `--flag` spellings of the tool's own arguments into the
@@ -595,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stop_says_nothing_was_written_and_a_replay_will_not_help() {
+    fn a_stop_says_the_state_must_be_read_before_any_retry() {
         // Incident I07: the run that kept working after being told it lost.
         let refusal = translate(
             &answer(
@@ -612,7 +642,7 @@ mod tests {
         .expect("a stop is a refusal");
         assert_eq!(refusal.code, "not-current-live-holder");
         assert_eq!(refusal.outcome, MutationOutcome::NotStarted);
-        assert_eq!(refusal.replay, Replayability::NotReplayable);
+        assert_eq!(refusal.replay, Replayability::StatusRequired);
         assert!(refusal.to_string().contains("the issue is not yours"));
     }
 
@@ -658,13 +688,21 @@ mod tests {
     }
 
     #[test]
-    fn a_configuration_defect_is_the_one_that_names_a_command() {
+    fn a_configuration_defect_says_the_row_is_the_operators_to_decide() {
         let refusal = translate(
             &answer(2, json!({"ok": false, "reason": "gh-not-found"})),
             "claim",
         )
         .expect("a config defect is a refusal");
-        assert!(matches!(refusal.resolution, Resolution::Run { .. }));
+        assert_eq!(
+            refusal.resolution,
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "the configuration row the transport disagreed with: it named no setting, and no \
+                 command it answers with clears this"
+            ),
+            "an unexplained configuration defect named a command that does not clear it"
+        );
     }
 
     #[test]
@@ -698,7 +736,7 @@ mod tests {
              src/lib.rs, cause: path-not-in-either-tree"
         );
         assert_eq!(refusal.outcome, MutationOutcome::NotStarted);
-        assert_eq!(refusal.replay, Replayability::ExactReplaySafe);
+        assert_eq!(refusal.replay, Replayability::NotReplayable);
     }
 
     #[test]
@@ -720,7 +758,15 @@ mod tests {
             refusal.message,
             "record_review_finding: value: blocking, expected: severe | warning | suggestion"
         );
-        assert!(matches!(refusal.resolution, Resolution::Run { .. }));
+        assert_eq!(
+            refusal.resolution,
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "the configuration row the transport disagreed with: it named no setting, and no \
+                 command it answers with clears this"
+            ),
+            "an unexplained exit-2 defect named a command that does not clear it"
+        );
     }
 
     #[test]
@@ -771,7 +817,7 @@ mod tests {
         // No refusal loses a field it delivers today.
         assert_eq!(refusal.code, "review-target-mismatch");
         assert_eq!(refusal.outcome, MutationOutcome::NotStarted);
-        assert_eq!(refusal.replay, Replayability::NotReplayable);
+        assert_eq!(refusal.replay, Replayability::StatusRequired);
         assert_eq!(
             refusal.resolution,
             Resolution::no_command(
@@ -1110,6 +1156,82 @@ mod tests {
         assert!(
             checked >= 40,
             "only {checked} reason(s) were found under the port — the walk is broken"
+        );
+    }
+
+    #[test]
+    fn a_refusal_never_says_the_rule_repeats_and_that_the_call_may_be_repeated() {
+        let horizon = translate(
+            &answer(
+                2,
+                json!({
+                    "ok": false,
+                    "reason": "invalid-horizon",
+                    "detail": "`soon` is not a horizon this run can report by",
+                }),
+            ),
+            "renew",
+        )
+        .expect("a malformed horizon is a refusal");
+        let text = horizon.agent_text("command");
+        assert!(
+            !(text.contains("repeating the command repeats the answer")
+                && text.contains("may be repeated")),
+            "a malformed horizon says both that repeating repeats the answer and that the call may \
+             be repeated: {text}"
+        );
+
+        let exits_for = |class: crate::outcome::RefusalClass| match class {
+            crate::outcome::RefusalClass::Unavailable => vec![3],
+            crate::outcome::RefusalClass::Stale => vec![1],
+            crate::outcome::RefusalClass::Refused => vec![1, 2],
+            crate::outcome::RefusalClass::Unknown => vec![5],
+        };
+        let mut checked = 0;
+        let mut refused = 0;
+        let mut replay_lines = 0;
+        for (code, class) in crate::harness::refusal_class::classified() {
+            for exit in exits_for(class) {
+                let refusal = translate(
+                    &answer(
+                        exit,
+                        json!({"ok": false, "reason": code, "detail": "a detail"}),
+                    ),
+                    "a context",
+                )
+                .expect("a non-zero exit is a refusal");
+                let text = refusal.agent_text("command");
+                assert!(
+                    !(text.contains("repeating the command repeats the answer")
+                        && text.contains("may be repeated")),
+                    "`{code}` at exit {exit} says both that repeating repeats the answer and that \
+                     the call may be repeated: {text}"
+                );
+                assert!(
+                    !text.contains("may be repeated"),
+                    "`{code}` at exit {exit} prints a replay answer `agent_text` omits whenever it \
+                     is that one: {text}"
+                );
+                if text.contains("Class: refused") {
+                    refused += 1;
+                }
+                if text.contains("Replay:") {
+                    replay_lines += 1;
+                }
+                checked += 1;
+            }
+        }
+        assert!(
+            checked >= 400,
+            "only {checked} code-and-exit pairs were rendered, so the scan read almost nothing"
+        );
+        assert!(
+            refused > 0,
+            "no refusal in the population was classed refused"
+        );
+        assert!(
+            replay_lines > 0,
+            "no refusal in the population printed a replay line, so the rule is untested"
         );
     }
 

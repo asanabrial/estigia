@@ -54,7 +54,7 @@ const ACQUIRING_FORMS: &[&str] = &[
 
 const ALLOWED_SENTENCES: &str = r##"
 negates acquisition :: Ordinary review licenses lenses only: the answer carries no judge count at any tier
-negates acquisition :: It acquires no judge at any tier: `review_tier` answers no judge count, and the computed verdict `release_ci` requires reads lens reports and the finding ledger alone
+negates acquisition :: It acquires no judge at any tier: the `review_read` view `tier` answers no judge count, and the computed verdict `release_ci` requires reads lens reports and the finding ledger alone
 negates acquisition :: none of them convenes a judge
 negates acquisition :: A lens is not a judge, and no tier acquires a judge
 negates acquisition :: Judgment Day's two judges are `review-blind` and `review-blind-sealed`, one template rendered twice, and no tier acquires them
