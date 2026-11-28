@@ -28,17 +28,23 @@ review tier, the lens and the finding do not establish.
   rejections on four `severe` documentation findings graded under a prompt-supplied rule, a figure not
   re-derivable because the receipts were not retained with a method.
 
-- **`review_tier` carries two named gaps against `ClassifyRisk`, and one widening.** It ports the
+- **`review_tier` carries two named gaps against `ClassifyRisk`, and two widenings.** It ports the
   hot-path tokens, `isServiceTokenReviewPath`, `isShellReviewPath` and `executableModeChanged`, four
-  producers reaching `auth`, `update`, `security`, `payments`, `permissions` and `shell_process`. The
-  content scan (`processBoundaryRiskReasons`, in `src/transport/tier/content_scan.rs`) is ported and
-  reads `high` on an added process-spawn construct, a `#!` line in either tree, a scan past
-  `SCAN_BYTE_BUDGET` or an unattributable diff (`process_scan_limit`), and the ten dangerous-sink
-  families. Where it differs from the source project:
+  producers reaching `auth`, `update`, `security`, `payments`, `permissions` and `shell_process`. A
+  hot-path token counts only for a path `is_semantic_risk_eligible` admits, so a prose-only change to
+  a `docs/auth.md` no longer reads `high` on its name. The content scan
+  (`processBoundaryRiskReasons`, in `src/transport/tier/content_scan.rs`) is ported and reads `high`
+  on an added process-spawn construct, a `#!` line in either tree, a scan past `SCAN_BYTE_BUDGET` or
+  an unattributable diff (`process_scan_limit`), and the ten dangerous-sink families. Where it
+  differs from the source project:
   - **Matching.** Go regexes and `git grep -E` become the `regex` crate and a line test over the blob.
-    Every catalogue pattern is unchanged, but `\b`, `\w` and `[^...]` are Unicode-aware here and
-    ASCII-only in Go, so a non-ASCII identifier can match here and not there. A blob containing a NUL
-    is skipped, standing in for `git grep -I`.
+    Every catalogue pattern is unchanged, and the process-spawn alternation gains Rust's
+    `Command::new(`, but `\b`, `\w` and `[^...]` are Unicode-aware here and ASCII-only in Go, so a
+    non-ASCII identifier can match here and not there. A blob containing a NUL is skipped, standing
+    in for `git grep -I`.
+  - **Comment lines.** Both scans skip an added line whose first non-space bytes are a comment
+    prefix (`//`, `#`, `--`, `/*`, `*`, `<!--`, `'''`, `"""`), from one `is_comment_line`, so a doc
+    comment naming `--exec` no longer reads `high`. The skip was stated for the sink scan alone.
   - **Interpreter directive.** Only the first line of a blob, in either tree, is read, and a first line
     starting `#![` is not a directive. The source project's `git grep '^#!'` matches any line, which
     made every change touching a Rust file with an inner attribute read `high`. The cost is a
@@ -78,7 +84,7 @@ review tier, the lens and the finding do not establish.
   `release_ci`, so the producer is removed until the review authority is separable by filename. This
   gap narrows what reaches `high`.
 
-  One property is a widening. `isGeneratedGoldenPath` gates a generated `testdata/golden/*.golden`
+  Two properties are widenings. `isGeneratedGoldenPath` gates a generated `testdata/golden/*.golden`
   fixture out of risk classification at seven call sites in the source project (`CountChangedLines`,
   `AssessSnapshotRisk`, `activePassiveContentPaths`, `deriveSnapshotRiskReasons`, `fallbackRiskReason`,
   `isInspectableStat` and `touchesHotPath`, plus `SnapshotBuilder`'s own marking). All seven have
@@ -86,6 +92,11 @@ review tier, the lens and the finding do not establish.
   `derive_snapshot_risk_reasons`, `fallback_risk_reason`, `is_inspectable_stat`, `touches_hot_path`)
   and none gates on a golden path, because this repository has no such convention. A path shaped like
   a golden fixture answers `high` here and would not there; it never turns `high` into `low`.
+
+  The other is the added `Command::new(` alternation. The ported catalogue named no Rust process
+  spawn, so a change adding `Command::new("sh").arg("-c")` read `medium` with one lens, while the
+  same boundary in Python or Java reads `high`. The pattern the criterion for `review_tier` names
+  is therefore matched here and absent from the ported catalogue; it can only raise a tier.
 
 - **`review_tier` reads two tree-to-tree `git diff` calls and never the worktree, and the tier-licensing
   sentence is held by review alone.** Both ends are resolved to commits (the two `pinned_diff_args`

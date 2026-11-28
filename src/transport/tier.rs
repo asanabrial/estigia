@@ -1814,10 +1814,15 @@ fn hot_path_risk_signals(logical_path: &str) -> Vec<&'static str> {
     signals
 }
 
+fn hot_path_signals(stat: &DiffStat) -> Vec<&'static str> {
+    if !is_semantic_risk_eligible(stat) {
+        return Vec::new();
+    }
+    hot_path_risk_signals(&stat.path)
+}
+
 fn touches_hot_path(stats: &[DiffStat]) -> bool {
-    stats
-        .iter()
-        .any(|stat| !hot_path_risk_signals(&stat.path).is_empty())
+    stats.iter().any(|stat| !hot_path_signals(stat).is_empty())
 }
 
 // ---------------------------------------------------------------------------
@@ -1906,7 +1911,7 @@ fn derive_snapshot_risk_reasons(
                 path: Some(stat.path.clone()),
             });
         }
-        for signal in hot_path_risk_signals(&stat.path) {
+        for signal in hot_path_signals(stat) {
             candidates.push(RiskReason {
                 code: REASON_HOT_PATH,
                 signal: Some(signal),
