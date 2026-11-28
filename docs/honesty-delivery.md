@@ -402,8 +402,12 @@ and a merge whose answer was lost). What it does not measure:
   `in-progress` and answers `continues: true`
   (`a_slice_whose_pull_request_does_not_close_the_issue_continues_it`), and it records the spend it
   was given before it posts its evidence
-  (`a_continuing_slice_records_the_spend_it_is_given_before_it_posts_evidence`). It reads the closing
-  references from GitHub, so a branch that names the issue with a closing keyword still closes it. A `deliver` started
+  (`a_continuing_slice_records_the_spend_it_is_given_before_it_posts_evidence`). What the closing note
+  posts is the summary line and the appendix and nothing else; the delivery's own account — receipt,
+  tier and lens roles, verdict, findings by class, checks receipt, CI summary, merge and parents, spend
+  and run id — is `Deliver::record`, answered to the caller and stored locally, never posted. It reads
+  the closing references from GitHub, so a branch that names the issue with a closing keyword still
+  closes it. A `deliver` started
   in the checkout its release removes runs every later read from the main working tree
   (`a_delivery_run_from_the_checkout_its_release_removes_still_reads_the_close`); when git cannot name
   that tree, the read still fails closed.
