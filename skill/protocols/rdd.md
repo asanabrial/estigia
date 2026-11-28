@@ -17,12 +17,12 @@ Receipt-driven review makes the subject explicit and freezes it first:
 
 | Step | State | What it does |
 |---|---|---|
-| freeze | `review` | `target` emits the complete intended target — the recorded base through `HEAD`, plus the uncommitted worktree — as a path/mode/blob manifest with **one digest** over it |
+| freeze | `review` | `review_read` with `view: target` emits the complete intended target — the recorded base through `HEAD`, plus the uncommitted worktree — as a path/mode/blob manifest with **one digest** over it |
 | classify | `review` | name the risk this change carries and which lenses the review must apply; a lens nobody named is a lens nobody applied |
 | capture | `review` | each finding recorded against that receipt with its own identity, evidence, material impact and one of `severe`/`warning`/`suggestion`, then one computed exact-receipt verdict over epoch, PR, head, base and **that digest** |
 | validate | every gate | re-derive the digest and compare; a difference stops the gate |
 
-The digest is the receipt. It is not a file Estigia writes — it is what `target` returns,
+The digest is the receipt. It is not a file Estigia writes — it is what `review_read` with `view: target` returns,
 and it belongs on the issue with the rest of the evidence.
 
 ## The gates
@@ -42,11 +42,11 @@ not a gate.
 At the boundaries Estigia holds, what it verifies is the *claim*, not the digest. It cannot compare a
 receipt it never took. `release_ci` does compare it, twice: the supplied receipt must equal the
 recorded one, and the digest re-derived from the clean target must equal it, or `release-target-mismatch`
-refuses. Every other gate leaves that comparison to `target` and to the run.
+refuses. Every other gate leaves that comparison to `review_read` with `view: target` and to the run.
 
 ## When the base moves
 
-A receipt is bound to a base as well as a head. `target` with `recorded_base` classifies later movement as none,
+A receipt is bound to a base as well as a head. `review_read` with `view: target` and `recorded_base` classifies later movement as none,
 compatible, overlapping, conflicting or unknown — and **unknown is not compatible**. The answer's
 `integrate` field is the movement's own reading, never a verdict: it reports what the movement did,
 not what the change still means.

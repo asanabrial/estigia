@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 #[rustfmt::skip]
 const DOCUMENTS: &[(&str, usize)] = &[
-    ("skill/SKILL.md", 17098),
+    ("skill/SKILL.md", 17093),
     ("skill/agents/analyst.md", 1851),
     ("skill/agents/developer.md", 3182),
     ("skill/agents/review-blind.md", 7984),
@@ -27,22 +27,22 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/agents/review-risk.md", 4276),
     ("skill/agents/review-validator.md", 1998),
     ("skill/assets/analyst-issue-template.md", 4459),
-    ("skill/bindings/github.md", 7998),
-    ("skill/bindings/github/delivery.md", 42980),
-    ("skill/bindings/github/operations-guarantees.md", 43312),
-    ("skill/bindings/github/operations.md", 61079),
+    ("skill/bindings/github.md", 8347),
+    ("skill/bindings/github/delivery.md", 42975),
+    ("skill/bindings/github/operations-guarantees.md", 43048),
+    ("skill/bindings/github/operations.md", 61313),
     ("skill/bindings/github/recovery.md", 6744),
-    ("skill/bindings/github/refusals.md", 68393),
-    ("skill/bindings/github/setup.md", 1586),
-    ("skill/bindings/linear.md", 7291),
-    ("skill/policies/blind-judges.md", 43406),
+    ("skill/bindings/github/refusals.md", 68401),
+    ("skill/bindings/github/setup.md", 1594),
+    ("skill/bindings/linear.md", 7299),
+    ("skill/policies/blind-judges.md", 43571),
     ("skill/policies/judgment-day.md", 16022),
-    ("skill/protocols/rdd.md", 7863),
+    ("skill/protocols/rdd.md", 7962),
     ("skill/references/analyst.md", 3169),
     ("skill/references/decision-gates.md", 8146),
-    ("skill/references/domain-composition.md", 9088),
-    ("skill/references/repository-delivery.md", 23414),
-    ("skill/references/runtime-notes.md", 23279),
+    ("skill/references/domain-composition.md", 9101),
+    ("skill/references/repository-delivery.md", 23521),
+    ("skill/references/runtime-notes.md", 23359),
     ("skill/references/safety-incidents.md", 16341),
 ];
 
@@ -208,9 +208,7 @@ fn line_exceptions_still_exceed_the_ceiling() {
 
 /// The operations table's long cells route their detail to a companion named
 /// from the cell, so a row that routes its detail needs no line exception, and
-/// each cell names a section the companion actually carries. A row that cannot
-/// route its detail — `reclaim`, whose cell is the whole statement — takes the
-/// exception `LINE_EXCEPTIONS` records instead.
+/// each cell names a section the companion actually carries.
 #[test]
 fn the_operations_table_routes_its_long_cells_to_a_named_companion() {
     let table =

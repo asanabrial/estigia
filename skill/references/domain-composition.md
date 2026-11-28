@@ -129,7 +129,7 @@ checked; never lower the bar merely to produce an item.
 
 ## Attribution boundary
 
-Attribution belongs to transport, not the domain. Mint one identity per run and reuse it for every
+Attribution belongs to transport, not the domain. Use the run id `SessionStart` reported and reuse it for every
 write: `<runtime>-<session-prefix>`, where `<runtime>` is a component — lowercase `a-z0-9` groups
 joined by single `-` — and the dashless suffix is eight to sixteen ASCII alphanumerics ending in
 eight lowercase hex digits; that is the only shape the gate admits. A suffix that carries a dash is
