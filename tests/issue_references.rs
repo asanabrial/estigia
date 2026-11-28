@@ -66,7 +66,7 @@ fn shipped_text(root: &Path) -> Vec<(String, String)> {
                 continue;
             }
             let code = estigia::source_text::code_of(&text);
-            estigia::source_text::shipped_part(&code).to_string()
+            estigia::source_text::shipped_part(&code)
         } else {
             text
         };

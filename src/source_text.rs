@@ -122,22 +122,25 @@ pub fn code_of(source: &str) -> String {
     out
 }
 
-/// The part of an already-stripped source file that ships, without its inline
-/// test module.
+/// The part of an already-stripped source file that ships, with every inline
+/// test module removed.
 ///
 /// `#[cfg(test)]` on `mod tests;` declares a file a walk skips anyway;
-/// `#[cfg(test)]` on `mod tests {` opens one right here. Only the second is a
-/// place to stop reading, and the attribute has to be attached to that module:
-/// a test-only item — `#[cfg(test)] pub(crate) fn …` — followed later by the
-/// module is not the boundary. `source` must be [`code_of`]'s output: a comment
-/// can move a boundary taken from raw text.
-pub fn shipped_part(source: &str) -> &str {
+/// `#[cfg(test)]` on `mod tests {` opens one right here, wherever it sits — a
+/// module in the middle of a file is a hole in the shipped text, not the end of
+/// it. Only the second is removed, and the attribute has to be attached to that
+/// module: a test-only item — `#[cfg(test)] pub(crate) fn …` — followed later by
+/// the module is not one. `source` must be [`code_of`]'s output: a comment can
+/// move a boundary taken from raw text.
+pub fn shipped_part(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut copied = 0;
     let mut at = 0;
     while let Some(found) = source[at..].find("#[cfg(test)]") {
         let start = at + found;
         let rest = source[start + "#[cfg(test)]".len()..].trim_start();
         let Some(end) = rest.find(['{', ';']) else {
-            return source;
+            break;
         };
         let head = &rest[..end];
         let opens_here = rest.as_bytes()[end] == b'{';
@@ -146,12 +149,60 @@ pub fn shipped_part(source: &str) -> &str {
                 .split_whitespace()
                 .nth_back(1)
                 .is_some_and(|word| word == "mod");
-        if opens_here && names_a_module {
-            return &source[..start];
+        if !(opens_here && names_a_module) {
+            at = start + "#[cfg(test)]".len();
+            continue;
         }
-        at = start + "#[cfg(test)]".len();
+        let open = source.len() - rest.len() + end;
+        let Some(close) = block_end(source, open) else {
+            break;
+        };
+        let mut from = line_start(source, start);
+        if source[..from].ends_with("\n\n") {
+            from -= 1;
+        }
+        out.push_str(&source[copied..from]);
+        copied = after_line_break(source, close + 1);
+        at = copied;
     }
-    source
+    out.push_str(&source[copied..]);
+    out
+}
+
+fn line_start(source: &str, at: usize) -> usize {
+    let line = source[..at].rfind('\n').map_or(0, |index| index + 1);
+    if source[line..at].trim().is_empty() {
+        line
+    } else {
+        at
+    }
+}
+
+fn block_end(source: &str, open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for (offset, byte) in source.as_bytes()[open..].iter().enumerate() {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn after_line_break(source: &str, at: usize) -> usize {
+    if source[at..].starts_with("\r\n") {
+        at + 2
+    } else if source[at..].starts_with('\n') {
+        at + 1
+    } else {
+        at
+    }
 }
 
 #[cfg(test)]
@@ -295,6 +346,26 @@ mod tests {
     #[test]
     fn an_inline_test_module_is_the_cut() {
         let source = "fn ship() {}\n#[cfg(test)]\nmod tests {\n    fn only_tests() {}\n}\n";
+        assert_eq!(shipped_part(source), "fn ship() {}\n");
+    }
+
+    #[test]
+    fn a_test_module_mid_file_leaves_the_shipped_code_on_both_sides() {
+        let source = "fn before() {}\n\n#[cfg(test)]\nmod message_shape {\n    fn only_tests() {}\n}\n\nfn after() {}\n";
+        assert_eq!(shipped_part(source), "fn before() {}\n\nfn after() {}\n");
+    }
+
+    #[test]
+    fn every_inline_test_module_is_removed_and_no_shipped_line_is() {
+        let source = "#[cfg(test)]\nmod first {\n    fn a() {}\n}\nfn between() {}\n\
+                      #[cfg(test)]\nmod second {\n    fn b() {}\n}\nfn after() {}\n";
+        assert_eq!(shipped_part(source), "fn between() {}\nfn after() {}\n");
+    }
+
+    #[test]
+    fn a_nested_block_inside_the_test_module_is_removed_with_it() {
+        let source = "fn ship() {}\n#[cfg(test)]\nmod tests {\n    fn a() {\n        \
+                      if true {\n            assert!(true);\n        }\n    }\n}\n";
         assert_eq!(shipped_part(source), "fn ship() {}\n");
     }
 

@@ -2342,7 +2342,7 @@ fn crate_sources() -> Vec<String> {
             // Strip before splitting: a comment naming `#[cfg(test)]` would
             // otherwise move the cut in the raw text.
             let stripped = crate::source_text::code_of(&source);
-            found.push(crate::source_text::shipped_part(&stripped).to_owned());
+            found.push(crate::source_text::shipped_part(&stripped));
         }
     }
     assert!(
@@ -3645,7 +3645,7 @@ fn suggested_in_source(root: &std::path::Path) -> Suggested {
             // would otherwise move the cut in the raw text.
             let stripped = crate::source_text::code_of(&text);
             let text = crate::source_text::shipped_part(&stripped);
-            let mut rest = text;
+            let mut rest: &str = &text;
             let mut consumed = 0usize;
             while let Some(at) = rest.find("Resolution::run(") {
                 let after = at + "Resolution::run(".len();

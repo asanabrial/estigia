@@ -242,11 +242,11 @@ fn main() {
         // `ambiguous-write` — three answers whose whole purpose is to be told
         // apart, arriving at the harness as one `transport-refused`.
         let shipped = source_text::shipped_part(&stripped);
-        assert_reasons_covered(shipped, &file);
-        with_action.extend(reasons_naming_a_continuation(shipped));
-        for reason in extract_reasons(shipped)
+        assert_reasons_covered(&shipped, &file);
+        with_action.extend(reasons_naming_a_continuation(&shipped));
+        for reason in extract_reasons(&shipped)
             .into_iter()
-            .chain(extract_constructed(shipped))
+            .chain(extract_constructed(&shipped))
         {
             if reasons.insert(reason) {
                 ported += 1;
