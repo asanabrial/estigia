@@ -2284,6 +2284,10 @@ pub const NOT_RUN: &[(&str, &str)] = &[
         "changelog-notes",
         "the release flow reads a version's changelog entry by hand before tagging, and the tool surface no longer carries a name for it",
     ),
+    (
+        "list-states",
+        "the loop's own read: four queues from one open-issue listing so a `Stop` pays one; an agent reads a queue through `list_state`",
+    ),
 ];
 
 /// The tools that write to the tracker or the repository host on a run's behalf.

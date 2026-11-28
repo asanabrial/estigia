@@ -1060,6 +1060,13 @@ fn run_operation(
                 super::commands::list_state(context, state, run_id()?, limit, now)
             }
         }
+        "list-states" => {
+            let limit = f.get("limit");
+            let limit = limit
+                .and_then(|limit| limit.trim().parse::<u32>().ok())
+                .unwrap_or(200);
+            super::commands::list_states(context, run_id()?, limit, now)
+        }
         "comment" => match f.get("expect-state") {
             Some(expect_state) => renew_comment(context, &f, issue()?, expect_state, now),
             None => super::commands::comment(

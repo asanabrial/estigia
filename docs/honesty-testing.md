@@ -333,9 +333,13 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   **What the Codex loop does not port.** `--wait` (a `Stop` hook answers and exits, so a held or pending
   queue ends the turn with a message), `--max` (nothing counts delivered issues; the preamble omits the
   cap), per-session operator text, and `/flow-status` (there is no stored goal to print). Each `Stop`
-  runs the four queue reads `estigia goal` runs, and a second set when the first was not confirmed,
-  inside a 180 s timeout, so a slow tracker adds that latency to every turn end and one slower than the
-  timeout ends the loop. `owned` recognises exactly the three commands setup writes, while
+  runs the queues `estigia goal` runs — one open-issue listing partitioned into all four — and asks
+  again only when the claim answer was `unread`, inside a 180 s timeout, so a slow tracker adds that latency to every turn end and one slower than the
+  timeout ends the loop. Each `Stop` also reads the whole transcript for a background launch that never
+  reported: a line scan of the same predicates took 96–107 ms over an 86.1 MB transcript and 32–37 ms
+  over 30.9 MB on a warm page cache here, and it stays whole because a scan that stopped early cannot
+  tell an unanswered launch from one it never reached, while answering `false` there releases the turn.
+  `owned` recognises exactly the three commands setup writes, while
   `strip_hooks` on uninstall drops any handler whose command merely contains an Estigia event name, so a
   foreign Codex hook spelled that way would lose its entry and keep its trust table.
 

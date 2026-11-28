@@ -64,7 +64,7 @@ pub const TRACKER_TRANSPORT_ABSENT_POPULATION: Population = Population {
            `cli::inert_tracker`, `harness::doctor::stale_run_pointers`'s \
            `Skipped` row, `harness::mcp::run_tool`'s tracker arm, \
            `harness::decide_observing`'s `NoTracker` aside, \
-           `harness::tracker_answer_for_pointer`, `harness::queue_read`, \
+           `harness::tracker_answer_for_pointer`, `harness::queues_read`, \
            and `harness::completed_work`. Each \
            is reached when `Tracker` is `Linear`, except `cli::inert_tracker`, \
            which asks `Tracker::adjudicates_unclaimed_writes` and so excludes \

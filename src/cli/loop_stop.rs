@@ -215,9 +215,10 @@ fn waiting_on(reading: &GoalReading) -> String {
 /// The one loop decision, shared by Codex's `Stop` and Claude Code's.
 ///
 /// `max` is the completion cap a stored loop carries and `last` the reason it
-/// last recorded; `pause` is how the caller waits between attempts at a read
-/// that has not answered yet, and `read` is asked with the completion count
-/// wanted only when a cap is set.
+/// last recorded; `pause` is how the caller waits between attempts at an
+/// `unread` answer, which may change, and `read` is asked with the completion
+/// count wanted only when a cap is set. An `unreadable` answer comes from the
+/// pointer and cannot change, so it is not asked again.
 pub(super) fn decide(
     run_id: &str,
     invocation: Invocation,
@@ -228,17 +229,24 @@ pub(super) fn decide(
 ) -> Decision {
     let mut reading = read();
     let mut attempts = 1;
-    while unconfirmed(&reading) && attempts < UNCONFIRMED_ATTEMPTS {
+    while reading.standing == "unread" && attempts < UNCONFIRMED_ATTEMPTS {
         pause();
         reading = read();
         attempts += 1;
     }
     if unconfirmed(&reading) {
         let retries = attempts - 1;
-        let reason = format!(
-            "Estigia could not confirm this run's claim ({}) after {retries} retries",
-            reading.standing
-        );
+        let reason = if retries == 0 {
+            format!(
+                "Estigia could not confirm this run's claim ({})",
+                reading.standing
+            )
+        } else {
+            format!(
+                "Estigia could not confirm this run's claim ({}) after {retries} retries",
+                reading.standing
+            )
+        };
         return Decision::Stop {
             value: ended(&reason),
             reason,

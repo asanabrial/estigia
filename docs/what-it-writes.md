@@ -402,7 +402,7 @@ key. A turn end and a
 tick share one in-flight decision per session: whichever arrives second while the first is reading
 does nothing, so the two enqueue once. `held` is read from `list-state`, which answers
 `open` for `review` and `in-progress` (every non-pull-request issue in the state, assigned or not) and
-`pending` and `unconditioned` beside `dischargeable` for `blocked`; one `estigia goal` reads four queues, and the blocked queue's per-item reads are shared by all three
+`pending` and `unconditioned` beside `dischargeable` for `blocked`; one `estigia goal` lists the open issues once and partitions that one answer into four queues, and the blocked queue's per-item reads are shared by all three
 blocked counts. What the wait cannot see is in [`honesty.md`](honesty.md).
 
 **A running child session is waited on, not re-prompted over.** A turn can end only because the
@@ -463,11 +463,13 @@ is the only terminator, and Codex imposes no cap of its own.
 | holds none, and only `unadmitted` issues are left | allows the stop without ending the loop (`terminal: false`), with `systemMessage` naming the count and saying to admit each with an explicit `transition` |
 | holds none and nothing can open | allows the stop, with `systemMessage` naming the `unconditioned` count when there is one |
 | has mail waiting, whichever of the rows above applies | the same answer with `decision: block` and a `reason` that is the loop's reason (when it has one), a blank line, then the mail; `systemMessage` is kept. The mail is taken by the delivery in [`sessions.md`](sessions.md#the-mailbox), so the row is stamped once. Codex has no `Stop` entry without the `Loop plugin` row `on`, so this is where Codex mail is delivered at `Stop`. |
-| has a claim answer that stays `unread` or `unreadable` past the bounded retries, or a queue count that could not be read | allows the stop, with `systemMessage` naming what could not be confirmed and, for a retried claim, saying the read was retried |
+| has an `unread` claim answer past the bounded retries, an `unreadable` one, or a queue count that could not be read | allows the stop, with `systemMessage` naming what could not be confirmed and, for a retried `unread`, saying the read was retried |
 
 The reading is `goal_reading`, the function behind `estigia goal`, not a copy of it, and an
-unconfirmed answer is asked again, with a pause between attempts, up to a bounded number of attempts
-before the stop is allowed — the OpenCode plugin retries the same way on its wait timer.
+`unread` answer is asked again, with a pause between attempts, up to a bounded number of attempts
+before the stop is allowed — the OpenCode plugin retries the same way on its wait timer. An
+`unreadable` answer comes from the pointer and cannot change inside one stop, so it is not asked
+again.
 `systemMessage` is the field Codex shows as a warning on a hook that allows (`codex-rs/hooks/src/events/stop.rs`
 turns it into a warning entry); a block's `reason` reaches the model as the next user message inside
 the same turn. A Codex that gets no answer within 180 s, or an exit other than 0 and 2, ends the turn:
@@ -531,9 +533,10 @@ shared decision Codex's hook uses — or, while the run holds a live claim, with
 issue is claimable or dischargeable. It honours a pending `stop-after`; stops at the stored `--max`, counted
 by `estigia goal --completed`; lets the turn end and
 says what the queue waits on when only held or pending work is left, since a `Stop` hook cannot wait;
-and retries an answer it cannot confirm, with a pause, up to the same bound
+and retries an `unread` answer it cannot confirm, with a pause, up to the same bound
 before the loop stops — a stop that is not terminal, so a later turn reads again, and whose record says
-the read was retried. It
+the read was retried; an `unreadable` answer is not retried, because it comes from the pointer and
+cannot change inside the stop. It
 records the last outcome and the stop on the stored goal, and the request behind a `stop-after` stop is
 consumed only once that record has reached disk, so a goal that could not be written leaves the
 request for the next turn. A fresh `/flow-loop` clears any request a

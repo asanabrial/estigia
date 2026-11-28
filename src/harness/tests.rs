@@ -2129,16 +2129,16 @@ fn the_gate_never_writes_to_the_tracker() {
         0,
         "the gate spawns the transport again"
     );
-    // Three now, and all three reads. The second is
-    // `tracker_answer_for_pointer` — the one question
+    // Three now, and all three reads. The first is `gate`'s own `verify-claim`.
+    // The second is `tracker_answer_for_pointer` — the one question
     // `guard::adjudicate_action`'s reconciliation and `doctor`'s
     // `stale-run-pointer` row both ask, held to `gate`'s own shape rather than
     // written a third time: same `Context::live`, same `GH_REPO`, same
-    // `verify-claim`. The third is `queue_read`, the one `list-state` read
-    // `estigia goal` asks only when the run is not live, once per queue, so a
-    // fourth call site *is* still the copy this file's own history keeps
-    // finding; this test still holds the count to exactly the ones this module
-    // owns.
+    // `verify-claim`. The third is `queues_read`, the one `list-states` read
+    // `estigia goal` asks, which lists the open issues once and partitions them
+    // into the four queues; a fourth call site *is* still the copy this file's
+    // own history keeps finding, and this test still holds the count to exactly
+    // the ones this module owns.
     let calls = source.matches("dispatch::dispatch(").count();
     assert_eq!(
         calls, 3,
@@ -2149,7 +2149,7 @@ fn the_gate_never_writes_to_the_tracker() {
         "the one call the gate makes is no longer the read it is allowed to make"
     );
     assert!(
-        source.contains("\"list-state\""),
+        source.contains("\"list-states\""),
         "the claimable read `estigia goal` asks is no longer the list it is allowed to read"
     );
     let mutating = ["\"claim\"", "\"transition\"", "\"comment\"", "\"reclaim\""];
@@ -2258,16 +2258,20 @@ fn dischargeable_work_counts_only_the_items_whose_every_clause_holds() {
     })]);
     let counted = crate::transport::store::with_store_at(&store_path, || {
         crate::test_env::with_scripted_gh(bin.path(), &script, || {
-            super::queue_read(
+            super::queues_read(
                 &context.skill_root,
                 &context.repo_dir,
                 &context.tracker,
                 "opencode-abc12345",
-                "blocked",
             )
         })
     });
-    let counted = counted.expect("the blocked queue was read");
+    let counted = counted.expect("the queues were read");
+    let counted = &counted["blocked"];
+    assert_eq!(
+        counted["ok"], true,
+        "the blocked queue did not answer: {counted}"
+    );
     assert_eq!(
         counted["dischargeable"], 1,
         "only #15's recorded condition holds: #16 records one clause that holds and one that does \
