@@ -7603,7 +7603,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 39_743;
+const TOOLS_LIST_CEILING: usize = 39_754;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -10494,7 +10494,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 9_646;
+const ALWAYS_LOADED_CEILING: usize = 9_657;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {

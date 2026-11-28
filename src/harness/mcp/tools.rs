@@ -318,9 +318,10 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "claim",
         contract_name: "claim",
-        description: "Swear to an issue. The earliest live claim wins, and every later write \
-                      is measured against it. `takeover` answers twice: repeat with \
-                      `target_operation`; a live holder needs a person's `hand-over`.",
+        description: "Swear to an issue. The earliest live claim wins; \
+                      a repository write the gate sees is measured against it. \
+                      `takeover` answers twice: repeat with `target_operation`; \
+                      a live holder needs a person's `hand-over`.",
         operation: "claim",
         arguments: &[
             ISSUE,
