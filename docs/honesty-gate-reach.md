@@ -160,12 +160,14 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   test only checks the template asks for closed decisions, the mismatch action and self-sufficiency),
   and the check is structural, not about the prose beneath. `gh issue create`/`new`, `gh api` posting to an
   `/issues` path and a GraphQL `createIssue` are refused `issue-creation-outside-flow` whoever holds the
-  checkout, naming `create` and its `repo` argument. Matching is on substrings of the command line, so a
-  line that merely mentions the command is refused, `gh` after `sudo` is matched, and an alias or script
-  that never spells `gh` still files an issue nothing checks. The read exemption knows only `-X GET` and
-  `--method GET` anywhere on the line, so a post beside a `-X GET` read (`gh api -X GET a; gh api
-  repos/o/r/issues -f t=x`) is unchecked. An issue filed in the web interface or by a token outside this
-  harness is unchecked too.
+  checkout, naming `create` and its `repo` argument. `gh issue create`/`new` are matched on substrings of
+  the command line, so a line that merely mentions them is refused and `gh` after `sudo` is matched. The
+  `gh api` spelling is read per command from the endpoint of the call that writes — a query string
+  ignored and a trailing slash trimmed — so a directory named `issues` or an `--input` file under one is
+  not an endpoint, and a `-X GET`/`--method GET` read in another command no longer exempts the write
+  beside it. A GraphQL `createIssue` counts on the call's own words. An alias or script that never
+  spells `gh` still files an issue nothing checks, and so does an issue filed in the web interface or
+  by a token outside this harness.
 - **A delivery by a run holding a claim is refused in a state that holds no verdict.** `git merge`, `git tag`,
   `gh pr merge` and the two `gh release` steps need the issue in `review` or `done`; `git push` and `gh pr create` are exempt
   (publishing is how a run reaches review). Operator-declared boundaries are never read as deliveries,

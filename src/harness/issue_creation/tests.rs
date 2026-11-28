@@ -77,6 +77,27 @@ fn the_api_spellings_beyond_the_plain_ones_are_named() {
 }
 
 #[test]
+fn a_path_that_ends_in_issues_is_not_an_endpoint_that_files_one() {
+    for line in [
+        "cd /tmp/scratch/issues && gh api repos/o/r/security-advisories -x post --input adv/1.json",
+        "gh api repos/o/r/security-advisories -x post --input some/issues",
+    ] {
+        assert!(
+            !names(line),
+            "`{line}` posts elsewhere and was named as filing an issue"
+        );
+    }
+}
+
+#[test]
+fn a_read_in_another_command_does_not_exempt_the_write_beside_it() {
+    assert!(
+        names("gh api -x get repos/o/r/pulls; gh api repos/o/r/issues -f title=x"),
+        "a `-X GET` read on the line exempted a write to the issues endpoint"
+    );
+}
+
+#[test]
 fn reads_and_other_issue_commands_with_options_are_not_named() {
     for line in [
         "gh api repos/o/r/issues?x=1",

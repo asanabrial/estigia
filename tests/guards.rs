@@ -750,7 +750,14 @@ const AFFIRMED: &[(&str, u64)] = &[
     // create` as a substring. The population already claimed "with options
     // allowed between the words", so the code caught up with the text; the
     // legitimate population and the escapes named are unchanged.
-    ("issue-creation-shell", 11655613431459157684),
+    // Re-read on 2026-11-28: the `gh api` half now reads the endpoint of the
+    // call that writes, per command, instead of any word on the line that ends
+    // in `/issues`. The population is the same set — a `gh api` write to an
+    // `/issues` path, or a GraphQL `createIssue` — and the boundary is strictly
+    // tighter: a directory or `--input` file named `issues` no longer matches,
+    // and a `-X GET` read in another command no longer exempts the write beside
+    // it. The text says so, and the escapes named are unchanged.
+    ("issue-creation-shell", 14999773568368626511),
     // `exit-code` — genuinely fail-closed. `0` to `5`
     // is the whole contract the transport implements, and the `_` arm sends
     // anything else to `Unknown`, never to the stop arm. Moved onto the item

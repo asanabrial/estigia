@@ -15,10 +15,14 @@ pub const ISSUE_CREATION_POPULATION: Population = Population {
            `gh issue create` and its alias `gh issue new`, with options allowed between the \
            words, and `gh api` posting to an `/issues` path (a query string is ignored) or a \
            GraphQL `createIssue` mutation. Legitimate population: every issue filed from a command \
-           line that names `gh`. Boundary: matched on substrings of the command line, so a line that \
-           merely mentions the command is refused too, `gh` after a wrapper such as `sudo` is \
-           matched, and an alias or a script that never spells `gh` on the line is not; \
-           `create` is the one place the analyst template is checked.",
+           line that names `gh`. Boundary: `gh issue create` and `gh issue new` are matched on \
+           substrings of the command line, so a line that merely mentions them is refused too; the \
+           `gh api` spellings are read per command from the endpoint of the call that writes, a \
+           query string ignored and a trailing slash trimmed, so a directory or an `--input` file \
+           named `issues` is not an endpoint and a `-X GET` read in another command exempts \
+           nothing; `gh` after a wrapper such as `sudo` is matched, and an alias or a script that \
+           never spells `gh` on the line is not; `create` is the one place the analyst template is \
+           checked.",
 };
 
 /// The `gh` options that take a value, skipped when reading the words after `gh`.
@@ -32,18 +36,10 @@ pub fn names_issue_creation(normalized: &str) -> bool {
 }
 
 fn api_files_an_issue(normalized: &str) -> bool {
-    let posts = super::mutates_through_the_api(normalized);
-    if !posts {
-        return false;
-    }
-    let reads = normalized.contains("-x get") || normalized.contains("--method get");
-    let issues_path = normalized.split_whitespace().any(|word| {
-        let path = word.trim_matches(|c| c == '"' || c == '\'');
-        [path, path.split('?').next().unwrap_or_default()]
-            .iter()
-            .any(|candidate| candidate.trim_end_matches('/').ends_with("/issues"))
-    });
-    !reads && (issues_path || normalized.contains("createissue"))
+    !super::gh_calls(normalized, |call| {
+        crate::transport::window::gh_api_files_an_issue(call).then_some(())
+    })
+    .is_empty()
 }
 
 /// The refusal for a shell line that files an issue, whoever holds the checkout.
