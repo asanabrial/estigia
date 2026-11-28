@@ -21,7 +21,7 @@ const SIGNAL_SHELL_PROCESS: &str = "shell_process";
 
 const PATHS_PER_DIFF: usize = 200;
 
-const PROCESS_BOUNDARY_PATTERN: &str = r"(?i)((^|[^[:alnum:]_.])(subprocess|child_process|execute_process|exec)([^[:alnum:]_]|$))|(execSync\(|getRuntime\(\)\.exec\(|ProcessBuilder|os\.system\(|os\.exec[lv]p?e?\(|posix_spawn|proc_open\(|shell_exec\(|passthru\(|popen\(|Process\.Start\()";
+const PROCESS_BOUNDARY_PATTERN: &str = r"(?i)((^|[^[:alnum:]_.])(subprocess|child_process|execute_process|exec)([^[:alnum:]_]|$))|(execSync\(|getRuntime\(\)\.exec\(|ProcessBuilder|os\.system\(|os\.exec[lv]p?e?\(|posix_spawn|proc_open\(|shell_exec\(|passthru\(|popen\(|Process\.Start\(|Command::new\()";
 
 static PROCESS_BOUNDARY: LazyLock<Result<Regex, String>> =
     LazyLock::new(|| Regex::new(PROCESS_BOUNDARY_PATTERN).map_err(|error| error.to_string()));
@@ -403,19 +403,19 @@ fn has_unsafe_yaml_load(line: &str) -> Result<bool, Failure> {
     Ok(false)
 }
 
+fn is_comment_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    ["//", "#", "--", "/*", "*", "<!--", "'''", "\"\"\""]
+        .iter()
+        .any(|prefix| trimmed.starts_with(prefix))
+}
+
 fn dangerous_sink_families(
     logical_path: &str,
     line: &str,
 ) -> Result<BTreeSet<&'static str>, Failure> {
     let mut families = BTreeSet::new();
-    if is_test_risk_path(logical_path) {
-        return Ok(families);
-    }
-    let trimmed = line.trim();
-    if ["//", "#", "--", "/*", "*", "<!--", "'''", "\"\"\""]
-        .iter()
-        .any(|prefix| trimmed.starts_with(prefix))
-    {
+    if is_test_risk_path(logical_path) || is_comment_line(line) {
         return Ok(families);
     }
     let extension = ascii_lower(go_ext(logical_path));
@@ -557,7 +557,7 @@ fn scan_added_lines(
         } else if line.starts_with("@@") {
             in_hunk = true;
         } else if in_hunk && let Some(added) = line.strip_prefix('+') {
-            if !process_seen && process.is_match(added) {
+            if !process_seen && !is_comment_line(added) && process.is_match(added) {
                 reasons.push(RiskReason {
                     code: REASON_PROCESS_BOUNDARY,
                     signal: Some(SIGNAL_SHELL_PROCESS),
