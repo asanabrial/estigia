@@ -181,12 +181,16 @@ a hung test was ended only by the job's limit, and a job ended that way left no 
 only has to cover a normal run. `tests/release.rs` pins the step order, the flags, the limit and the
 config.
 
-On Windows the same steps run in the `windows-tests` job, split three ways with nextest's
-`--partition count:N/3`, and only the first partition runs the doc tests. None of the three carries
-the required context's name: `check-windows`, named `check (windows-latest)`, waits for all three and
-passes only when their combined result is `success`. It runs under `always()` because a required
-context that reports `skipped` passes branch protection, and a cancelled run must fail it instead.
-`windows_runs_the_suite_in_partitions_behind_one_required_context` in `tests/release.rs` pins that
+On Windows the same steps run in the `windows-tests` job, split four ways with nextest's
+`--partition count:N/4`, and on macOS in `macos-tests`, split three ways; only the first partition of
+each runs the doc tests. Measured on 2026-11-28, the unsplit macOS leg set the wall time of every run
+(9m56s of tests in an 11m50s job, against 3m30s on Ubuntu), and the slowest of three Windows
+partitions came next at 8m17s. No partition carries the required context's name: `check-windows`,
+named `check (windows-latest)`, and `check-macos`, named `check (macos-latest)`, each wait for every
+partition and pass only when their combined result is `success`. They run under `always()` because a
+required context that reports `skipped` passes branch protection, and a cancelled run must fail it
+instead. `windows_runs_the_suite_in_partitions_behind_one_required_context` and
+`macos_runs_the_suite_in_partitions_behind_one_required_context` in `tests/release.rs` pin that
 shape.
 
 nextest runs one process per test. `ENVIRONMENT` in `src/test_env.rs` and the other process-wide

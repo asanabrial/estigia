@@ -135,16 +135,18 @@ fn ci_check_runners() -> Vec<String> {
         .split(',')
         .map(|label| label.trim().to_owned())
         .collect();
-    let shards = workflow
-        .split_once("\n  windows-tests:\n")
-        .map(|(_, rest)| rest)
-        .unwrap_or_else(|| panic!("ci.yml has no `windows-tests` job"));
-    runners.extend(
-        shards
-            .lines()
-            .find_map(|line| line.trim().strip_prefix("runs-on:"))
-            .map(|label| label.trim().to_owned()),
-    );
+    for job in ["windows-tests", "macos-tests"] {
+        let shards = workflow
+            .split_once(&format!("\n  {job}:\n"))
+            .map(|(_, rest)| rest)
+            .unwrap_or_else(|| panic!("ci.yml has no `{job}` job"));
+        runners.extend(
+            shards
+                .lines()
+                .find_map(|line| line.trim().strip_prefix("runs-on:"))
+                .map(|label| label.trim().to_owned()),
+        );
+    }
     runners
 }
 
@@ -1818,7 +1820,7 @@ fn ci_reuses_a_green_run_over_the_same_bytes_and_nothing_else() {
         "a merge-queue or dispatched run must never reuse:\n{reuse}"
     );
 
-    for name in ["check", "windows-tests", "lint", "release"] {
+    for name in ["check", "windows-tests", "macos-tests", "lint", "release"] {
         let body = job(name);
         assert!(
             body.contains("needs: reuse") && body.contains("if: ${{ !cancelled() }}"),
@@ -1847,62 +1849,79 @@ fn ci_reuses_a_green_run_over_the_same_bytes_and_nothing_else() {
     }
 }
 
-#[test]
-fn windows_runs_the_suite_in_partitions_behind_one_required_context() {
+fn ci_job(name: &str) -> String {
     let workflow = code_of(&read(".github/workflows/ci.yml"));
-    let job = |name: &str| -> String {
-        let header = format!("  {name}:");
-        workflow
-            .lines()
-            .skip_while(|line| *line != header)
-            .skip(1)
-            .take_while(|line| {
-                !line
-                    .strip_prefix("  ")
-                    .and_then(|rest| rest.strip_suffix(':'))
-                    .is_some_and(|key| !key.is_empty() && !key.starts_with(' '))
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    let header = format!("  {name}:");
+    workflow
+        .lines()
+        .skip_while(|line| *line != header)
+        .skip(1)
+        .take_while(|line| {
+            !line
+                .strip_prefix("  ")
+                .and_then(|rest| rest.strip_suffix(':'))
+                .is_some_and(|key| !key.is_empty() && !key.starts_with(' '))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
-    let shards = job("windows-tests");
+fn assert_partitioned(shards_job: &str, fan_in_job: &str, runner: &str, partitions: u32) {
+    let shards = ci_job(shards_job);
+    let listed = (1..=partitions)
+        .map(|n| n.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
     assert!(
-        shards.contains("partition: [1, 2, 3]") && shards.contains("runs-on: windows-latest"),
+        shards.contains(&format!("partition: [{listed}]"))
+            && shards.contains(&format!("runs-on: {runner}")),
         "{shards}"
     );
     assert!(
-        shards.contains("--partition count:${{ matrix.partition }}/3"),
+        shards.contains(&format!(
+            "--partition count:${{{{ matrix.partition }}}}/{partitions}"
+        )),
         "a partition runs the whole suite, or a different share than the matrix names:\n{shards}"
     );
     assert!(
         shards.contains("matrix.partition == 1"),
         "the doc tests run in every partition, or in none:\n{shards}"
     );
+    let context = format!("check ({runner})");
     assert!(
-        !shards.contains("name: check (windows-latest)\n"),
+        !shards.contains(&format!("name: {context}\n")),
         "a partition carries the required context's name, so one green partition would satisfy it"
     );
 
-    let fan_in = job("check-windows");
+    let fan_in = ci_job(fan_in_job);
     assert!(
-        fan_in.contains("name: check (windows-latest)")
-            && fan_in.contains("needs: [reuse, windows-tests]"),
-        "nothing reports the required `check (windows-latest)` context after the partitions:\n{fan_in}"
+        fan_in.contains(&format!("name: {context}"))
+            && fan_in.contains(&format!("needs: [reuse, {shards_job}]")),
+        "nothing reports the required `{context}` context after the partitions:\n{fan_in}"
     );
     assert!(
         fan_in.contains("if: ${{ always() }}"),
         "the fan-in can be skipped, and a skipped required context passes branch protection:\n{fan_in}"
     );
     assert!(
-        fan_in.contains("${{ needs.windows-tests.result }}")
+        fan_in.contains(&format!("${{{{ needs.{shards_job}.result }}}}"))
             && fan_in.contains("test \"$PARTITIONS\" = success"),
         "the fan-in does not fail when a partition did:\n{fan_in}"
     );
 
-    let check = job("check");
+    let check = ci_job("check");
     assert!(
-        !check.contains("windows-latest"),
-        "Windows still runs the whole suite in one `check` job beside the partitions:\n{check}"
+        !check.contains(runner),
+        "{runner} still runs the whole suite in one `check` job beside the partitions:\n{check}"
     );
+}
+
+#[test]
+fn windows_runs_the_suite_in_partitions_behind_one_required_context() {
+    assert_partitioned("windows-tests", "check-windows", "windows-latest", 4);
+}
+
+#[test]
+fn macos_runs_the_suite_in_partitions_behind_one_required_context() {
+    assert_partitioned("macos-tests", "check-macos", "macos-latest", 3);
 }
