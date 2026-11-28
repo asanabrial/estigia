@@ -4249,6 +4249,16 @@ fn a_relaunched_job_keeps_the_mint_time_the_first_launch_wrote() {
     store
         .mint_job_token("job-relaunched", 200)
         .expect("the second mint");
+    store
+        .bound_job_tokens(50)
+        .expect("a bound before the first mint");
+    assert!(
+        store
+            .job_token("job-relaunched")
+            .expect("the row reads")
+            .is_some(),
+        "a bound before the first mint deleted a token that had not outlived anything"
+    );
     store.bound_job_tokens(150).expect("the bound");
     assert_eq!(
         store.job_token("job-relaunched").expect("the row reads"),

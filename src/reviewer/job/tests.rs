@@ -209,6 +209,11 @@ fn a_relaunched_job_writes_a_token_the_store_still_holds() {
         JobResult::Answer { token, .. } => token,
         other => panic!("{other:?}"),
     };
+    assert_eq!(
+        written.as_deref(),
+        Some(first.as_str()),
+        "the earlier launch finished last and wrote a token other than its own"
+    );
     let held = store.job_token("job-two-launches").expect("the row reads");
     assert!(
         crate::reviewer::job::bound_to(written.as_deref(), held.as_deref()),
