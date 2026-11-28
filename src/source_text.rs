@@ -8,6 +8,20 @@
 /// searching Rust source, so it never mistakes prose for code and never
 /// recognises a comment by hand.
 pub fn code_of(source: &str) -> String {
+    scan(source, true)
+}
+
+/// The same scan with every string, raw-string and char literal's bytes
+/// replaced by spaces, so a brace inside one is not a brace.
+///
+/// Byte offsets match `source` exactly: a character is replaced by as many
+/// spaces as it occupies, what lets a boundary found in this text index the
+/// source it came from.
+fn code_without_literals(source: &str) -> String {
+    scan(source, false)
+}
+
+fn scan(source: &str, keep_literals: bool) -> String {
     #[derive(Clone, Copy, PartialEq)]
     enum State {
         Code,
@@ -35,19 +49,19 @@ pub fn code_of(source: &str) -> String {
                     state = State::Block(1);
                 }
                 '"' => {
-                    out.push(c);
+                    push_text(&mut out, c, keep_literals);
                     state = State::Str;
                 }
                 'r' if matches!(chars.peek(), Some('#') | Some('"')) => {
-                    out.push(c);
+                    push_text(&mut out, c, keep_literals);
                     let mut hashes = 0usize;
                     while chars.peek() == Some(&'#') {
-                        out.push('#');
+                        push_text(&mut out, '#', keep_literals);
                         chars.next();
                         hashes += 1;
                     }
                     if chars.peek() == Some(&'"') {
-                        out.push('"');
+                        push_text(&mut out, '"', keep_literals);
                         chars.next();
                         state = State::Raw(hashes);
                     }
@@ -63,7 +77,7 @@ pub fn code_of(source: &str) -> String {
                         }
                         None => false,
                     };
-                    out.push(c);
+                    push_text(&mut out, c, keep_literals);
                     if is_char_literal {
                         state = State::Char;
                     }
@@ -94,7 +108,7 @@ pub fn code_of(source: &str) -> String {
                 }
             }
             State::Str | State::Char => {
-                out.push(c);
+                push_text(&mut out, c, keep_literals);
                 if escape {
                     escape = false;
                 } else if c == '\\' {
@@ -104,11 +118,11 @@ pub fn code_of(source: &str) -> String {
                 }
             }
             State::Raw(hashes) => {
-                out.push(c);
+                push_text(&mut out, c, keep_literals);
                 if c == '"' {
                     let mut seen = 0usize;
                     while chars.peek() == Some(&'#') && seen < hashes {
-                        out.push('#');
+                        push_text(&mut out, '#', keep_literals);
                         chars.next();
                         seen += 1;
                     }
@@ -122,6 +136,16 @@ pub fn code_of(source: &str) -> String {
     out
 }
 
+fn push_text(out: &mut String, c: char, keep: bool) {
+    if keep {
+        out.push(c);
+    } else {
+        for _ in 0..c.len_utf8() {
+            out.push(' ');
+        }
+    }
+}
+
 /// The part of an already-stripped source file that ships, with every inline
 /// test module removed.
 ///
@@ -131,7 +155,9 @@ pub fn code_of(source: &str) -> String {
 /// it. Only the second is removed, and the attribute has to be attached to that
 /// module: a test-only item — `#[cfg(test)] pub(crate) fn …` — followed later by
 /// the module is not one. `source` must be [`code_of`]'s output: a comment can
-/// move a boundary taken from raw text.
+/// move a boundary taken from raw text. The block's extent is counted with the
+/// contents of string and char literals blanked, so a brace inside one is not a
+/// brace and a module holding `"}"` is not closed by it.
 pub fn shipped_part(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut copied = 0;
@@ -157,30 +183,34 @@ pub fn shipped_part(source: &str) -> String {
         let Some(close) = block_end(source, open) else {
             break;
         };
-        let mut from = line_start(source, start);
-        if source[..from].ends_with("\n\n") {
+        let own_line = line_start(source, start);
+        let mut from = match own_line {
+            Some(line) => line,
+            None => source[..start].trim_end_matches([' ', '\t']).len(),
+        };
+        if own_line.is_some() && source[..from].ends_with("\n\n") {
             from -= 1;
         }
         out.push_str(&source[copied..from]);
-        copied = after_line_break(source, close + 1);
+        copied = match own_line {
+            Some(_) => after_line_break(source, close + 1),
+            None => close + 1,
+        };
         at = copied;
     }
     out.push_str(&source[copied..]);
     out
 }
 
-fn line_start(source: &str, at: usize) -> usize {
+fn line_start(source: &str, at: usize) -> Option<usize> {
     let line = source[..at].rfind('\n').map_or(0, |index| index + 1);
-    if source[line..at].trim().is_empty() {
-        line
-    } else {
-        at
-    }
+    source[line..at].trim().is_empty().then_some(line)
 }
 
 fn block_end(source: &str, open: usize) -> Option<usize> {
+    let code = code_without_literals(source);
     let mut depth = 0usize;
-    for (offset, byte) in source.as_bytes()[open..].iter().enumerate() {
+    for (offset, byte) in code.as_bytes()[open..].iter().enumerate() {
         match byte {
             b'{' => depth += 1,
             b'}' => {
@@ -367,6 +397,42 @@ mod tests {
         let source = "fn ship() {}\n#[cfg(test)]\nmod tests {\n    fn a() {\n        \
                       if true {\n            assert!(true);\n        }\n    }\n}\n";
         assert_eq!(shipped_part(source), "fn ship() {}\n");
+    }
+
+    #[test]
+    fn the_literal_free_scan_keeps_every_byte_offset() {
+        let source = "let s = \"ünïcode {} }}\"; let c = '{'; fn f() {}\n";
+        let code = super::code_without_literals(source);
+        assert_eq!(code.len(), source.len(), "{code:?}");
+        assert!(!code.contains('ü'), "{code:?}");
+        assert_eq!(code.find("fn f() {"), source.find("fn f() {"), "{code:?}");
+    }
+
+    #[test]
+    fn a_brace_inside_the_test_module_literal_does_not_close_it_early() {
+        let source = "fn ship() {}\n#[cfg(test)]\nmod tests {\n    let close = \"}\";\n    \
+                      let open = '{';\n    fn a() {}\n}\nfn after() {}\n";
+        assert_eq!(shipped_part(source), "fn ship() {}\nfn after() {}\n");
+    }
+
+    #[test]
+    fn an_unclosed_test_module_leaves_the_rest_of_the_source_alone() {
+        let source = "fn ship() {}\n#[cfg(test)]\nmod broken {\n    fn a() {}\n#[cfg(test)]\n\
+                      mod tests {\n    fn b() {}\n}\nfn after() {}\n";
+        assert_eq!(shipped_part(source), source);
+    }
+
+    #[test]
+    fn a_crlf_test_module_takes_its_line_break_with_it() {
+        let source = "fn ship() {}\r\n#[cfg(test)]\r\nmod tests {\r\n    fn a() {}\r\n}\r\n\
+                      fn after() {}\r\n";
+        assert_eq!(shipped_part(source), "fn ship() {}\r\nfn after() {}\r\n");
+    }
+
+    #[test]
+    fn a_test_module_beside_code_on_the_same_line_leaves_no_trailing_space() {
+        let source = "fn ship() {} #[cfg(test)] mod tests { fn a() {} }\nfn after() {}\n";
+        assert_eq!(shipped_part(source), "fn ship() {}\nfn after() {}\n");
     }
 
     #[test]
