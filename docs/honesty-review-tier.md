@@ -42,9 +42,15 @@ review tier, the lens and the finding do not establish.
     `Command::new(`, but `\b`, `\w` and `[^...]` are Unicode-aware here and ASCII-only in Go, so a
     non-ASCII identifier can match here and not there. A blob containing a NUL is skipped, standing
     in for `git grep -I`.
-  - **Comment lines.** Both scans skip an added line whose first non-space bytes are a comment
-    prefix (`//`, `#`, `--`, `/*`, `*`, `<!--`, `'''`, `"""`), from one `is_comment_line`, so a doc
-    comment naming `--exec` no longer reads `high`. The skip was stated for the sink scan alone.
+  - **Comment lines.** Both scans skip an added line that is *wholly* a comment, from one
+    `is_comment_line`: `//` to end of line; `/*`, `<!--`, `'''` or `"""` only when the opener closes
+    on the same line with nothing after it, so `/* note */ execSync(cmd)` reads `high`; and `*`, `#`
+    or `--` only when the marker is followed by whitespace and nothing after it matches the
+    process-spawn pattern, so `*slot = Command::new(…)` reads `high` and `/// passes --exec` does not.
+    The cost is that a `*`, `#` or `--` comment that names a spawn or a sink in prose reads `high`:
+    a language-blind rule cannot tell it from code, and the alternative — skipping the line — is how
+    code that starts with one of those markers went unseen. The skip was stated for the sink scan
+    alone.
   - **Interpreter directive.** Only the first line of a blob, in either tree, is read, and a first line
     starting `#![` is not a directive. The source project's `git grep '^#!'` matches any line, which
     made every change touching a Rust file with an inner attribute read `high`. The cost is a
