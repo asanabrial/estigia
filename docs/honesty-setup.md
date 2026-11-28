@@ -139,8 +139,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   binds that head either way.
 - **An exit-2 refusal with no `action` is still sent to `estigia config list`, and nothing checks that the
   command clears it.** `translate`'s code-2 arm carries the transport's own `action` for every reason the
-  table does not answer; the fallback repeats the envelope's scalar-valued fields beside the ones the refusal
-  is built from (`an_envelope_field_that_is_not_scalar_is_dropped_and_a_scalar_is_repeated`) and runs for
+  table does not answer; the fallback repeats every non-null envelope field beside the ones the refusal is
+  built from, an object or a nested list as compact JSON
+  (`an_envelope_object_is_rendered_as_json_a_null_is_dropped_and_a_scalar_is_repeated`), and runs for
   **every** code whose envelope carries no `detail`. What is left is the last resort: a
   `Failure::ConfigDefect` or code-2 `Failure::Stop` without an `action` or a `malformed_argument` entry
   (`invalid-finding-class`, `missing-argument`, `incomplete-review-transaction` and their neighbours, none of

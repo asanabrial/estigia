@@ -22176,3 +22176,104 @@ fn a_publication_whose_checkout_is_not_on_its_branch_is_refused_before_anything_
         drop(remote);
     }
 }
+
+fn release_of<'a>(receipt: &'a ReviewTransaction) -> CiRelease<'a> {
+    CiRelease {
+        issue: 42,
+        run_id: "claude-a",
+        epoch: &receipt.epoch,
+        pr: receipt.pr,
+        head: &receipt.head,
+        base: &receipt.base,
+        digest: &receipt.digest,
+        worktree: None,
+        never_ran_evidence_file: None,
+        now: "2026-08-31T00:00:00Z",
+    }
+}
+
+fn mark_worktree_for(repo: &std::path::Path, path: &std::path::Path, at: &str, issue: u64) {
+    git(
+        repo,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            &path.display().to_string(),
+            at,
+        ],
+    );
+    let marker = super::super::branch::ownership_path(path).expect("the worktree's admin dir");
+    std::fs::write(
+        &marker,
+        serde_json::json!({
+            "run_id": "claude-a",
+            "issue": issue,
+            "branch": "fix/released",
+            "worktree": path.display().to_string(),
+            "claimed_at": "2026-08-31T00:00:00Z",
+        })
+        .to_string(),
+    )
+    .expect("the ownership marker is written");
+}
+
+#[test]
+fn a_release_named_no_worktree_derives_the_target_from_the_issues_marked_checkout() {
+    let (root, context, receipt) = medium_change();
+    let checkout = root.path().join("published-from");
+    mark_worktree_for(&context.repo_dir, &checkout, &receipt.head, 42);
+    git(
+        &context.repo_dir,
+        &["checkout", "--quiet", "--detach", &receipt.base],
+    );
+
+    let resolved = release_checkout(&context, &release_of(&receipt))
+        .expect("the marked checkout resolves")
+        .expect("a checkout other than the primary one");
+    let target = super::super::target::clean_target(&context, &receipt.base, Some(&resolved))
+        .expect("the marked checkout derives a target");
+
+    assert_eq!(target["head"], receipt.head.as_str());
+    let primary = super::super::target::clean_target(&context, &receipt.base, None)
+        .expect("the primary checkout derives a target");
+    assert_ne!(
+        primary["head"],
+        receipt.head.as_str(),
+        "the primary checkout must stand elsewhere for this to measure anything"
+    );
+}
+
+#[test]
+fn a_release_with_no_marked_checkout_and_the_primary_elsewhere_names_the_missing_checkout() {
+    let (root, context, receipt) = medium_change();
+    mark_worktree_for(
+        &context.repo_dir,
+        &root.path().join("other"),
+        &receipt.head,
+        43,
+    );
+    git(
+        &context.repo_dir,
+        &["checkout", "--quiet", "--detach", &receipt.base],
+    );
+
+    let failure = release_checkout(&context, &release_of(&receipt))
+        .expect_err("a primary checkout on another commit was read as the published one");
+
+    let envelope = failure.envelope();
+    assert_eq!(envelope["reason"], "release-checkout-unresolved");
+    assert_eq!(envelope["primary_head"], receipt.base.as_str());
+    assert_eq!(envelope["recorded_head"], receipt.head.as_str());
+}
+
+#[test]
+fn a_release_with_no_marked_checkout_reads_a_primary_checkout_at_the_published_head() {
+    let (_root, context, receipt) = medium_change();
+
+    assert_eq!(
+        release_checkout(&context, &release_of(&receipt)).expect("the primary checkout"),
+        None
+    );
+}

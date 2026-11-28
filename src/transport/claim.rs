@@ -10534,7 +10534,9 @@ pub fn release_ci(
     // basis would otherwise release, so computed evidence cannot carry it past CI
     // and it can never read as a missing review.
     require_un_escalated_terminal(&comments, &supplied)?;
-    let basis = release_basis(context, &comments, &supplied, release.worktree)?;
+    let checkout = release_checkout(context, release);
+    let worktree = checkout.as_ref().ok().and_then(Option::as_deref);
+    let basis = release_basis(context, &comments, &supplied, worktree)?;
     if basis == ReleaseBasis::StructuralReadback {
         require_cleared_publication_lane(
             context,
@@ -10560,7 +10562,8 @@ pub fn release_ci(
     // and that record is read where it is asked for rather than here.
     let current = view_pr(context, release.pr)?;
     require_pr_matches(&current, &supplied, true)?;
-    let target = super::target::clean_target(context, release.base, release.worktree)?;
+    checkout.clone()?;
+    let target = super::target::clean_target(context, release.base, worktree)?;
     if target.get("head").and_then(serde_json::Value::as_str) != Some(release.head)
         || target.get("base").and_then(serde_json::Value::as_str) != Some(release.base)
         || target.get("digest").and_then(serde_json::Value::as_str) != Some(release.digest)
@@ -10602,6 +10605,54 @@ pub fn release_ci(
         "next": next,
         "findings": findings,
     }))
+}
+
+/// The checkout whose clean target `release_ci` re-derives: the one named, else
+/// the one whose ownership marker names this issue, else the primary checkout
+/// when it stands at the published head.
+///
+/// Refuses `release-checkout-unresolved` rather than reading a primary checkout
+/// on another commit, which would answer `release-target-mismatch` about bytes
+/// nobody published from.
+fn release_checkout(
+    context: &Context,
+    release: &CiRelease<'_>,
+) -> Result<Option<std::path::PathBuf>, Failure> {
+    if let Some(named) = release.worktree {
+        return Ok(Some(named.to_path_buf()));
+    }
+    let issue = crate::identity::Identity::Number(release.issue);
+    let discovery = super::branch::discover_adopted_worktree(context, &issue);
+    if let Ok(Some(marked)) = discovery {
+        return Ok(Some(marked));
+    }
+    let primary = super::run(
+        &["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        Some(&context.repo_dir),
+        super::How::tolerated(),
+    )
+    .ok()
+    .filter(|answer| answer.status == 0)
+    .map(|answer| answer.stdout.trim().to_owned());
+    if primary.as_deref() == Some(release.head) {
+        return Ok(None);
+    }
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "release-checkout-unresolved",
+        "issue": release.issue,
+        "recorded_head": release.head,
+        "primary_checkout": context.repo_dir.display().to_string(),
+        "primary_head": primary,
+        "marked_checkout": match discovery {
+            Ok(_) => "no registered checkout carries a single ownership marker for this issue"
+                .to_owned(),
+            Err(failure) => format!("the ownership markers could not be read: {failure:?}"),
+        },
+        "action": "do not release CI; nothing was written. Check the published head out in the \
+                   checkout the publication was made from, registered with this repository, \
+                   and call again",
+    })))
 }
 
 /// Records that `release_ci` admitted these exact bytes, once per receipt: the
