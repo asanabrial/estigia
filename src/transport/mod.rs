@@ -223,16 +223,20 @@ pub struct How {
     /// This command **mutates something**. Decides which failure is raised, and
     /// nothing else.
     pub writes: bool,
-    /// Give up after this long. Only ever set on a call that mutates, which is
-    /// why expiry is reported as an ambiguous write rather than as nothing.
+    /// Give up after this long. A write that expires is an ambiguous write; a
+    /// read that expires learned nothing and is a failed read.
     pub timeout: Option<Duration>,
 }
 
+/// The longest one `gh` or `git` read may take before it is given up.
+pub const READ_DEADLINE: Duration = Duration::from_secs(60);
+
 impl How {
-    /// A read that must succeed.
+    /// A read that must succeed, within [`READ_DEADLINE`].
     pub fn read() -> Self {
         Self {
             check: true,
+            timeout: Some(read_deadline()),
             ..Self::default()
         }
     }
@@ -259,6 +263,23 @@ impl How {
     pub fn tolerated() -> Self {
         Self::default()
     }
+}
+
+/// [`READ_DEADLINE`], shortened in a debug build when the pipe fixture asks.
+fn read_deadline() -> Duration {
+    #[cfg(debug_assertions)]
+    {
+        static OVERRIDE: std::sync::LazyLock<Option<Duration>> = std::sync::LazyLock::new(|| {
+            std::env::var("ESTIGIA_TEST_READ_DEADLINE_MS")
+                .ok()
+                .and_then(|text| text.parse::<u64>().ok())
+                .map(Duration::from_millis)
+        });
+        if let Some(deadline) = *OVERRIDE {
+            return deadline;
+        }
+    }
+    READ_DEADLINE
 }
 
 #[cfg(test)]
@@ -547,10 +568,8 @@ fn attempt(
 ) -> Result<Output, Failure> {
     let mut command = prepared_command(args, cwd, how, envs, mode)?;
 
-    // `Command::output` waits without a deadline. A timeout is only ever set on
-    // a call that mutates, and the honest answer when one expires is that the
-    // write's fate is unknown — so an unsupported wait must not silently become
-    // an unbounded one.
+    // `Command::output` waits without a deadline, so a call that names one must
+    // not silently become unbounded.
     if how.timeout.is_some() {
         return spawn_with_deadline(command, args, cwd, how);
     }
@@ -916,16 +935,19 @@ fn spawn_with_deadline(
                 );
             }
             Ok(false) if start.elapsed() >= deadline => {
-                // Killed, and still reported as ambiguous: the remote may have
-                // completed the mutation before the local wait gave up.
                 let _ = tree.terminate();
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(Failure::Timeout(format!(
+                let detail = format!(
                     "{} did not finish within {}s",
                     args.iter().take(3).copied().collect::<Vec<_>>().join(" "),
                     deadline.as_secs_f64()
-                )));
+                );
+                return Err(if how.writes {
+                    Failure::Timeout(detail)
+                } else {
+                    Failure::Read(detail)
+                });
             }
             Ok(false) => std::thread::sleep(Duration::from_millis(10)),
             Err(error) => {

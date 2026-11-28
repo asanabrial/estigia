@@ -78,7 +78,7 @@ pub(crate) fn key_for(
     envs: &[(&str, &str)],
     mode: EnvMode,
 ) -> Option<Key> {
-    if how.writes || how.timeout.is_some() {
+    if how.writes {
         return None;
     }
     if !SCOPE.with(|slot| slot.borrow().is_some()) || !memoisable(args) {

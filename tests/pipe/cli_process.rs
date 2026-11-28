@@ -26,6 +26,56 @@ fn a_reader_that_stops_reading_does_not_produce_a_backtrace() {
 }
 
 #[test]
+fn a_read_that_outlives_its_deadline_fails_as_a_read() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    name_origin_o_r(repo);
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "list_state",
+            "arguments": { "state": "review", "run_id": "claude-abcd1234" },
+        },
+    })
+    .to_string();
+
+    let started = std::time::Instant::now();
+    let mut child = tracker_command(home, repo, bin, "[]")
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_DELAY_MS", "5000")
+        .env("ESTIGIA_TEST_READ_DEADLINE_MS", "200")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let elapsed = started.elapsed();
+
+    assert!(
+        elapsed < std::time::Duration::from_secs(3),
+        "the read held the call for {elapsed:?}, past its deadline"
+    );
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(text.contains("read-failed"), "{text}");
+    assert!(!text.contains("ambiguous-write"), "{text}");
+}
+
+#[test]
 fn a_refusal_still_reaches_standard_error_and_a_non_zero_code() {
     // The other half: the exit contract has to survive whatever the output
     // handling does. `setup` with no agent is the cheapest refusal there is.

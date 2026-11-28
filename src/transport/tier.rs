@@ -2059,7 +2059,10 @@ fn cat_file_batch(at: &Path, mode: &str, oids: &[&str]) -> Result<Vec<u8>, Failu
     super::run_with_stdin(
         &["git", "cat-file", mode],
         Some(at),
-        How::read(),
+        How {
+            timeout: None,
+            ..How::read()
+        },
         input.as_bytes(),
     )
 }
