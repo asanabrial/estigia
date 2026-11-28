@@ -38,7 +38,7 @@ transition's own refusals follow; omitting the flag claims without moving, which
 
 `--branch` and `--base` (with `--worktree-root` and `--no-link`) then create the isolated checkout in
 the same call. A refused claim creates no checkout; a failed checkout is reported under
-`start_branch` while the claim stands.
+`claim` with `branch` while the claim stands.
 
 A run holds one active claim and a second is refused. The MCP tool's `park: true`
 is the exception, and it is the server's bookkeeping, never a transport flag. While the git operation
@@ -77,7 +77,7 @@ takeover wrote nothing new, so it sends nothing.
 
 ## Handing an issue to another runtime
 
-`handoff` states where an unheld issue is going, so a session of that runtime in that repository can
+`estigia handoff` states where an unheld issue is going, so a session of that runtime in that repository can
 find it at `SessionStart`. It writes a local row naming the issue, the runtime, the run that handed it
 over and the time, and writes no runtime label: it removes a leftover `dev:` one and reads the result
 back twice. While the git operation window is closed that clean-up is queued as a
@@ -146,7 +146,7 @@ delta a re-review reads **only when it is honest**: `parent-head` still an ances
 base not having moved, and that range touching at least one path. A rebase onto an advanced base
 breaks the first and a merge of one breaks the second; an identical-bytes republish breaks the third. The marker records which case this publication landed
 in: `delta-range` carries `parent-head..head` verbatim when it is honest, `delta-range-reason` names
-`"history-rewritten"`, `"base-advanced"`, `"merged-range"` or `"empty-repair-range"` (`review_tier` with `parent_head`'s own words) when it is
+`"history-rewritten"`, `"base-advanced"`, `"merged-range"` or `"empty-repair-range"` (`review_read` with `view: tier` and `parent_head`'s own words) when it is
 not, answered back by `review_read` with `view: transaction` as `delta_range`/`delta_range_reason`, never by
 `publish_review`'s own answer. When the reason is `"base-advanced"` or `"merged-range"`, the head contains
 the advanced base and `git merge-tree` merges the parent head and that base without a conflict, the
@@ -217,7 +217,7 @@ only `budget-candidate-tree` is written for it.
 `--with-review` adds the review tier and the first `review_status` to the answer. A
 failed read is reported under `review_reads_unavailable`, not refused: a second
 publication mints a new epoch. `--start-review` implies it, moves the issue to `review` and launches
-every `launch_review_input` input unless the lane is `red` or unreadable; the outcome is
+every `collect_review_input` input with `launch: true` unless the lane is `red` or unreadable; the outcome is
 `review_start`. `--record-verdict` on `collect_review_input` records the computed verdict only when
 nothing runs and `review_status` finds the verdict computable; else it returns that status.
 
@@ -297,7 +297,7 @@ when there is none and `recover-epoch-ambiguous` (naming the candidates) when th
 `--authorized-by` defaults to the login `gh api user` reports, refused `recover-login-unresolved` when
 `gh` names none. The long form, with `--epoch <epoch> --authorized-by <login>`, stays accepted and its
 flags win. `review_status`'s `escalated` stop carries a plain `why` sentence beside the reason code
-(and `record_computed_verdict`'s `escalated` entries carry one per cause), saying what happened and
+(and `deliver` with `until: verdict` carries one per cause in its `escalated` entries), saying what happened and
 what the person decides. It is not an MCP tool, and the gate refuses
 an agent's shell line for it (recover-is-for-a-person) on every host, outside any stand-down, before any claim is read and
 without asking, because a hook's `ask` is not a human step under every permission mode. An agent whose
@@ -305,7 +305,7 @@ receipt stands escalated with its lineage's corrections spent, or handed to a pe
 `escalate_review`, tells the person that command and waits; while a correction is unspent it may
 still be corrected. The command prints the pinned tier and lens focus in the person's own terminal, which
 the agent cannot read; the person passes them on, and the agent acquires the panel the pinned tier licenses for the
-successor — four lenses at `high`, the pinned focus's lens at `medium` — since `review_tier` does not
+successor — four lenses at `high`, the pinned focus's lens at `medium` — since `review_read` with `view: tier` does not
 apply the floor and does not size it.
 
 It recovers the publication named by `--epoch`, which must be the newest on its pull request and stand
@@ -421,7 +421,7 @@ collect never starts a reviewer, abandoned slot or not. Both take `--name` for o
 every slot the `collect` offers in the same state, so a `high` review launches its four lenses in one
 call and collects them in the next; each slot keeps its own claim check, and a batch reports a slot a
 running job already holds (`capture-already-running`, a launch) or one still running (`capture-running`,
-a collect) rather than refusing the whole call. `launch_review_input` re-reads `review_status` and refuses `capture-input-not-offered` unless the
+a collect) rather than refusing the whole call. `collect_review_input` with `launch: true` re-reads `review_status` and refuses `capture-input-not-offered` unless the
 answer is a `collect` that offers `--name` and `--name` is a lens role, `refutation-batch` or
 `review-validator`; no
 reviewer starts before that. The receipt is the one the
@@ -494,8 +494,8 @@ receipt's ledger supports. The caller names the receipt and never the outcome. E
 settled by the order in *What the ledger computes* in `policies/blind-judges.md`, which owns it. The outcome is `escalated` over `rejected` over `approved`, and
 `approved` additionally needs every lens role the receipt's review panel licenses to have filed a
 `review_lens_report`: for a first publication the tier is re-derived from `base..head` with
-`review_tier`, and for a repair whose recorded lineage names the honest narrow range the panel is the
-one `review_tier` with `parent_head` answers over `parent-head..head` — the delta lens alone for a
+`review_read` with `view: tier`, and for a repair whose recorded lineage names the honest narrow range the panel is the
+one `review_read` with `view: tier` and `parent_head` answers over `parent-head..head` — the delta lens alone for a
 `warning`/`suggestion`-cleared narrow repair, or the repair's own smaller panel in place of the whole
 change's. `low` licenses no lens and closes as `approved` on the structural readback alone, and a
 licensed role with no report is listed in `missing_roles` and answers `incomplete` unless a finding
@@ -568,7 +568,7 @@ the read); `high` answers four lenses, `review-risk`, `review-readback` (the res
 authored leaves that one question a subject. `lens_roles` names the reserved reviewers the count
 licenses. `--raise` with `--raise-reason` lifts the tier to `high` for one of six risk items the refusal
 `invalid-risk-raise` lists, and never lowers it; `computed_level` keeps the derived tier. `--focus-reason`
-is answered back. `review_tier` stores nothing; `publish_review`/`republish_review` take the same `--raise`,
+is answered back. `review_read` with `view: tier` stores nothing; `publish_review`/`republish_review` take the same `--raise`,
 `--raise-reason`, `--focus` and `--focus-reason` and record them with the computed tier on the
 published marker, and the tier `review_status`, the computed verdict and `release_ci` derive then reads a
 recorded raise as `high`, never below the computed one. A publication that declares no raise is sized by the diff alone. `review-lens` is in no tier's allocation; only the delta-lens repair below launches it. An unreadable byte in
@@ -586,14 +586,14 @@ rather than derived here.
 `forecast` is the one line the run says before it launches anything: the tier, the lens count and the
 expected spend, which is the `Review budget` figure times the lenses the answer licenses
 (or a plain statement that no budget is declared). It is stated, never put to anybody for approval,
-and the same line is carried by `review_tier` with `parent_head`.
+and the same line is carried by `review_read` with `view: tier` and `parent_head`.
 Reads `base..head`, the whole change — a first publication's own range; a repair round reads a
-narrower one through `review_tier` with `parent_head` instead, when that narrower range is honestly
+narrower one through `review_read` with `view: tier` and `parent_head` instead, when that narrower range is honestly
 recoverable
 
 ## Deriving a repair's tier
 
-read-only, no claim required. The same classification as `review_tier`, over the range a repair
+read-only, no claim required. The same classification as `review_read` with `view: tier`, over the range a repair
 round actually reads: when `parent-head` is still an ancestor of `head`, the base did not move, and
 `parent-head..head` touches at least one path, the answer reads that narrower range — the repair's own edits alone — and
 carries `range: "repair"`; `"base"` in that answer holds `parent-head`, not `base`, because that is
@@ -610,7 +610,7 @@ never granted the delta lens — or `"empty-repair-range"` when
 alone is not enough. A frozen tree pair was never a defence against any of this — a candidate tree
 is the tree of a commit, and `git diff tree(A) tree(B)` is the same diff as `git diff A B`, so after
 a rebase the repair head's own content already carries the base's advance regardless of which ids
-name the ends. A first publication has no parent and reads `review_tier` instead, since there is
+name the ends. A first publication has no parent and reads `review_read` with `view: tier` instead, since there is
 nothing yet to narrow against. `clearing_finding` names the class of the `review_finding` that
 licensed the republish over an approved parent receipt — `severe`, `warning` or `suggestion`;
 anything else fails the read, naming the allowed values. When it names a `warning` or a `suggestion`
@@ -629,7 +629,7 @@ a takeover the old epoch is refused `target-operation-mismatch` before any write
 converges the assignee, drops any `dev:` and, once the close is the registered delivery and nothing is
 unpublished, puts the isolated checkout down.
 
-`--evidence-file <f>` and `--spend <json>` (one object with `record_spend`'s fields, or an array)
+`--evidence-file <f>` and `--spend <json>` (one object with `spend`'s fields, or an array)
 fold the close in. A held run may omit a record's receipt fields; the tool fills them from its
 review transaction and keeps any the record names. The close folds in, in the order the store allows: each spend record while the issue is in `review`,
 `done` (from `review` only), the evidence note, the release. A bad spend refuses before any write. A stop after a
@@ -650,7 +650,7 @@ With neither, from `review` or `done` after a hand merge: under `autonomous`, wi
 `deliver` is the tool that runs the tail of a publication that needs no judgement: holding the declared
 checks' wait and starting the slots a passing receipt held back, collecting each finished slot
 (`collect_review_input`, once per slot, never a launch), the computed
-verdict (`record_computed_verdict`), `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
+verdict (`deliver` with `until: verdict`), `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
 topology readback and the close, each through the operation that owns it. The merge goes through the
 decision the `gh pr merge` boundary makes. It answers `delivered`; `pending` with `ask_after`, after
 `wait_seconds` (1-900, default 20) of waiting inside the call; or `stopped` with the `step`, a

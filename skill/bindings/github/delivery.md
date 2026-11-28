@@ -69,7 +69,7 @@ While the window is closed, `claim`, `transition`, `comment`, `create` and `unas
 from the local store and queue their GitHub writes; an issue created then carries a provisional number until
 the queue is sent. GitHub answers not found for that number: read it with `list_state` and `issue`, which answers queued or the real number, and the gate answers a `gh issue` command naming it the same way. `estigia flush` sends the queue in order once the window is open, and every write to
 GitHub and every publication runs it first. A queue that does not drain refuses `outbox-pending`, naming the
-write it stopped at and how many remain: settle that write, then run `flush` again. Every closed-window answer names the next opening as `opens_at`, and a loop waits for that instant: the attempt it wakes runs `flush` first.
+write it stopped at and how many remain: settle that write, then run `estigia flush` again. Every closed-window answer names the next opening as `opens_at`, and a loop waits for that instant: the attempt it wakes runs `flush` first.
 
 ## Branch, worktree and the linked issue
 
@@ -441,23 +441,19 @@ naming convention and previous component tag. Require exactly one convention; if
 require an unambiguous single-product/component classification before using `v<new>` or
 `<component>/v<new>`.
 
-**A tag carries what a human wrote about the version.** Before creating it, extract the version's
-changelog entry:
+**A tag carries what a human wrote about the version.** The entry is the one the component's
+changelog holds for `<new>`, under a heading that opens with the version — anchor on that opening,
+not on the version appearing anywhere in the heading. Seen live: an entry headed
+`### 2026-07-25 — (sin bump de versión) … (sigue en v6.9.8)` — whose entire point is that 6.9.8 did
+*not* ship in it — was matched for 6.9.8 ahead of the genuine entry by a looser pattern. That would
+have produced a tag whose notes describe a different change and disclaim the version they are named
+after.
 
-```bash
-SCRIPT changelog-notes --version <new> --file <component-changelog> --out <notes-file>
-```
-
-It **fails closed** when the version has no entry, or has a heading with nothing under it. That is
-not an obstacle to route around: the entry is part of what "delivered" means, and a tag is immutable,
-so notes improvised at tag time are permanent. Write the entry first: the agent cutting the version writes
-it, a few one-line bullets, from the pull requests merged since the previous tag.
-
-The extraction anchors on the version OPENING the heading, which matters more than it sounds. Seen
-live: an entry headed `### 2026-07-25 — (sin bump de versión) … (sigue en v6.9.8)` — whose entire
-point is that 6.9.8 did *not* ship in it — was matched for 6.9.8 ahead of the genuine entry by a
-looser pattern. That would have produced a tag whose notes describe a different change and disclaim
-the version they are named after.
+The agent cutting the version writes the entry, a few one-line bullets, from the pull requests merged
+since the previous tag, and writes it before tagging. An entry with a heading and nothing under it is
+**not** an entry: that is not an obstacle to route around, because a tag is immutable and notes
+improvised at tag time are permanent. The tag and Release then carry that file as written
+(`--notes-file <notes-file>`).
 
 For `<tag>`, inspect both local and remote direct plus peeled refs. A valid annotated tag has a tag
 object and a `refs/tags/<tag>^{}` target equal to `<merge-sha>`; a lightweight tag, another target or
@@ -475,8 +471,8 @@ same notes the tag carries (add `--prerelease` for a prerelease).
 
 **Do not use `--generate-notes`.** It substitutes a list of commit subjects for the entry a human
 wrote, which reads like documentation without being any — and it does so silently, so a component
-whose changelog was never updated still gets a Release that looks complete. The `changelog-notes`
-failure is the signal you want there. After ANY create result, re-read the Release JSON and the remote peeled
+whose changelog was never updated still gets a Release that looks complete. The missing entry is the
+signal you want there. After ANY create result, re-read the Release JSON and the remote peeled
 tag; both must match the expected metadata and `<merge-sha>`. Auth, network or API ambiguity fails
 closed. Tag or Release failure leaves the issue in `review` even though the merge already exists.
 

@@ -169,8 +169,9 @@ rest were absorbed by a surviving name reached through a parameter or a `view`. 
 `src/harness/mcp/tests.rs` bounds the list, and each change above moved it by exactly the measured
 difference. It is the largest list a process can answer, the unreadable-context one.
 
-A turn pays only for the `ALWAYS_LOADED` schemas on a host that honours the mark: 12,407 bytes, held by
-`ALWAYS_LOADED_CEILING`, since a name that absorbs another's arguments grows them while the menu shrinks. That is
+A turn pays only for the `ALWAYS_LOADED` schemas on a host that honours the mark:
+`ALWAYS_LOADED_CEILING` in `src/harness/mcp/tests.rs` bounds them at 10,921 bytes, since a name that
+absorbs another's arguments grows them while the menu shrinks. That is
 why `transition` grew when it took `blocked_until`'s clause, even as four tools left the menu.
 
 The list depends on the process's `GateContext`, fixed for the process, so `listChanged` stays false.

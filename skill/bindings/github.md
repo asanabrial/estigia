@@ -67,30 +67,30 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused on retry.
 | `create` | `SCRIPT create` |
 | `list_state` | `SCRIPT list-state` |
 | `claim` | `SCRIPT claim` — see *Claim* in github/operations.md |
-| `handoff` | `SCRIPT handoff` |
+| `handoff` | `estigia handoff <issue> --to <runtime>` |
 | `verify_claim` | `SCRIPT verify-claim` |
 | `transition` | `SCRIPT transition` |
 | `comment` | `SCRIPT comment` |
 | `task` | `SCRIPT task` |
 | `tasks` | `SCRIPT tasks` |
-| `judge_workspaces` | `SCRIPT judge-workspaces` |
+| `judge_workspaces` | `estigia judge-workspaces` |
 | `publish_review` | `SCRIPT publish-review` — see *Publishing a review target* in github/operations.md |
 | `republish_review` | `SCRIPT republish-review` |
 | `handoff_review` | `SCRIPT handoff-review` |
 | `review_finding` | `SCRIPT review-finding` — see *Recording a finding* in github/operations.md |
 | `escalate_review` | `SCRIPT escalate-review` |
 | `review_disposition` | `SCRIPT review-disposition` — see *Recording a disposition* in github/operations.md |
-| `launch_review_input` | `SCRIPT launch-review-input` |
+| `launch_review_input` | the `launch-review-input` operation is `collect_review_input` with `launch: true` |
 | `collect_review_input` | `SCRIPT collect-review-input` |
-| `review_computed_verdict` | `SCRIPT review-computed-verdict` |
-| `record_spend` | `SCRIPT spend` |
+| `review_computed_verdict` | the `review-computed-verdict` operation is `deliver` with `until: verdict`; it keeps its name |
+| `record_spend` | passed as `spend` to `release` or `deliver` |
 | `review_status` | `SCRIPT review-status` |
 | `review_read` | `SCRIPT review-read` |
-| `target` | `SCRIPT target` |
-| `release_ci` | `SCRIPT release-ci` |
+| `target` | the `target` view of `review_read` answers it |
+| `release_ci` | the `release-ci` operation is `deliver` with `until: ci` |
 | `deliver` | `deliver`, which calls the merge gate itself |
-| `run_checks` | `SCRIPT run-checks` |
-| `review_tier` | `SCRIPT review-tier` — see *Deriving the review tier* in github/operations.md |
+| `run_checks` | the `run-checks` operation is `collect_review_input` with `checks: true` |
+| `review_tier` | the `review-tier` operation is `review_read` with `view: tier` — see *Deriving the review tier* in github/operations.md |
 | `unassign` | `SCRIPT unassign` — see *Releasing an issue* in github/operations.md |
 | assisted checkout | `SCRIPT assist` |
 | pull request review | `pr_review`, whose `action` names one step of the review-only claim |

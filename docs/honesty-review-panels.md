@@ -507,15 +507,16 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 7,998 | file on disk |
-  | `skill/policies/blind-judges.md` | 43,406 | file on disk |
+  | `skill/bindings/github.md` | 8,328 | file on disk |
+  | `skill/policies/blind-judges.md` | 43,571 | file on disk |
   | `skill/policies/judgment-day.md` | 16,022 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 43,074 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 43,039 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
-  its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
-  explicitly asks for Judgment Day. A publishing run loads those plus `delivery.md`. The rendered
+  its path uses: `blind-judges.md` when `review_status` stops as escalated or a correction is owed,
+  and `judgment-day.md` only when the operator explicitly asks for Judgment Day. A publishing run
+  loads those plus `delivery.md`. The rendered
   `review-blind` definition (reading grant, unsealed) is measured through
   `setup::render_reviewer_agent` and crossed by the same test; it is the judge body, not the
   starting context total. On every adapter but Claude Code no definition is installed at all, so

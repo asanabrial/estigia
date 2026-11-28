@@ -1616,6 +1616,113 @@ fn no_shipped_skill_file_names_an_operation_no_tool_performs() {
     );
 }
 
+const CONTRACT_OPERATIONS: [&str; 2] = ["release_ci", "review_computed_verdict"];
+
+// `ask` is a permission mode, `status` a label prefix and store key, and
+// `heartbeat` a marker kind, so a sentence naming one is not naming the tool.
+const NAMES_THAT_ARE_ALSO_VALUES: [&str; 3] = ["ask", "status", "heartbeat"];
+
+fn same_call(one: &str, other: &str) -> bool {
+    let (mut one, mut other) = (one.split_whitespace(), other.split_whitespace());
+    match (one.next(), other.next()) {
+        (Some(first), Some(second)) => first == second && one.next() == other.next(),
+        _ => false,
+    }
+}
+
+fn names_a_replacement(line: &str, replacement: &str) -> bool {
+    backticked(line).into_iter().any(|(_, _, span)| {
+        backticked(replacement)
+            .into_iter()
+            .any(|(_, _, call)| same_call(span, call))
+    })
+}
+
+fn script_call(line: &str) -> Option<&str> {
+    let rest = line.split_once("SCRIPT ")?.1;
+    let end = rest
+        .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-'))
+        .unwrap_or(rest.len());
+    Some(&rest[..end])
+}
+
+fn names_an_argument(name: &str) -> bool {
+    every_row().any(|tool| tool.arguments.iter().any(|argument| argument.name == name))
+}
+
+#[test]
+fn no_shipped_skill_file_writes_a_retired_name_as_the_call() {
+    let mut stale: Vec<String> = Vec::new();
+    let mut scanned = 0;
+    for file in crate::skill::FILES {
+        scanned += file.contents.lines().count();
+        let mut operations_table = false;
+        for (index, line) in file.contents.lines().enumerate() {
+            if line.starts_with('|') {
+                let first = line
+                    .split('|')
+                    .nth(1)
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('`');
+                if first.eq_ignore_ascii_case("operation") {
+                    operations_table = true;
+                }
+            } else if !line.trim().is_empty() {
+                operations_table = false;
+            }
+            let retired = script_call(line).filter(|name| {
+                tools::retired(&spelling(name)).is_some()
+                    || NOT_RUN.iter().any(|(word, _)| *word == *name)
+            });
+            if let Some(name) = retired {
+                stale.push(format!("{}:{}: `SCRIPT {name}`", file.path, index + 1));
+            }
+            let prose = if operations_table && line.starts_with('|') {
+                line.splitn(3, '|').nth(2).unwrap_or("")
+            } else {
+                line
+            };
+            for (_, _, span) in backticked(prose) {
+                if CONTRACT_OPERATIONS.contains(&span) || NAMES_THAT_ARE_ALSO_VALUES.contains(&span)
+                {
+                    continue;
+                }
+                if names_an_argument(span) {
+                    continue;
+                }
+                let replacement = tools::retired(span).or_else(|| {
+                    NOT_RUN
+                        .iter()
+                        .find(|(word, _)| *word == span)
+                        .map(|(_, why)| *why)
+                });
+                let Some(replacement) = replacement else {
+                    continue;
+                };
+                if names_a_replacement(prose, replacement) {
+                    continue;
+                }
+                stale.push(format!(
+                    "{}:{}: `{span}` was retired — write {} instead",
+                    file.path,
+                    index + 1,
+                    replacement
+                ));
+            }
+        }
+    }
+    assert!(
+        scanned > 1000,
+        "the shipped skill was not read: {scanned} lines"
+    );
+    assert!(
+        stale.is_empty(),
+        "these send a run to a name the server answers with a refusal:\n{}",
+        stale.join("\n")
+    );
+}
+
 #[test]
 fn the_absorption_map_names_only_operations_no_tool_performs_and_answers_with_one_that_exists() {
     let callable = callable_names();
