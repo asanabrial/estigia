@@ -82,24 +82,38 @@ fn a_check_runs_in_its_cwd_inside_the_tree() {
 #[test]
 fn a_check_sees_the_build_variables_and_nothing_else() {
     let tree = tempfile::tempdir().expect("a tree");
-    let outcome = crate::test_env::with_process_env("ESTIGIA_LEAKED_TOKEN", "s3cret", || {
-        ran(
-            tree.path(),
-            &[
-                check("leak", "printf %s \"$ESTIGIA_LEAKED_TOKEN\""),
-                check("path", "printf %s \"$PATH\""),
-            ],
-            DEADLINE,
-        )
-    });
+    let (home, outcome) =
+        crate::test_env::with_process_env("ESTIGIA_LEAKED_TOKEN", "s3cret", || {
+            let home = std::env::var("HOME").unwrap_or_default();
+            let outcome = ran(
+                tree.path(),
+                &[
+                    check("leak", "printf %s \"$ESTIGIA_LEAKED_TOKEN\""),
+                    check("path", "printf %s \"$PATH\""),
+                    check("home", "printf %s \"$HOME\""),
+                ],
+                DEADLINE,
+            );
+            (home, outcome)
+        });
+    assert_eq!(
+        outcome.runs[0].exit,
+        Some(0),
+        "the leaked-variable probe never ran, so finding nothing proves nothing"
+    );
     assert_eq!(
         outcome.runs[0].tail, "",
-        "a check read a variable outside the allow-list, so it runs with the session's whole \
-         environment"
+        "a check read a variable outside the allow-list, so it runs with the session's whole environment"
     );
+    assert_eq!(outcome.runs[1].exit, Some(0));
     assert!(
         !outcome.runs[1].tail.is_empty(),
         "a check lost `PATH`, so nothing it runs can be found"
+    );
+    assert_eq!(outcome.runs[2].exit, Some(0));
+    assert_eq!(
+        outcome.runs[2].tail, home,
+        "a check lost a variable `CHECKS_INHERITED` carries, so the allow-list is not the list the checks run under"
     );
 }
 
