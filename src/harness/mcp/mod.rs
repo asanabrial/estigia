@@ -1196,21 +1196,8 @@ fn run_tool_answering(
     if context.workflow == Some(crate::config::Workflow::Assisted)
         && tools::writes_the_tracker(name)
     {
-        return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
-            "workflow-assisted-writes-no-tracker",
-            format!(
-                "`{name}` writes the tracker, and the `Workflow` row is `assisted` in this \
-                 repository's own file: the team coordinates who takes an issue, and Estigia \
-                 writes nothing to it"
-            ),
-            match arguments.get("run_id").and_then(Value::as_str) {
-                Some(run_id)
-                    if name == "release" && session::load(&context.state_root, run_id).assisted =>
-                {
-                    Resolution::run(format!("estigia release --run-id {run_id}"))
-                }
-                _ => Resolution::run("estigia config set Workflow autonomous --repo"),
-            },
+        return Err(ToolFailure::Refused(Box::new(assisted_writes_refusal(
+            name, arguments, context,
         ))));
     }
 
@@ -2711,6 +2698,34 @@ fn refusal_result(refusal: &Refusal, tool: Option<&str>) -> Value {
         }],
         "isError": true,
     })
+}
+
+/// A tracker write refused because the repository's `Workflow` row is
+/// `assisted`. The way out is the operator changing that row, so the refusal
+/// names it as operator knowledge rather than handing the agent a command that
+/// would rewrite the operator's policy to clear its own refusal.
+fn assisted_writes_refusal(name: &str, arguments: &Value, context: &GateContext) -> Refusal {
+    let resolution = match arguments.get("run_id").and_then(Value::as_str) {
+        Some(run_id)
+            if name == "release" && session::load(&context.state_root, run_id).assisted =>
+        {
+            Resolution::run(format!("estigia release --run-id {run_id}"))
+        }
+        _ => Resolution::no_command(
+            crate::outcome::NoCommandReason::OperatorKnowledge,
+            "the repository's `Workflow` row set to `autonomous` by the operator, if the team \
+             wants Estigia to write its tracker",
+        ),
+    };
+    Refusal::not_started(
+        "workflow-assisted-writes-no-tracker",
+        format!(
+            "`{name}` writes the tracker, and the `Workflow` row is `assisted` in this \
+             repository's own file: the team coordinates who takes an issue, and Estigia \
+             writes nothing to it"
+        ),
+        resolution,
+    )
 }
 
 fn success(id: Value, result: Value) -> Value {

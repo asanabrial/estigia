@@ -2346,7 +2346,7 @@ fn an_unanswered_tracker_read_names_the_read_and_not_the_contract() {
     );
     assert_eq!(
         refusal.resolution.to_string(),
-        "[world-action] the tracker could not be read; write nothing and retry the read",
+        "the tracker could not be read; write nothing and retry the read",
         "the refusal did not carry the resolution the transport already had: {refusal:?}"
     );
 }

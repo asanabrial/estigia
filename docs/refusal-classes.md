@@ -7,14 +7,16 @@ a verdict, or a moved receipt as a rule, and acts on the wrong one — as happen
 that reported a failed read as a stale verdict.
 
 `class` is one of four words. It is in `--json` as `"class"`, and it is one line of the text the
-hook and the tool server show an agent (`Refusal::agent_text`, one function for both).
+hook and the tool server show an agent (`Refusal::agent_text`, one function for both): the word and
+a short gloss, `Class: stale (re-read, then decide)`. The gloss says what the caller does next and
+never repeats the other lines; the full rules for each class are the table below.
 
-| Class | Means | The caller |
-|---|---|---|
-| `unavailable` | The control surface could not be read. Nothing was decided. | Read again later. The answer is not a state and never clearance. |
-| `stale` | The surface was read, and what the run was acting on has moved: a receipt, a head, an authority. | Re-read the current state, then decide. Repeating the command unchanged repeats the answer. |
-| `refused` | The surface was read and the rule says no. | Stop, or change what was asked. |
-| `unknown` | A write may or may not have landed. | Look before acting. Never report it as any named state. |
+| Class | Gloss in the text | Means | The caller |
+|---|---|---|---|
+| `unavailable` | `read again; not a state` | The control surface could not be read. Nothing was decided. | Read again later. The answer is not a state and never clearance. |
+| `stale` | `re-read, then decide` | The surface was read, and what the run was acting on has moved: a receipt, a head, an authority. | Re-read the current state, then decide. Repeating the command unchanged repeats the answer. |
+| `refused` | `the rule says no` | The surface was read and the rule says no. | Stop, or change what was asked. |
+| `unknown` | `look before acting` | A write may or may not have landed. | Look before acting. Never report it as any named state. |
 
 `unknown` is the fourth because the rule forbids reporting an unknown outcome as a state: `write-failed`
 and `ambiguous-write` are neither a refusal by a rule nor a stale authority. It matches
@@ -47,6 +49,55 @@ reason string says.
 `unknown` and an unknown outcome are one fact: choosing `unknown` sets `outcome: unknown` and the
 replay advice that goes with it (`Refusal::classed`), and a refusal whose outcome is unknown is
 `unknown`. A refusal cannot print `Class: unknown` over "nothing was written".
+
+## The text an agent reads
+
+`Refusal::agent_text` is the one function behind the hook's denial and the tool server's error. It
+prints each fact once, and prints a line only when the answer is not the default:
+
+- the message and, under it, the code in parentheses;
+- the class word and its gloss;
+- `What happened to the world` **only when the outcome is not `not_started`** — a refusal already
+  implies nothing happened, and a line saying so on every one of them is a line people stop reading;
+- `Replay` **only when the answer is not "the same call may be repeated"** — the same rule
+  `Display for Refusal` applies;
+- the resolution, alone on the last line.
+
+The replay answer is derived from the class (`RefusalClass::replay`) so the two lines cannot
+disagree: `refused` is `do not repeat`, `stale` and `unknown` are `read the current state first`,
+`unavailable` is safe to read again. `translate` overrides that default only where the class cannot
+answer alone — a write that already landed is read first, a missing login or a spent rate limit
+needs a person — and an exit-`1` action that names a tool the caller can call again is not
+`do not repeat`: `checks-runner-lost` says nothing was recorded and names `collect_review_input`,
+so its text carries no replay line at all.
+
+A refusal that never started and is safe to replay, as `checks-runner-lost` is, reads:
+
+```
+the runner exited 137 without a result
+(checks-runner-lost)
+
+Class: unavailable (read again; not a state)
+
+nothing was recorded; call `collect_review_input` with `checks: true` again to start the checks afresh
+```
+
+A refusal whose write landed and whose replay is a state read reads:
+
+```
+the remote never reported the head and base that were just pushed, and ...
+(publication-readback-disagrees)
+
+Class: stale (re-read, then decide)
+What happened to the world: the write landed; what failed came after it
+Replay: read the current state first
+
+<the transport's action, as its author wrote it>
+```
+
+A resolution that names no command prints the `no_command` detail. The `world-action` reason is
+the one every transport action carries, so its detail prints alone; `operator-knowledge` and
+`human-authority` keep their tag because they say who else has to act.
 
 ## The rules, and every decision that was a judgement
 
@@ -246,7 +297,8 @@ propagating it blocks a push for a reason the person typing it cannot act on. It
 
 The harness translates the transport's own five codes into that taxonomy rather than collapsing them.
 `1` the control surface was read and answered stop — do not replay. `2` the operator's configuration
-is wrong — the one with a command that fixes it. `3` the control surface answered **nothing** — retry
+is wrong, or the caller's argument was — two faults share the code and the answer says which one it
+read; no command clears either. `3` the control surface answered **nothing** — retry
 the read, and never treat it as a stand-down or as clearance. `4` and `5` a write may have landed and
 nobody saw — go and look. The distinctions live in the refusal, where they can be read. issue-flow's
 `5` meant both "nothing was written" and "something was written and I do not know what"; reporting the

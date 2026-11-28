@@ -580,3 +580,30 @@ pub(super) fn require_receipt(
         Some(_) => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lost_checks_runner_is_not_told_to_stop_repeating_the_call() {
+        let failure = runner_lost("the runner exited 137 without a result");
+        let refusal = crate::harness::tracker::translate(
+            &crate::harness::tracker::Answer {
+                code: failure.code(),
+                body: Some(failure.envelope()),
+            },
+            "run_checks",
+        )
+        .expect("a lost runner is a refusal");
+        let text = refusal.agent_text("call");
+        assert!(
+            !text.contains("do not repeat"),
+            "the refusal forbids the call its own resolution names: {text}"
+        );
+        assert!(
+            text.contains("collect_review_input"),
+            "the refusal does not name the call that starts the checks afresh: {text}"
+        );
+    }
+}

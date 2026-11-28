@@ -37,7 +37,7 @@ read and what to do about it:
 ```
 $ git push origin HEAD
 estigia: git push: gh issue view failed (1): none of the git remotes ... (read-failed)
-  [world-action] the tracker could not be read; write nothing and retry the read
+  the tracker could not be read; write nothing and retry the read
 error: failed to push some refs
 ```
 
