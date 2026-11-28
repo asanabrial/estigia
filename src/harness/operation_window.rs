@@ -336,13 +336,21 @@ pub fn permits_now(window: &GitOperationWindow, now: Option<u16>) -> bool {
 /// machine document is consulted, and `fallback` is the repository layer's own
 /// answer, [`GitOperationWindow::Disabled`] when it has none.
 pub fn effective_in(repo_dir: &Path, fallback: &GitOperationWindow) -> GitOperationWindow {
-    let mut raw: Option<String> = None;
     let rows = match crate::skill::repository_rows(repo_dir) {
         Ok(rows) => rows,
         Err(_) => return GitOperationWindow::Unreadable,
     };
-    if let Some((_, text)) = rows {
-        for (label, value) in crate::config::table_rows(&text) {
+    effective_from_document(rows.as_ref().map(|(_, text)| text.as_str()), fallback)
+}
+
+/// [`effective_in`] over a repository document a caller already read.
+pub(crate) fn effective_from_document(
+    document: Option<&str>,
+    fallback: &GitOperationWindow,
+) -> GitOperationWindow {
+    let mut raw: Option<String> = None;
+    if let Some(text) = document {
+        for (label, value) in crate::config::table_rows(text) {
             if Setting::from_label(&label) == Some(Setting::GitOperationWindow) {
                 raw = Some(value);
             }

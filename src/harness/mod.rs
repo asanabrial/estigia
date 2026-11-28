@@ -1936,7 +1936,25 @@ pub(crate) fn is_delivery(action: &Action) -> bool {
 
 /// Whether two checkouts belong to one clone and share its worktree registry.
 pub(crate) fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
+    #[cfg(test)]
+    SAME_REPOSITORY_CALLS.with(|calls| calls.set(calls.get() + 1));
     repository_relation(left, right) == Relation::Same
+}
+
+#[cfg(test)]
+thread_local! {
+    static SAME_REPOSITORY_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many times this test thread has compared two checkouts' repositories.
+#[cfg(test)]
+pub(crate) fn same_repository_calls() -> u64 {
+    SAME_REPOSITORY_CALLS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn forget_same_repository_calls() {
+    SAME_REPOSITORY_CALLS.with(|calls| calls.set(0));
 }
 
 pub(crate) fn another_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
@@ -3891,9 +3909,10 @@ fn decide_observing(
     let path_covered = run
         .covered()
         .any(|covered| crate::paths::covers(covered, &context.repo_dir));
-    let same_repository = run
-        .covered()
-        .any(|covered| same_git_repository(covered, &context.repo_dir));
+    let same_repository = || {
+        run.covered()
+            .any(|covered| same_git_repository(covered, &context.repo_dir))
+    };
     let reviewed_sibling = matches!(
         (
             action,
@@ -3908,7 +3927,7 @@ fn decide_observing(
                 ..
             },
             Some(receipt)
-        ) if command == "gh pr merge" && *command_pr == receipt.pr && same_repository
+        ) if command == "gh pr merge" && *command_pr == receipt.pr && same_repository()
     );
     if run.covered().count() > 0 && !path_covered && !reviewed_sibling {
         // Two halves, and the comment used to name only the first. A plain write
@@ -3921,7 +3940,9 @@ fn decide_observing(
         // neither is still `Outside(AnotherCheckout)`: `stale_verdict` returns
         // `None` for want of a reviewed head to compare.
         if is_delivery(action)
-            && (same_repository || run.review_transaction.is_some() || run.reviewed_head.is_some())
+            && (same_repository()
+                || run.review_transaction.is_some()
+                || run.reviewed_head.is_some())
             && let Some(refusal) =
                 stale_verdict(action, run, &context.repo_dir, &live_pr_reader(context))
                     .or_else(|| merge_spelling(action, literal, run))
@@ -4473,15 +4494,29 @@ pub(crate) fn goal_completion_reading(
 /// answers "which installed skill can be asked", and this gives the rule its
 /// chance even when none can be found.
 pub fn control_surface() -> PathBuf {
-    discover_skill_root().unwrap_or_else(|_| {
-        let options = crate::setup::SetupOptions::default();
-        crate::setup::every_adapter()
-            .find_map(|adapter| crate::setup::resolve_paths(adapter, &options).ok())
-            .map(|paths| paths.skill_root)
-            // Nowhere to point at, so anywhere without a transport will do: the
-            // only thing asked of this path is that asking it fails.
-            .unwrap_or_else(|| PathBuf::from("estigia-has-no-installed-skill"))
-    })
+    discover_skill_root().unwrap_or_else(|_| fallback_control_surface())
+}
+
+/// The control surface and the contract read while choosing it.
+pub(crate) fn control_surface_with_contract() -> (PathBuf, Result<String, Refusal>) {
+    match discover_skill_root_in_with_contract(&crate::setup::SetupOptions::default()) {
+        Ok(found) => found,
+        Err(_) => {
+            let root = fallback_control_surface();
+            let contract = crate::skill::contract_text_at(&root);
+            (root, contract)
+        }
+    }
+}
+
+fn fallback_control_surface() -> PathBuf {
+    let options = crate::setup::SetupOptions::default();
+    crate::setup::every_adapter()
+        .find_map(|adapter| crate::setup::resolve_paths(adapter, &options).ok())
+        .map(|paths| paths.skill_root)
+        // Nowhere to point at, so anywhere without a transport will do: the
+        // only thing asked of this path is that asking it fails.
+        .unwrap_or_else(|| PathBuf::from("estigia-has-no-installed-skill"))
 }
 
 /// The one installed skill root the gate decides in, for a harness that was
@@ -4492,11 +4527,13 @@ pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
 
 /// [`discover_skill_root`], for a caller that resolves its own environment.
 pub fn discover_skill_root_in(options: &crate::setup::SetupOptions) -> Result<PathBuf, Refusal> {
-    let roots: Vec<PathBuf> = crate::setup::every_adapter()
-        .filter_map(|adapter| crate::setup::resolve_paths(adapter, options).ok())
-        .map(|paths| paths.skill_root)
-        .filter(|root| root.join(crate::skill::CONTRACT).is_file())
-        .collect();
+    discover_skill_root_in_with_contract(options).map(|(root, _)| root)
+}
+
+/// [`discover_skill_root_in`], carrying the contract it read to choose.
+pub(crate) fn discover_skill_root_in_with_contract(
+    options: &crate::setup::SetupOptions,
+) -> Result<(PathBuf, Result<String, Refusal>), Refusal> {
     // The **contract** is what makes a directory a skill root. Estigia's own
     // first, because Estigia installs its skill under upstream's name on
     // purpose, and an operator who already runs `issue-flow` has a root that
@@ -4504,10 +4541,15 @@ pub fn discover_skill_root_in(options: &crate::setup::SetupOptions) -> Result<Pa
     //
     // `min_by_key` keeps the first of equal ranks, so where nothing
     // distinguishes two roots the `AGENTS` order above still decides.
-    roots
-        .iter()
-        .min_by_key(|root| claim_to_decide_in(root))
-        .cloned()
+    crate::setup::every_adapter()
+        .filter_map(|adapter| crate::setup::resolve_paths(adapter, options).ok())
+        .map(|paths| paths.skill_root)
+        .filter(|root| root.join(crate::skill::CONTRACT).is_file())
+        .map(|root| {
+            let contract = crate::skill::contract_text_at(&root);
+            (root, contract)
+        })
+        .min_by_key(|(root, contract)| claim_to_decide_in(root, contract))
         .ok_or_else(|| {
             Refusal::not_started(
                 "harness-not-installed",
@@ -4522,8 +4564,9 @@ pub fn discover_skill_root_in(options: &crate::setup::SetupOptions) -> Result<Pa
 /// first half is whether the contract carries a configuration block; the
 /// second — the whole fix — is presence of the operator's own `estigia.local.md`,
 /// not "differs from the defaults". **A file that will not parse still counts.**
-fn claim_to_decide_in(root: &Path) -> (u8, u8) {
-    let carries_a_block = std::fs::read_to_string(root.join(crate::skill::CONTRACT))
+fn claim_to_decide_in(root: &Path, contract: &Result<String, Refusal>) -> (u8, u8) {
+    let carries_a_block = contract
+        .as_ref()
         .is_ok_and(|text| text.contains(crate::config::BLOCK_BEGIN));
     let carries_the_operators_own = root.join(crate::config::LOCAL_FILE).is_file();
     // The block first, so a root with no configuration block is never preferred

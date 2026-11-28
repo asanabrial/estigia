@@ -3580,3 +3580,74 @@ fn a_push_the_hook_cannot_check_says_so_and_lets_it_through() {
         "the note does not name the command that would make the hook answer: {said}"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn post_tool_use_answers_without_reading_the_contract() {
+    use std::io::Write as _;
+    use std::time::{Duration, Instant};
+
+    let home = tempfile::tempdir().expect("a temporary home");
+    let skill = home
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join(estigia::skill::DIRECTORY);
+    std::fs::create_dir_all(&skill).expect("the skill directory");
+    let contract = skill.join(estigia::skill::CONTRACT);
+    let made = Command::new("mkfifo")
+        .arg(&contract)
+        .status()
+        .unwrap_or_else(|error| {
+            panic!("this fixture needs `mkfifo` to place a contract that blocks when read: {error}")
+        });
+    assert!(made.success(), "mkfifo answered {made}");
+
+    let mut command = estigia_command();
+    for (name, _) in std::env::vars() {
+        if name.starts_with("ESTIGIA_") {
+            command.env_remove(name);
+        }
+    }
+    let mut child = command
+        .args(["hook", "post-tool-use"])
+        .env("HOME", home.path())
+        .env("USERPROFILE", home.path())
+        .env("APPDATA", home.path().join("AppData").join("Roaming"))
+        .env("XDG_CONFIG_HOME", home.path().join(".config"))
+        .current_dir(home.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary runs");
+    let payload =
+        "{\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"true\"}}";
+    let _ = child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(payload.as_bytes());
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if child.try_wait().expect("the child is waitable").is_some() {
+            let output = child.wait_with_output().expect("the process ends");
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout).trim(),
+                "{}",
+                "post-tool-use answered something other than `{{}}`"
+            );
+            return;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "post-tool-use opened the contract instead of answering `{{}}`; the FIFO held the read"
+            );
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}

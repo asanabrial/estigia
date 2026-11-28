@@ -2034,6 +2034,103 @@ fn a_write_outside_the_claim_is_not_an_inline_write_inside_the_renewal_window() 
 }
 
 #[test]
+fn an_allowed_write_that_changes_nothing_leaves_the_pointer_alone() {
+    let root = tempfile::tempdir().expect("a state root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("a repository directory");
+    let (context, run_id) = windowed_claim(root.path(), &repo);
+    let pointer = session::pointer_path(&context.state_root, &run_id);
+    let before = std::fs::read_to_string(&pointer).expect("the pointer is readable");
+
+    let answer = run_as(
+        Dialect::ClaudeCode,
+        Some("claude-code"),
+        Event::PreToolUse,
+        &Input {
+            tool_name: "Write".to_owned(),
+            tool_input: json!({"file_path": repo.join("src").join("in_claim.rs").display().to_string()}),
+            session_id: "windowed-1".to_owned(),
+            ..Input::default()
+        },
+        Some(&context),
+    );
+    assert_eq!(
+        answer["hookSpecificOutput"]["permissionDecision"], "allow",
+        "the fixture's write was refused, so the case under test was never reached: {answer}"
+    );
+
+    let after = std::fs::read_to_string(&pointer).expect("the pointer is readable");
+    assert_eq!(
+        before, after,
+        "a write that changed nothing rewrote the run pointer"
+    );
+}
+
+#[test]
+fn a_write_inside_the_claim_does_not_compare_repositories() {
+    let root = tempfile::tempdir().expect("a state root");
+    let repo = crate::test_env::repository_with_commit();
+    let (context, _run_id) = windowed_claim(root.path(), repo.path());
+
+    crate::harness::forget_same_repository_calls();
+    let answer = run_as(
+        Dialect::ClaudeCode,
+        Some("claude-code"),
+        Event::PreToolUse,
+        &Input {
+            tool_name: "Write".to_owned(),
+            tool_input: json!({"file_path": repo.path().join("src").join("in_claim.rs").display().to_string()}),
+            session_id: "windowed-1".to_owned(),
+            ..Input::default()
+        },
+        Some(&context),
+    );
+    assert_eq!(
+        answer["hookSpecificOutput"]["permissionDecision"], "allow",
+        "the fixture's write was refused, so the case under test was never reached: {answer}"
+    );
+    assert_eq!(
+        crate::harness::same_repository_calls(),
+        0,
+        "a write inside the claim ran the repository comparison its decision does not read"
+    );
+}
+
+fn windowed_claim(root: &std::path::Path, repo: &std::path::Path) -> (GateContext, String) {
+    let skill_root = root.join("skill");
+    std::fs::create_dir_all(&skill_root).expect("a skill root");
+    std::fs::write(skill_root.join(crate::skill::CONTRACT), "the contract\n")
+        .expect("the contract is installed");
+    let state_root = root.join("state");
+    let context = GateContext {
+        stand_down: None,
+        integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
+        flag: None,
+        skill_root,
+        repo_dir: repo.to_path_buf(),
+        state_root: state_root.clone(),
+        operation_window: Default::default(),
+        issue_requirement: crate::config::IssueRequirement::Off,
+        repository_config_unreadable: None,
+        decision_mode: crate::config::DecisionMode::Ask,
+        workflow: Some(crate::config::Workflow::Autonomous),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        repository_host: crate::config::RepositoryHost::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let run_id = session::run_id(session::DEFAULT_RUNTIME, "windowed-1");
+    let mut run = session::Run::new(run_id.clone());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.state = Some("in-progress".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    run.mark_verified();
+    session::store(&state_root, &run).expect("the pointer writes");
+    (context, run_id)
+}
+
+#[test]
 fn an_inline_target_is_named_a_target_whether_it_is_a_path_or_a_shell_command() {
     let run = session::Run {
         inline_writes: std::collections::BTreeSet::from([

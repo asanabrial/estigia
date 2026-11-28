@@ -597,7 +597,7 @@ what is unmeasured there.
 
 `estigia setup claude-code` registers `PostToolUse` with the matcher `Bash` and
 `"<estigia>" hook post-tool-use`, 10 s. It decides nothing and says nothing: every call answers
-`{}`. Only Claude Code gets it.
+`{}` before the payload and the configuration are read. Only Claude Code gets it.
 
 ## Which hook commands setup treats as its own
 

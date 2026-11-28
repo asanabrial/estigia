@@ -1467,6 +1467,7 @@ pub fn run_as(
                 push_refs: Vec::new(),
             };
             let mut run = session::load(&context.state_root, &run_id);
+            let before = run.clone();
             let mut run_id = run_id;
             let landed = (dialect == Dialect::ClaudeCode
                 && run.issue.is_none()
@@ -1620,12 +1621,9 @@ pub fn run_as(
                 && subject
                     .as_ref()
                     .is_some_and(|target| run.inline_writes.insert(target.clone()));
-            // `saw_new_role` and not only `Allow`, and the difference is the
-            // point: the role record is about what the gate **saw**, and a
-            // delegated context reading files makes calls this gate answers
-            // `Outside` rather than `Allow`. Still best effort, and still never
-            // a denial.
-            if saw_new_role || saw_new_write || matches!(decision, Decision::Allow(_)) {
+            if (saw_new_role || saw_new_write || matches!(decision, Decision::Allow(_)))
+                && run != before
+            {
                 let _ = session::store(&context.state_root, &run);
             }
             note(
