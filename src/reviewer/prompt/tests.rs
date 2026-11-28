@@ -37,6 +37,27 @@ fn prompt_for(role: Role, findings: &[FindingForPrompt]) -> String {
 }
 
 #[test]
+fn two_lenses_for_one_receipt_share_a_prefix_at_least_as_long_as_the_diff() {
+    let risk = prompt_for(Role::Risk, &[]);
+    let readback = prompt_for(Role::Readback, &[]);
+    let shared = risk
+        .bytes()
+        .zip(readback.bytes())
+        .take_while(|(left, right)| left == right)
+        .count();
+    assert!(
+        shared >= DIFF.len(),
+        "the lenses share {shared} bytes, less than the {} byte diff",
+        DIFF.len()
+    );
+    assert!(
+        risk[..shared].contains(DIFF),
+        "the shared prefix does not carry the diff: {:?}",
+        &risk[..shared]
+    );
+}
+
+#[test]
 fn the_same_input_is_the_same_bytes() {
     let findings = [finding("f1")];
     assert_eq!(
@@ -111,7 +132,7 @@ fn a_prompt_past_the_ceiling_is_refused_not_truncated() {
 fn neither_the_frontmatter_nor_the_tool_grant_rule_reaches_a_reviewer() {
     for role in Role::ALL {
         let text = prompt_for(role, &[]);
-        assert!(text.starts_with("You are "), "{role:?}: {text}");
+        assert!(text.contains("You are "), "{role:?}: {text}");
         for leaked in [
             "WebSearch",
             "{{TOOLS}}",
@@ -146,9 +167,15 @@ fn each_role_is_asked_with_its_own_template() {
             .1;
         let text = prompt_for(role, &[]);
         let own_rules = body_of(template);
+        let rules_at = text
+            .find(&own_rules)
+            .unwrap_or_else(|| panic!("{name} is not its own template"));
+        let diff_end = text
+            .find("\nDIFF>>>\n")
+            .unwrap_or_else(|| panic!("{name} has no diff section"));
         assert!(
-            text.starts_with(&own_rules),
-            "{name} is not its own template"
+            rules_at > diff_end,
+            "{name}'s template does not follow the shared sections"
         );
         assert!(bodies.insert(own_rules), "{name} shares a template");
     }

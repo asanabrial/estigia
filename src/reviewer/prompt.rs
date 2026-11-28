@@ -1,8 +1,10 @@
 //! The bytes a binary-launched reviewer is handed.
 //!
-//! A role's own template, its tool-grant rule removed because this reviewer has
-//! no tools, then one fixed section carrying the receipt, the criteria, the
-//! findings and the diff, and last the exact shape the role must answer in.
+//! One fixed section carrying the receipt, the criteria, the findings and the
+//! diff, then a role's own template with its tool-grant rule removed because
+//! this reviewer has no tools, and last the exact shape the role must answer
+//! in. The shared sections lead so that concurrent reviewers of one receipt
+//! share a prefix a prompt cache can serve.
 //! The same input is the same bytes, and a diff that is not the one the
 //! receipt published is refused rather than reviewed.
 
@@ -67,15 +69,7 @@ pub fn build(input: &PromptInput<'_>) -> Result<Vec<u8>, Refusal> {
         )));
     }
 
-    let mut prompt = body_of(input.role.template()).into_bytes();
-    prompt.extend_from_slice(b"\n\n---\n\n# Launch\n\n");
-    prompt.extend_from_slice(
-        b"Wherever the instructions above say the diff, they mean the diff under `## Diff` \
-          below; it and the sections around it are everything you are given. A file shown as a \
-          `diff --git` header and one `# estigia-generated` line, with no hunks, is verified by \
-          byte-identical regeneration when the verdict is recorded: do not review it by \
-          reading, and do not report its missing hunks.\n\n",
-    );
+    let mut prompt = b"# Launch\n\n".to_vec();
     prompt.extend_from_slice(receipt_section(input.receipt).as_bytes());
     prompt.extend_from_slice(b"\n## Criteria\n\n");
     prompt.extend_from_slice(
@@ -93,7 +87,16 @@ pub fn build(input: &PromptInput<'_>) -> Result<Vec<u8>, Refusal> {
         .as_bytes(),
     );
     prompt.extend_from_slice(input.payload);
-    prompt.extend_from_slice(b"\nDIFF>>>\n\n");
+    prompt.extend_from_slice(
+        b"\nDIFF>>>\n\n---\n\n# Instructions\n\nWherever the instructions below say the \
+          diff, they mean the diff under `## Diff` above; it and the sections before it are \
+          everything you are given. A file shown as a `diff --git` header and one \
+          `# estigia-generated` line, with no hunks, is verified by byte-identical regeneration \
+          when the verdict is recorded: do not review it by reading, and do not report its \
+          missing hunks.\n\n",
+    );
+    prompt.extend_from_slice(body_of(input.role.template()).as_bytes());
+    prompt.extend_from_slice(b"\n\n");
     prompt.extend_from_slice(answer_section(input.role).as_bytes());
 
     if prompt.len() > PROMPT_CEILING {
