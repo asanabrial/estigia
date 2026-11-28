@@ -2807,14 +2807,19 @@ fn compact_review_status(tool: &str, body: &mut Value) {
 }
 
 fn without_repeated_receipt(status: &mut Value) {
-    if let Some(object) = status.as_object_mut() {
-        object.insert("compact_version".to_owned(), json!(COMPACT_REVIEW_VERSION));
-    }
-    let receipt = status["receipt"].clone();
-    let Some(arguments) = status["next"]["arguments"].as_object_mut() else {
+    let Some(status) = status.as_object_mut() else {
         return;
     };
-    if let Some(receipt) = receipt.as_object() {
+    status.insert("compact_version".to_owned(), json!(COMPACT_REVIEW_VERSION));
+    let receipt = status.get("receipt").cloned();
+    let Some(arguments) = status
+        .get_mut("next")
+        .and_then(|next| next.get_mut("arguments"))
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    if let Some(receipt) = receipt.as_ref().and_then(Value::as_object) {
         arguments.retain(|name, value| name == "epoch" || receipt.get(name) != Some(value));
     }
 }
@@ -2835,7 +2840,11 @@ fn compact_publication(body: &mut Value) {
                 status.remove(field);
             }
         }
-        if status["next"]["kind"] == "collect"
+        if status
+            .get("next")
+            .and_then(|next| next.get("kind"))
+            .and_then(Value::as_str)
+            == Some("collect")
             && let Some(arguments) = status
                 .get_mut("next")
                 .and_then(|next| next.get_mut("arguments"))

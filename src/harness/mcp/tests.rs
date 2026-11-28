@@ -10884,6 +10884,23 @@ fn a_compact_publication_drops_the_receipt_its_embedded_status_repeats() {
 }
 
 #[test]
+fn a_publication_whose_status_carries_no_next_is_compacted_without_a_panic() {
+    let mut body = json!({
+        "ok": true,
+        "issue": 42,
+        "review_status": {"ok": true, "issue": 42},
+        "tier": {"base": "b".repeat(40), "head": "a".repeat(40)},
+    });
+    super::compact_answer("publish_review", &mut body);
+    assert_eq!(
+        body["tier"],
+        json!({}),
+        "the compaction did not run: {body}"
+    );
+    assert!(body["review_status"].is_object(), "{body}");
+}
+
+#[test]
 fn a_checks_rerun_reaches_run_checks_and_needs_checks() {
     let (row, rest) = super::collect_step(&json!({
         "issue": 7,
