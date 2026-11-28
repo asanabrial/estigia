@@ -22246,6 +22246,40 @@ fn a_release_named_no_worktree_derives_the_target_from_the_issues_marked_checkou
 }
 
 #[test]
+fn a_stale_marked_checkout_gives_way_to_a_primary_checkout_at_the_published_head() {
+    let (root, context, receipt) = medium_change();
+    let checkout = root.path().join("left-behind");
+    mark_worktree_for(&context.repo_dir, &checkout, &receipt.base, 42);
+
+    assert_eq!(
+        release_checkout(&context, &release_of(&receipt))
+            .expect("the checkout resolves")
+            .as_ref(),
+        None,
+        "a marked checkout on the base was read over a primary checkout on the head"
+    );
+}
+
+#[test]
+fn a_stale_marked_checkout_is_kept_when_the_primary_stands_elsewhere_too() {
+    let (root, context, receipt) = medium_change();
+    let checkout = root.path().join("left-behind");
+    mark_worktree_for(&context.repo_dir, &checkout, &receipt.base, 42);
+    git(
+        &context.repo_dir,
+        &["checkout", "--quiet", "--detach", &receipt.base],
+    );
+
+    let resolved = release_checkout(&context, &release_of(&receipt))
+        .expect("the checkout resolves")
+        .expect("the marked checkout, so the mismatch names its target");
+    assert_eq!(
+        std::fs::canonicalize(&resolved).expect("the resolved path"),
+        std::fs::canonicalize(&checkout).expect("the marked path")
+    );
+}
+
+#[test]
 fn a_release_with_no_marked_checkout_and_the_primary_elsewhere_names_the_missing_checkout() {
     let (root, context, receipt) = medium_change();
     mark_worktree_for(

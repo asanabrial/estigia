@@ -10616,6 +10616,17 @@ pub fn release_ci(
 /// Refuses `release-checkout-unresolved` rather than reading a primary checkout
 /// on another commit, which would answer `release-target-mismatch` about bytes
 /// nobody published from.
+fn head_at(directory: &std::path::Path) -> Option<String> {
+    super::run(
+        &["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        Some(directory),
+        super::How::tolerated(),
+    )
+    .ok()
+    .filter(|answer| answer.status == 0)
+    .map(|answer| answer.stdout.trim().to_owned())
+}
+
 fn release_checkout(
     context: &Context,
     release: &CiRelease<'_>,
@@ -10625,19 +10636,19 @@ fn release_checkout(
     }
     let issue = crate::identity::Identity::Number(release.issue);
     let discovery = super::branch::discover_adopted_worktree(context, &issue);
-    if let Ok(Some(marked)) = discovery {
-        return Ok(Some(marked));
+    let marked = discovery.as_ref().ok().and_then(Clone::clone);
+    if let Some(marked) = marked
+        .as_ref()
+        .filter(|marked| head_at(marked).as_deref() == Some(release.head))
+    {
+        return Ok(Some(marked.clone()));
     }
-    let primary = super::run(
-        &["git", "rev-parse", "--verify", "HEAD^{commit}"],
-        Some(&context.repo_dir),
-        super::How::tolerated(),
-    )
-    .ok()
-    .filter(|answer| answer.status == 0)
-    .map(|answer| answer.stdout.trim().to_owned());
+    let primary = head_at(&context.repo_dir);
     if primary.as_deref() == Some(release.head) {
         return Ok(None);
+    }
+    if let Some(marked) = marked {
+        return Ok(Some(marked));
     }
     Err(Failure::Stop(serde_json::json!({
         "ok": false,
