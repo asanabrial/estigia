@@ -296,3 +296,89 @@ fn the_lens_templates_carry_the_shared_rules_from_one_constant() {
         );
     }
 }
+
+const TWO_FILES: &str = "diff --git a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n@@ -1 +1 @@\n-old x\n+new x\ndiff --git a/y.rs b/y.rs\n--- a/y.rs\n+++ b/y.rs\n@@ -1 +1 @@\n-old y\n+new y\n";
+
+#[test]
+fn the_refuter_sees_only_the_files_its_candidates_cite() {
+    let candidate = finding("f1");
+    let shown = payload_for_candidates(std::slice::from_ref(&candidate), TWO_FILES.as_bytes())
+        .expect("a cut");
+    let receipt = receipt_for(TWO_FILES.as_bytes());
+    let text = String::from_utf8(
+        build_showing(
+            &PromptInput {
+                role: Role::Refuter,
+                receipt: &receipt,
+                payload: TWO_FILES.as_bytes(),
+                criteria: "the criteria",
+                findings: std::slice::from_ref(&candidate),
+            },
+            Some(&shown),
+        )
+        .expect("a prompt"),
+    )
+    .expect("utf-8");
+    assert!(text.contains("+new x"), "{text}");
+    assert!(
+        !text.contains("new y"),
+        "another file's hunk is shown: {text}"
+    );
+    assert!(
+        text.contains("Only the file diffs the candidates cite are shown"),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "sha256={} bytes={}",
+            receipt.payload_digest,
+            TWO_FILES.len()
+        )),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_candidate_with_no_location_shows_the_whole_diff() {
+    let mut candidate = finding("f1");
+    candidate.location = None;
+    assert_eq!(
+        payload_for_candidates(&[candidate], TWO_FILES.as_bytes()),
+        None
+    );
+}
+
+#[test]
+fn a_cited_path_the_diff_does_not_carry_shows_the_whole_diff() {
+    let mut candidate = finding("f1");
+    candidate.location = Some("z.rs:4".to_owned());
+    assert_eq!(
+        payload_for_candidates(&[candidate], TWO_FILES.as_bytes()),
+        None
+    );
+}
+
+#[test]
+fn one_cited_path_the_diff_does_not_carry_shows_the_whole_diff_for_every_candidate() {
+    let mut carried = finding("f1");
+    carried.location = Some("x.rs:1".to_owned());
+    let mut missing = finding("f2");
+    missing.location = Some("z.rs:4".to_owned());
+    assert_eq!(
+        payload_for_candidates(&[carried, missing], TWO_FILES.as_bytes()),
+        None
+    );
+}
+
+#[test]
+fn a_quoted_diff_header_falls_back_to_the_whole_diff_rather_than_a_partial_cut() {
+    let quoted = "diff --git \"a/x y.rs\" \"b/x y.rs\"\n--- \"a/x y.rs\"\n+++ \"b/x y.rs\"\n@@ -1 +1 @@\n-old\n+new\ndiff --git a/y.rs b/y.rs\n--- a/y.rs\n+++ b/y.rs\n@@ -1 +1 @@\n-old y\n+new y\n";
+    let mut candidate = finding("f1");
+    candidate.location = Some("y.rs:1".to_owned());
+    let mut quoted_candidate = finding("f2");
+    quoted_candidate.location = Some("x y.rs:1".to_owned());
+    assert_eq!(
+        payload_for_candidates(&[candidate, quoted_candidate], quoted.as_bytes()),
+        None
+    );
+}

@@ -38,6 +38,61 @@ pub struct FindingForPrompt {
     pub location: Option<String>,
 }
 
+/// The diff sections for the files `findings` cite, or `None` when the whole
+/// payload must be shown.
+///
+/// `None` is the safe answer: a finding with no location, a cited path the diff
+/// does not carry, or a payload that is not UTF-8 all fall back to the whole
+/// diff rather than hiding a file the reviewer was asked about.
+pub fn payload_for_candidates(findings: &[FindingForPrompt], payload: &[u8]) -> Option<Vec<u8>> {
+    if findings.is_empty() {
+        return None;
+    }
+    let mut paths: Vec<&str> = Vec::new();
+    for finding in findings {
+        let path = finding.location.as_deref()?.split(':').next()?;
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    let text = std::str::from_utf8(payload).ok()?;
+    let sections = diff_sections(text);
+    let mut cuts = Vec::new();
+    for path in &paths {
+        let found: Vec<&str> = sections
+            .iter()
+            .copied()
+            .filter(|section| section_path(section) == Some(*path))
+            .collect();
+        if found.is_empty() {
+            return None;
+        }
+        cuts.extend(found);
+    }
+    Some(cuts.concat().into_bytes())
+}
+
+fn diff_sections(text: &str) -> Vec<&str> {
+    let mut starts = Vec::new();
+    if text.starts_with("diff --git ") {
+        starts.push(0);
+    }
+    for (at, _) in text.match_indices("\ndiff --git ") {
+        starts.push(at + 1);
+    }
+    starts.push(text.len());
+    starts
+        .windows(2)
+        .map(|pair| &text[pair[0]..pair[1]])
+        .collect()
+}
+
+fn section_path(section: &str) -> Option<&str> {
+    let header = section.split_once('\n').map_or(section, |(line, _)| line);
+    let (_, after) = header.split_once(" b/")?;
+    Some(after)
+}
+
 /// Everything one prompt is built from.
 #[derive(Debug, Clone, Copy)]
 pub struct PromptInput<'a> {
@@ -61,6 +116,16 @@ pub struct PromptInput<'a> {
 /// to `receipt.payload_digest`, and with `reviewer-input-too-large` past
 /// [`PROMPT_CEILING`]. Never truncates.
 pub fn build(input: &PromptInput<'_>) -> Result<Vec<u8>, Refusal> {
+    build_showing(input, None)
+}
+
+/// Builds the prompt for `input`, showing `shown` bytes of the diff in place of
+/// the whole payload the receipt published.
+///
+/// The digest is always checked against `input.payload`, so a caller may cut
+/// the diff it displays but never the bytes it vouches for. `None` shows the
+/// whole payload.
+pub fn build_showing(input: &PromptInput<'_>, shown: Option<&[u8]>) -> Result<Vec<u8>, Refusal> {
     let actual = sha256_hex(input.payload);
     if actual != input.receipt.payload_digest {
         return Err(ReviewerCode::PayloadMismatch.refusal(format!(
@@ -86,7 +151,7 @@ pub fn build(input: &PromptInput<'_>) -> Result<Vec<u8>, Refusal> {
         )
         .as_bytes(),
     );
-    prompt.extend_from_slice(input.payload);
+    prompt.extend_from_slice(shown.unwrap_or(input.payload));
     prompt.extend_from_slice(
         b"\nDIFF>>>\n\n---\n\n# Instructions\n\nWherever the instructions below say the \
           diff, they mean the diff under `## Diff` above; it and the sections before it are \
@@ -95,6 +160,13 @@ pub fn build(input: &PromptInput<'_>) -> Result<Vec<u8>, Refusal> {
           when the verdict is recorded: do not review it by reading, and do not report its \
           missing hunks.\n\n",
     );
+    if shown.is_some() {
+        prompt.extend_from_slice(
+            b"Only the file diffs the candidates cite are shown. The digest and byte count \
+              above name the whole published payload, which was verified before this cut; treat \
+              these sections as that payload's cited files, not as a different change.\n\n",
+        );
+    }
     prompt.extend_from_slice(body_of(input.role.template()).as_bytes());
     prompt.extend_from_slice(b"\n\n");
     prompt.extend_from_slice(answer_section(input.role).as_bytes());
