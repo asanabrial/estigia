@@ -200,7 +200,9 @@ detached (the same lock, liveness and detaching `__review-job` uses, and the sam
    receipt with `cached: true`, and nothing runs.
 3. A job for the same digests is running: it is waited on, then answered `state: "running"` with `job` and
    `ask_after`.
-4. Otherwise the job is launched and waited on.
+4. Otherwise the job is launched and waited on. A finished job verifies the `review` claim again
+   before it records anything, at the clock the call has reached rather than the one it started at: a
+   claim that lapsed while the job ran records no receipt.
 
 The job runs each check in `<checkout>/<cwd>`, sequentially in declaration order, a failing check not
 stopping the rest, under a 30 minute deadline for the whole job after which its process group is killed

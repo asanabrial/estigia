@@ -253,6 +253,36 @@ fn a_passing_check_records_a_receipt_and_the_verdict_clears() {
 }
 
 #[test]
+fn a_claim_that_lapsed_while_the_job_ran_is_not_read_as_live_after_it() {
+    crate::transport::store::forget_scratch_store();
+    let held = tempfile::tempdir().expect("a directory");
+    let release = held.path().join("release");
+    let (_root, context, receipt) = checked_change(Some(&declaration_for(&[(
+        "slow",
+        &release_loop(&release, RELEASE_LOOP_TICKS),
+    )])));
+    let comments = vec![
+        live_claim_until("claude-a", "2026-08-31T00:00:01Z"),
+        published(&receipt),
+    ];
+    let releaser = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(2));
+        put(&release, "go");
+    });
+
+    let refused = ask(
+        &context,
+        &comments,
+        &request(30, &receipt.base),
+        &on_a_thread,
+    )
+    .expect_err("a claim that lapsed during the wait was read as live after it");
+    releaser.join().expect("the releaser");
+
+    assert_eq!(reason(refused), "not-current-live-holder");
+}
+
+#[test]
 fn a_second_run_for_the_same_digest_runs_nothing() {
     crate::transport::store::forget_scratch_store();
     let counted = tempfile::tempdir().expect("a directory");
