@@ -2429,7 +2429,7 @@ pub fn render_reviewer_agent(template: &str, evidence: Evidence, seal: Seal, nam
         },
     };
     let discipline = format!("{paragraph}\n\n{}", crate::skill::VERDICT_BASIS_REQUIREMENT);
-    let rendered = template
+    let rendered = crate::skill::with_lens_rules(template)
         .replace("{{TOOLS}}", tools)
         .replace("{{DISCIPLINE}}", &discipline);
     let Some(placeholder) = declared_reviewer_name(&rendered) else {
