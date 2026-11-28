@@ -181,7 +181,7 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
         "a sub-agent wrote past its own tool list: {out}"
     );
     assert!(
-        out.contains("nothing was written") && out.contains("operator-knowledge"),
+        out.contains("Class: refused (the rule says no)") && out.contains("operator-knowledge"),
         "the denial does not carry what to do about it: {out}"
     );
 

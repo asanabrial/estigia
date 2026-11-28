@@ -151,11 +151,16 @@ fn an_ask_does_not_say_the_write_was_refused() {
             .to_owned()
     };
     assert!(reason(&ask).starts_with("estigia asks before this write."));
-    assert!(reason(&deny).starts_with("estigia refused this write."));
-    for refusal_only in ["Class:", "What happened to the world", "Replay:"] {
-        assert!(!reason(&ask).contains(refusal_only), "{}", reason(&ask));
-        assert!(reason(&deny).contains(refusal_only), "{}", reason(&deny));
+    assert!(reason(&deny).starts_with("estigia refused this call."));
+    for neither in [
+        "estigia refused this write.",
+        "What happened to the world",
+        "Replay:",
+    ] {
+        assert!(!reason(&ask).contains(neither), "{}", reason(&ask));
+        assert!(!reason(&deny).contains(neither), "{}", reason(&deny));
     }
+    assert!(reason(&deny).contains("Class: "), "{}", reason(&deny));
     assert!(
         reason(&ask).contains("a message\n(a-code)"),
         "{}",
@@ -2120,7 +2125,7 @@ fn a_denial_carries_the_whole_refusal() {
         message: "src/x.rs: claude-aaaa lost the race".into(),
         outcome: MutationOutcome::NotStarted,
         class: crate::harness::refusal_class::class_of_code("not-current-live-holder"),
-        replay: Replayability::NotReplayable,
+        replay: Replayability::StatusRequired,
         resolution: Resolution::run("estigia status"),
         observed: None,
     };
@@ -2132,9 +2137,16 @@ fn a_denial_carries_the_whole_refusal() {
     assert_eq!(response["hookSpecificOutput"]["permissionDecision"], "deny");
     // Everything the agent needs to act, in the one place it will read.
     assert!(reason.contains("not-current-live-holder"));
-    assert!(reason.contains("nothing was written"));
-    assert!(reason.contains("do not repeat this command"));
+    assert!(
+        reason.contains("Class: stale (re-read, then decide)"),
+        "{reason}"
+    );
+    assert!(reason.contains("read the current state first"));
     assert!(reason.contains("estigia status"));
+    assert!(
+        !reason.contains("nothing was written"),
+        "a stale stop printed the default world line: {reason}"
+    );
 }
 
 #[test]

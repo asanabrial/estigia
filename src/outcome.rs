@@ -68,6 +68,10 @@ pub enum Replayability {
 /// The ratchet's escape hatch, and it is deliberately narrow: three reasons, no
 /// free text. A rejection that reaches for a fourth is a rejection that has a
 /// resolution and has not written it down.
+///
+/// [`NoCommandReason::WorldAction`] is the reason almost every transport action
+/// carries, so its detail is printed alone; the other two keep their tag because
+/// they say who else must act, which the detail does not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NoCommandReason {
@@ -136,6 +140,10 @@ impl fmt::Display for Resolution {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Run { command } => write!(formatter, "run: {command}"),
+            Self::NoCommand {
+                reason: NoCommandReason::WorldAction,
+                detail,
+            } => formatter.write_str(detail),
             Self::NoCommand { reason, detail } => write!(formatter, "[{reason}] {detail}"),
         }
     }
@@ -302,13 +310,27 @@ impl RefusalClass {
         }
     }
 
-    /// What an agent is told the class means, shared by every text surface.
+    /// The short gloss an agent is told the class means, shared by every text
+    /// surface. It says what the caller does next, in a phrase that fits one
+    /// line: the rules for placing a code are in `docs/refusal-classes.md`.
     pub fn meaning(self) -> &'static str {
         match self {
-            Self::Unavailable => "the control surface could not be read; this is not a state",
-            Self::Stale => "what this run acted on has moved; re-read before deciding",
-            Self::Refused => "the rule says no; repeating the command repeats the answer",
-            Self::Unknown => "the outcome cannot be established; look before acting",
+            Self::Unavailable => "read again; not a state",
+            Self::Stale => "re-read, then decide",
+            Self::Refused => "the rule says no",
+            Self::Unknown => "look before acting",
+        }
+    }
+
+    /// The replay answer that goes with this class when nothing more specific
+    /// is known, so a refusal cannot carry a class whose gloss is read as *the
+    /// answer repeats* next to a replay answer saying *the call may be
+    /// repeated*.
+    pub fn replay(self) -> Replayability {
+        match self {
+            Self::Unavailable => Replayability::ExactReplaySafe,
+            Self::Stale | Self::Unknown => Replayability::StatusRequired,
+            Self::Refused => Replayability::NotReplayable,
         }
     }
 }
@@ -404,18 +426,29 @@ impl Refusal {
     /// The text an agent is shown on the hook and tool-server surfaces: code,
     /// class, outcome, replay and resolution, once for both.
     ///
+    /// The world line and the replay line are printed only when they are not
+    /// the default — the same rule [`fmt::Display`] applies — because a line
+    /// saying a refusal wrote nothing, or that a command may be repeated,
+    /// printed on every refusal is a line people stop reading.
+    ///
     /// `noun` is what a retry would repeat, as [`Replayability::advice`] takes it.
     pub fn agent_text(&self, noun: &str) -> String {
-        format!(
-            "{}\n({})\n\nClass: {} \u{2014} {}\nWhat happened to the world: {}\nReplay: {}\n\n{}",
+        let mut text = format!(
+            "{}\n({})\n\nClass: {} ({})",
             self.message,
             self.code,
             self.class.word(),
             self.class.meaning(),
-            self.outcome.what_happened(),
-            self.replay.advice(noun),
-            self.resolution,
-        )
+        );
+        if let Some(line) = self.what_happened() {
+            text.push_str(&format!("\nWhat happened to the world: {line}"));
+        }
+        if let Some(line) = self.about_retrying(noun) {
+            text.push_str(&format!("\nReplay: {line}"));
+        }
+        text.push_str("\n\n");
+        text.push_str(&self.resolution.to_string());
+        text
     }
 
     /// Attaches what the gate parsed on its way to this refusal.
@@ -443,13 +476,13 @@ impl Refusal {
     ///
     /// The words are [`Replayability::advice`]'s — the same mapping an agent
     /// reads, not a second copy of it.
-    fn about_retrying(&self) -> Option<String> {
+    fn about_retrying(&self, noun: &str) -> Option<String> {
         match self.replay {
             // The one difference kept, and it is presentation rather than
             // vocabulary: a line saying a command is safe to repeat, printed on
             // every refusal that is, is a line people stop reading.
             Replayability::ExactReplaySafe => None,
-            replay => Some(replay.advice("command")),
+            replay => Some(replay.advice(noun)),
         }
     }
 }
@@ -463,7 +496,7 @@ impl fmt::Display for Refusal {
         if let Some(line) = self.what_happened() {
             write!(formatter, "\n  {line}")?;
         }
-        if let Some(line) = self.about_retrying() {
+        if let Some(line) = self.about_retrying("command") {
             write!(formatter, "\n  {line}")?;
         }
         write!(formatter, "\n  {}", self.resolution)
@@ -636,7 +669,7 @@ mod tests {
                 class: super::RefusalClass::Refused,
                 observed: None,
             };
-            match refusal.about_retrying() {
+            match refusal.about_retrying("command") {
                 None => assert_eq!(
                     replay,
                     super::Replayability::ExactReplaySafe,
@@ -977,6 +1010,34 @@ mod display_tests {
                 "the resolution is not the last thing said: {said}"
             );
         }
+    }
+
+    #[test]
+    fn a_refusal_that_never_started_says_nothing_about_the_world() {
+        let untouched =
+            Refusal::not_started("a-code", "a sentence", Resolution::run("estigia status"))
+                .agent_text("call");
+        assert!(
+            !untouched.contains("What happened to the world"),
+            "a refusal that never started printed a world line: {untouched}"
+        );
+        assert!(
+            !untouched.contains("nothing was written"),
+            "a refusal that never started still says it wrote nothing: {untouched}"
+        );
+
+        let unknown =
+            refusal(MutationOutcome::Unknown, Replayability::StatusRequired).agent_text("call");
+        assert!(
+            unknown.contains("What happened to the world: a write may have landed"),
+            "the world line was dropped for an outcome that needs it: {unknown}"
+        );
+        let landed =
+            refusal(MutationOutcome::Committed, Replayability::NotReplayable).agent_text("call");
+        assert!(
+            landed.contains("What happened to the world: the write landed"),
+            "the world line was dropped for an outcome that needs it: {landed}"
+        );
     }
 
     #[test]

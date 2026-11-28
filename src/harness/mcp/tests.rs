@@ -1785,8 +1785,12 @@ fn an_uninstalled_harness_answers_with_a_refusal_the_agent_can_act_on() {
     }));
     assert_eq!(response["isError"], true);
     let text = response["content"][0]["text"].as_str().expect("text");
-    assert!(text.contains("nothing was written"));
-    assert!(text.contains("skill-root-unknown"));
+    assert!(
+        !text.contains("nothing was written"),
+        "a refusal that never started printed the default world line: {text}"
+    );
+    assert!(text.contains("Class: refused (the rule says no)"), "{text}");
+    assert!(text.contains("skill-root-unknown"), "{text}");
 }
 
 #[test]
@@ -5912,7 +5916,7 @@ fn an_assisted_workflow_refuses_every_tool_that_writes_the_tracker() {
 }
 
 #[test]
-fn the_assisted_refusal_names_the_row_the_value_and_the_way_out() {
+fn the_assisted_refusal_names_the_row_the_value_and_who_decides() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = assisted_context(&root);
     let ToolFailure::Refused(refusal) = run_tool("ensure_states", &json!({}), Ok(&context))
@@ -5921,16 +5925,16 @@ fn the_assisted_refusal_names_the_row_the_value_and_the_way_out() {
         panic!("refused as malformed rather than by the rule");
     };
     let said = refusal.to_string();
-    for part in [
-        "Workflow",
-        "assisted",
-        "estigia config set Workflow autonomous --repo",
-    ] {
+    for part in ["Workflow", "assisted", "operator-knowledge", "operator"] {
         assert!(
             said.contains(part),
             "the refusal does not say {part}: {said}"
         );
     }
+    assert!(
+        !said.contains("estigia config set"),
+        "the refusal hands the agent the operator's own policy to change: {said}"
+    );
 }
 
 #[test]

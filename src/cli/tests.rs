@@ -1064,7 +1064,11 @@ fn inventory() -> Vec<Refusal> {
         Refusal::not_started(
             "workflow-assisted-writes-no-tracker",
             "`claim` writes the tracker, and the `Workflow` row is `assisted` in this repository's own file",
-            Resolution::run("estigia config set Workflow autonomous --repo"),
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "the repository's `Workflow` row set to `autonomous` by the operator, if the team \
+                 wants Estigia to write its tracker",
+            ),
         ),
         Refusal::not_started(
             "already-holding",

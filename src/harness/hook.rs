@@ -451,7 +451,7 @@ impl Dialect {
 
     /// Denying, in this dialect, carrying the whole refusal.
     fn deny(self, refusal: &Refusal) -> Value {
-        let reason = reason_text("estigia refused this write.", refusal);
+        let reason = reason_text("estigia refused this call.", refusal);
         match self {
             Self::ClaudeCode => json!({
                 "hookSpecificOutput": {
@@ -1110,11 +1110,13 @@ fn drift_note(context: &GateContext) -> String {
         // `sync` is the wrong command here and refuses: the contract is this
         // binary's copy, carrying one configured value it does not recognise.
         // The gate falls back to its defaults meanwhile, which is the part that
-        // has to be said out loud — `doctor` names the row.
+        // has to be said out loud. `doctor` reports the row but does not clear
+        // it, so it is not named: the row has to be corrected where it is
+        // written, by whoever put the value there.
         crate::skill::Presence::Unreadable => format!(
             "\n\nThe operator table in `{}` carries a value this build does not recognise, so the \
-             gate is running on its defaults rather than on what is written there. Run `estigia \
-             doctor` for the row.",
+             gate is running on its defaults rather than on what is written there. No command \
+             clears that: the row has to be corrected where it is written.",
             context.skill_root.display()
         ),
         crate::skill::Presence::Absent => format!(

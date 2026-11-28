@@ -760,7 +760,9 @@ Closes #464",
             "the keyword was not what refused it: {text}"
         );
         assert!(
-            text.contains("nothing was written"),
+            !text.contains("What happened to the world")
+                && !text.contains("the write landed")
+                && !text.contains("may have landed"),
             "the pre-push refusal did not report the world untouched ({source}): {text}"
         );
 
@@ -1440,7 +1442,9 @@ fn an_unreadable_pr_body_refuses_before_the_remote_is_touched() {
     );
     // And the sentence is true, which is the whole subject of this issue.
     assert!(
-        text.contains("nothing was written"),
+        !text.contains("What happened to the world")
+            && !text.contains("the write landed")
+            && !text.contains("may have landed"),
         "the refusal did not say the world was untouched: {text}"
     );
 }
@@ -2255,7 +2259,9 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
     // harness report a landed write, so a refusal that reaches here must not
     // carry it however the sentence is phrased.
     assert!(
-        text.contains("nothing was written"),
+        !text.contains("What happened to the world")
+            && !text.contains("the write landed")
+            && !text.contains("may have landed"),
         "the refusal did not report the untouched world it is actually in: {text}"
     );
     assert_eq!(
