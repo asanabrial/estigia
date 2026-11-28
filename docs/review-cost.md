@@ -275,13 +275,17 @@ orchestrator, as it has none into any subagent. The delivery step records one `s
 `orchestrator` and one per delegated phase before the transition to `done`; `skill/SKILL.md`'s
 developer step 6 states this inside the delivery sentence, and no test pins that clause.
 
-## The reviewer prompt order buys no cache hits, and is not shipped
+## The reviewer prompt leads with the shared sections, and the cache still does not read them
 
-Moving the role template to the end of the prompt, so the shared receipt, criteria and diff lead and
-share a prompt-cache prefix, was measured on 2026-10-09 and **not shipped**: the shared bytes are
-never cache-read in any position. Four `claude -p --model claude-sonnet-4-5 --output-format json`
-calls, reading `usage.cache_read_input_tokens` and `usage.cache_creation_input_tokens`, over the bytes
-`build` in `src/reviewer/prompt.rs` produces for a real lens (68,164 bytes):
+`build` in `src/reviewer/prompt.rs` used to put the role's own template first, so two lenses of one
+publication shared nothing before their own rules. It now leads with the receipt, the criteria, the
+findings and the diff and ends with the role's template and answer format;
+`two_lenses_for_one_receipt_share_a_prefix_at_least_as_long_as_the_diff` pins the shared prefix
+through the diff.
+
+The order was measured once before and not shipped. On 2026-10-09, moving the role last over the bytes
+`build` produced for a real lens (68,164 bytes) still read the cache only for the CLI's own invariant
+prefix:
 
 | call | prompt | bytes | cache read | cache created |
 |---|---|---:|---:|---:|
@@ -292,9 +296,28 @@ calls, reading `usage.cache_read_input_tokens` and `usage.cache_creation_input_t
 
 The read-back is 18,289 on three calls that share nothing but the binary, including the unrelated one,
 so it is the CLI's own invariant prefix and not any reviewed byte. The user message that carries the
-receipt, criteria and diff is never cache-read, so the role's position in it cannot share what was
-never shared. Concurrent lenses would also not reuse a prefix the first had not yet returned, and
-serialising them is out of scope.
+receipt, criteria and diff was never cache-read, so the role's position in it could not share what was
+never shared.
+
+The order is shipped anyway, for the input a cache can serve, and it was measured again on 2026-11-28
+under the runner's own isolation — `claude --print --output-format json --tools "" --permission-mode
+dontAsk --no-session-persistence --setting-sources "" --strict-mcp-config` and the isolated system
+prompt — over a real 51,290-byte payload. Two launches, the risk lens then the readback lens, share
+the receipt, criteria and diff prefix byte for byte:
+
+| call | prompt | bytes | cache read | cache created |
+|---|---|---:|---:|---:|
+| 1 | risk lens, role last, cold | 57,355 | 0 | 22,355 |
+| 2 | readback lens, role last, same prefix | 57,636 | 0 | 22,419 |
+
+So the shared prefix is now the same bytes in the same order, and the Claude Code path this repository
+launches still cache-creates each request and reads none of it; with `--tools ""` and
+`--setting-sources ""` even the binary's invariant prefix the earlier arm saw is gone. What the order
+buys is the input a cache could serve, and the counters here claim no saving beyond it. Concurrent
+lenses would also not reuse a prefix the first had not yet returned, and serialising them is out of
+scope. Both arms read `usage.cache_read_input_tokens` and `usage.cache_creation_input_tokens` from the
+CLI's own result object; the 2026-10-09 arm ran without the isolation flags above, which is why its
+invariant prefix is absent from the second table.
 
 A lens inherits `CLAUDE_CODE_PROMPT_CACHE_TTL` from the environment it is launched in since
 2026-11-28, when the name joined `INHERITED` in `src/reviewer/run.rs`; before that the launcher
