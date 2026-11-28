@@ -3918,8 +3918,9 @@ fn a_compact_claim_creates_the_checkout_and_names_it_once() {
     let created = answer["start_branch"]["worktree"]
         .as_str()
         .expect("the checkout is named");
+    let encoded = serde_json::to_string(created).expect("a path serialises");
     assert_eq!(
-        answer.to_string().matches(created).count(),
+        answer.to_string().matches(&encoded).count(),
         1,
         "the compact claim names its checkout more than once: {answer}"
     );
