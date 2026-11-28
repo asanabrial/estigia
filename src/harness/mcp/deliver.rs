@@ -325,12 +325,16 @@ impl<H: Hands> Deliver<'_, H> {
                 let lane = self.release(&receipt)?;
                 let (view, ci) = self.ci(&receipt, &lane)?;
                 self.base(&receipt, &view)?;
-                let merged = self.merge(&receipt, &view)?;
-                self.version(&receipt, &merged)?;
-                self.close(&receipt, &merged, &ci)?
+                self.finish(&receipt, &view, &ci)?
             }
         };
         Ok(answer)
+    }
+
+    fn finish(&mut self, receipt: &ReviewTransaction, view: &Value, ci: &Value) -> Step<Value> {
+        let merged = self.merge(receipt, view)?;
+        self.version(receipt, &merged)?;
+        self.close(receipt, &merged, ci)
     }
 
     fn receipt_in_status(&self) -> Step<ReviewTransaction> {
