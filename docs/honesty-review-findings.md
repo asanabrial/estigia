@@ -122,6 +122,17 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   `review-finding` markers, 14 were in the gated class and 5 carried a span; 2 would fail containment
   (both on PR 209, one unchanged line each).
 
+  **A lens is told the rule; one location outside it still costs the whole answer.** The lens
+  prompt's answer format (`answer_section` in `src/reviewer/prompt.rs`) says a causal `location`
+  names lines of one unbroken run of `+` lines, not a span from one run to another, because the
+  payload is a `--unified=3` diff and the check reads `--unified=0` runs: two edits a few lines apart
+  read as one hunk to the lens and as two here. Nothing makes a lens follow it, and a refused location
+  is answer-scoped (`ANSWER_SCOPED` in `src/transport/claim/capture.rs`), so `collect_review_input`
+  discards every finding in that answer and the lens is launched again. The Judgment Day judge
+  definition (`skill/agents/review-blind.md`) does not carry the sentence. Measured 2026-11-28: a
+  `review-reliability` lens located one finding in `release_ci` across two runs of `+` lines 25
+  unchanged lines apart, on three launches in a row.
+
   **Containment assumes separated new-side hunks.** `changed_new_side_lines` uses `--unified=0`,
   `--no-renames` and `--inter-hunk-context=0`. Four modify/delete/keep fixture shapes in one repository
   produced `2`/`4` or `2`, never adjacent `2`/`3`; this probes, not proves, the precondition. Split ranges
