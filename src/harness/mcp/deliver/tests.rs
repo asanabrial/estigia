@@ -1112,10 +1112,39 @@ fn a_ready_step_that_failed_is_retried_while_the_pull_request_is_a_draft() {
     script.extend(green_script(&world));
     let ran = drive(&fake, &script, &request());
     assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert_eq!(
+        ran.answer["done"][1], "release_ci",
+        "the retry is not one of the steps deliver accounts for: {}",
+        ran.answer["done"]
+    );
+}
+
+#[test]
+fn the_deliver_after_a_version_stop_lands_closes_without_merging_again() {
+    let cargo = world(
+        "Cargo.toml",
+        "[package]\nname = \"x\"\nversion = \"1.2.3\"\n",
+    );
+    let first = fake(&cargo);
+    let ran = drive(&first, &green_script(&cargo), &request());
+    assert_eq!(stopped(&ran), ("version", "version-changed"));
+    assert!(merged_by_gh(&ran));
+
+    let second = fake(&cargo);
+    let receipt = receipt_of(&cargo);
+    second.scripts.borrow_mut().insert(
+        "review_status".into(),
+        vec![status(&receipt, halt("delivered"))],
+    );
+    let mut script = merged_view(&cargo);
+    script.extend(issue_views());
+    let ran = drive(&second, &script, &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert!(!merged_by_gh(&ran), "the call after the stop merged again");
     assert!(
-        called(&fake).contains(&"release_ci".to_owned()),
-        "a release already recorded hid the ready step that never landed: {:?}",
-        called(&fake)
+        called(&second).contains(&"release".to_owned()),
+        "the call after the stop never closed the issue: {:?}",
+        called(&second)
     );
 }
 
