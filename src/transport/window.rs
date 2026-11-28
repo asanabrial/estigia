@@ -330,6 +330,29 @@ impl<'a> ApiCall<'a> {
     }
 }
 
+/// Whether this `gh` call files an issue: a REST write whose own endpoint is an
+/// `/issues` path, or a GraphQL mutation that names `createIssue` on the line.
+///
+/// A path elsewhere on the line — a directory the command changes into, an
+/// `--input` file — is not the endpoint and decides nothing.
+pub(crate) fn gh_api_files_an_issue(args: &[&str]) -> bool {
+    if !gh_api_writes(args) {
+        return false;
+    }
+    let call = ApiCall::read(args);
+    let posts_to_issues = call.endpoint.is_some_and(names_the_issues_endpoint);
+    posts_to_issues
+        || args
+            .iter()
+            .any(|arg| arg.to_ascii_lowercase().contains("createissue"))
+}
+
+fn names_the_issues_endpoint(path: &str) -> bool {
+    [path, path.split('?').next().unwrap_or_default()]
+        .iter()
+        .any(|candidate| candidate.trim_end_matches('/').ends_with("/issues"))
+}
+
 fn api_writes(args: &[&str]) -> bool {
     ApiCall::read(args).writes(args)
 }
