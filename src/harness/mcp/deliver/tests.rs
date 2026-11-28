@@ -119,6 +119,7 @@ struct Fake {
     stamp: Option<String>,
     lane: Value,
     checks: Result<Option<Value>, Value>,
+    collectable: Vec<String>,
     now: u64,
     evidence: RefCell<String>,
     origin: Instant,
@@ -215,6 +216,7 @@ fn fake(world: &World) -> Fake {
         checks: Ok(Some(
             json!({"passed": true, "checks": [{"name": "suite", "exit": 0}]}),
         )),
+        collectable: Vec::new(),
         now: NOW,
         evidence: RefCell::new(String::new()),
         origin: Instant::now(),
@@ -260,6 +262,10 @@ impl Hands for Fake {
 
     fn receipt(&self) -> Option<ReviewTransaction> {
         self.receipt.clone()
+    }
+
+    fn collectable(&self, _issue: u64, _receipt: &ReviewTransaction) -> Result<Vec<String>, Value> {
+        Ok(self.collectable.clone())
     }
 
     fn worktree(&self) -> Option<String> {
@@ -933,6 +939,35 @@ fn until_verdict_records_the_verdict_and_stops_before_any_release() {
     assert_eq!(ran.answer["verdict"]["outcome"], "approved");
     assert!(ran.answer.get("release").is_none(), "{}", ran.answer);
     assert_eq!(called(&fake), ["verify_claim", "record_computed_verdict"]);
+    assert!(ran.gh.is_empty(), "{:?}", ran.gh);
+}
+
+#[test]
+fn until_verdict_collects_a_finished_lens_before_recording_the_verdict() {
+    let world = world("b.txt", "two\n");
+    let mut fake = fake(&world);
+    fake.collectable = vec!["review-risk".into()];
+    fake.scripts.borrow_mut().insert(
+        "collect_review_input".into(),
+        vec![Ok(json!({"ok": true, "collected": []}))],
+    );
+    let ran = drive(&fake, &[], &until(Until::Verdict));
+
+    assert_eq!(ran.answer["reached"], "verdict", "{}", ran.answer);
+    assert_eq!(ran.answer["verdict"]["outcome"], "approved");
+    assert!(ran.answer.get("release").is_none(), "{}", ran.answer);
+    assert_eq!(
+        called(&fake),
+        [
+            "verify_claim",
+            "collect_review_input",
+            "record_computed_verdict"
+        ]
+    );
+    assert_eq!(
+        sent_to(&fake, "collect_review_input")[0]["names"],
+        json!(["review-risk"])
+    );
     assert!(ran.gh.is_empty(), "{:?}", ran.gh);
 }
 

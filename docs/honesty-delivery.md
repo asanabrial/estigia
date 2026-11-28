@@ -298,7 +298,9 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
 - **A release closes a hand merge only on the road a holding run takes.** `open_hand_merge` in
   `src/transport/dispatch.rs` runs inside `merged_release`, which a release reaches with a
   `target_operation`; the tool fills one for a run that holds the issue, and a release naming none
-  takes `claim::unassign` and closes nothing. Under a closed window it also closes nothing, since the
+  and carrying no `evidence_file` or `spend` takes `claim::unassign` and closes nothing. One carrying
+  either is refused `malformed-argument` when the run is not the live holder, rather than answered
+  `ok` by a discovery that never saw them. Under a closed window it also closes nothing, since the
   close is not queued, and the issue stays open until a later release or `deliver`. A close that stops
   after its merge note landed answers `close_incomplete`; the repeat finds the issue still `OPEN` and
   posts the note a second time. `an_autonomous_release_after_a_hand_merge_closes_the_issue_and_puts_the_checkout_down`

@@ -779,6 +779,16 @@ fn close_incomplete(
     serde_json::Value::Object(done)
 }
 
+/// Whether the run this release acts for is the issue's live holder.
+fn release_holds(context: &Context, departure: &Departure<'_>) -> Result<bool, Failure> {
+    let ledger = super::store::Ledger::open(context, departure.issue, departure.now)?;
+    let comments = ledger.timeline()?;
+    Ok(super::claim::holding(&comments, departure.now)
+        .holder
+        .as_deref()
+        == Some(departure.run_id))
+}
+
 /// A release that folds its close into itself, in the order the store forces:
 /// every spend record while the issue is still in `review`, the move to `done`,
 /// the evidence comment, then the release. Everything refusable without a
@@ -1258,7 +1268,27 @@ fn run_operation(
         ),
         "claim" => {
             let issue = issue()?;
-            if !f.on("takeover") {
+            if f.on("takeover") {
+                for (flag, given) in [
+                    ("transition-to", f.get("transition-to").is_some()),
+                    ("branch", f.get("branch").is_some()),
+                    ("base", f.get("base").is_some()),
+                    ("worktree-root", f.get("worktree-root").is_some()),
+                    ("no-link", f.on("no-link")),
+                ] {
+                    if given {
+                        return Err(flag_without_its_mode(
+                            operation,
+                            flag,
+                            &format!(
+                                "--{flag} belongs to the claim that starts a checkout, and \
+                                 --takeover displaces a holder instead; nothing in a takeover \
+                                 would use it"
+                            ),
+                        ));
+                    }
+                }
+            } else {
                 if f.on("force") {
                     return Err(flag_without_its_mode(
                         operation,
@@ -1274,6 +1304,21 @@ fn run_operation(
                         "--reason-file is the evidence a forced takeover carries, and no \
                          --takeover was given",
                     ));
+                }
+                for (flag, given) in [
+                    ("no-link", f.on("no-link")),
+                    ("worktree-root", f.get("worktree-root").is_some()),
+                ] {
+                    if given && f.get("branch").is_none() {
+                        return Err(flag_without_its_mode(
+                            operation,
+                            flag,
+                            &format!(
+                                "--{flag} names part of a claim's checkout, and no --branch was \
+                                 given to start one"
+                            ),
+                        ));
+                    }
                 }
             }
             if f.on("takeover") {
@@ -1379,10 +1424,27 @@ fn run_operation(
                 worktree: f.path("worktree"),
                 now,
             };
+            let evidence = f.path("evidence-file");
+            let spend = f.get("spend");
+            if departure.target_operation.is_none() && (evidence.is_some() || spend.is_some()) {
+                let flag = if spend.is_some() {
+                    "spend"
+                } else {
+                    "evidence-file"
+                };
+                if !release_holds(context, &departure)? {
+                    return Err(flag_without_its_mode(
+                        operation,
+                        flag,
+                        "--spend and --evidence-file close a delivery, which needs a live claim \
+                         on the issue or an explicit --target-operation",
+                    ));
+                }
+            }
             if departure.target_operation.is_none() {
                 return super::claim::unassign(context, &departure);
             }
-            merged_release(context, &departure, f.path("evidence-file"), f.get("spend"))
+            merged_release(context, &departure, evidence, spend)
         }
         "handoff" => super::handoff::record(
             context,
