@@ -12,19 +12,17 @@ on which call wrote the live holding. Against a holding **`claim`** itself wrote
 asking for a different horizon is refused `claim-metadata-mismatch` against the persisted marker,
 and asking under a fresh id instead adopts the live claim as already written, reporting the horizon
 already on the timeline rather than the one just asked for. Against a holding this run took over —
-its own marker, written by **`reclaim`** — both routes are refused `operation-id-kind-conflict`
-instead: reusing the id meets a marker whose kind is already `reclaim`, and a fresh id is adopted
-into that same marker, whose kind is checked before any horizon is compared. The two routes reach
-that marker differently. The reused-id route finds it by the id this call supplied, on a comment
-this account authored, and then holds it to the run id and horizon it recorded — a disagreement
-there is the `claim-metadata-mismatch` above; its runtime is attribution, never compared. The
-fresh-id route finds nothing under the supplied id at all: `may_claim` picks this run's own live
-acquisition by run id, and the call carries on under whichever id that marker already had. Neither
-refusal tells this run that it *holds* the issue. The reused-id route is read from the whole comment
-history rather than from who holds now, so a run that lost a race while its own marker stayed live
-meets the same refusal without being the holder. Ask `verify_claim` instead of inferring ownership
-from either. A run whose own prior acquisition on this issue has since died — lapsed, or pushed out
-of the live epoch by a later foreign `reclaim` — is the one exception: the id it would reuse names a
+its own marker, written by **`reclaim`** — both routes adopt it the same way, reporting the
+takeover's horizon: reusing the id finds that marker on a comment this account authored and holds
+it to the run id it names, and a fresh id finds nothing under the supplied id at all, so `may_claim`
+picks this run's own live acquisition by run id and the call carries on under whichever id that
+marker already had. Neither writes a second event, because one operation id names one event: the
+takeover stays the marker that explains the holding. Anything else under that id, another kind or a
+`reclaim` this run did not write, is still `operation-id-kind-conflict`; the reused-id route reads
+the whole history rather than who holds now, so a run that lost a race while its own marker stayed
+live meets it without being the holder. Ask `verify_claim` instead of inferring ownership from
+either. A run whose own prior acquisition on this issue has since died — lapsed, or pushed out of
+the live epoch by a later foreign `reclaim` — is the one exception: the id it would reuse names a
 dead event rather than one to resume, so this mints a fresh id and reissues once instead of
 refusing. The reissue is a fresh claim, not a reversal of the takeover: a foreign `reclaim` whose
 holder is still live is left holding the issue, and the fresh claim loses the race as any fresh
@@ -624,14 +622,16 @@ tier's own `lenses`; so does the whole-change fallback, whichever reason it name
 
 `unassign` puts the issue down. Discovery is read-only, writes nothing whatever the call
 carries, and answers the epoch to name; `--target-operation` authorises only that epoch. A run
-holding the issue names none: the tool fills it from the claim's operation id, and after
-a takeover the old epoch is refused `target-operation-mismatch` before any write. The release
+holding the issue — as its active claim or as a parked one — names none: the tool fills it from
+that claim's own record, so a release of a parked issue writes in one call, and after a takeover
+the old epoch is refused `target-operation-mismatch` before any write. The release
 converges the assignee, drops any `dev:` and, once the close is the registered delivery and nothing is
 unpublished, puts the isolated checkout down.
 
 `--evidence-file <f>` and `--spend <json>` (one object with `spend`'s fields, or an array)
-fold the close in. A held run may omit a record's receipt fields; the tool fills them from its
-review transaction and keeps any the record names. The close folds in, in the order the store allows: each spend record while the issue is in `review`,
+fold the close in. A held run may omit a record's receipt fields; the tool fills them from the
+review transaction its record for that issue holds — the parked claim's own when the release names
+a parked issue — and keeps any the record names. The close folds in, in the order the store allows: each spend record while the issue is in `review`,
 `done` (from `review` only), the evidence note, the release. A bad spend refuses before any write. A stop after a
 write landed is not a refusal: the answer carries `close_incomplete` (`step`, `failure`) beside what
 landed and the claim is still held: repeat the same call with the same operation id. The release

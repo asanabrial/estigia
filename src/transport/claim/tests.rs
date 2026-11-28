@@ -483,6 +483,111 @@ fn a_claim_that_adopts_a_live_claim_answers_the_operation_it_adopted() {
 }
 
 #[test]
+fn a_claim_after_this_runs_own_live_reclaim_is_admitted() {
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    crate::transport::store::forget_scratch_store();
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+    let lapsed_operation = "c".repeat(32);
+    let lapsed = dated(
+        "2",
+        "2026-07-28T02:00:00Z",
+        format!(
+            "claiming.\n\n{}\n",
+            super::super::markers::render(
+                "claim",
+                &[
+                    ("run-id", "claude-b"),
+                    ("runtime", "claude"),
+                    ("horizon", "2026-07-28T03:00Z"),
+                    ("op-id", &lapsed_operation),
+                ],
+            )
+            .expect("the lapsed claim renders")
+        ),
+    );
+    let script = claim_script(12, &[lapsed]);
+    fn takeover(target: Option<&str>) -> Reclaim<'_> {
+        Reclaim {
+            issue: 12,
+            run_id: "claude-a",
+            runtime: "claude",
+            horizon: RECLAIM_HORIZON,
+            operation_id: RECLAIM_OPERATION,
+            target_operation: target,
+            force: false,
+            reason_file: None,
+            now: RECLAIM_NOW,
+        }
+    }
+    let claiming = |run: &'static str| Acquisition {
+        issue: 12,
+        run_id: run,
+        runtime: "claude",
+        horizon: RECLAIM_HORIZON,
+        operation_id: RECLAIM_OPERATION,
+        now: RECLAIM_NOW,
+    };
+
+    let (taken, answer, timeline, refused) =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            let target = reclaim(&context, &takeover(None)).expect("the discovery answers")
+                ["target_operation"]
+                .as_str()
+                .expect("a target")
+                .to_owned();
+            let taken = reclaim(&context, &takeover(Some(&target))).expect("the takeover lands");
+            let answer = claim(&context, &claiming("claude-a"));
+            let timeline = store_timeline(&context, 12);
+            let refused = claim(&context, &claiming("claude-b"));
+            (taken, answer, timeline, refused)
+        });
+
+    assert_eq!(taken["reused_existing_reclaim"], false, "{taken}");
+    let answer = answer.unwrap_or_else(|failure| {
+        panic!(
+            "a claim after this run's own live reclaim was refused {}: {failure:?}",
+            reason(failure.clone())
+        )
+    });
+    assert_eq!(answer["ok"], true, "{answer}");
+    assert_eq!(
+        answer["operation_id"].as_str(),
+        Some(RECLAIM_OPERATION),
+        "the claim did not resume under the key the takeover wrote: {answer}"
+    );
+    let events = ownership::ownership_events(&timeline);
+    let reclaim_marker = events
+        .iter()
+        .find(|event| event.kind == "reclaim" && event.run_id == "claude-a")
+        .expect("the takeover marker is still on the timeline");
+    assert_eq!(
+        reclaim_marker.from_operation.as_deref(),
+        Some(lapsed_operation.as_str()),
+        "the claim rewrote the takeover the epoch rests on"
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.operation_id.as_deref() == Some(RECLAIM_OPERATION))
+            .count(),
+        1,
+        "the claim wrote a second event under the takeover's one key: {timeline:?}"
+    );
+    let held = holding(&timeline, RECLAIM_NOW);
+    assert_eq!(held.holder.as_deref(), Some("claude-a"));
+    assert_eq!(
+        held.event.map(|event| event.kind),
+        Some("reclaim".to_owned()),
+        "the takeover stopped being the event that explains the holding"
+    );
+    assert_eq!(
+        reason(refused.expect_err("a different run cannot share the key")),
+        "operation-id-kind-conflict"
+    );
+}
+
+#[test]
 fn a_reclaim_answers_the_state_and_receipt_the_store_holds() {
     let directory = tempfile::tempdir().expect("a directory for the log");
     crate::transport::store::forget_scratch_store();
