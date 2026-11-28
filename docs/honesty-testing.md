@@ -82,10 +82,11 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   enforces that, and an earlier sweep that missed `std::fs::read_to_string` was rejected twice.
 
 - **`build.rs` strips comments once, at the read.** It extracts `TRANSPORT_VOCABULARY` from each
-  `src/transport/*.rs` after `source_text::code_of`, before `shipped_part` cuts the inline test module
-  and before `extract_reasons`, `extract_constructed` and `assert_reasons_covered` walk it. The cut is
-  `#[cfg(test)]` attached to `mod <name> {`: a `#[cfg(test)] mod tests;` declaration opens a file a
-  walk skips anyway, and a test-only item before the module is not the boundary. The floor is
+  `src/transport/*.rs` after `source_text::code_of`, before `shipped_part` removes every inline test
+  module and before `extract_reasons`, `extract_constructed` and `assert_reasons_covered` walk it. The
+  unit is `#[cfg(test)]` attached to `mod <name> {`, wherever it sits: a `#[cfg(test)] mod tests;`
+  declaration opens a file a walk skips anyway, a test-only item before the module is not the unit,
+  and a module in the middle of a file is a hole rather than the end of it. The floor is
   the count `refusal-baseline.txt` records (`population 178` over `reasons.len()`). Regenerating the
   vocabulary with and without the change gave the same 123 entries.
 
