@@ -22340,6 +22340,25 @@ fn a_release_with_no_marked_checkout_and_the_primary_elsewhere_names_the_missing
 }
 
 #[test]
+fn a_primary_checkout_whose_head_cannot_be_read_is_reported_as_unknown() {
+    let (root, mut context, receipt) = medium_change();
+    let empty = root.path().join("not-a-repository");
+    std::fs::create_dir_all(&empty).expect("a directory");
+    context.repo_dir = empty;
+
+    let failure = release_checkout(&context, &release_of(&receipt))
+        .expect_err("a primary git cannot read was taken for one that stands elsewhere");
+
+    let envelope = failure.envelope();
+    assert_eq!(envelope["reason"], "release-checkout-unresolved");
+    assert_eq!(
+        envelope["primary_head"],
+        serde_json::Value::Null,
+        "an unreadable primary head was reported as a commit"
+    );
+}
+
+#[test]
 fn a_release_with_no_marked_checkout_reads_a_primary_checkout_at_the_published_head() {
     let (_root, context, receipt) = medium_change();
 
