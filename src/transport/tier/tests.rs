@@ -2246,6 +2246,32 @@ fn benign_look_alikes_stay_non_high() {
 }
 
 #[test]
+fn a_prose_only_hot_path_name_stays_below_high() {
+    let answer = tier_after("docs/auth.md", "x\nThe token is renewed by the caller.\n");
+    assert_ne!(answer["level"], "high", "{answer}");
+    assert!(!names_reason(&answer, "hot_path", "auth"), "{answer}");
+}
+
+#[test]
+fn a_comment_naming_a_process_boundary_stays_below_high() {
+    let answer = tier_after("src/lib.rs", "x\n/// passes --exec to the child\n");
+    assert_ne!(answer["level"], "high", "{answer}");
+    assert!(
+        !names_reason(&answer, "process_boundary", "shell_process"),
+        "{answer}"
+    );
+}
+
+#[test]
+fn a_real_process_boundary_in_source_still_reads_high() {
+    let answer = tier_after(
+        "src/lib.rs",
+        "x\nlet _ = Command::new(\"sh\").arg(\"-c\");\n",
+    );
+    assert_eq!(answer["level"], "high", "{answer}");
+}
+
+#[test]
 fn a_content_scan_past_the_byte_budget_reads_high_with_its_own_reason() {
     let answer = tier_after("src/big.py", &"x = 1\n".repeat(1_500_000));
     assert_eq!(answer["level"], "high", "{answer}");
