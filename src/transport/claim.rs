@@ -10609,6 +10609,8 @@ pub fn release_ci(
     }))
 }
 
+/// The commit `directory` stands at, or `None` when git cannot answer there: a
+/// checkout git no longer registers has no head, and that is not the published one.
 fn head_at(directory: &std::path::Path) -> Option<String> {
     super::run(
         &["git", "rev-parse", "--verify", "HEAD^{commit}"],

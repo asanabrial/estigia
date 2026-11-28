@@ -22261,7 +22261,7 @@ fn a_named_worktree_wins_over_a_marked_checkout_at_the_published_head() {
 }
 
 #[test]
-fn a_marked_checkout_whose_head_cannot_be_read_falls_through_to_the_primary() {
+fn a_marked_checkout_that_git_no_longer_registers_falls_through_to_the_primary() {
     let (root, context, receipt) = medium_change();
     let marked = root.path().join("removed");
     mark_worktree_for(&context.repo_dir, &marked, &receipt.head, 42);
@@ -22278,7 +22278,7 @@ fn a_marked_checkout_whose_head_cannot_be_read_falls_through_to_the_primary() {
     assert_eq!(
         release_checkout(&context, &release_of(&receipt)).expect("the checkout resolves"),
         None,
-        "a marked checkout whose head cannot be read was taken as standing at the published head"
+        "a checkout git no longer registers was still taken as the publication's target"
     );
 }
 
