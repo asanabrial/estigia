@@ -2036,7 +2036,7 @@ fn run_tool_answering(
         );
     }
     if compact && let Some(body) = body.as_mut() {
-        compact_review_status(tool.name, body);
+        compact_answer(tool.name, body);
     }
     let body = body.unwrap_or(json!({"ok": true}));
     let text = answer_text(Some(body.clone()), compact);
@@ -2783,8 +2783,20 @@ fn delivers(context: &GateContext) -> bool {
     layered.merge_by() == crate::config::Party::Agent && layered.delivery.is_autonomous()
 }
 
-/// The shape of a compact `review_status` answer, which [`expanded_receipt`] reads back.
-const COMPACT_REVIEW_VERSION: u64 = 1;
+/// The shape of a compact answer, which [`expanded_receipt`] reads back.
+const COMPACT_REVIEW_VERSION: u64 = 2;
+
+fn compact_answer(tool: &str, body: &mut Value) {
+    compact_review_status(tool, body);
+    compact_task(tool, body);
+    match tool {
+        "publish_review" | "republish_review" => compact_publication(body),
+        "claim" => compact_claim(body),
+        "collect_review_input" => compact_collected(body),
+        "run_checks" => compact_checks(body),
+        _ => {}
+    }
+}
 
 /// Drops the receipt `next.arguments` repeats from the `review_status` an answer
 /// is or embeds, so `compact` reaches the status a publication carries too.
@@ -2804,6 +2816,198 @@ fn without_repeated_receipt(status: &mut Value) {
     };
     if let Some(receipt) = receipt.as_object() {
         arguments.retain(|name, value| name == "epoch" || receipt.get(name) != Some(value));
+    }
+}
+
+fn compact_publication(body: &mut Value) {
+    let top = receipt_of(body);
+    let (ok, issue, epoch) = (
+        body.get("ok").cloned(),
+        body.get("issue").cloned(),
+        body.get("epoch").cloned(),
+    );
+    if let Some(status) = body.get_mut("review_status").and_then(Value::as_object_mut) {
+        if top.is_some() && status.get("receipt") == top.as_ref() {
+            status.remove("receipt");
+        }
+        for (field, outer) in [("ok", &ok), ("issue", &issue)] {
+            if outer.is_some() && status.get(field) == outer.as_ref() {
+                status.remove(field);
+            }
+        }
+        if status["next"]["kind"] == "collect"
+            && let Some(arguments) = status
+                .get_mut("next")
+                .and_then(|next| next.get_mut("arguments"))
+                .and_then(Value::as_object_mut)
+            && epoch.is_some()
+            && arguments.get("epoch") == epoch.as_ref()
+        {
+            arguments.remove("epoch");
+        }
+    }
+    if let Some(tier) = body.get_mut("tier").and_then(Value::as_object_mut) {
+        tier.remove("base");
+        tier.remove("head");
+    }
+    if let Some(start) = body.get_mut("review_start").and_then(Value::as_object_mut) {
+        without_launched_repeats(start.get_mut("launched"));
+        if let Some(detail) = start
+            .get_mut("launch_skipped")
+            .and_then(|skipped| skipped.get_mut("detail"))
+        {
+            without_checks_repeats(detail);
+        }
+    }
+}
+
+fn receipt_of(body: &Value) -> Option<Value> {
+    let mut receipt = serde_json::Map::new();
+    for field in RECEIPT_FIELDS {
+        receipt.insert(field.to_owned(), body.get(field)?.clone());
+    }
+    Some(Value::Object(receipt))
+}
+
+fn without_launched_repeats(launched: Option<&mut Value>) {
+    let Some(launched) = launched.and_then(Value::as_array_mut) else {
+        return;
+    };
+    for slot in launched {
+        if let Some(slot) = slot.as_object_mut() {
+            slot.remove("ok");
+            slot.remove("issue");
+            slot.remove("epoch");
+        }
+    }
+}
+
+fn without_checks_repeats(value: &mut Value) {
+    if let Some(object) = value.as_object_mut() {
+        object.remove("digest");
+        object.remove("commands");
+    }
+}
+
+fn without_attempted(value: &mut Value) {
+    if let Some(object) = value.as_object_mut() {
+        object.remove("attempted");
+    }
+}
+
+fn compact_claim(body: &mut Value) {
+    if let Some(ownership) = body
+        .pointer_mut("/start_branch/ownership")
+        .and_then(Value::as_object_mut)
+    {
+        for field in ["run_id", "issue", "branch", "worktree"] {
+            ownership.remove(field);
+        }
+    }
+    let Some(transition) = body.get_mut("transition").and_then(Value::as_object_mut) else {
+        return;
+    };
+    transition.remove("labels_after");
+    if !transition.contains_key("board_repair") {
+        transition.remove("board_column_after");
+    }
+    if let Some(board) = transition.get_mut("board") {
+        without_attempted(board);
+    }
+    if let Some(repair) = transition
+        .get_mut("board_repair")
+        .and_then(Value::as_object_mut)
+    {
+        for field in ["retried", "column_now"] {
+            if let Some(value) = repair.get_mut(field) {
+                without_attempted(value);
+            }
+        }
+    }
+}
+
+fn compact_collected(body: &mut Value) {
+    let (ok, issue) = (body.get("ok").cloned(), body.get("issue").cloned());
+    let Some(collected) = body.get_mut("collected").and_then(Value::as_array_mut) else {
+        without_finding_repeats(body);
+        return;
+    };
+    let shared = collected
+        .first()
+        .and_then(|slot| slot.get("epoch"))
+        .cloned()
+        .filter(|epoch| {
+            collected
+                .iter()
+                .all(|slot| slot.get("epoch") == Some(epoch))
+        });
+    for slot in collected.iter_mut() {
+        if let Some(object) = slot.as_object_mut() {
+            for (field, outer) in [("ok", &ok), ("issue", &issue)] {
+                if outer.is_some() && object.get(field) == outer.as_ref() {
+                    object.remove(field);
+                }
+            }
+            if shared.is_some() {
+                object.remove("epoch");
+            }
+        }
+        without_finding_repeats(slot);
+    }
+    if let Some(epoch) = shared {
+        body["epoch"] = epoch;
+    }
+}
+
+fn without_finding_repeats(value: &mut Value) {
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    object.remove("findings_recorded");
+    if let Some(findings) = object.get_mut("findings").and_then(Value::as_array_mut) {
+        for finding in findings {
+            if let Some(finding) = finding.as_object_mut() {
+                finding.remove("lens");
+            }
+        }
+    }
+}
+
+fn compact_checks(body: &mut Value) {
+    without_checks_repeats(body);
+    without_launched_repeats(body.get_mut("launched"));
+}
+
+fn compact_deliver(body: &mut Value) {
+    let lane = body.get("lane").is_some();
+    let Some(release) = body.get_mut("release").and_then(Value::as_object_mut) else {
+        return;
+    };
+    for field in ["issue", "epoch", "pr", "head", "base", "digest"] {
+        release.remove(field);
+    }
+    if lane {
+        release.remove("lane");
+    }
+    if let Some(transition) = release.get_mut("transition").and_then(Value::as_object_mut) {
+        transition.remove("delivery");
+        if let Some(board) = transition.get_mut("board") {
+            without_attempted(board);
+        }
+    }
+    if let Some(done) = release.get_mut("done").and_then(Value::as_object_mut) {
+        done.remove("spend");
+    }
+    release.remove("spend");
+}
+
+fn compact_task(tool: &str, body: &mut Value) {
+    if tool != "task" {
+        return;
+    }
+    if let Some(task) = body.get_mut("task").and_then(Value::as_object_mut) {
+        task.remove("text");
+        task.remove("evidence");
     }
 }
 

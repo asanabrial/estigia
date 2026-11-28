@@ -2248,6 +2248,10 @@ fn the_task_tool_answers_compact_through_the_server() {
         "the compact argument never reached the transport: {compact}"
     );
     assert_eq!(compact["task"]["id"], "T1", "{compact}");
+    assert!(
+        compact["task"].get("text").is_none() && compact["task"].get("evidence").is_none(),
+        "the compact answer echoes the text the caller sent: {compact}"
+    );
     let legacy = parse(&legacy);
     assert_eq!(
         legacy["tasks"].as_array().map(Vec::len),

@@ -1842,7 +1842,7 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
 /// still non-severe for its warning, and the receipt delivers on that class
 /// alone.
 #[test]
-fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
+fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding_compacted() {
     let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
@@ -2030,7 +2030,12 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
         "the fixture pointer was not stored"
     );
 
-    let release_request = deliver_until("ci", run_id, None);
+    let release_request = {
+        let mut request: serde_json::Value =
+            serde_json::from_str(&deliver_until("ci", run_id, None)).expect("the request is JSON");
+        request["params"]["arguments"]["compact"] = serde_json::json!(true);
+        request.to_string()
+    };
 
     let call =
         |request: &str, answers: String, counts: &std::path::Path| -> (serde_json::Value, String) {
@@ -2079,6 +2084,14 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
     );
     let released = &answer["release"];
     assert_eq!(released["ci_released"], true, "{transcript}");
+    assert!(
+        released.get("epoch").is_none() && released.get("lane").is_none(),
+        "the compact delivery repeats its receipt and lane: {transcript}"
+    );
+    assert!(
+        answer["lane"]["state"].is_string(),
+        "the compact delivery lost the lane it names once: {transcript}"
+    );
     assert!(
         transcript.contains("pr ready"),
         "delivery never marked the pull request ready: {transcript}"

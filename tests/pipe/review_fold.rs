@@ -324,6 +324,133 @@ fn collect_records_the_verdict_only_when_the_review_names_it_next() {
     ));
     assert_eq!(again["reached"], "verdict", "{again}");
     assert_eq!(again["verdict"]["reused_existing_verdict"], true, "{again}");
+
+    let compacted = answer(&ask(
+        &rig,
+        &world,
+        "deliver",
+        serde_json::json!({
+            "issue": 12, "run_id": RUN_ID, "until": "verdict", "compact": true,
+        }),
+    ));
+    assert_eq!(compacted["reached"], "verdict", "{compacted}");
+    assert_eq!(
+        compacted["verdict"]["outcome"], "approved",
+        "deliver did not complete over its own compacted reads: {compacted}"
+    );
+}
+
+#[test]
+fn a_compact_publication_names_each_receipt_fact_once() {
+    let rig = tracker_rig();
+    let reviewer = tempfile::tempdir().expect("a reviewer directory");
+    let lane = serde_json::json!({"total_count": 1, "check_runs": [{
+        "name": "ci", "status": "completed", "conclusion": "success",
+    }]});
+    let world = published_world(
+        &rig,
+        "src/auth.rs",
+        lane,
+        &instant_reviewer(reviewer.path()),
+    );
+    let mut arguments = publish_arguments(&rig, &world);
+    arguments["compact"] = serde_json::json!(true);
+    let published = answer(&ask(&rig, &world, "publish_review", arguments));
+    let text = published.to_string();
+    for field in ["epoch", "head", "base", "digest"] {
+        let value = published[field].as_str().unwrap_or_default().to_owned();
+        assert!(
+            !value.is_empty(),
+            "the answer lost its {field}: {published}"
+        );
+        assert_eq!(
+            text.matches(&value).count(),
+            1,
+            "{field} is named more than once: {text}"
+        );
+    }
+    assert!(
+        published["review_status"].get("receipt").is_none(),
+        "the embedded status repeats the publication's receipt: {published}"
+    );
+    assert!(
+        published["tier"].get("head").is_none() && published["tier"].get("base").is_none(),
+        "the tier repeats the publication's range: {published}"
+    );
+    let launched = published["review_start"]["launched"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(launched.len(), 4, "{published}");
+    for slot in &launched {
+        for repeated in ["ok", "issue", "epoch"] {
+            assert!(
+                slot.get(repeated).is_none(),
+                "a launched slot repeats {repeated}: {slot}"
+            );
+        }
+        assert!(
+            slot.get("job").is_some(),
+            "a launched slot lost its job: {slot}"
+        );
+    }
+    std::fs::write(reviewer.path().join("release"), "").expect("the reviewer is released");
+}
+
+#[test]
+fn a_compact_collect_names_the_slot_fields_once() {
+    let rig = tracker_rig();
+    let reviewer = tempfile::tempdir().expect("a reviewer directory");
+    let lane = serde_json::json!({"total_count": 0, "check_runs": []});
+    let world = world(
+        &rig,
+        "src/auth.rs",
+        "review",
+        lane,
+        &instant_reviewer(reviewer.path()),
+        false,
+    );
+    let names = offered(&rig, &world);
+    answer(&ask(
+        &rig,
+        &world,
+        "collect_review_input",
+        serde_json::json!({"issue": 12, "run_id": RUN_ID, "names": names, "launch": true}),
+    ));
+    let collected = answer(&ask(
+        &rig,
+        &world,
+        "collect_review_input",
+        serde_json::json!({
+            "issue": 12, "run_id": RUN_ID, "names": names,
+            "wait_seconds": 30, "compact": true,
+        }),
+    ));
+    let epoch = collected["epoch"]
+        .as_str()
+        .expect("the shared epoch is named once at the top");
+    let slots = collected["collected"]
+        .as_array()
+        .expect("the batch is answered");
+    assert!(!slots.is_empty(), "{collected}");
+    for slot in slots {
+        for repeated in ["ok", "issue", "epoch"] {
+            assert!(
+                slot.get(repeated).is_none(),
+                "a collected slot repeats {repeated}: {slot}"
+            );
+        }
+        assert!(
+            slot.get("findings_recorded").is_none(),
+            "a collected slot repeats its findings count: {slot}"
+        );
+        assert!(
+            slot.get("job").is_some(),
+            "a collected slot lost the running job id: {slot}"
+        );
+        assert!(!epoch.is_empty(), "{collected}");
+    }
+    std::fs::write(reviewer.path().join("release"), "").expect("the reviewer is released");
 }
 
 #[test]
