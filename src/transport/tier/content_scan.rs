@@ -403,19 +403,42 @@ fn has_unsafe_yaml_load(line: &str) -> Result<bool, Failure> {
     Ok(false)
 }
 
-fn is_comment_line(line: &str) -> bool {
+const CLOSED_COMMENTS: [(&str, &str); 4] = [
+    ("/*", "*/"),
+    ("<!--", "-->"),
+    ("'''", "'''"),
+    ("\"\"\"", "\"\"\""),
+];
+
+const AMBIGUOUS_COMMENTS: [&str; 3] = ["*", "#", "--"];
+
+fn is_comment_line(line: &str, code: &Regex) -> bool {
     let trimmed = line.trim();
-    ["//", "#", "--", "/*", "*", "<!--", "'''", "\"\"\""]
-        .iter()
-        .any(|prefix| trimmed.starts_with(prefix))
+    if trimmed.starts_with("//") {
+        return true;
+    }
+    for (open, close) in CLOSED_COMMENTS {
+        if let Some(rest) = trimmed.strip_prefix(open) {
+            return match rest.find(close) {
+                Some(at) => rest[at + close.len()..].trim().is_empty(),
+                None => true,
+            };
+        }
+    }
+    AMBIGUOUS_COMMENTS.iter().any(|marker| {
+        trimmed.strip_prefix(marker).is_some_and(|rest| {
+            (rest.is_empty() || rest.starts_with(char::is_whitespace)) && !code.is_match(rest)
+        })
+    })
 }
 
 fn dangerous_sink_families(
     logical_path: &str,
     line: &str,
+    comment: bool,
 ) -> Result<BTreeSet<&'static str>, Failure> {
     let mut families = BTreeSet::new();
-    if is_test_risk_path(logical_path) || is_comment_line(line) {
+    if is_test_risk_path(logical_path) || comment {
         return Ok(families);
     }
     let extension = ascii_lower(go_ext(logical_path));
@@ -557,7 +580,8 @@ fn scan_added_lines(
         } else if line.starts_with("@@") {
             in_hunk = true;
         } else if in_hunk && let Some(added) = line.strip_prefix('+') {
-            if !process_seen && !is_comment_line(added) && process.is_match(added) {
+            let comment = is_comment_line(added, process);
+            if !process_seen && !comment && process.is_match(added) {
                 reasons.push(RiskReason {
                     code: REASON_PROCESS_BOUNDARY,
                     signal: Some(SIGNAL_SHELL_PROCESS),
@@ -565,7 +589,7 @@ fn scan_added_lines(
                 });
                 process_seen = true;
             }
-            for family in dangerous_sink_families(current, added)? {
+            for family in dangerous_sink_families(current, added, comment)? {
                 if sinks_seen.insert(family) {
                     reasons.push(RiskReason {
                         code: REASON_DANGEROUS_SINK,

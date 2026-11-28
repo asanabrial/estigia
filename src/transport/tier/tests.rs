@@ -2262,6 +2262,85 @@ fn a_comment_naming_a_process_boundary_stays_below_high() {
 }
 
 #[test]
+fn a_dereference_assignment_that_spawns_reads_high() {
+    let answer = tier_after(
+        "src/lib.rs",
+        "x\n*slot = Command::new(\"sh\").arg(\"-c\").spawn();\n",
+    );
+    assert_eq!(answer["level"], "high", "{answer}");
+    assert!(
+        names_reason(&answer, "process_boundary", "shell_process"),
+        "{answer}"
+    );
+}
+
+#[test]
+fn a_block_comment_that_closes_onto_a_spawn_reads_high() {
+    let answer = tier_after("src/app.js", "x\n/* note */ execSync(cmd);\n");
+    assert_eq!(answer["level"], "high", "{answer}");
+    assert!(
+        names_reason(&answer, "process_boundary", "shell_process"),
+        "{answer}"
+    );
+}
+
+#[test]
+fn an_unambiguous_comment_naming_a_spawn_stays_below_high() {
+    for line in [
+        "// Command::new(\"sh\")",
+        "/* Command::new(\"sh\") */",
+        "<!-- Command::new(\"sh\") -->",
+        "'''Command::new(\"sh\")'''",
+        "\"\"\"Command::new(\"sh\")\"\"\"",
+    ] {
+        let answer = tier_after("src/lib.rs", &format!("x\n{line}\n"));
+        assert_ne!(answer["level"], "high", "{line}: {answer}");
+        assert!(
+            !names_reason(&answer, "process_boundary", "shell_process"),
+            "{line}: {answer}"
+        );
+    }
+}
+
+#[test]
+fn an_ambiguous_marker_followed_by_a_spawn_reads_high() {
+    for line in [
+        "* slot = Command::new(\"sh\").arg(\"-c\").spawn();",
+        "# Command::new(\"sh\").arg(\"-c\").spawn();",
+        "-- Command::new(\"sh\").arg(\"-c\").spawn();",
+    ] {
+        let answer = tier_after("src/lib.rs", &format!("x\n{line}\n"));
+        assert_eq!(answer["level"], "high", "{line}: {answer}");
+        assert!(
+            names_reason(&answer, "process_boundary", "shell_process"),
+            "{line}: {answer}"
+        );
+    }
+}
+
+#[test]
+fn a_dereference_assignment_that_reaches_a_sink_reads_high() {
+    let answer = tier_after("src/app.py", "x\n*x = pickle.loads(data)\n");
+    assert_eq!(answer["level"], "high", "{answer}");
+    assert!(
+        names_reason(&answer, "dangerous_sink", "unsafe_deserialization"),
+        "{answer}"
+    );
+}
+
+#[test]
+fn an_ambiguous_marker_naming_no_process_stays_below_high() {
+    for line in [
+        "* a line of prose",
+        "# a line of prose",
+        "-- a line of prose",
+    ] {
+        let answer = tier_after("src/lib.rs", &format!("x\n{line}\n"));
+        assert_ne!(answer["level"], "high", "{line}: {answer}");
+    }
+}
+
+#[test]
 fn a_real_process_boundary_in_source_still_reads_high() {
     let answer = tier_after(
         "src/lib.rs",
