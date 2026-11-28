@@ -10608,9 +10608,8 @@ pub fn release_ci(
 }
 
 /// The checkout whose clean target `release_ci` re-derives: the one named, else
-/// the one whose ownership marker names this issue when it stands at the
-/// published head, else the primary checkout when that one does, else the
-/// marked checkout, whose target then answers the mismatch honestly.
+/// the one whose ownership marker names this issue, else the primary checkout
+/// when it stands at the published head.
 ///
 /// Refuses `release-checkout-unresolved` rather than reading a primary checkout
 /// on another commit, which would answer `release-target-mismatch` about bytes
@@ -10624,18 +10623,19 @@ fn release_checkout(
     }
     let issue = crate::identity::Identity::Number(release.issue);
     let discovery = super::branch::discover_adopted_worktree(context, &issue);
-    let marked = discovery.as_ref().ok().cloned().flatten();
-    if let Some(marked) = &marked
-        && head_at(marked).as_deref() == Some(release.head)
-    {
-        return Ok(Some(marked.clone()));
+    if let Ok(Some(marked)) = discovery {
+        return Ok(Some(marked));
     }
-    let primary = head_at(&context.repo_dir);
+    let primary = super::run(
+        &["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        Some(&context.repo_dir),
+        super::How::tolerated(),
+    )
+    .ok()
+    .filter(|answer| answer.status == 0)
+    .map(|answer| answer.stdout.trim().to_owned());
     if primary.as_deref() == Some(release.head) {
         return Ok(None);
-    }
-    if marked.is_some() {
-        return Ok(marked);
     }
     Err(Failure::Stop(serde_json::json!({
         "ok": false,
@@ -10644,7 +10644,7 @@ fn release_checkout(
         "recorded_head": release.head,
         "primary_checkout": context.repo_dir.display().to_string(),
         "primary_head": primary,
-        "marked_checkout": match &discovery {
+        "marked_checkout": match discovery {
             Ok(_) => "no registered checkout carries a single ownership marker for this issue"
                 .to_owned(),
             Err(failure) => format!("the ownership markers could not be read: {failure:?}"),
@@ -10653,17 +10653,6 @@ fn release_checkout(
                    checkout the publication was made from, registered with this repository, \
                    and call again",
     })))
-}
-
-fn head_at(checkout: &std::path::Path) -> Option<String> {
-    super::run(
-        &["git", "rev-parse", "--verify", "HEAD^{commit}"],
-        Some(checkout),
-        super::How::tolerated(),
-    )
-    .ok()
-    .filter(|answer| answer.status == 0)
-    .map(|answer| answer.stdout.trim().to_owned())
 }
 
 /// Records that `release_ci` admitted these exact bytes, once per receipt: the

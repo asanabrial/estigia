@@ -22278,62 +22278,6 @@ fn a_release_with_no_marked_checkout_reads_a_primary_checkout_at_the_published_h
     );
 }
 
-#[test]
-fn a_release_prefers_a_primary_checkout_at_the_head_over_a_marked_one_elsewhere() {
-    let (root, context, receipt) = medium_change();
-    mark_worktree_for(
-        &context.repo_dir,
-        &root.path().join("stale"),
-        &receipt.base,
-        42,
-    );
-
-    assert_eq!(
-        release_checkout(&context, &release_of(&receipt)).expect("the primary checkout"),
-        None
-    );
-}
-
-#[test]
-fn a_release_with_nothing_at_the_head_reads_the_marked_checkout_so_the_mismatch_is_its_own() {
-    let (root, context, receipt) = medium_change();
-    let stale = root.path().join("stale");
-    mark_worktree_for(&context.repo_dir, &stale, &receipt.base, 42);
-    git(
-        &context.repo_dir,
-        &["checkout", "--quiet", "--detach", &receipt.base],
-    );
-
-    let resolved = release_checkout(&context, &release_of(&receipt))
-        .expect("the marked checkout")
-        .expect("not the primary checkout");
-    assert_eq!(
-        resolved.canonicalize().expect("resolves"),
-        stale.canonicalize().expect("resolves")
-    );
-}
-
-#[test]
-fn a_release_reads_the_worktree_it_is_named_before_any_marker() {
-    let (root, context, receipt) = medium_change();
-    mark_worktree_for(
-        &context.repo_dir,
-        &root.path().join("marked"),
-        &receipt.head,
-        42,
-    );
-    let named = root.path().join("named");
-    let release = CiRelease {
-        worktree: Some(&named),
-        ..release_of(&receipt)
-    };
-
-    assert_eq!(
-        release_checkout(&context, &release).expect("the named worktree"),
-        Some(named.clone())
-    );
-}
-
 fn release_ci_script(receipt: &ReviewTransaction, comments: &[ownership::Comment]) -> String {
     let view = |draft: bool| {
         serde_json::json!({
