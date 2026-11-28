@@ -204,11 +204,39 @@ name still dispatches and refuses with its own typed reason.
   they have left the menu altogether, their calls carried by arguments of `collect_review_input` and
   `deliver`, which are marked.
 - **`compact: true`** omits `build` from an answer and drops from `review_status`'s `next.arguments`
-  the receipt fields but `epoch`. A receipt-taking call that sends `epoch` and leaves out `pr`, `head`,
-  `base` or `digest` has them filled by the server from this run's pointer when it holds that epoch's
-  review transaction for the issue (`expanded_receipt`), and is refused for another epoch, so the model
-  never rebuilds a receipt; a compact `review_status` answer names its shape in `compact_version`. Without
-  it every answer is byte-identical to before.
+  the receipt fields, keeping `epoch`, which is the one a receipt-taking call names. A publication's
+  embedded status whose `next` is a `collect` also drops `epoch`, which a collect does not take. A
+  receipt-taking call that sends `epoch` and leaves out `pr`, `head`, `base` or `digest` has them
+  filled by the server from this run's pointer when it holds that epoch's review transaction for the
+  issue (`expanded_receipt`), and is refused for another epoch, so the model never rebuilds a
+  receipt; a compact answer names its shape in `compact_version`, now `2`. Without it every answer is
+  byte-identical to before.
+
+  The compact pass (`compact_answer` in `src/harness/mcp/mod.rs`) removes the facts an answer says
+  twice, by operation:
+  - `publish_review` and `republish_review`: the embedded `review_status.receipt` and its `ok` and
+    `issue` when the top level equals them; `tier.base` and `tier.head`; `ok`, `issue` and `epoch`
+    from each `review_start.launched` slot; and `digest` and `commands` from a checks answer embedded
+    in `review_start.launch_skipped.detail`.
+  - `claim`: `run_id`, `issue`, `branch` and `worktree` from `start_branch.ownership`;
+    `transition.labels_after`, which is required to be `status:<to>`; `transition.board_column_after`
+    unless `board_repair` is present; and `attempted` from every board form.
+  - `collect_review_input`: `ok` and `issue` from each collected slot, and the shared `epoch`, named
+    once at the top; `findings_recorded`, which is `findings.len()`; and each finding's `lens`, which
+    is the slot's `name`. A collected slot keeps its `job`, and launch answers keep `launch` and
+    `name`.
+  - `run_checks`: `digest` and `commands`, which no next call takes.
+  - `deliver`: `issue`, `epoch`, `pr`, `head`, `base`, `digest` and `lane` from `release` where the
+    answer's own top level holds the same value; `release.transition.delivery`, which repeats
+    `merged`; and the `spend` record the caller sent.
+  - `task`: the `text` and `evidence` the caller sent.
+
+  Measured through the MCP server, both answers to the fixtures named beside them:
+
+  | Operation | Before (bytes) | After (bytes) | What moved |
+  |---|---:|---:|---|
+  | `publish_review` with `start_review`, one check, four launched slots (`a_compact_publication_names_each_receipt_fact_once`) | 2,768 | 1,872 | embedded receipt, tier range, slot echoes, next epoch |
+  | `claim` with `branch`, `base` and `transition_to` (`a_compact_claim_creates_the_checkout_and_names_it_once`) | 1,391 | 972 | ownership copy, `labels_after`, board read-back, `attempted` |
 - **`review_read` with `view: target`** answers the brief form by default, so the manifest, about 100
   bytes per tracked file, is paid only by a call that passes `manifest`.
 - **`republish_review`** stays a tool of its own although its arguments equal `publish_review`'s: its

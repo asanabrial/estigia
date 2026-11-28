@@ -207,3 +207,21 @@ fn no_findings_role_is_told_to_state_that_it_found_nothing() {
         );
     }
 }
+
+#[test]
+fn a_findings_role_is_told_a_causal_location_stays_inside_one_run_of_added_lines() {
+    for role in Role::ALL
+        .into_iter()
+        .filter(|role| role.answer() == Answer::Findings)
+    {
+        let text = prompt_for(role, &[]);
+        let (_, answer) = text
+            .split_once("## Answer format")
+            .expect("an answer section");
+        assert!(
+            answer.contains("one unbroken run of `+` lines")
+                && answer.contains("not a span from one run to another"),
+            "{role:?}: {answer}"
+        );
+    }
+}

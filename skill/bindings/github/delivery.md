@@ -527,13 +527,13 @@ open with its closing note already posted — retry only the bare `gh issue clos
 the note.
 
 `deliver` writes the closing note itself: a one-line summary in `Summary language`, then the agent's
-appendix. The receipt, tier and lens roles, computed verdict, findings by class, checks receipt when
-one exists, CI summary, merge commit and parents, spend and run id are the delivery's own record, kept
-off GitHub. It closes the GitHub issue if the merge left it open and reads it back.
+appendix. The full record — receipt, tier, verdict, findings, checks receipt, CI, merge, spend and run
+id — is kept off GitHub. It closes the GitHub issue if the merge left it open and reads it back.
 
-State what was actually verified: review verdict, CI run or checks, measured numbers, tests run, PR,
-**the delivering commit SHA**, and every version tag or Release published.
-Never write just "done"; the state already says that, and the comment exists to show what earned it.
+The appendix is the note's only agent-written text, so state there what was actually verified: review
+verdict, CI run or checks, measured numbers, tests run, PR, **the delivering commit SHA**, and every
+version tag or Release published. Never write just "done"; the state already says that, and the note
+exists to show what earned it.
 
 **A shared GitHub account cannot manufacture independent approval.** The workflow's reviewer is a
 fresh reasoning context, but GitHub sees the authenticated account, not that context. When the same

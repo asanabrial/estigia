@@ -2357,6 +2357,10 @@ fn the_task_tool_answers_compact_through_the_server() {
         "the compact argument never reached the transport: {compact}"
     );
     assert_eq!(compact["task"]["id"], "T1", "{compact}");
+    assert!(
+        compact["task"].get("text").is_none() && compact["task"].get("evidence").is_none(),
+        "the compact answer echoes the text the caller sent: {compact}"
+    );
     let legacy = parse(&legacy);
     assert_eq!(
         legacy["tasks"].as_array().map(Vec::len),
@@ -10484,6 +10488,128 @@ fn a_compact_answer_keeps_an_expected_epoch_and_every_slot_of_a_mixed_collect() 
 }
 
 #[test]
+fn a_compact_collection_names_a_shared_epoch_once_and_strips_each_findings_lens() {
+    let finding = json!({
+        "id": "f1",
+        "class": "suggestion",
+        "blocking": false,
+        "lens": "review-risk",
+        "location": "src/auth.rs:1",
+    });
+    let mut shared = json!({
+        "ok": true,
+        "issue": 5,
+        "collected": [
+            {"ok": true, "issue": 5, "epoch": "e1", "name": "review-risk", "job": "j1",
+             "findings_recorded": 1, "findings": [finding]},
+            {"ok": true, "issue": 5, "epoch": "e1", "name": "review-readback", "job": "j2",
+             "findings_recorded": 0, "findings": []},
+        ],
+    });
+    super::compact_collected(&mut shared);
+    assert_eq!(shared["epoch"], "e1", "{shared}");
+    for slot in shared["collected"].as_array().expect("slots") {
+        assert!(
+            slot.get("epoch").is_none(),
+            "a slot repeats the batch's shared epoch: {shared}"
+        );
+        assert!(
+            slot.get("findings_recorded").is_none(),
+            "a slot repeats its findings count: {shared}"
+        );
+    }
+    assert!(
+        shared["collected"][0]["findings"][0].get("lens").is_none(),
+        "a finding repeats the slot's name: {shared}"
+    );
+    assert_eq!(
+        shared["collected"][0]["findings"][0]["id"], "f1",
+        "{shared}"
+    );
+    assert_eq!(
+        shared["collected"][0]["findings"][0]["location"], "src/auth.rs:1",
+        "{shared}"
+    );
+
+    let mut mixed = json!({
+        "ok": true,
+        "issue": 5,
+        "collected": [
+            {"ok": true, "issue": 5, "epoch": "e1", "name": "review-risk", "job": "j1"},
+            {"ok": true, "issue": 5, "epoch": "e2", "name": "review-readback", "job": "j2"},
+        ],
+    });
+    super::compact_collected(&mut mixed);
+    assert!(
+        mixed.get("epoch").is_none(),
+        "a batch whose slots disagree named one epoch at the top: {mixed}"
+    );
+    assert_eq!(mixed["collected"][0]["epoch"], "e1", "{mixed}");
+    assert_eq!(mixed["collected"][1]["epoch"], "e2", "{mixed}");
+}
+
+#[test]
+fn a_compact_delivery_keeps_a_receipt_the_answer_names_nowhere_else() {
+    let lane = json!({"state": "green", "rollup": "none"});
+    let receipt = json!({"epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"});
+    let mut until_ci = json!({
+        "ok": true,
+        "delivered": false,
+        "reached": "ci",
+        "verdict": {"outcome": "approved", "issue": 5},
+        "release": {
+            "ok": true, "issue": 5, "epoch": "e1", "pr": 7, "head": "h",
+            "base": "b", "digest": "d", "ci_released": true, "lane": lane,
+        },
+        "lane": lane,
+    });
+    super::compact_deliver(&mut until_ci);
+    for field in ["epoch", "pr", "head", "base", "digest"] {
+        assert_eq!(
+            until_ci["release"][field], receipt[field],
+            "the compact delivery dropped the only {field} it names: {until_ci}"
+        );
+    }
+    assert!(
+        until_ci["release"].get("lane").is_none(),
+        "the compact delivery repeats the lane its top level names: {until_ci}"
+    );
+    assert_eq!(until_ci["lane"], lane, "{until_ci}");
+
+    let mut closed = json!({
+        "ok": true,
+        "delivered": true,
+        "issue": 5,
+        "pr": 7,
+        "merged": {"sha": "m", "parents": ["a", "b"]},
+        "release": {
+            "ok": true, "issue": 5, "assignee_kept": false,
+            "checkout": {"put_down": true},
+            "transition": {"to": "done", "delivery": {"merge_commit": "m"}},
+            "spend": {"tokens": 1},
+        },
+    });
+    super::compact_deliver(&mut closed);
+    assert!(
+        closed["release"].get("issue").is_none(),
+        "the compact delivery repeats the issue its top level names: {closed}"
+    );
+    assert!(
+        closed["release"].get("spend").is_none(),
+        "the compact delivery echoes the spend the caller sent: {closed}"
+    );
+    assert!(
+        closed["release"]["transition"].get("delivery").is_none(),
+        "the compact delivery repeats the merge under the transition: {closed}"
+    );
+    assert_eq!(
+        closed["release"]["checkout"],
+        json!({"put_down": true}),
+        "{closed}"
+    );
+}
+
+#[test]
 fn a_compacted_execute_answer_expands_back_to_the_arguments_it_dropped() {
     let (_root, context) = pointer_with_receipt("claude-expand0a1b2c3d");
     let full =
@@ -10873,6 +10999,23 @@ fn a_compact_publication_drops_the_receipt_its_embedded_status_repeats() {
         body["pr"], 7,
         "the publication's own fields were touched: {body}"
     );
+}
+
+#[test]
+fn a_publication_whose_status_carries_no_next_is_compacted_without_a_panic() {
+    let mut body = json!({
+        "ok": true,
+        "issue": 42,
+        "review_status": {"ok": true, "issue": 42},
+        "tier": {"base": "b".repeat(40), "head": "a".repeat(40)},
+    });
+    super::compact_answer("publish_review", &mut body);
+    assert_eq!(
+        body["tier"],
+        json!({}),
+        "the compaction did not run: {body}"
+    );
+    assert!(body["review_status"].is_object(), "{body}");
 }
 
 #[test]

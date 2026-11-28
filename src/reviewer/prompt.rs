@@ -182,8 +182,12 @@ fn answer_section(role: Role) -> String {
              \"evidence_class\": \"<{evidence}; required for severe>\", \
              \"causal_disposition\": \"<{causal}; required for severe>\", \
              \"origin\": \"<{origin}; only for a severe finding new to a repair>\", \
-             \"parent\": \"<id of the finding this reassesses, optional>\"}}]}}\n\nAn empty \
-             `findings` list says the sweep found nothing.",
+             \"parent\": \"<id of the finding this reassesses, optional>\"}}]}}\n\nA \
+             `severe` finding disposed `introduced` or `worsened` names in `location` only \
+             lines of one unbroken run of `+` lines in the diff above \u{2014} not a context \
+             line, and not a span from one run to another \u{2014} or the whole answer is \
+             discarded. Where a defect reaches over several runs, locate it on the one that \
+             carries it.\n\nAn empty `findings` list says the sweep found nothing.",
             classes = FINDING_CLASSES.join("|"),
             evidence = FINDING_EVIDENCE_CLASSES.join("|"),
             causal = FINDING_CAUSAL_DISPOSITIONS.join("|"),
