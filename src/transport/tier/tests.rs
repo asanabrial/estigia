@@ -656,8 +656,7 @@ fn the_review_tier_answer_states_the_forecast_line_for_each_tier() {
     let head = commit_file(at, "docs/guide.md", b"start\nmore prose\n", false);
     let low = review_tier(&test_context(at), &base, &head, None, None).expect("an answer");
     assert_eq!(
-        low["forecast"],
-        "low: no lenses, about 0 tokens against a Review budget of 150000 per context",
+        low["forecast"], "low: no lenses, no spend is forecast",
         "{low}"
     );
 
@@ -669,7 +668,7 @@ fn the_review_tier_answer_states_the_forecast_line_for_each_tier() {
         review_tier(&test_context(at), &base, &head, None, Some("risk")).expect("an answer");
     assert_eq!(
         medium["forecast"],
-        "medium: 1 lens (review-risk), about 150000 tokens against a Review budget of 150000 per context",
+        "medium: 1 lens (review-risk), up to 150000 tokens, the Review budget per context",
         "{medium}"
     );
     let mut budgeted = test_context(at);
@@ -681,7 +680,7 @@ fn the_review_tier_answer_states_the_forecast_line_for_each_tier() {
     let medium = review_tier(&budgeted, &base, &head, None, None).expect("an answer");
     assert_eq!(
         medium["forecast"],
-        "medium: 1 lens (review-reliability), about 100000 tokens against a Review budget of 100000 per context",
+        "medium: 1 lens (review-reliability), up to 100000 tokens, the Review budget per context",
         "{medium}"
     );
     budgeted.config[0].1 = "none".to_owned();
@@ -699,7 +698,7 @@ fn the_review_tier_answer_states_the_forecast_line_for_each_tier() {
     let high = review_tier(&test_context(at), &base, &head, None, None).expect("an answer");
     assert_eq!(
         high["forecast"],
-        "high: 4 lenses (review-risk, review-readback, review-readability, review-reliability), about 600000 tokens against a Review budget of 150000 per context",
+        "high: 4 lenses (review-risk, review-readback, review-readability, review-reliability), up to 150000 tokens, the Review budget per context",
         "{high}"
     );
 }
@@ -1189,7 +1188,7 @@ fn a_repair_answer_forecasts_the_panel_it_licenses_and_the_delta_lens_prices_two
     let ordinary = repair(&context, None);
     assert_eq!(
         ordinary["forecast"],
-        "medium: 1 lens (review-reliability), about 150000 tokens against a Review budget of 150000 per context",
+        "medium: 1 lens (review-reliability), up to 150000 tokens, the Review budget per context",
         "{ordinary}"
     );
     let severe = repair(&context, Some("severe"));
@@ -1199,7 +1198,7 @@ fn a_repair_answer_forecasts_the_panel_it_licenses_and_the_delta_lens_prices_two
     assert_eq!(widened["panel"], "lens", "{widened}");
     assert_eq!(
         widened["forecast"],
-        "medium: 2 lenses (review-reliability, review-lens), about 300000 tokens against a Review budget of 150000 per context",
+        "medium: 2 lenses (review-reliability, review-lens), up to 150000 tokens, the Review budget per context",
         "{widened}"
     );
 

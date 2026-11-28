@@ -215,12 +215,12 @@ review tier, the lens and the finding do not establish.
     produced `evidence_class` and `causal_disposition`: what reaches `record_review_finding` is
     whatever the orchestrator passes. `RiskLevel::lenses` and `--lens` validation are enforced in code;
     the launch that turns a count into a subagent call is read by an agent from prose.
-  - **The five lens definitions' stale-prose floor is written and not crossed.** They carry the
-    never-`severe` treatment of stale prose and its carve-out, but
+  - **The five lens definitions' stale-prose floor is written and not crossed.** `LENS_RULES`
+    (`src/skill.rs`) carries the never-`severe` treatment of stale prose and its carve-out once for
+    all five templates, so they cannot disagree with each other; but
     `the_stale_prose_rule_and_its_carve_out_reach_both_carriers` (`tests/payload.rs`) crosses
     `STALE_PROSE_NEVER_SEVERE` and `CARVE_OUT_BOUND` (`src/skill.rs`) against the two judge carriers
-    only. The lens copies are paraphrases no test crosses, so nothing keeps them agreeing with the
-    constants or each other.
+    only, so nothing keeps that one paraphrase agreeing with the constants.
 
 - **A lens count is a fixed allocation per tier, not a risk dial, and `RiskLevel::lenses` cannot
   silently answer zero for a new tier.** A lens is one narrow question, and N copies of it measure how

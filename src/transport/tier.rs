@@ -504,10 +504,12 @@ fn forecast_line(answer: &serde_json::Value, budget: crate::config::ReviewBudget
         crate::config::ReviewBudget::Off => {
             "no Review budget is declared, so no spend is forecast".to_owned()
         }
-        crate::config::ReviewBudget::Tokens(per_context) => format!(
-            "about {} tokens against a Review budget of {per_context} per context",
-            u64::from(per_context) * (roles.len() as u64)
-        ),
+        crate::config::ReviewBudget::Tokens(_) if roles.is_empty() => {
+            "no spend is forecast".to_owned()
+        }
+        crate::config::ReviewBudget::Tokens(per_context) => {
+            format!("up to {per_context} tokens, the Review budget per context")
+        }
     };
     format!("{level}: {lenses}, {spend}")
 }

@@ -110,6 +110,7 @@ fn body_of(template: &str) -> String {
     let body = crate::harness::roles::frontmatter(template)
         .and_then(|frontmatter| trimmed.get("---".len() + frontmatter.len() + "\n---".len()..))
         .unwrap_or(trimmed);
+    let body = crate::skill::with_lens_rules(body);
     without_tool_grant_rule(body.trim()).trim().to_owned()
 }
 

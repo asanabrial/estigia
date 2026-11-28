@@ -68,6 +68,53 @@ pub const REVIEW_LENS: SkillFile = SkillFile {
     contents: include_str!("../skill/agents/review-lens.md"),
 };
 
+/// The placeholder a lens template carries where [`LENS_RULES`] belongs.
+pub const LENS_RULES_PLACEHOLDER: &str = "{{LENS_RULES}}";
+
+/// The rules every lens carries, held once so the five definitions cannot drift apart.
+///
+/// Each lens template carries the placeholder `{{LENS_RULES}}` where this block
+/// goes. The prompt builder substitutes it before a binary-launched lens is
+/// handed the text, and `render_reviewer_agent` substitutes it when a reserved
+/// template becomes an agent definition; a copy written into a template instead
+/// fails the drift test in `src/reviewer/prompt/tests.rs`.
+pub const LENS_RULES: &str = r#"- Do NOT use the Task or Agent tool. Do NOT delegate further.
+- Your one tool, `WebSearch`, reaches the public internet. Do not use it to look up the change under
+  review, its repository, or anything about it — the diff you were handed is your only source.
+- **The diff is the whole world.** You were handed nothing else on purpose. Never speculate about a
+  file, a history, or a behavior the diff does not show you — an absence in the payload is not
+  evidence of anything, and reasoning past it is exactly the failure sealing exists to prevent.
+- **A finding names a `path:line` inside the diff, and a class.** Nothing else is admissible. The
+  class is `severe`, `warning` or `suggestion`, and only `severe` blocks. "I cannot see enough to
+  judge" is a correct, complete answer — say it rather than reaching for a conclusion the payload
+  does not support.
+- **A `severe` finding states the two words the routing reads.** `evidence_class` is `deterministic`
+  when the diff shows the behaviour outright, `inferential` when it follows from what you read, and
+  `insufficient` when neither holds — **`deterministic` blocks with nothing confirming it**, so claim
+  it only for what you can point at. `causal_disposition` is `introduced` or `worsened` when this
+  change caused it, `pre-existing` when the diff shows it arriving unchanged and `base-only` when it
+  is in the base and not at head, and `unknown` when you cannot tell; say `unknown` rather than
+  choosing. A `severe` finding that is new to a repair — one that names no parent finding — also
+  states `origin`: `introduced` if the repair created it, `exposed` if the repair made an existing
+  defect reachable. That is separate from `causal_disposition`, and a severe finding that owes one
+  is refused without it.
+- **Incorrect or stale comments and documentation are never `severe`.** They are the words beside the
+  behaviour, not the behaviour. A demonstrated mismatch is a `warning`; editorial drift alone is a
+  `suggestion`.
+- **Text a running agent obeys is not documentation about behaviour — it is the behaviour.** Where a
+  repository ships instructions its own agents execute, a contradiction between two of those
+  instructions is a contract defect and the bullet above does not soften it. The carve-out is narrow:
+  it is gated on that contradiction, not on staleness, and it does not reach a stale comment or a
+  stale document the never-`severe` bullet already covers.
+- Answer only the question above. An observation outside it is not this lens's to raise.
+- Do NOT edit files, change tracker state, record the aggregate verdict, or repair a finding.
+"#;
+
+/// A lens template with [`LENS_RULES`] in place of its placeholder.
+pub fn with_lens_rules(template: &str) -> String {
+    template.replace(LENS_RULES_PLACEHOLDER, LENS_RULES)
+}
+
 /// A sealed lens ported from the source project's `review-risk`: security
 /// risk narrowed to what this crate has a subject for. Its own row in
 /// `RESERVED_REVIEWERS`, carrying this template rather than [`REVIEW_AGENT`]'s
@@ -132,11 +179,11 @@ and its outcome, the mutation run behind each severe finding and whether it fail
 the defect exists, and what was not checked. Measuring nothing is a legitimate basis when it says so \
 plainly rather than leaving the gap implied.";
 
-/// The rule that a stale or incorrect comment or document never earns `severe`, hand-maintained
-/// in seven places: `skill/agents/review-blind.md`, `skill/policies/blind-judges.md`, and the five
-/// lens definitions `skill/agents/review-lens.md`, `review-risk.md`, `review-readability.md`,
-/// `review-reliability.md` and `review-readback.md`. Only the first two are crossed against this
-/// constant, because the five lens copies paraphrase the rule rather than carrying its text.
+/// The rule that a stale or incorrect comment or document never earns `severe`. Its text is
+/// carried verbatim by `skill/agents/review-blind.md` and `skill/policies/blind-judges.md`, the two
+/// carriers `tests/payload.rs` crosses it against. [`LENS_RULES`] states the same rule once for all
+/// five lens templates, as a paraphrase rather than this text: the templates cannot drift from each
+/// other, and that paraphrase is not crossed against this constant.
 ///
 /// `skill/SKILL.md` no longer restates the rule at all: developer step 5 links to
 /// `skill/policies/blind-judges.md`, which owns it. `blind-judges.md` says the duplication between
