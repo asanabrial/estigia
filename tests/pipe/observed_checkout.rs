@@ -3803,7 +3803,7 @@ fn a_session_started_in_a_herdr_pane_records_it_and_one_started_outside_carries_
 /// `claim` makes leaves it, or the next write from the new worktree is measured against
 /// a run that does not cover it.
 #[test]
-fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
+fn a_compact_claim_creates_the_checkout_and_names_it_once() {
     let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let origin = tempfile::tempdir().expect("a bare origin");
@@ -3883,6 +3883,8 @@ fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
                 "branch": branch,
                 "base": base,
                 "worktree_root": trees.path().display().to_string(),
+                "transition_to": "in-progress",
+                "compact": true,
             } },
         });
         let output = tracker_command(home, repo, bin, &answers)
@@ -3916,6 +3918,37 @@ fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
     let created = answer["start_branch"]["worktree"]
         .as_str()
         .expect("the checkout is named");
+    let encoded = serde_json::to_string(created).expect("a path serialises");
+    assert_eq!(
+        answer.to_string().matches(&encoded).count(),
+        1,
+        "the compact claim names its checkout more than once: {answer}"
+    );
+    let ownership = &answer["start_branch"]["ownership"];
+    for repeated in ["run_id", "issue", "branch", "worktree"] {
+        assert!(
+            ownership.get(repeated).is_none(),
+            "the ownership record repeats {repeated}: {answer}"
+        );
+    }
+    assert!(
+        ownership.get("claimed_at").is_some(),
+        "the ownership record lost what it alone says: {answer}"
+    );
+    let transition = &answer["transition"];
+    assert_eq!(transition["to"], "in-progress", "{answer}");
+    assert!(
+        transition.get("labels_after").is_none(),
+        "the transition repeats the one label it is required to produce: {answer}"
+    );
+    assert!(
+        transition.get("board_column_after").is_none(),
+        "a transition with no repair repeats its board read-back: {answer}"
+    );
+    assert!(
+        transition["board"].get("attempted").is_none(),
+        "the board says it was attempted, which every path says: {answer}"
+    );
     assert!(
         worktree_registered(repo, std::path::Path::new(created)),
         "{created} is not a registered worktree"
