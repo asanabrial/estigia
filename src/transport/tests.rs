@@ -29,7 +29,10 @@ fn process_arguments_preserve_non_utf8_path_bytes() {
             argument,
         ],
         None,
-        How::read(),
+        How {
+            timeout: None,
+            ..How::read()
+        },
     )
     .expect("the process receives the path argument");
     assert_eq!(
@@ -197,10 +200,31 @@ fn a_grandchild_holding_the_pipe_does_not_hold_the_call() {
 }
 
 #[cfg(unix)]
+fn timed_write(script: &str, seconds: u64) -> Result<Output, Failure> {
+    run(
+        &["sh", "-c", script],
+        None,
+        How {
+            timeout: Some(std::time::Duration::from_secs(seconds)),
+            ..How::write()
+        },
+    )
+}
+
+#[cfg(unix)]
 #[test]
-fn a_timeout_is_still_a_timeout() {
-    let failure = timed("sleep 30", 1).expect_err("the child outlives its deadline");
+fn a_timed_write_that_outlives_its_deadline_is_an_ambiguous_write() {
+    let failure = timed_write("sleep 30", 1).expect_err("the child outlives its deadline");
     assert!(matches!(failure, Failure::Timeout(_)), "{failure:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_expired_read_is_a_failed_read_never_an_ambiguous_write() {
+    let failure = timed("sleep 30", 1).expect_err("the child outlives its deadline");
+    assert!(matches!(failure, Failure::Read(_)), "{failure:?}");
+    assert_eq!(failure.code(), 3);
+    assert_eq!(failure.envelope()["reason"], "read-failed");
 }
 
 #[cfg(unix)]
