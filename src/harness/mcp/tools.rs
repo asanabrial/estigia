@@ -1215,8 +1215,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "worktree_root",
                 "string",
-                "Where the checkout is made, as for `start_branch`. Defaults to the configured \
-                 location.",
+                "Where the checkout is made. Defaults to the configured location.",
             ),
             Argument::optional(
                 "several",
@@ -1254,7 +1253,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "worktree_root",
                 "string",
-                "`claim` only: where the checkout is made, as for `start_branch`.",
+                "`claim` only: where the checkout is made. Defaults to the configured location.",
             ),
             Argument::optional(
                 "wait_seconds",

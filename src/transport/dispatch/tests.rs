@@ -999,6 +999,67 @@ fn a_merged_release_refuses_what_it_can_before_it_writes() {
     assert_eq!(phase["reason"], "invalid-spend-phase", "{phase}");
 }
 
+#[test]
+fn a_release_that_closes_a_delivery_needs_a_live_claim_or_a_named_epoch() {
+    let root = tempfile::tempdir().expect("a context root");
+    let context = context(root.path());
+    let issue = 7u64;
+    let run_id = "claude-abcd1234";
+    let target = "a".repeat(32);
+    let operation = "b".repeat(32);
+    let claim = crate::transport::markers::render(
+        "claim",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("horizon", "2026-01-01T00:00Z"),
+            ("op-id", &target),
+        ],
+    )
+    .expect("a claim marker");
+    let payload = serde_json::json!({
+        "state": "OPEN",
+        "assignees": [],
+        "labels": [],
+        "comments": [{
+            "id": "IC_claim",
+            "createdAt": "2025-12-31T00:00:00Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("Claimed.\n\n{claim}\n"),
+        }],
+    });
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(issue, payload)]);
+    let spend = spend_object("review", 1).to_string();
+    let envelope = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        super::dispatch(
+            &context,
+            "unassign",
+            &[
+                "--issue",
+                "7",
+                "--run-id",
+                run_id,
+                "--runtime",
+                "claude",
+                "--operation-id",
+                &operation,
+                "--spend",
+                &spend,
+            ]
+            .iter()
+            .map(|part| (*part).to_owned())
+            .collect::<Vec<_>>(),
+            "2026-01-02T00:00:00Z",
+        )
+    })
+    .expect_err("a release that closes a delivery without a live claim was accepted")
+    .envelope();
+    assert_eq!(envelope["reason"], "malformed-argument", "{envelope}");
+    assert_eq!(envelope["argument"], "--spend", "{envelope}");
+}
+
 /// A merged `claim` accepts the state it moves to and refuses a claim with no
 /// state to move to exactly as the separate calls do.
 ///
@@ -1217,7 +1278,7 @@ fn a_mode_flag_given_without_its_mode_is_refused() {
         .envelope()
     };
 
-    let cases: [(&str, &[&str], &str); 6] = [
+    let cases: [(&str, &[&str], &str); 13] = [
         (
             "claim",
             &[
@@ -1248,6 +1309,80 @@ fn a_mode_flag_given_without_its_mode_is_refused() {
                 "/no/such/reason",
             ],
             "--reason-file",
+        ),
+        (
+            "claim",
+            &[
+                "--issue",
+                "7",
+                "--run-id",
+                "run",
+                "--takeover",
+                "--branch",
+                "fix",
+            ],
+            "--branch",
+        ),
+        (
+            "claim",
+            &[
+                "--issue",
+                "7",
+                "--run-id",
+                "run",
+                "--takeover",
+                "--transition-to",
+                "review",
+            ],
+            "--transition-to",
+        ),
+        (
+            "claim",
+            &[
+                "--issue",
+                "7",
+                "--run-id",
+                "run",
+                "--takeover",
+                "--base",
+                "main",
+            ],
+            "--base",
+        ),
+        (
+            "claim",
+            &[
+                "--issue",
+                "7",
+                "--run-id",
+                "run",
+                "--takeover",
+                "--worktree-root",
+                "/no/such/worktree",
+            ],
+            "--worktree-root",
+        ),
+        (
+            "claim",
+            &["--issue", "7", "--run-id", "run", "--takeover", "--no-link"],
+            "--no-link",
+        ),
+        (
+            "claim",
+            &["--issue", "7", "--run-id", "run", "--no-link"],
+            "--no-link",
+        ),
+        (
+            "claim",
+            &[
+                "--issue",
+                "7",
+                "--run-id",
+                "run",
+                "--worktree-root",
+                "/no/such/worktree",
+            ],
+            "--worktree-root",
         ),
         (
             "review-tier",

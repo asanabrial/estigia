@@ -39,7 +39,9 @@ pub(crate) use close::{DeliveryClose, verified_delivery, verified_delivery_close
 pub(crate) use computed::{Settled, settle_severe};
 pub use recover::{RecoverReview, host_repo_of, recover_review};
 pub use status::review_status;
-pub(crate) use status::{Judged, current_review_transaction, repo_of, review_judged};
+pub(crate) use status::{
+    Judged, collectable_inputs, current_review_transaction, repo_of, review_judged,
+};
 pub use validator::{VALIDATOR_ATTEMPTS, ValidatorResultReview, record_validator_result};
 
 pub use computed::{
