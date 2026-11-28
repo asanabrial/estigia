@@ -189,24 +189,26 @@ impl Tool {
     }
 }
 
-const RUN_ID: Argument = Argument::required(
-    "run_id",
-    "string",
-    "This run's id, as SessionStart reported it.",
-);
-const ISSUE: Argument = Argument::required("issue", "integer", "Issue number.").counting_from(1);
+const RUN_ID: Argument = Argument::required("run_id", "string", "");
+const ISSUE: Argument = Argument::required("issue", "integer", "").counting_from(1);
 const FILING_REPO: Argument = Argument::optional(
     "repo",
     "string",
     "Repository to file in, `owner/name`; defaults to this checkout's. Starts unclaimed. The \
      destination's window decides.",
 );
-const RECEIPT_EPOCH: Argument = Argument::required("epoch", "string", "Publication epoch.");
-const RECEIPT_PR: Argument =
-    Argument::required("pr", "integer", "Pull request number.").counting_from(1);
-const RECEIPT_HEAD: Argument = Argument::required("head", "string", "Published head SHA.");
-const RECEIPT_BASE: Argument = Argument::required("base", "string", "Published base SHA.");
-const RECEIPT_DIGEST: Argument = Argument::required("digest", "string", "Target manifest digest.");
+const RECEIPT_EPOCH: Argument = Argument::required("epoch", "string", "");
+const RECEIPT_PR: Argument = Argument::required("pr", "integer", "").counting_from(1);
+const RECEIPT_HEAD: Argument = Argument::required("head", "string", "");
+const RECEIPT_BASE: Argument = Argument::required("base", "string", "");
+const RECEIPT_DIGEST: Argument = Argument::required("digest", "string", "");
+
+const SPEND: Argument = Argument::optional(
+    "spend",
+    "string",
+    "One JSON object or an array of `phase`, `conditions`, `input`, `tokens`, `seconds`, \
+     `contexts` and optional `note`.",
+);
 // `assist` reads a Linear key (`ENG-123`) as readily as a GitHub number, so its
 // issue argument is a string; `dispatch` parses whichever it is.
 const ISSUE_ANY: Argument = Argument::required(
@@ -316,10 +318,10 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "claim",
         contract_name: "claim",
-        description: "Swear to an issue. Adjudicated by the local store; the earliest live \
-                      claim wins, and a repository write the gate sees is then measured \
-                      against it. `takeover` answers twice: repeat with `target_operation`, \
-                      and a live holder needs a person's `hand-over` before the write.",
+        description: "Swear to an issue. The earliest live claim wins; \
+                      a repository write the gate sees is measured against it. \
+                      `takeover` answers twice: repeat with `target_operation`; \
+                      a live holder needs a person's `hand-over`.",
         operation: "claim",
         arguments: &[
             ISSUE,
@@ -462,11 +464,10 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "comment",
         contract_name: "comment",
-        description: "Record evidence on the issue. Generic text can never become a control \
-                      event: markers in it are escaped. With `expect_state`, renew the claim \
-                      first and record a renewal (`heartbeat`, `progress` or `blocked`); renewal \
-                      first, post second, and it refuses to post when the renewal says stop. \
-                      Without `expect_state`, a plain `note`, `blocker` or `diagnosis`.",
+        description: "Record evidence on the issue. With `expect_state`, renew the claim and \
+                      record a renewal (`heartbeat`, `progress` or `blocked`); without it, a \
+                      plain `note`, `blocker` or `diagnosis`. Markers in generic text are \
+                      escaped, and a renewal that says stop posts nothing.",
         operation: "comment",
         arguments: &[
             ISSUE,
@@ -488,8 +489,8 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "expect_state",
                 "string",
-                "The state this run believes the issue is in. Given, the call renews the claim \
-                 before it records, as `heartbeat` did.",
+                "The state this run believes the issue is in; given, the call renews the claim \
+                 before it records.",
             )
             .of(crate::config::STATES),
         ],
@@ -582,11 +583,10 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "inbox",
         contract_name: "inbox",
-        description: "List this run's mail, or what it sent, without consuming it; `read` and \
-                      `ack` mark one received message and are its own acts. Delivery stays at \
-                      hook points. With `wait: true`, block until the first unread message to \
-                      this run matching `type`, `thread` and `from` arrives, and answer exactly \
-                      that one as delivered, or a timeout. Mail decides no permission or gate.",
+        description: "List this run's mail, or what it sent; `read` and `ack` mark one \
+                      received message. With `wait: true`, block until the first unread message \
+                      matching `type`, `thread` and `from` arrives, and answer that one as \
+                      delivered, or a timeout.",
         operation: "inbox",
         arguments: &[
             RUN_ID,
@@ -624,9 +624,9 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "task",
         description: "Record or revise one row of the claimed issue's task checklist in the \
                       local store: a stable id, its acceptance, the route used and, once done, \
-                      the commit identity or, when the work is not a commit, an `evidence` note \
-                      naming where it is recorded. Needs the live claim; nothing reaches the tracker. The answer carries the changed row and the checklist as `tasks` \
-                      summarises it, or with `compact` the changed row alone.",
+                      the commit identity or an `evidence` note. Needs the live claim. The answer \
+                      carries the changed row and the checklist, or with `compact` the changed \
+                      row alone.",
         operation: "task",
         arguments: &[
             ISSUE,
@@ -721,13 +721,7 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "Path to the close-evidence note. Omit to post none.",
             ),
-            Argument::optional(
-                "spend",
-                "string",
-                "One JSON object or an array: `phase`, `conditions`, `input`, `tokens`, \
-                 `seconds`, `contexts`, optional `note`. The receipt fields default to the \
-                 held review transaction. All checked before any write. Omit to record none.",
-            ),
+            SPEND,
         ],
         effect: PointerEffect::Forget,
         writes: true,
@@ -762,13 +756,7 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "Who or what can discharge the blocker.",
             ),
-            Argument::optional(
-                "spend",
-                "string",
-                "One JSON object or an array: `phase`, `conditions`, `input`, `tokens`, \
-                 `seconds`, `contexts`, optional `note`. The receipt fields default to the \
-                 held review transaction. All checked before any write. Omit to record none.",
-            ),
+            SPEND,
         ],
         effect: PointerEffect::Forget,
         writes: true,
@@ -892,14 +880,12 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "record_disposition",
         contract_name: "review_disposition",
-        description: "Record an optional disposition batch against an exact review transaction: \
-                      `acted-on`, `filed` (with `filed_as`, the issue it became) or `declined`, \
-                      each with a reason, for `warning` and `suggestion` findings the receipt \
-                      recorded. Nothing owes this record. Refused: an id whose every recording is \
-                      `severe` (the computed verdict adjudicates it; one also recorded as \
-                      non-severe is answered for that non-severe recording), an id the receipt \
-                      never recorded, a duplicate, a blank or filler reason, a `filed` entry \
-                      naming no issue. A retry reads back the recorded batch.",
+        description: "Record a disposition batch against an exact review transaction: \
+                      `acted-on`, `filed` (with `filed_as`), or `declined`, each with a reason, \
+                      for `warning` and `suggestion` findings the receipt recorded. Refuses an \
+                      id whose every recording is `severe`; a mixed-class identity is answered \
+                      for its non-severe recording. Also refused: an unrecorded id, a duplicate, \
+                      a blank reason, or `filed` without an issue. A retry reads back the batch.",
         operation: "review-disposition",
         arguments: &[
             ISSUE,
@@ -923,12 +909,11 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "collect_review_input",
         contract_name: "collect_review_input",
-        description: "Record what started reviewers answered: `name`/`names`, by the launching run, for \
-                      slots it offers. A running job is refused unless `wait_seconds` is given; a \
-                      batch reports it and continues. A bad or repeated answer writes nothing. \
-                      `launch: true` starts each named reviewer detached; `checks: true` runs the \
-                      declared checks for the published digest, and with `launch: true` starts \
-                      every slot they held back once they pass. Requires a live review claim.",
+        description: "Record what started reviewers answered, for the slots `review_status` \
+                      offered. `launch: true` starts each named reviewer; `checks: true` runs the \
+                      declared checks and, with `launch`, starts every slot a passing receipt \
+                      held back. A running job needs `wait_seconds`; a bad or repeated answer \
+                      writes nothing.",
         operation: "collect-review-input",
         arguments: &[
             ISSUE,
@@ -1155,13 +1140,11 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "deliver",
         contract_name: "deliver",
-        description: "The tail after `publish_review` in one call: finished lenses collected, \
-                      computed verdict, CI release, \
-                      CI, merge through the `gh pr merge` gate, topology readback, close \
-                      with generated evidence. `until` stops earlier. \
-                      Answers `delivered`, `pending` with `ask_after` (call again; no landed write \
-                      repeats) or `stopped` with `step`, `reason` and any `next`; nothing is \
-                      written past a stop.",
+        description: "The tail after `publish_review` in one call: collect finished lenses, \
+                      compute the verdict, release CI, merge through the `gh pr merge` gate, \
+                      read topology back and close with generated evidence. `until` stops earlier. \
+                      Answers `delivered`, `pending` with `ask_after`, or `stopped` with `step`, \
+                      `reason` and any `next`.",
         operation: "deliver",
         arguments: &[
             ISSUE,
@@ -1172,11 +1155,7 @@ pub const TOOLS: &[Tool] = &[
                 "The longest a pending step waits inside this call, 1-900; default 20.",
             )
             .counting_from(1),
-            Argument::optional(
-                "spend",
-                "string",
-                "As `release`'s `spend`: the close records it, receipt fields defaulted.",
-            ),
+            SPEND,
             Argument::optional(
                 "appendix_file",
                 "string",
@@ -1326,15 +1305,12 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "review_stages",
         contract_name: "review stages",
-        description: "Where an assisted run's pull request stands in `External reviewers`, read \
-                      from GitHub: a check still running, comments to address, a review to \
-                      request or awaited, the merge awaited, or merged. Review comments come back \
-                       as data, including open threads from all authors. `expected_head` pins the \
-                       reading; `wait_seconds` polls CI for that head (0-300). Every push requires \
-                       a new reading. `request_review` asks for the current stage's review. `ci` \
-                       is `passed`, `failed` (with `failing_checks`), `pending`, `missing` or \
-                       `none` (no CI was seen, never a pass). An autonomous run gets its \
-                       receipt's `ci` and `open_threads`, no position.",
+        description: "Where an assisted run's pull request stands in `External reviewers`: a \
+                      check still running, comments to address, a review to request or awaited, \
+                      the merge awaited, or merged. `expected_head` pins the reading; \
+                      `wait_seconds` polls CI for that head (0-300). `request_review` asks for the \
+                      current stage's review. `ci` is `passed`, `failed` (with `failing_checks`), \
+                      `pending`, `missing` or `none`.",
         operation: "review-stages",
         arguments: &[
             RUN_ID,
@@ -1377,30 +1353,22 @@ pub const TOOLS: &[Tool] = &[
         name: "review_read",
         contract_name: "review_read",
         description: "One read of a review transaction, chosen by `view`. `transaction` is the \
-                      recorded publication for one epoch: topology, repair lineage, the lane's \
-                      note and workflows, and the autoclose verdict. `findings` is every finding \
-                      recorded against the receipt, `verdict` the verdict the ledger computes, \
-                      `membership` whether a candidate file is a genuine subset of the payload, \
-                      `inspect` what a correction changed over its parent, `spend` every \
-                      measurement of one phase. `tier` is the review tier for one base/head \
-                      pair, derived from the change alone: `high` when a hot-path token, an \
-                      adjacent `service`/`token` path pair, a shell-source extension or an \
-                      execute-bit flip is touched; `low` when at least one path changed and \
-                      every authored byte is proven passive prose and nothing configures \
-                      anything; `medium` otherwise, including a range that changed no path \
-                      (`nothing_measured`, never `low`). `lenses` is a fixed allocation per \
-                      tier: `medium` answers one lens, the `focus` argument's (default \
-                      `reliability`); `high` answers four lenses, `review-risk`, \
-                      `review-readback`, `review-readability` and `review-reliability`; `low` \
-                      answers zero. `target` is the delivery target of a \
-                      base: base, head, digest, path count. `tier` and `target` read git alone \
+                      recorded publication for one epoch; `findings` every finding against the \
+                      receipt; `verdict` what the ledger computes; `membership` whether a \
+                      candidate file is a subset of the payload; `inspect` what a correction \
+                      changed over its parent; `spend` every measurement of one phase; `tier` the \
+                      review tier for one base/head pair; `target` the delivery target of a base. \
+                      `lenses` is a fixed allocation per tier: `medium` answers one lens, the \
+                      `focus` argument's (default `reliability`); `high` answers four lenses, \
+                      `review-risk`, `review-readback`, `review-readability` and \
+                      `review-reliability`; `low` answers zero. `tier` and `target` read git alone \
                       and take no `issue`. Read-only, no claim.",
         operation: "review-read",
         arguments: &[
             Argument::optional(
                 "issue",
                 "integer",
-                "Issue number. Every view but `tier` and `target` needs it.",
+                "Every view but `tier` and `target` needs it.",
             )
             .counting_from(1),
             Argument::required(
@@ -2442,8 +2410,10 @@ impl Tool {
             properties.insert(argument.name.to_owned(), {
                 let mut property = json!({
                     "type": argument.json_type,
-                    "description": argument.description,
                 });
+                if !argument.description.is_empty() {
+                    property["description"] = json!(argument.description);
+                }
                 // Published, not merely enforced: an agent that cannot see
                 // the vocabulary guesses at it, and every wrong guess costs
                 // a whole call.
@@ -2452,9 +2422,6 @@ impl Tool {
                 }
                 if let Some(choices) = argument.choices {
                     property["enum"] = json!(choices);
-                }
-                if let Some(least) = argument.least {
-                    property["minimum"] = json!(least);
                 }
                 property
             });
@@ -2477,10 +2444,15 @@ impl Tool {
                 "properties": properties,
                 "required": required,
             },
-            "annotations": {
-                "readOnlyHint": !self.writes,
-            },
         });
+        if self.description.is_empty()
+            && let Some(object) = schema.as_object_mut()
+        {
+            object.remove("description");
+        }
+        if !self.writes {
+            schema["annotations"] = json!({"readOnlyHint": true});
+        }
         if ALWAYS_LOADED.contains(&self.name) {
             schema["_meta"] = json!({"anthropic/alwaysLoad": true});
         }

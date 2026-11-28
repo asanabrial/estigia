@@ -215,8 +215,8 @@ to a base that did not advance past the parent's. A first publication is never b
 only `budget-candidate-tree` is written for it.
 
 `--with-review` adds the review tier and the first `review_status` to the answer. A
-failed read is reported under `review_reads_unavailable`, not refused: a second
-publication mints a new epoch. `--start-review` implies it, moves the issue to `review` and launches
+failed read is reported under `review_reads_unavailable`, not refused.
+`--start-review` implies it, moves the issue to `review` and launches
 every `collect_review_input` input with `launch: true` unless the lane is `red` or unreadable; the outcome is
 `review_start`. `--record-verdict` on `collect_review_input` records the computed verdict only when
 nothing runs and `review_status` finds the verdict computable; else it returns that status.

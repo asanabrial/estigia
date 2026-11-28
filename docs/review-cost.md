@@ -162,6 +162,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `heartbeat`, `blocked_until`, `ensure_states` and `start_branch` absorb into `comment`, `transition` and `claim`; `comment` and `transition` gain the merged arguments | 33 | 52,798 |
 | `send_message` takes `question`, `inbox` takes `wait`; `record_spend` becomes `spend` on `release`, `handoff_review` and `deliver`; `handoff`, `list_sessions` and `judge_workspaces` become CLI commands | 27 | 46,607 |
 | `edit_pr` joins for assisted pull request metadata edits | 28 | 45,407 |
+| Four descriptions corrected, then the default `annotations`, `minimum`, the `run_id` sentence and repeated receipt prose trimmed | 28 | 39,754 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
@@ -170,7 +171,7 @@ rest were absorbed by a surviving name reached through a parameter or a `view`. 
 difference. It is the largest list a process can answer, the unreadable-context one.
 
 A turn pays only for the `ALWAYS_LOADED` schemas on a host that honours the mark:
-`ALWAYS_LOADED_CEILING` in `src/harness/mcp/tests.rs` bounds them at 10,921 bytes, since a name that
+`ALWAYS_LOADED_CEILING` in `src/harness/mcp/tests.rs` bounds them at 9,657 bytes, since a name that
 absorbs another's arguments grows them while the menu shrinks. That is
 why `transition` grew when it took `blocked_until`'s clause, even as four tools left the menu.
 
@@ -210,7 +211,9 @@ name still dispatches and refuses with its own typed reason.
   filled by the server from this run's pointer when it holds that epoch's review transaction for the
   issue (`expanded_receipt`), and is refused for another epoch, so the model never rebuilds a
   receipt; a compact answer names its shape in `compact_version`, now `2`. Without it every answer is
-  byte-identical to before.
+  byte-identical to before. Dropping `compact` from the schemas was considered and rejected: it is one
+  boolean on 28 tools, about a kilobyte of the list, and it is the only way a caller asks for the
+  shape that omits `build` from every answer.
 
   The compact pass (`compact_answer` in `src/harness/mcp/mod.rs`) removes the facts an answer says
   twice, by operation:
