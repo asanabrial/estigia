@@ -386,7 +386,7 @@ fn envelope_detail(answer: &Answer, context: &str) -> String {
         .into_iter()
         .flatten()
         .filter(|(key, _)| !matches!(key.as_str(), "ok" | "reason" | "action" | "world"))
-        .filter_map(|(key, value)| scalar_text(value).map(|text| format!("{key}: {text}")))
+        .filter_map(|(key, value)| field_text(value).map(|text| format!("{key}: {text}")))
         .collect();
     if fields.is_empty() {
         format!("{context}: the transport exited {}", answer.code)
@@ -395,17 +395,24 @@ fn envelope_detail(answer: &Answer, context: &str) -> String {
     }
 }
 
-fn scalar_text(value: &Value) -> Option<String> {
+fn field_text(value: &Value) -> Option<String> {
     match value {
         Value::String(text) => Some(text.clone()),
-        Value::Number(number) => Some(number.to_string()),
-        Value::Bool(flag) => Some(flag.to_string()),
-        Value::Array(items) => {
-            let texts: Vec<String> = items.iter().filter_map(scalar_text).collect();
-            (texts.len() == items.len()).then(|| texts.join(" | "))
-        }
-        Value::Null | Value::Object(_) => None,
+        Value::Number(_) | Value::Bool(_) => Some(value.to_string()),
+        Value::Array(items) if items.iter().all(is_scalar) => Some(
+            items
+                .iter()
+                .filter_map(field_text)
+                .collect::<Vec<_>>()
+                .join(" | "),
+        ),
+        Value::Array(_) | Value::Object(_) => Some(value.to_string()),
+        Value::Null => None,
     }
+}
+
+fn is_scalar(value: &Value) -> bool {
+    matches!(value, Value::String(_) | Value::Number(_) | Value::Bool(_))
 }
 
 /// The transport's `reason` strings, as `&'static str` codes.
@@ -858,10 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn an_envelope_field_that_is_not_scalar_is_dropped_and_a_scalar_is_repeated() {
-        // The honesty sentence this holds: the fallback repeats a scalar-valued
-        // field beside the ones the refusal is built from, and drops a null or
-        // an object rather than naming it.
+    fn an_envelope_object_is_rendered_as_json_a_null_is_dropped_and_a_scalar_is_repeated() {
         let refusal = translate(
             &answer(
                 2,
@@ -875,6 +879,7 @@ mod tests {
                     "flag": true,
                     "listed": ["a", "b"],
                     "object_field": {"reason": "inner"},
+                    "mixed_list": [{"path": "a"}, "b"],
                     "null_field": null,
                 }),
             ),
@@ -888,6 +893,7 @@ mod tests {
             "count: 3",
             "flag: true",
             "listed: a | b",
+            r#"mixed_list: [{"path":"a"},"b"]"#,
         ] {
             assert!(
                 refusal.message.contains(repeated),
@@ -896,8 +902,10 @@ mod tests {
             );
         }
         assert!(
-            !refusal.message.contains("object_field"),
-            "an object value was named rather than dropped: {}",
+            refusal
+                .message
+                .contains(r#"object_field: {"reason":"inner"}"#),
+            "an object value was dropped rather than rendered: {}",
             refusal.message
         );
         assert!(
@@ -905,6 +913,35 @@ mod tests {
             "a null value was named rather than dropped: {}",
             refusal.message
         );
+    }
+
+    #[test]
+    fn a_release_target_mismatch_names_the_recorded_and_the_derived_target() {
+        let failure = crate::transport::Failure::Stop(json!({
+            "ok": false,
+            "reason": "release-target-mismatch",
+            "recorded": {"head": "796d9f8", "base": "5b83ab3", "digest": "9999"},
+            "derived": {"head": "5b83ab3", "base": "5b83ab3", "digest": "aaaa"},
+            "action": "do not release CI; republish the current clean target",
+        }));
+        let refusal = translate(
+            &Answer {
+                code: failure.code(),
+                body: Some(failure.envelope()),
+            },
+            "release_ci",
+        )
+        .expect("a stop is a refusal");
+        for named in [
+            r#"recorded: {"head":"796d9f8","base":"5b83ab3","digest":"9999"}"#,
+            r#"derived: {"head":"5b83ab3","base":"5b83ab3","digest":"aaaa"}"#,
+        ] {
+            assert!(
+                refusal.message.contains(named),
+                "the mismatch lost {named}: {}",
+                refusal.message
+            );
+        }
     }
 
     #[test]

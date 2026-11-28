@@ -461,6 +461,7 @@ const REFUSED: &[&str] = &[
     "refutation-includes-deterministic-finding",
     "refutation-unknown-finding",
     "rejected-on-insufficient-evidence",
+    "release-checkout-unresolved",
     "release-repository-mismatch",
     "renewal-kind-unsupported",
     "republish-before-panel-reported",

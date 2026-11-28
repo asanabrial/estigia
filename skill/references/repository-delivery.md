@@ -29,7 +29,7 @@ never waives exact-SHA review, tests, CI, authority checks, or any stricter repo
 
 **The candidate is the publication, and no review is due before one.** Estigia reviews one candidate
 per publication: the pull request `publish_review` records an epoch, head, base and digest for. A
-commit is not a candidate — a verdict binds that receipt, and `record_computed_verdict` refuses one
+commit is not a candidate — a verdict binds that receipt, and `deliver` with `until: verdict` refuses one
 without it — so nothing obliges a unit of work to be committed on its own as a review boundary, and
 there is no "review due" question to ask between the first write and the publication. Its answer
 would always be the publication step `SKILL.md` already states: publish, then transition to
@@ -42,10 +42,10 @@ review and its own `release_ci` — under the one claim that covers the issue, a
 a receipt to its own pull request, so an earlier slice's receipt stays usable after a later one
 publishes, and each slice's first publication records no lineage from another. Every slice but the last starts its branch with `no_link: true`, so its merge does not close the issue. Only `stacked-to-main` is taken: every slice's base is the default branch, and a chain
 targeting another branch is declined because it conflicts with the merge-parents rule and
-`target`'s base. `Change size` stays a planning heuristic, and a single larger coherent pull
+the base `review_read` with `view: target` reports. `Change size` stays a planning heuristic, and a single larger coherent pull
 request remains the ordinary answer when splitting would reduce review quality.
 
-The reads that exist answer the questions that do: `review_tier` sizes
+The reads that exist answer the questions that do: `review_read` with `view: tier` sizes
 the panel a range licenses — with `parent_head` for a repair — and `review_status`'s `corrections`
 answers whether the lineage of the issue's latest publication
 has spent its corrections.
@@ -141,7 +141,7 @@ CI are already bound to. What is required instead is to CLASSIFY later movement:
 | the merge result could not be established | integrate; an unanswered merge is never "compatible", and the whole change is re-reviewed |
 
 Textual disjointness is evidence, not proof: two files that never overlap can still have to change
-together. `target` reports refs, changed paths and the read-only merge result; whether the change
+together. `review_read` with `view: target` reports refs, changed paths and the read-only merge result; whether the change
 still MEANS what it did is a judgement, and it stays with the reviewer.
 
 An operator may override any of this. When `~/.agents/AGENTS.md` exists it is the canonical
@@ -173,7 +173,7 @@ Publish the configured review target as a draft before moving work to review. Re
 review request when resuming; duplicate review targets split evidence. A reused ready PR must become
 draft and be read back before push. A new PR is created draft after a topic push that does not trigger
 CI. Capture epoch, PR, head, base, target digest and payload digest, and require every independent
-verdict to identify that full receipt. `launch_review_input` builds each reviewer's payload itself, so ask for `inline_payload` only
+verdict to identify that full receipt. `collect_review_input` with `launch: true` builds each reviewer's payload itself, so ask for `inline_payload` only
 for a reviewer you launch yourself (Judgment Day, a `handoff_review` host) and hand it over
 as the primary evidence, naming the specific claims the change makes about text the payload does not
 show and reserving the checkout for those. An oversize payload refuses
@@ -205,7 +205,7 @@ the receipt if the jobs go green; a red re-run, or either condition failing, is 
 launch knowing the computed verdict may not be recordable; absent, proceed; disabled, CI cannot run, so proceed
 and merge as *CI, merge and delivery* states for such a repository; unreadable, not clearance.
 `start_review` skips a red or unreadable lane; nothing else refuses launches.
-`record_computed_verdict`
+`deliver` with `until: verdict`
 refuses an approval for a head whose lane is red or unfinished, so a platform-only failure is
 found before rounds are spent. A repository with no dispatchable lane has
 no check runs on its head, which proceeds unchanged: Estigia does not parse consumer YAML for the

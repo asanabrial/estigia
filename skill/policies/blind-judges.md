@@ -1,8 +1,8 @@
 # Blind judges
 
-Ordinary review here is the lenses `review_tier` licenses — none at `low`, one at `medium`, four at
+Ordinary review here is the lenses the `review_read` view `tier` licenses — none at `low`, one at `medium`, four at
 `high` — plus the refuter when a standing finding owes one, at most the `Corrections per lineage` corrections and each one's targeted
-validator. It acquires no judge at any tier: `review_tier` answers no judge count, and the computed
+validator. It acquires no judge at any tier: the `review_read` view `tier` answers no judge count, and the computed
 verdict `release_ci` requires reads lens reports and the finding ledger alone. This document states
 ordinary review's settlement — what a finding is, what the ledger computes, refutation, the one
 correction and its validator — because that is what `skill/SKILL.md` developer step 5 routes to.
@@ -21,11 +21,11 @@ them and what a correction costs; none of them convenes a judge.
 
 ### Lens acquisition
 
-`review_tier` answers a lens count beside its tier, and `lens_roles` names what it licenses. The
+`review_read` with `view: tier` answers a lens count beside its tier, and `lens_roles` names what it licenses. The
 verification table: `low` is structural readback only and acquires none; `medium` acquires one lens, the `focus`'s —
 `risk`, `resilience`, `readability` or `reliability`, default `reliability`, with `resilience` filled by
 `review-readback`; `high` acquires four lenses, `review-risk`, `review-readback`,
-`review-readability` and `review-reliability`. `review_tier`'s `raise` lifts a tier to `high` for a risk the
+`review-readability` and `review-reliability`. The `raise` on `review_read` with `view: tier` lifts a tier to `high` for a risk the
 diff cannot show and never lowers one: `authorization`, `migration`, `input`, `concurrency`, `irreversibility` or
 `contract`, with a reason, the binary (`RISK_ITEMS`) being the authority on the list. `publish_review` records the raise and the gate reads it. A tier that cannot be read is `high`, never
 permission to acquire less. `review-lens` is in no tier's allocation: only the delta-lens republish
@@ -263,7 +263,7 @@ contains it, and `git merge-tree` merges the parent head and that base without a
 correction's own diff is the one from that merged tree to the head, and the validator is offered over
 it. When the history was rewritten (`"history-rewritten"`), or the merge does not integrate cleanly,
 `review_read` with `view: verdict` answers `validator-delta-carries-upstream` and `review_status`
-offers no validator. `launch_review_input` launches it, as the `review-validator` input of that
+offers no validator. `collect_review_input` with `launch: true` launches it, as the `review-validator` input of that
 `collect`: the first installed `claude` or `codex` CLI, with no tools, handed the exact receipt, the
 correction's diff over its parent (`parent.head..head`, or the merged tree to the head when the
 correction integrated a moved base; not the whole change) and the parent receipt's severe
@@ -367,7 +367,7 @@ delta lens to it.** Two separate sentences, and the first is the one that matter
 the panel recorded through capture clears a repair at all.** A finding the publishing run wrote about
 its own receipt — any class — licenses the republish and nothing narrower: `licensed_lens_roles` answers
 no delta panel, so the whole change's own tier runs, which is what keeps an author from buying new code
-a reader of its own. When the clearing finding does come from the panel, `review_tier` with
+a reader of its own. When the clearing finding does come from the panel, `review_read` with `view: tier` and
 `parent_head` takes its class as `clearing_finding`, and when it names `warning` or `suggestion` over
 the repair's own honest narrow range whose level is not `high`, `review-lens` is **added** to the
 lenses `level` allocates rather than put in their place: the delta tier's own lens runs beside it at
@@ -478,7 +478,7 @@ never becomes the thing that is delivered.
 
 **Enforced, mechanically:** the draft barrier, one computed exact-receipt verdict, the exact
 review transaction, Claude's reserved-role prelaunch checks, the **publication lane refusal** —
-`record_computed_verdict` will not bank an approval for a head whose dispatched CI lane is red or
+`deliver` with `until: verdict` will not bank an approval for a head whose dispatched CI lane is red or
 still running — the **retirement of the aggregate verdict**, which is why no tool records an aggregate verdict under a reviewer's name, the **receipt currency**, which refuses a finding naming any receipt but
 the one under review, the **declaration gate**, which refuses a severe finding that states neither its
 evidence class nor its causal disposition and any finding whose declared word is outside those two
@@ -514,7 +514,7 @@ now legible enough to be argued with.
 `publish_review` keeps ordinary compatible CI behind a draft PR, records epoch/PR/head/base/digest, and
 starts one publication-lane run against the head it pushed. That last one is why the refusal above is
 mechanical rather than a rule somebody has to remember: the signal is collected at publication and the
-gate sits on the single writer of a verdict marker, `record_computed_verdict`, not in the prompt that launches the lenses. It is
+gate sits on the single writer of a verdict marker, `deliver` with `until: verdict`, not in the prompt that launches the lenses. It is
 not a proof that a lane exists — a repository without a dispatchable one has no check runs on its
 head, and that proceeds.
 `release_ci` replays the newest receipt on its own pull request, current draft PR and coherent clean target before
@@ -528,14 +528,14 @@ judges are `review-blind` and `review-blind-sealed`, one template rendered twice
 them. The seven other reserved names — the five sealed lenses `review-lens`,
 `review-risk`, `review-readability`, `review-reliability` and `review-readback`, the sealed refuter
 `review-refuter` and the sealed read-only validator `review-validator` — are installed by nothing:
-`launch_review_input` launches each from a template embedded in the binary, as **Lens acquisition**,
+`collect_review_input` with `launch: true` launches each from a template embedded in the binary, as **Lens acquisition**,
 **Refutation** and **The targeted validator** state, and setup retracts a copy an earlier build wrote.
 Judgment Day's two judge definitions are fixed, not configured: one sealed, one unsealed, launched
 only for Judgment Day.
 `Evidence standard` decides the unsealed grant; the sealed one is fixed. The two judge definitions carry the paragraph asking for
 what a closing statement rests on, applied when `setup` or `sync` next writes each file. For Judgment Day the orchestrator remains
 responsible for passing the effective judge model, launching both judges concurrently, withholding
-sibling output and preserving dissent. For ordinary review it remains responsible for calling `launch_review_input` for every
+sibling output and preserving dissent. For ordinary review it remains responsible for calling `collect_review_input` with `launch: true` for every
 lens slot `review_status` offers. That is a real contract, not mechanical proof that it happened.
 
 **What is still enforced around this:** the claim, the renewal before repository writes and at every

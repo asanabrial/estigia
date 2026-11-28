@@ -2245,8 +2245,9 @@ pub fn retired(name: &str) -> Option<&'static str> {
 /// see a name no call performs.
 pub const NOT_EXPOSED: &[(&str, &str)] = &[(
     "reclaim",
-    "exposed as `claim` with `takeover: true`, not as a tool of its own; the binding carries \
-     the operation at *reclaim* in `bindings/github.md`",
+    "exposed as `claim` with `takeover: true`, not as a tool of its own; \
+     `bindings/github.md` maps it and `bindings/github/operations.md` carries the operation at \
+     *Taking a live claim from another run*",
 )];
 
 /// The reason a name is deliberately not exposed, when it is one.

@@ -1616,6 +1616,255 @@ fn no_shipped_skill_file_names_an_operation_no_tool_performs() {
     );
 }
 
+const VALUE_MARKERS: [(&str, &[&str]); 3] = [
+    ("ask", &["permission", "posture", "cautious", "balanced"]),
+    (
+        "status",
+        &["sessions", "label", "store", "pr_review", "submit"],
+    ),
+    ("heartbeat", &["marker", "renews", "progress"]),
+];
+
+fn same_call(one: &str, other: &str) -> bool {
+    let (mut one, mut other) = (one.split_whitespace(), other.split_whitespace());
+    match (one.next(), other.next()) {
+        (Some(first), Some(second)) => first == second && one.next() == other.next(),
+        _ => false,
+    }
+}
+
+fn sentence_around(line: &str, start: usize) -> &str {
+    let begin = line[..start]
+        .rfind(['.', '!', '?', ':', ';'])
+        .map(|at| at + 1)
+        .unwrap_or(0);
+    let end = line[start..]
+        .find(['.', '!', '?'])
+        .map(|at| start + at + 1)
+        .unwrap_or(line.len());
+    line[begin..end].trim()
+}
+
+fn script_calls(line: &str) -> impl Iterator<Item = &str> {
+    line.match_indices("SCRIPT ")
+        .map(move |(at, marker)| {
+            let rest = &line[at + marker.len()..];
+            let end = rest
+                .find(|c: char| {
+                    !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+                })
+                .unwrap_or(rest.len());
+            &rest[..end]
+        })
+        .filter(|name| !name.is_empty())
+}
+
+fn retired_or_unrun(name: &str) -> Option<&'static str> {
+    tools::retired(name).or_else(|| {
+        NOT_RUN
+            .iter()
+            .find(|(word, _)| *word == name)
+            .map(|(_, why)| *why)
+    })
+}
+
+fn retired_or_unrun_call(name: &str) -> Option<&'static str> {
+    retired_or_unrun(name).or_else(|| retired_or_unrun(&spelling(name)))
+}
+
+fn contract_operations() -> Vec<String> {
+    crate::skill::FILES
+        .iter()
+        .find(|file| file.path == crate::skill::CONTRACT)
+        .and_then(|file| file.contents.lines().find(|line| line.contains("MUST map")))
+        .map(|line| {
+            backticked(line)
+                .into_iter()
+                .map(|(_, _, name)| name.to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn names_an_argument_in(sentence: &str, before: &str, name: &str) -> bool {
+    let in_position = ["'s ", " with ", " in ", " takes "]
+        .iter()
+        .any(|marker| before.ends_with(marker));
+    in_position
+        && every_row().any(|tool| {
+            tool.arguments.iter().any(|argument| argument.name == name)
+                && backticked(sentence).iter().any(|(_, _, span)| {
+                    same_call(span, tool.name) || same_call(span, tool.contract_name)
+                })
+        })
+}
+
+fn block_around(lines: &[&str], index: usize) -> String {
+    if lines[index].starts_with('|') || lines[index].starts_with('#') {
+        return lines[index].to_owned();
+    }
+    let mut start = index;
+    while start > 0
+        && !lines[start - 1].trim().is_empty()
+        && !lines[start - 1].starts_with('|')
+        && !lines[start - 1].starts_with('#')
+    {
+        start -= 1;
+    }
+    let mut end = index;
+    while end + 1 < lines.len()
+        && !lines[end + 1].trim().is_empty()
+        && !lines[end + 1].starts_with('|')
+        && !lines[end + 1].starts_with('#')
+    {
+        end += 1;
+    }
+    lines[start..=end].join(" ")
+}
+
+fn stale_names(path: &str, contents: &str, contract: &[String]) -> Vec<String> {
+    let lines: Vec<&str> = contents.lines().collect();
+    let mut stale = Vec::new();
+    let mut operations_table = false;
+    for (index, line) in lines.iter().copied().enumerate() {
+        if line.starts_with('|') {
+            let first = line
+                .split('|')
+                .nth(1)
+                .unwrap_or("")
+                .trim()
+                .trim_matches('`');
+            if first.eq_ignore_ascii_case("operation") {
+                operations_table = true;
+            }
+        } else if !line.trim().is_empty() {
+            operations_table = false;
+        }
+        for name in script_calls(line).filter(|name| retired_or_unrun_call(name).is_some()) {
+            stale.push(format!("{path}:{}: `SCRIPT {name}`", index + 1));
+        }
+        let prose = if operations_table && line.starts_with('|') {
+            line.splitn(3, '|').nth(2).unwrap_or("")
+        } else {
+            line
+        };
+        let context = block_around(&lines, index);
+        for (start, _, span) in backticked(prose) {
+            let Some(replacement) = retired_or_unrun(span) else {
+                continue;
+            };
+            if contract.iter().any(|name| name == span) {
+                continue;
+            }
+            let sentence = sentence_around(prose, start);
+            if sentence
+                .find('→')
+                .is_some_and(|arrow| sentence.find(span).is_some_and(|at| at < arrow))
+            {
+                continue;
+            }
+            if names_an_argument_in(&context, &prose[..start], span) {
+                continue;
+            }
+            if VALUE_MARKERS.iter().any(|(name, markers)| {
+                *name == span && markers.iter().any(|marker| context.contains(marker))
+            }) {
+                continue;
+            }
+            stale.push(format!(
+                "{path}:{}: `{span}` was retired — write {replacement} instead",
+                index + 1
+            ));
+        }
+    }
+    stale
+}
+
+#[test]
+fn no_shipped_skill_file_names_a_retired_tool_outside_a_mapping() {
+    let contract = contract_operations();
+    assert!(
+        contract.len() >= 10,
+        "the contract's required operations were not read: {contract:?}"
+    );
+    let mut stale: Vec<String> = Vec::new();
+    let mut scanned = 0;
+    for file in crate::skill::FILES {
+        scanned += file.contents.lines().count();
+        stale.extend(stale_names(file.path, file.contents, &contract));
+    }
+    assert!(
+        scanned > 1000,
+        "the shipped skill was not read: {scanned} lines"
+    );
+    assert!(
+        stale.is_empty(),
+        "these send a run to a name the server answers with a refusal:\n{}",
+        stale.join("\n")
+    );
+}
+
+#[test]
+fn the_retired_name_check_flags_the_lines_the_skill_must_not_carry() {
+    let contract = contract_operations();
+    let stale = stale_names(
+        "SKILL.md",
+        "Call `launch_review_input` for the slot.\n",
+        &contract,
+    );
+    assert_eq!(stale.len(), 1, "a retired call went unreported: {stale:?}");
+    let script = stale_names("SKILL.md", "| `x` | `SCRIPT review-tier` |\n", &contract);
+    assert_eq!(
+        script.len(),
+        1,
+        "a hyphenated SCRIPT call went unreported: {script:?}"
+    );
+    for clean in [
+        "| `claim` | `SCRIPT claim` |\n",
+        "- `start_branch` → `claim` with `branch`\n",
+        "the local store's answer (`sessions`, `status`)\n",
+    ] {
+        let reported = stale_names("SKILL.md", clean, &contract);
+        assert!(
+            reported.is_empty(),
+            "a clean line was reported: {reported:?}"
+        );
+    }
+}
+
+#[test]
+fn every_estigia_command_the_skill_names_is_a_subcommand() {
+    let mut commands: Vec<String> = Vec::new();
+    cli_names(
+        &<crate::cli::Cli as clap::CommandFactory>::command(),
+        &mut commands,
+    );
+    let mut missing = Vec::new();
+    for file in crate::skill::FILES {
+        for line in file.contents.lines() {
+            for (_, _, span) in backticked(line) {
+                let Some((command, rest)) = span.split_once(' ') else {
+                    continue;
+                };
+                if command != "estigia" {
+                    continue;
+                }
+                let Some(subcommand) = rest.split_whitespace().next() else {
+                    continue;
+                };
+                if !commands.iter().any(|name| name == &spelling(subcommand)) {
+                    missing.push(format!("{}: `{span}`", file.path));
+                }
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "these name an `estigia` command that is not a subcommand:\n{}",
+        missing.join("\n")
+    );
+}
+
 #[test]
 fn the_absorption_map_names_only_operations_no_tool_performs_and_answers_with_one_that_exists() {
     let callable = callable_names();
@@ -10207,6 +10456,15 @@ fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
         bytes <= ALWAYS_LOADED_CEILING,
         "the always-loaded schemas are {bytes} bytes against a ceiling of \
          {ALWAYS_LOADED_CEILING}: every turn pays them, so trim one or raise this in a reviewed edit"
+    );
+}
+
+#[test]
+fn the_documented_always_loaded_bound_is_the_ceiling_this_suite_holds() {
+    let doc = include_str!("../../../docs/review-cost.md").replace(',', "");
+    assert!(
+        doc.contains(&format!("bounds them at {ALWAYS_LOADED_CEILING} bytes")),
+        "docs/review-cost.md does not state the {ALWAYS_LOADED_CEILING}-byte bound this suite holds"
     );
 }
 

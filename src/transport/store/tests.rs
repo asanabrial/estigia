@@ -4241,6 +4241,23 @@ fn a_second_launch_of_one_job_reads_back_the_token_the_first_minted() {
 }
 
 #[test]
+fn a_relaunched_job_keeps_the_mint_time_the_first_launch_wrote() {
+    let (_directory, store) = open();
+    store
+        .mint_job_token("job-relaunched", 100)
+        .expect("the first mint");
+    store
+        .mint_job_token("job-relaunched", 200)
+        .expect("the second mint");
+    store.bound_job_tokens(150).expect("the bound");
+    assert_eq!(
+        store.job_token("job-relaunched").expect("the row reads"),
+        None,
+        "the relaunch moved the row's mint time, so the token outlived the bound its directory is pruned by"
+    );
+}
+
+#[test]
 fn both_launches_of_one_job_are_admitted_by_the_collector() {
     let (_directory, store) = open();
     let first = store

@@ -90,7 +90,7 @@ qualify. If the runtime or operator forbids delegation, use a separate session.
 
 For Claude Code, every setup installs two definitions, `review-blind` and `review-blind-sealed`,
 with `model: inherit`. The sealed lenses, the refuter and the validator are not installed:
-`launch_review_input` launches each from a template embedded in the binary, so neither of these two
+`collect_review_input` with `launch: true` launches each from a template embedded in the binary, so neither of these two
 paragraphs launches them and there is no hand launch — the launch gate refuses a `Task` launch of one
 of those seven names; `skill/SKILL.md` developer step 5 and
 `blind-judges.md`'s "Lens acquisition", "Refutation" and "The targeted validator" sections say how
@@ -126,15 +126,15 @@ performs the same recursive user-tree uniqueness preflight before writing. The t
 only nested `tool_input.subagent_type` is the launch target. An already-running reviewer always receives
 the embedded policy, never whatever is on disk. This does not alter ordinary project-first agent resolution and does not
 cover OpenCode launches. Absence of that reserved type is not an absent capability: a host without
-`review-blind` still gets the panel, because the binary launches it, after `publish_review` and a publication lane that is green, never-ran, absent, disabled, or has no lane at all (not red, not unreadable), `review_status` offers each lens the tier licenses as a `collect` input whose `capture` is `launch_review_input` — one at `medium`, four at `high` and none at `low`, except a `warning`- or `suggestion`-cleared repair over its own honest narrow non-`high` range, which `review_tier` with `parent_head` answers with the delta lens alone.
+`review-blind` still gets the panel, because the binary launches it, after `publish_review` and a publication lane that is green, never-ran, absent, disabled, or has no lane at all (not red, not unreadable), `review_status` offers each lens the tier licenses as a `collect` input whose `capture` is `collect_review_input` with `launch: true` — one at `medium`, four at `high` and none at `low`, except a `warning`- or `suggestion`-cleared repair over its own honest narrow non-`high` range, which `review_read` with `view: tier` and `parent_head` answers with the delta lens alone.
 The host calls `collect_review_input` with `launch: true` for offered inputs, then `collect_review_input` without it when their `capture` names it with no `launch`; `names` batches either call. `capture: null` means running: ask `review_status` again. The host launches no lens `Task` itself: the binary starts the first installed `claude` or `codex` CLI tool-less with the diff and criteria, recording findings and the lens report. Setup registers OpenCode's MCP server in `opencode.json`. With its review relay installed, or neither CLI available, launch answers `relay: true` and starts nothing. OpenCode's answer carries `launch: {agent, prompt, background: false}`: launch exactly that built-in `agent` with exactly that `prompt`, foreground. The `<!-- estigia:review name=<role> -->` marker lets `estigia-review-relay.js` supply the binary's prompt and privately admit the designated completed result, not its display wrapper. Background review is unsupported: after a lifecycle refusal, collect abandons the runner-less attempt (`capture-runner-lost`) and records the loss against the run, so ask status and relaunch on the same receipt — it runs the installed `claude` or `codex` CLI, not the relay. With neither installed the refusal names the CLI. Never treat a later background notification as admitted review.
 Acknowledgments precede the channel. After `capture-job-missing`, relaunch on the same receipt.
 Never name a reserved reviewer as the agent: `estigia setup opencode` installs none, and OpenCode refuses an unknown agent. That is a launch, not a handoff: `handoff_review` remains only for a host that can neither start a CLI nor relay. A CLI that is missing, out of quota or not logged in refuses the capture and records nothing, and the lens stays offered. A not-logged-in refusal names the `HOME` and config-dir variable the reviewer was launched with; compare that environment with the operator's before asking for a login, since the CLI may be logged in under a different one. Use a separate session or durable handoff only when that launch failed, never as the first move and never a smaller or serialized panel. A host that can call the tool and calls `handoff_review` without launching first is a defect against this sentence.
 
 Acquiring a reviewer is not gated on a row: a run acquires one when its runtime can provide one, and
 does so without asking. It does not make Estigia spawn a model for the work, open a session, or prove a
-context is independent; the one launch Estigia makes itself is the reviewer `launch_review_input`
-starts. Being able is not the only thing that decides it: a host whose always-loaded instructions
+context is independent; the one launch Estigia makes itself is the reviewer `collect_review_input`
+starts with `launch: true`. Being able is not the only thing that decides it: a host whose always-loaded instructions
 say to ask before launching a subagent does not make an authorised launch unauthorised, because
 Estigia writes the standing grant into that same always-loaded file — a launch is made and its result
 reported, not asked for again. When the host cannot spawn a helper at all, or every launch of the panel failed, use the

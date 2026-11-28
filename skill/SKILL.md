@@ -29,7 +29,7 @@ the install alias ([runtime notes](references/runtime-notes.md)).
 
 - Issue Flow owns roles, states, claims, and transitions; routed domains own value, priority, evidence, and done criteria. Neither side invents the other's policy.
 - An analyst, including an adversarial reviewer, is read-only: no branch, worktree, commit, PR, migration, sync, database write or delivery action, and no external system beyond the tracker operations required below. One bounded exception: a Judgment Day judge under `Evidence standard` `measuring` builds and mutates only inside the directory handed to it, outside the claimed checkout. It files at most one evidenced issue, save for the filing duty [blind judges](policies/blind-judges.md) places on the run that records the computed verdict — that run files one issue for every `severe` finding it records `pre-existing`, `base-only` or `unknown`, however many that is. Review MUST use a context that did not write the change.
-- Mint one `<runtime>-<session-prefix>` run-id and reuse it for every write. Write no `analyst:<runtime>` or `dev:<runtime>` label: Estigia removes a leftover `dev:` label and adds none. Attribution stays in the local store: no GitHub text or label names the run-id or a tool, or hides a marker.
+- Use the run id `SessionStart` reported, and reuse it for every write. Write no `analyst:<runtime>` or `dev:<runtime>` label: Estigia removes a leftover `dev:` label and adds none. Attribution stays in the local store: no GitHub text or label names the run-id or a tool, or hides a marker.
 - Resume this run's held issue before consulting queues, and use the selected binding's claim: the store adjudicates, and the earliest live claim wins. **The gate performs the pre-write verification** — a repository write it observes is re-verified whenever the renewal window has passed and at every expensive or irreversible boundary — so no separate `verify_claim` is needed first. An unreadable control surface permits no write; under `assisted` ([decision gates](references/decision-gates.md)) the local `assist` record stands in.
 - A closed `Git operation window` holds back only commits and remote writes: keep editing and testing, leave the work uncommitted, take the next issue with `claim` and `park: true`, and never seek `stand-down` or `disabled` to pass it ([delivery](bindings/github/delivery.md#the-repositorys-daily-schedule-for-pushes)). Tell the person to nudge it at `opens_at`.
 - Editing only the title or body of an issue or a pull request, as one plain `gh issue edit` or `gh pr edit` with `--title` or `--body-file`, is no repository write: either role does it freely.
@@ -145,5 +145,5 @@ machine-wide row, never widen it. `estigia config list` prints every row in forc
 
 <!-- issue-flow:config:end -->
 
-`Authorisation posture` sets both authorisations at once: `balanced` makes them `auto` and `cautious`
-`ask`, and an explicit authorisation row after it wins.
+`Authorisation posture` sets both authorisations at once: `balanced` makes them `auto` and `cautious` `ask`,
+and an explicit authorisation row after it wins.
