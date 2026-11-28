@@ -188,8 +188,8 @@ pub fn shipped_part(source: &str) -> String {
             Some(line) => line,
             None => source[..start].trim_end_matches([' ', '\t']).len(),
         };
-        if own_line.is_some() && source[..from].ends_with("\n\n") {
-            from -= 1;
+        if own_line.is_some() {
+            from -= blank_line_before(&source[..from]);
         }
         out.push_str(&source[copied..from]);
         copied = match own_line {
@@ -200,6 +200,16 @@ pub fn shipped_part(source: &str) -> String {
     }
     out.push_str(&source[copied..]);
     out
+}
+
+fn blank_line_before(source: &str) -> usize {
+    if source.ends_with("\r\n\r\n") {
+        2
+    } else if source.ends_with("\n\n") {
+        1
+    } else {
+        0
+    }
 }
 
 fn line_start(source: &str, at: usize) -> Option<usize> {
@@ -406,6 +416,30 @@ mod tests {
         assert_eq!(code.len(), source.len(), "{code:?}");
         assert!(!code.contains('ü'), "{code:?}");
         assert_eq!(code.find("fn f() {"), source.find("fn f() {"), "{code:?}");
+    }
+
+    #[test]
+    fn a_literal_brace_of_any_shape_does_not_close_the_test_module() {
+        for literal in [
+            "\"}\"", "\"{\"", "'}'", "'{'", "r#\"}\"#", "r\"{\"", "\"\\}\"", "'\\''",
+        ] {
+            let source = format!(
+                "fn ship() {{}}\n#[cfg(test)]\nmod tests {{\n    let held = {literal};\n    fn a() {{}}\n}}\nfn after() {{}}\n"
+            );
+            assert_eq!(
+                shipped_part(&source),
+                "fn ship() {}\nfn after() {}\n",
+                "the module holding {literal} was not removed whole"
+            );
+        }
+    }
+
+    #[test]
+    fn an_lf_and_a_crlf_blank_line_before_the_module_leave_the_same_shape() {
+        let lf = "fn ship() {}\n\n#[cfg(test)]\nmod tests {\n    fn a() {}\n}\n\nfn after() {}\n";
+        let crlf = "fn ship() {}\r\n\r\n#[cfg(test)]\r\nmod tests {\r\n    fn a() {}\r\n}\r\n\r\nfn after() {}\r\n";
+        assert_eq!(shipped_part(lf), "fn ship() {}\n\nfn after() {}\n");
+        assert_eq!(shipped_part(crlf), "fn ship() {}\r\n\r\nfn after() {}\r\n");
     }
 
     #[test]
