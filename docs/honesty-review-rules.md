@@ -476,7 +476,7 @@ One area of [`honesty.md`](honesty.md), the record of what this instrument does 
   **This repository's own `ci.yml` does not run the suite twice over one head.** Its `reuse` job asks the
   Actions API for a successful run of `ci.yml` on the same head SHA (on `pull_request`), or on the merged
   pull request head when a push to `main` is a merge commit whose tree equals that head's tree; when it
-  finds one, every step of `check`, `windows-tests`, `lint` and `release` is skipped and the jobs report their required
+  finds one, every step of `check`, `windows-tests`, `macos-tests`, `lint` and `release` is skipped and the jobs report their required
   contexts as success in seconds. So on this repository a green required context means *green in this run
   or in a run of the same workflow over the same bytes*, and the run it reused is named in the `reuse`
   job's log. Any read that fails leaves the answer empty and runs everything; `merge_group` and
