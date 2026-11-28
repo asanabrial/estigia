@@ -96,6 +96,10 @@ fn a_check_sees_the_build_variables_and_nothing_else() {
             );
             (home, outcome)
         });
+    assert!(
+        !home.is_empty(),
+        "the parent has no `HOME`, so the probe cannot tell the allow-list from an empty environment"
+    );
     assert_eq!(
         outcome.runs[0].exit,
         Some(0),
