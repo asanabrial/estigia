@@ -48,22 +48,28 @@ pub fn payload_for_candidates(findings: &[FindingForPrompt], payload: &[u8]) -> 
     if findings.is_empty() {
         return None;
     }
-    let mut paths = Vec::new();
+    let mut paths: Vec<&str> = Vec::new();
     for finding in findings {
-        paths.push(finding.location.as_deref()?.split(':').next()?);
-    }
-    let text = std::str::from_utf8(payload).ok()?;
-    let mut cuts = Vec::new();
-    for section in diff_sections(text) {
-        if section_path(section).is_some_and(|path| paths.contains(&path)) {
-            cuts.push(section);
+        let path = finding.location.as_deref()?.split(':').next()?;
+        if !paths.contains(&path) {
+            paths.push(path);
         }
     }
-    if cuts.is_empty() {
-        None
-    } else {
-        Some(cuts.concat().into_bytes())
+    let text = std::str::from_utf8(payload).ok()?;
+    let sections = diff_sections(text);
+    let mut cuts = Vec::new();
+    for path in &paths {
+        let found: Vec<&str> = sections
+            .iter()
+            .copied()
+            .filter(|section| section_path(section) == Some(*path))
+            .collect();
+        if found.is_empty() {
+            return None;
+        }
+        cuts.extend(found);
     }
+    Some(cuts.concat().into_bytes())
 }
 
 fn diff_sections(text: &str) -> Vec<&str> {

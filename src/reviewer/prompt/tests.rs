@@ -357,3 +357,28 @@ fn a_cited_path_the_diff_does_not_carry_shows_the_whole_diff() {
         None
     );
 }
+
+#[test]
+fn one_cited_path_the_diff_does_not_carry_shows_the_whole_diff_for_every_candidate() {
+    let mut carried = finding("f1");
+    carried.location = Some("x.rs:1".to_owned());
+    let mut missing = finding("f2");
+    missing.location = Some("z.rs:4".to_owned());
+    assert_eq!(
+        payload_for_candidates(&[carried, missing], TWO_FILES.as_bytes()),
+        None
+    );
+}
+
+#[test]
+fn a_quoted_diff_header_falls_back_to_the_whole_diff_rather_than_a_partial_cut() {
+    let quoted = "diff --git \"a/x y.rs\" \"b/x y.rs\"\n--- \"a/x y.rs\"\n+++ \"b/x y.rs\"\n@@ -1 +1 @@\n-old\n+new\ndiff --git a/y.rs b/y.rs\n--- a/y.rs\n+++ b/y.rs\n@@ -1 +1 @@\n-old y\n+new y\n";
+    let mut candidate = finding("f1");
+    candidate.location = Some("y.rs:1".to_owned());
+    let mut quoted_candidate = finding("f2");
+    quoted_candidate.location = Some("x y.rs:1".to_owned());
+    assert_eq!(
+        payload_for_candidates(&[candidate, quoted_candidate], quoted.as_bytes()),
+        None
+    );
+}
