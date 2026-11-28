@@ -83,7 +83,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused on retry.
 | `launch_review_input` | the `launch-review-input` operation is `collect_review_input` with `launch: true` |
 | `collect_review_input` | `SCRIPT collect-review-input` |
 | `review_computed_verdict` | the `review-computed-verdict` operation is `deliver` with `until: verdict`; it keeps its name |
-| `record_spend` | passed as `spend` to `release` or `deliver` |
+| `record_spend` | passed as `spend` to `release`, `handoff_review` or `deliver` |
 | `review_status` | `SCRIPT review-status` |
 | `review_read` | `SCRIPT review-read` |
 | `target` | the target view of `review_read` answers it |
@@ -105,8 +105,8 @@ with `until` `verdict`); `last_activity` is the issue's timeline in the local st
 
 ### Operations no tool exposes
 
-Each name below has no tool of its own; the call on the right answers it, and its kebab spelling
-remains for the CLI (`start-branch`, `blocked-until`, `ensure-states`).
+Each name below has no tool of its own; the call on the right answers it, and the kebab spelling
+is the operation's own (`start-branch`, `blocked-until`, `ensure-states`).
 
 - `start_branch` → `claim` with `branch`, `base`, `worktree_root` and `no_link`
 - `heartbeat` → `comment` with `expect_state`

@@ -145,5 +145,5 @@ machine-wide row, never widen it. `estigia config list` prints every row in forc
 
 <!-- issue-flow:config:end -->
 
-`Authorisation posture` sets both authorisations at once: `balanced` makes them `auto` and `cautious`
-`ask`, and an explicit authorisation row after it wins.
+`Authorisation posture` sets both authorisations at once: `balanced` makes them `auto` and `cautious` `ask`,
+and an explicit authorisation row after it wins.
