@@ -1457,9 +1457,9 @@ pub fn tasks(
 /// in the local store rather than in the body.
 ///
 /// A label is created at the write that needs it: `gh` resolves the labels it is
-/// given before it files, and names the first one it cannot find, so a complete
-/// label set costs no label call and a missing one is created and the filing
-/// retried once.
+/// given before it files and names one it cannot find, so a complete label set
+/// costs no label call and each missing one is created and the filing repeated
+/// until it lands.
 ///
 /// The URL is parsed defensively and the failure is a *write* failure. `gh`
 /// printing a URL is not a contract, and an unguarded index here would crash out
@@ -1640,25 +1640,27 @@ struct Filing<'a> {
     colours: &'a [(String, &'a str)],
 }
 
-/// The labels the failure names, or all of them when the detail names none:
-/// `gh` reports `'<name>' not found` for the first label it cannot resolve, so
-/// the rest of the set is not known to be there.
+/// The labels this filing attaches that the failure names.
+///
+/// `gh` resolves the labels it was given before it writes and reports one of
+/// them, `'<name>' not found`; a detail naming none of them is not a missing
+/// label this can repair.
 fn labels_the_failure_names<'a>(detail: &str, labels: &'a [String]) -> Vec<&'a str> {
     let lowered = detail.to_ascii_lowercase();
-    let named: Vec<&str> = labels
+    labels
         .iter()
         .map(String::as_str)
         .filter(|name| lowered.contains(&name.to_ascii_lowercase()))
-        .collect();
-    if named.is_empty() {
-        labels.iter().map(String::as_str).collect()
-    } else {
-        named
-    }
+        .collect()
 }
 
-/// Files the issue, creating the label `gh` reported missing and repeating the
-/// same filing once. `gh` resolves labels before it writes, so nothing was filed.
+/// Files the issue, creating each label `gh` reports missing and repeating the
+/// same filing until it lands or names a label already created.
+///
+/// One report names one label, so a repository missing several needs one round
+/// per label. `gh` resolves before it writes, so a refused attempt filed
+/// nothing, and `file_or_adopt` adopts an issue that did land rather than
+/// filing a second one.
 fn file_repairing_missing_label(
     context: &Context,
     store: &mut super::store::Store,
@@ -1680,20 +1682,31 @@ fn file_repairing_missing_label(
             false,
         )
     };
-    match write() {
-        Err(Failure::Write(detail)) if names_a_missing_label(&detail) => {
-            for name in labels_the_failure_names(&detail, filing.labels) {
-                let colour = filing
-                    .colours
-                    .iter()
-                    .find(|(held, _)| held == name)
-                    .map(|(_, colour)| *colour)
-                    .unwrap_or("ededed");
-                ensure_label(context, name, colour)?;
+    let mut created: Vec<&str> = Vec::new();
+    loop {
+        match write() {
+            Err(Failure::Write(detail)) if names_a_missing_label(&detail) => {
+                let mut repaired = false;
+                for name in labels_the_failure_names(&detail, filing.labels) {
+                    if created.contains(&name) {
+                        continue;
+                    }
+                    let colour = filing
+                        .colours
+                        .iter()
+                        .find(|(held, _)| held == name)
+                        .map(|(_, colour)| *colour)
+                        .unwrap_or("ededed");
+                    ensure_label(context, name, colour)?;
+                    created.push(name);
+                    repaired = true;
+                }
+                if !repaired {
+                    return Err(Failure::Write(detail));
+                }
             }
-            write()
+            answer => return answer,
         }
-        answer => answer,
     }
 }
 

@@ -1009,7 +1009,7 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "create",
         contract_name: "create",
-        description: "File a finding. Creates the label the filing reports missing, then \
+        description: "File a finding. Creates the labels a filing reports missing, then \
                       projects the initial state onto every project it belongs to.",
         operation: "create",
         arguments: &[

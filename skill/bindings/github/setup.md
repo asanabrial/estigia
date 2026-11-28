@@ -1,6 +1,6 @@
 ## Setup
 
-A label a write needs is created at that write: `gh` refuses to attach a label that does not exist, and it resolves the labels it was given before it writes, naming the first it cannot find. That is why `create` creates only the label `gh` reported missing and retries once, as any label write does. The domain names its own priority scale and rule book, so no setup script can have created them in advance. Label creation is idempotent, and a repository that already holds the label costs no label call at all.
+A label a write needs is created at that write: `gh` refuses to attach a label that does not exist, and it resolves the labels it was given before it writes, naming the first it cannot find. That is why `create` creates only the labels `gh` reported missing, one per report, as any label write does. The domain names its own priority scale and rule book, so no setup script can have created them in advance. Label creation is idempotent, and a repository that already holds the label costs no label call at all.
 
 No label names a runtime: `claim`, `create` and `estigia handoff` write none, and a `dev:<runtime>` label an
 earlier version left is removed when the issue is next touched. Who holds an issue is the local

@@ -1795,6 +1795,59 @@ fn a_create_repairs_the_missing_label_once_and_files_the_issue() {
     assert_eq!(filings, 2, "the filing was not retried once: {asked}");
 }
 
+/// A repository missing several labels has each one created, one per report.
+///
+/// `gh` names one label per failed filing, so the repair has to read the next
+/// report rather than assume the first was the only one missing.
+#[test]
+fn a_create_repairs_each_missing_label_before_the_filing_lands() {
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "issue create",
+            "nth": 1,
+            "stderr": "could not add label: 'priority:high' not found",
+            "status": 1,
+        }),
+        serde_json::json!({ "matches": "label create priority:high", "status": 0 }),
+        serde_json::json!({
+            "matches": "issue create",
+            "nth": 2,
+            "stderr": "could not add label: 'domain:general' not found",
+            "status": 1,
+        }),
+        serde_json::json!({ "matches": "label create domain:general", "status": 0 }),
+        serde_json::json!({ "matches": "issue list", "stdout": "[]", "status": 0 }),
+        serde_json::json!({
+            "matches": "issue create",
+            "nth": 3,
+            "stdout": "https://github.com/o/r/issues/5",
+            "status": 0,
+        }),
+    ]);
+
+    let (answer, asked) = a_create(root.path(), &script);
+
+    let answer = answer.expect("both labels created lets the filing land");
+    assert_eq!(answer["issue"], 5, "{answer}");
+    let created = label_calls(&asked);
+    assert_eq!(
+        created.len(),
+        2,
+        "each missing label was not created exactly once: {asked}"
+    );
+    assert!(
+        created.iter().any(|line| line.contains("priority:high"))
+            && created.iter().any(|line| line.contains("domain:general")),
+        "the labels that were created are not the ones gh reported: {asked}"
+    );
+    let filings = asked
+        .lines()
+        .filter(|line| line.contains("issue create"))
+        .count();
+    assert_eq!(filings, 3, "the filing was not retried per report: {asked}");
+}
+
 /// A clause belongs to a `blocked` issue and is one whole thing: both halves,
 /// or `clear`, never a piece of either.
 #[test]
