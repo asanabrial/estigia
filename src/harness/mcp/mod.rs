@@ -337,7 +337,8 @@ fn initialize(params: &Value) -> Value {
         },
         "instructions": "Estigia holds the workflow authority. Call `claim` before any repository \
                          write (a title or body edit of an issue or a pull request is not one); every write afterwards is verified against that claim, and every \
-                         irreversible boundary re-verifies it against the local store. A refusal here \
+                         irreversible boundary re-verifies it against the local store. A tool's \
+                         `run_id` is this run's id, as SessionStart reported it. A refusal here \
                          is the store answering, not a suggestion.",
     })
 }
@@ -433,10 +434,14 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
     for argument in tool.arguments {
         let Some(value) = arguments.get(argument.name) else {
             if argument.required {
-                return Err(ToolFailure::Malformed(format!(
-                    "{} needs `{}`: {}",
-                    tool.name, argument.name, argument.description
-                )));
+                return Err(ToolFailure::Malformed(if argument.description.is_empty() {
+                    format!("{} needs `{}`", tool.name, argument.name)
+                } else {
+                    format!(
+                        "{} needs `{}`: {}",
+                        tool.name, argument.name, argument.description
+                    )
+                }));
             }
             continue;
         };
@@ -1035,7 +1040,7 @@ fn read_view_step(
                 })
             {
                 return Err(ToolFailure::Malformed(format!(
-                    "review_read needs `issue` for view `{other}`: Issue number."
+                    "review_read needs `issue` for view `{other}`"
                 )));
             }
             return Ok(None);

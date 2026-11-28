@@ -1610,9 +1610,7 @@ pub(super) fn deliver(
     named: Option<&NamedRun<'_>>,
 ) -> Result<Value, ToolFailure> {
     let Some(named) = named else {
-        return Err(ToolFailure::Malformed(
-            "deliver needs `run_id`: this run's id, as SessionStart reported it".to_owned(),
-        ));
+        return Err(ToolFailure::Malformed("deliver needs `run_id`".to_owned()));
     };
     let issue = arguments["issue"].as_u64().unwrap_or_default();
     let seconds = requested_wait(arguments)?;

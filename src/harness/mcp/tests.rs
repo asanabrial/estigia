@@ -1290,7 +1290,54 @@ fn a_read_only_tool_says_so_in_its_schema() {
     let read_only = tools::find("verify_claim").expect("verify_claim exists");
     let writing = tools::find("claim").expect("claim exists");
     assert_eq!(read_only.schema()["annotations"]["readOnlyHint"], true);
-    assert_eq!(writing.schema()["annotations"]["readOnlyHint"], false);
+    assert!(
+        writing.schema().get("annotations").is_none(),
+        "a writing tool carries the protocol default"
+    );
+}
+
+#[test]
+fn no_schema_publishes_a_floor_or_an_empty_description() {
+    let listed = result(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    for tool in listed["tools"].as_array().expect("a tool list") {
+        let properties = tool["inputSchema"]["properties"]
+            .as_object()
+            .expect("a property map");
+        for (name, property) in properties {
+            assert!(
+                property.get("minimum").is_none(),
+                "{} publishes a minimum on `{name}`",
+                tool["name"]
+            );
+            assert!(
+                !property
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .is_some_and(str::is_empty),
+                "{} publishes an empty description on `{name}`",
+                tool["name"]
+            );
+        }
+    }
+    let issue =
+        &tools::find("claim").expect("claim exists").schema()["inputSchema"]["properties"]["issue"];
+    assert_eq!(issue["type"], "integer");
+    assert!(issue.get("description").is_none(), "{issue}");
+    assert!(issue.get("minimum").is_none(), "{issue}");
+}
+
+#[test]
+fn the_run_id_sentence_lives_once_in_the_instructions() {
+    let listed = result(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    let text = serde_json::to_string(&listed).expect("serialisable");
+    assert!(!text.contains("as SessionStart reported it"), "{text}");
+    let handshake = result(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize"}));
+    let instructions = handshake["instructions"].as_str().unwrap_or_default();
+    assert_eq!(
+        instructions.matches("as SessionStart reported it").count(),
+        1,
+        "{instructions}"
+    );
 }
 
 #[test]
@@ -2021,7 +2068,23 @@ fn a_missing_required_argument_names_it_and_says_what_it_is_for() {
     .expect("an answer");
     let message = response["error"]["message"].as_str().expect("a message");
     assert!(message.contains("run_id"), "{message}");
-    assert!(message.contains("SessionStart"), "{message}");
+    let handshake = result(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize"}));
+    assert!(
+        handshake["instructions"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("SessionStart"),
+        "{handshake}"
+    );
+
+    let described = ask(json!({
+        "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+        "params": {"name": "claim", "arguments": {"issue": 12, "run_id": "claude-abcd1234"}}
+    }))
+    .expect("an answer");
+    let message = described["error"]["message"].as_str().expect("a message");
+    assert!(message.contains("horizon"), "{message}");
+    assert!(message.contains("report"), "{message}");
 }
 
 #[test]
@@ -5447,7 +5510,7 @@ fn a_tool_that_moves_the_run_pointer_is_a_tool_that_writes() {
 /// unknown shorthand flag: '5' in -5` — a wrong argument reported as a
 /// broken transport, arriving through a bound nobody published.
 #[test]
-fn an_integer_that_counts_from_one_is_refused_below_it_and_says_so_in_the_schema() {
+fn an_integer_that_counts_from_one_is_refused_below_it() {
     for tool in every_row() {
         for argument in tool.arguments {
             if argument.json_type != "integer" {
@@ -5467,15 +5530,6 @@ fn an_integer_that_counts_from_one_is_refused_below_it_and_says_so_in_the_schema
                     1
                 },
                 "`{}` on `{}` counts from {least}",
-                argument.name,
-                tool.name
-            );
-
-            let schema = tool.schema();
-            assert_eq!(
-                schema["inputSchema"]["properties"][argument.name]["minimum"],
-                serde_json::json!(least),
-                "`{}` on `{}` enforces a floor the schema does not publish",
                 argument.name,
                 tool.name
             );
@@ -7549,7 +7603,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 45_475;
+const TOOLS_LIST_CEILING: usize = 39_743;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -10440,7 +10494,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
     }
 }
 
-const ALWAYS_LOADED_CEILING: usize = 10_921;
+const ALWAYS_LOADED_CEILING: usize = 9_646;
 
 #[test]
 fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
