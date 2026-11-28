@@ -1678,6 +1678,123 @@ fn an_edit_that_fails_for_another_reason_is_not_retried() {
     assert!(!written.contains("label create"), "{written}");
 }
 
+const FILED_BODY: &str = "## Summary\n\n> [!NOTE]\n> A probe.\n\n\
+    ## Problem\nA probe.\n\n\
+    ## Why it matters\nA probe.\n\n\
+    ## Proposed approach\nA probe.\n\n\
+    ## Where to start\nA probe.\n\n\
+    ## Acceptance criteria\nA probe.\n\n\
+    ## How to verify\nA probe.\n\n\
+    ## Out of scope\nA probe.\n\n\
+    ## Evidence\nA probe.\n";
+
+fn a_create(root: &std::path::Path, script: &str) -> (Result<serde_json::Value, Failure>, String) {
+    let context = local_context(root);
+    let bin = crate::test_env::scripted_gh();
+    let log = root.join("calls.log");
+    let counts = root.join("counts");
+    let store = root.join("state.db");
+    let body = root.join("body.md");
+    std::fs::write(&body, FILED_BODY).expect("the body file");
+    let answer = crate::transport::store::with_store_at(&store, || {
+        crate::transport::window::with_mode(crate::transport::window::Mode::Open, || {
+            crate::test_env::with_counting_logging_gh(bin.path(), script, &counts, &log, || {
+                super::create(
+                    &context,
+                    "an-identity",
+                    "A title",
+                    &body,
+                    "ready",
+                    Some("priority:high"),
+                    Some("general"),
+                    None,
+                    None,
+                    None,
+                    None,
+                    "2026-01-01T00:00Z",
+                )
+            })
+        })
+    });
+    let asked = std::fs::read_to_string(&log).unwrap_or_default();
+    (answer, asked)
+}
+
+fn label_calls(asked: &str) -> Vec<&str> {
+    asked
+        .lines()
+        .filter(|line| line.contains("label create"))
+        .collect()
+}
+
+/// A repository whose labels all exist pays for no label call at all.
+#[test]
+fn a_create_over_a_complete_label_set_creates_no_label() {
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let script = crate::test_env::answers(&[serde_json::json!({
+        "matches": "issue create",
+        "stdout": "https://github.com/o/r/issues/5",
+        "status": 0,
+    })]);
+
+    let (answer, asked) = a_create(root.path(), &script);
+
+    let answer = answer.expect("a filing whose labels all exist lands");
+    assert_eq!(answer["issue"], 5, "{answer}");
+    assert!(
+        label_calls(&asked).is_empty(),
+        "a repository holding every label was made to create one: {asked}"
+    );
+}
+
+/// The one label `gh` reports missing is created once, and the same filing is
+/// retried and lands.
+///
+/// `gh` resolves labels before it writes and names the first it cannot find, so
+/// the write that needs it is where the repair belongs.
+#[test]
+fn a_create_repairs_the_missing_label_once_and_files_the_issue() {
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "issue create",
+            "nth": 1,
+            "stderr": "could not add label: 'priority:high' not found",
+            "status": 1,
+        }),
+        serde_json::json!({ "matches": "label create", "status": 0 }),
+        serde_json::json!({ "matches": "issue list", "stdout": "[]", "status": 0 }),
+        serde_json::json!({
+            "matches": "issue create",
+            "nth": 2,
+            "stdout": "https://github.com/o/r/issues/5",
+            "status": 0,
+        }),
+    ]);
+
+    let (answer, asked) = a_create(root.path(), &script);
+
+    let answer = answer.expect("the created label lets the retried filing land");
+    assert_eq!(answer["issue"], 5, "{answer}");
+    let created = label_calls(&asked);
+    assert_eq!(
+        created.len(),
+        1,
+        "the missing label was not created exactly once: {asked}"
+    );
+    assert!(
+        created[0].contains("label create priority:high")
+            && created[0].contains("--color d93f0b")
+            && created[0].contains("--force"),
+        "the missing label was not created with the filing's own colour: {asked}"
+    );
+    let filings = asked
+        .lines()
+        .filter(|line| line.contains("issue create"))
+        .count();
+    assert_eq!(filings, 2, "the filing was not retried once: {asked}");
+}
+
 /// A clause belongs to a `blocked` issue and is one whole thing: both halves,
 /// or `clear`, never a piece of either.
 #[test]

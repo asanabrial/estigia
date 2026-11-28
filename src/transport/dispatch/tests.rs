@@ -226,27 +226,17 @@ fn a_missing_argument_says_which_one() {
     );
 }
 
-/// `--findings` without a receipt is refused before `create` writes anything.
+/// `--findings` without a receipt is refused before the body is read.
 ///
-/// The dependency check used to live only in `body_with_marker`, which `create`
-/// reaches after it has created every label, so a call naming a finding and no
-/// epoch left labels behind and filed nothing. Mutation: drop the dispatch
-/// check and this reddens, because `gh label create` runs before the refusal.
+/// The body file here does not exist, so an answer that names the missing
+/// receipt is one the dispatch check gave before `create` reached the file. The
+/// check is also inside `create`, after the read; that copy alone answers a read
+/// failure for this call.
 #[test]
-fn findings_without_a_receipt_are_refused_before_any_label_is_created() {
-    const BODY: &str = "## Summary\n\n> [!NOTE]\n> A probe.\n\n\
-        ## Problem\nA probe.\n\n\
-        ## Why it matters\nA probe.\n\n\
-        ## Proposed approach\nA probe.\n\n\
-        ## Where to start\nA probe.\n\n\
-        ## Acceptance criteria\nA probe.\n\n\
-        ## How to verify\nA probe.\n\n\
-        ## Out of scope\nA probe.\n\n\
-        ## Evidence\nA probe.\n";
+fn findings_without_a_receipt_are_refused_before_the_body_is_read() {
     let root = tempfile::tempdir().expect("a directory");
     let count = root.path().join("count");
-    let body = root.path().join("body.md");
-    std::fs::write(&body, BODY).expect("the body file");
+    let body = root.path().join("absent.md");
     let bin = crate::test_env::scripted_gh();
     let script = crate::test_env::answers(&[
         serde_json::json!({ "matches": "label create", "status": 0 }),

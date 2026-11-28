@@ -137,8 +137,8 @@ pub use crate::config::STATES;
 /// to be safe to re-run the one command nobody can re-run.
 ///
 /// Its reason for existing is ordering: `gh` refuses to attach a label that does
-/// not exist, and the refusal arrives at `gh issue create` — the analyst's last
-/// step, after all the analysis is done.
+/// not exist, so a run that provisions the six states once does not pay for them
+/// at each write that needs one.
 ///
 /// While the git operation window is closed it writes nothing and answers
 /// `deferred`, because the `Reconverge` a queued `create`, `claim` or `transition`
@@ -942,7 +942,8 @@ pub(super) fn status_labels(data: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Creates a label before anything tries to attach it.
+/// Creates a label a write reported missing, or one a queued filing carries for
+/// the flush.
 ///
 /// Tolerated on purpose: `--force` is idempotent, so a label that already exists
 /// reports non-zero and means success.
@@ -1455,9 +1456,10 @@ pub fn tasks(
 /// `create` — file an issue, recording its identity and `blocked-until` clauses
 /// in the local store rather than in the body.
 ///
-/// Labels are created **before** they are attached, all of them, because `gh`
-/// refuses to attach one that does not exist and the refusal arrives at
-/// `gh issue create` — the analyst's last step, after all the analysis is done.
+/// A label is created at the write that needs it: `gh` resolves the labels it is
+/// given before it files, and names the first one it cannot find, so a complete
+/// label set costs no label call and a missing one is created and the filing
+/// retried once.
 ///
 /// The URL is parsed defensively and the failure is a *write* failure. `gh`
 /// printing a URL is not a contract, and an unguarded index here would crash out
@@ -1499,11 +1501,6 @@ pub fn create(
     }
 
     let closed = super::outbox::is_closed(context);
-    if !closed {
-        for (name, colour) in &ensure {
-            ensure_label(context, name, colour)?;
-        }
-    }
 
     let repo = super::claim::repo_of(context)?;
     let mut store = super::store::Store::open(&super::store::store_path()?)?;
@@ -1528,8 +1525,18 @@ pub fn create(
         );
     }
     let pending = pending_create_key(&repo, identity, title);
-    let (number, url) = file_or_adopt(
-        context, &mut store, &repo, None, &pending, title, &body, state, &labels, false,
+    let (number, url) = file_repairing_missing_label(
+        context,
+        &mut store,
+        &repo,
+        &pending,
+        &Filing {
+            title,
+            body: &body,
+            state,
+            labels: &labels,
+            colours: &ensure,
+        },
     )?;
 
     // The case everyone forgets: a fresh issue reaches its projects with an
@@ -1622,6 +1629,71 @@ pub(super) fn file_or_adopt(
             store.set_meta(pending, title)?;
             file_issue(context, title, body, state, labels)
         }
+    }
+}
+
+struct Filing<'a> {
+    title: &'a str,
+    body: &'a str,
+    state: &'a str,
+    labels: &'a [String],
+    colours: &'a [(String, &'a str)],
+}
+
+/// The labels the failure names, or all of them when the detail names none:
+/// `gh` reports `'<name>' not found` for the first label it cannot resolve, so
+/// the rest of the set is not known to be there.
+fn labels_the_failure_names<'a>(detail: &str, labels: &'a [String]) -> Vec<&'a str> {
+    let lowered = detail.to_ascii_lowercase();
+    let named: Vec<&str> = labels
+        .iter()
+        .map(String::as_str)
+        .filter(|name| lowered.contains(&name.to_ascii_lowercase()))
+        .collect();
+    if named.is_empty() {
+        labels.iter().map(String::as_str).collect()
+    } else {
+        named
+    }
+}
+
+/// Files the issue, creating the label `gh` reported missing and repeating the
+/// same filing once. `gh` resolves labels before it writes, so nothing was filed.
+fn file_repairing_missing_label(
+    context: &Context,
+    store: &mut super::store::Store,
+    repo: &super::store::Repo,
+    pending: &str,
+    filing: &Filing<'_>,
+) -> Result<(u64, String), Failure> {
+    let mut write = || {
+        file_or_adopt(
+            context,
+            store,
+            repo,
+            None,
+            pending,
+            filing.title,
+            filing.body,
+            filing.state,
+            filing.labels,
+            false,
+        )
+    };
+    match write() {
+        Err(Failure::Write(detail)) if names_a_missing_label(&detail) => {
+            for name in labels_the_failure_names(&detail, filing.labels) {
+                let colour = filing
+                    .colours
+                    .iter()
+                    .find(|(held, _)| held == name)
+                    .map(|(_, colour)| *colour)
+                    .unwrap_or("ededed");
+                ensure_label(context, name, colour)?;
+            }
+            write()
+        }
+        answer => answer,
     }
 }
 
