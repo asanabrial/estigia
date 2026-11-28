@@ -3067,3 +3067,16 @@ fn the_editor_opens_over_a_repository_row_that_does_not_parse() {
         .edit_scope_over(&crate::config::Config::default());
     assert_eq!(edited.workflow, crate::config::Workflow::Assisted);
 }
+
+#[test]
+fn no_shipped_agent_definition_names_this_repository() {
+    for file in crate::skill::AGENT_DEFINITIONS {
+        for needle in ["src/test_env.rs", "CLAUDE.md", "this crate"] {
+            assert!(
+                !file.contents.contains(needle),
+                "{} names this repository's {needle:?}; a definition ships to every repository",
+                file.path
+            );
+        }
+    }
+}

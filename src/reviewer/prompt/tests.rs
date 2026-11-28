@@ -225,3 +225,47 @@ fn a_findings_role_is_told_a_causal_location_stays_inside_one_run_of_added_lines
         );
     }
 }
+
+#[test]
+fn the_lens_templates_carry_the_shared_rules_from_one_constant() {
+    let shared = crate::skill::LENS_RULES;
+    assert!(
+        shared.lines().count() > 20,
+        "the shared rules were emptied: {shared:?}"
+    );
+    let lenses = [
+        "agents/review-lens.md",
+        "agents/review-readability.md",
+        "agents/review-readback.md",
+        "agents/review-reliability.md",
+        "agents/review-risk.md",
+    ];
+    for path in lenses {
+        let file = crate::skill::AGENT_DEFINITIONS
+            .iter()
+            .find(|file| file.path == path)
+            .unwrap_or_else(|| panic!("{path} is not shipped"));
+        assert_eq!(
+            file.contents
+                .matches(crate::skill::LENS_RULES_PLACEHOLDER)
+                .count(),
+            1,
+            "{path} does not carry the placeholder exactly once"
+        );
+        for line in shared.lines().filter(|line| line.starts_with("- ")) {
+            assert!(
+                !file.contents.contains(line),
+                "{path} carries a copy of a shared rule instead of the constant: {line}"
+            );
+        }
+        let body = body_of(file.contents);
+        assert!(
+            !body.contains(crate::skill::LENS_RULES_PLACEHOLDER),
+            "{path} renders the placeholder instead of the rules"
+        );
+        assert!(
+            body.contains("**The diff is the whole world.**"),
+            "{path} does not render the shared rules"
+        );
+    }
+}
