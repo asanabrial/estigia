@@ -2176,19 +2176,47 @@ fn should_reissue_claim(
 }
 
 /// The epoch a `release` of the issue this run holds ends, when the call did
-/// not name one: the claim's own operation id, which the pointer recorded. A
+/// not name one: the claim's own operation id, which the pointer recorded —
+/// for the active issue or for a parked one, from that claim's own record. A
 /// takeover changes the epoch, and the transport still refuses the old one as
-/// `target-operation-mismatch`; a pointer with no id keeps the discovery call.
+/// `target-operation-mismatch`; a record with no id keeps the discovery call.
 fn held_release_epoch(run: &session::Run, issue: u64, flags: &[String]) -> Option<String> {
-    if run.issue_number() != Some(issue) || flags.iter().any(|flag| flag == "--target-operation") {
+    if flags.iter().any(|flag| flag == "--target-operation") {
         return None;
     }
-    run.operation_id.clone()
+    held_claim(run, issue)?.operation_id.map(ToOwned::to_owned)
+}
+
+/// One claim this run's pointer records, active or parked.
+struct HeldClaim<'a> {
+    operation_id: Option<&'a str>,
+    review_transaction: Option<&'a crate::transport::claim::ReviewTransaction>,
+}
+
+/// The record this run's pointer keeps for `issue`, whichever slot holds it.
+///
+/// A parked claim's own record, never the active one's: filling a parked
+/// release from the issue the run currently works would name an epoch and a
+/// receipt that belong to somebody else's claim.
+fn held_claim(run: &session::Run, issue: u64) -> Option<HeldClaim<'_>> {
+    if run.issue_number() == Some(issue) {
+        return Some(HeldClaim {
+            operation_id: run.operation_id.as_deref(),
+            review_transaction: run.review_transaction.as_ref(),
+        });
+    }
+    run.parked
+        .iter()
+        .find(|parked| parked.issue.number() == Some(issue))
+        .map(|parked| HeldClaim {
+            operation_id: parked.operation_id.as_deref(),
+            review_transaction: parked.review_transaction.as_ref(),
+        })
 }
 
 /// Fills the receipt fields a `--spend` record leaves out from the review
-/// transaction the run holds for this issue. A field the caller named is kept,
-/// so the store still checks it against the receipt.
+/// transaction this run's record holds for this issue. A field the caller
+/// named is kept, so the store still checks it against the receipt.
 fn default_spend_receipt(run: &session::Run, issue: u64, flags: &mut [String]) {
     let Some(at) = flags.iter().position(|flag| flag == "--spend") else {
         return;
@@ -2266,10 +2294,7 @@ fn expanded_receipt(
 }
 
 fn held_spend_receipt(run: &session::Run, issue: u64, spend: &str) -> Option<String> {
-    if run.issue_number() != Some(issue) {
-        return None;
-    }
-    let receipt = run.review_transaction.as_ref()?;
+    let receipt = held_claim(run, issue)?.review_transaction?;
     let mut value: Value = serde_json::from_str(spend).ok()?;
     let fill = |record: &mut Value| {
         if let Some(record) = record.as_object_mut() {

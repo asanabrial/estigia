@@ -11061,10 +11061,29 @@ pub fn operation_marker(
 /// One id names one event, and an event has one kind. Letting a `claim`'s id
 /// later carry a `standdown` would make the timeline's own identity ambiguous:
 /// the same operation would appear to both take and release the item.
+///
+/// A run-scoped variant is the same rule with the run named; `claim` uses it
+/// because a takeover and the claim that follows share one key by design.
 pub fn reject_operation_kind_conflict(
     comments: &[ownership::Comment],
     operation_id: &str,
     allowed: &[&str],
+) -> Result<(), Failure> {
+    reject_operation_kind_conflict_for(comments, operation_id, allowed, "")
+}
+
+/// Refuses an operation id that has been used for a kind it does not belong to,
+/// reading only what `run_id` may have written.
+///
+/// A run that reclaimed an issue keeps one key across the takeover and the claim
+/// that follows it, so that run's own `reclaim` under the key is not a conflict
+/// for its claim. Any other run's marker on the id is, whatever its kind: one id
+/// still names one operation, and that operation one run.
+pub(crate) fn reject_operation_kind_conflict_for(
+    comments: &[ownership::Comment],
+    operation_id: &str,
+    allowed: &[&str],
+    run_id: &str,
 ) -> Result<(), Failure> {
     let conflict = |kinds: Option<Vec<String>>| {
         let mut payload =
@@ -11085,6 +11104,7 @@ pub fn reject_operation_kind_conflict(
         .filter(|comment| comment.viewer_did_author && !comment.includes_created_edit)
         .flat_map(|comment| super::markers::parse(&comment.body))
         .filter(|mark| mark.get("op-id").map(String::as_str) == Some(operation_id))
+        .filter(|mark| !own_takeover(mark, allowed, run_id))
         .filter_map(|mark| mark.get("kind").cloned())
         .collect();
     kinds.sort();
@@ -11093,6 +11113,15 @@ pub fn reject_operation_kind_conflict(
         return Err(conflict(Some(kinds)));
     }
     Ok(())
+}
+
+/// Whether this marker is a takeover the run the caller speaks for wrote, which
+/// a claim under the same key may follow.
+fn own_takeover(mark: &super::markers::Marker, allowed: &[&str], run_id: &str) -> bool {
+    allowed.contains(&"claim")
+        && !run_id.is_empty()
+        && mark.get("run-id").map(String::as_str) == Some(run_id)
+        && mark.get("kind").map(String::as_str) == Some("reclaim")
 }
 
 /// The horizon a claim must declare, or a refusal.
@@ -11843,6 +11872,16 @@ fn is_dead_self_operation(
         .any(|event| !live.iter().any(|held| held.position == event.position))
 }
 
+/// Whether the live acquisition this run holds under `operation_id` is a
+/// takeover, so a claim may follow it under the key it already wrote.
+fn is_live_own_reclaim(live: &[ownership::Event], operation_id: &str, run_id: &str) -> bool {
+    live.iter().any(|event| {
+        event.kind == "reclaim"
+            && event.run_id == run_id
+            && event.operation_id.as_deref() == Some(operation_id)
+    })
+}
+
 /// `claim` — write or resume one operation-scoped acquisition.
 ///
 /// The operation id is what makes a retry safe: it names **one event**, so a
@@ -11919,7 +11958,12 @@ pub(crate) fn claim_on(
         }
 
         let mut operation_id = operation_id.clone();
-        reject_operation_kind_conflict(&comments, &operation_id, &["claim", "standdown"])?;
+        reject_operation_kind_conflict_for(
+            &comments,
+            &operation_id,
+            &["claim", "standdown"],
+            what.run_id,
+        )?;
         let expected = [("run-id", what.run_id), ("horizon", what.horizon)];
         let existing = operation_marker(&comments, &operation_id, OperationKind::Claim, &expected)?;
 
@@ -11932,10 +11976,11 @@ pub(crate) fn claim_on(
                 } => {
                     operation_id = adopted;
                     reused = true;
-                    reject_operation_kind_conflict(
+                    reject_operation_kind_conflict_for(
                         &comments,
                         &operation_id,
                         &["claim", "standdown"],
+                        what.run_id,
                     )?;
                     let adopted_expected = [("run-id", what.run_id)];
                     if operation_marker(
@@ -11945,6 +11990,7 @@ pub(crate) fn claim_on(
                         &adopted_expected,
                     )?
                     .is_none()
+                        && !is_live_own_reclaim(&before.live, &operation_id, what.run_id)
                     {
                         return Err(Failure::Write(
                             "claim operation is not visible; retry with the same operation ID"

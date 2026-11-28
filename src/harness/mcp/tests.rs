@@ -10019,6 +10019,82 @@ fn a_release_of_the_held_issue_names_the_epoch_the_claim_recorded() {
 }
 
 #[test]
+fn a_parked_release_names_the_epoch_and_receipt_the_pointer_records_for_it() {
+    let mut run = crate::harness::session::Run::new("claude-parked0a1b2c3d".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.operation_id = Some("epoch-of-the-active-claim".to_owned());
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "active-receipt".to_owned(),
+        pr: 7,
+        head: "h7".to_owned(),
+        base: "b7".to_owned(),
+        digest: "d7".to_owned(),
+    });
+    run.parked.push(crate::harness::session::ParkedClaim {
+        issue: crate::identity::Identity::Number(13),
+        state: Some("review".to_owned()),
+        worktree: None,
+        operation_id: Some("epoch-of-the-parked-claim".to_owned()),
+        release_id: None,
+        review_transaction: Some(crate::transport::claim::ReviewTransaction {
+            epoch: "parked-receipt".to_owned(),
+            pr: 9,
+            head: "h9".to_owned(),
+            base: "b9".to_owned(),
+            digest: "d9".to_owned(),
+        }),
+        reviewed_head: None,
+        horizon: None,
+    });
+    run.parked.push(crate::harness::session::ParkedClaim {
+        issue: crate::identity::Identity::Number(14),
+        state: Some("in-progress".to_owned()),
+        worktree: None,
+        operation_id: None,
+        release_id: None,
+        review_transaction: None,
+        reviewed_head: None,
+        horizon: None,
+    });
+
+    let none: Vec<String> = Vec::new();
+    assert_eq!(
+        super::held_release_epoch(&run, 13, &none).as_deref(),
+        Some("epoch-of-the-parked-claim"),
+        "the release of a parked issue named no epoch, so it makes the discovery call"
+    );
+    assert_eq!(
+        super::held_release_epoch(&run, 12, &none).as_deref(),
+        Some("epoch-of-the-active-claim"),
+        "the held issue's own release stopped naming its claim"
+    );
+    assert_eq!(
+        super::held_release_epoch(&run, 14, &none),
+        None,
+        "a parked claim the pointer records no epoch for was filled with a guess"
+    );
+
+    let bare = r#"{"phase":"orchestrator","conditions":"inline","input":1,"tokens":2,"seconds":3,"contexts":1}"#;
+    let filled: Value = serde_json::from_str(
+        &super::held_spend_receipt(&run, 13, bare).expect("the parked receipt fills the record"),
+    )
+    .expect("json");
+    assert_eq!(
+        filled["epoch"], "parked-receipt",
+        "the parked issue's spend borrowed the receipt of the issue this run holds: {filled}"
+    );
+    assert_eq!(filled["pr"], 9, "{filled}");
+    assert_eq!(filled["head"], "h9", "{filled}");
+    assert_eq!(filled["base"], "b9", "{filled}");
+    assert_eq!(filled["digest"], "d9", "{filled}");
+    assert_eq!(
+        super::held_spend_receipt(&run, 14, bare),
+        None,
+        "a parked claim the pointer records no receipt for was filled with a default"
+    );
+}
+
+#[test]
 fn an_incomplete_close_leaves_the_pointer_the_run_still_needs() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
