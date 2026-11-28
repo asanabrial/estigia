@@ -1,22 +1,19 @@
 //! The MCP server: the agent calls tools instead of composing shell.
 //!
-//! Synchronous stdio JSON-RPC, because this binary also answers a `PreToolUse`
-//! hook on every edit. Each `tools/call` runs on its own worker and is answered
-//! under the id the client sent it, so a call that waits does not hold the next
-//! one. Estigia holds the tools, not the authority — every tool reaches the
-//! tracker through the transport, and the answer is the tracker's, translated.
-//! What this protocol subset does not implement is in [`UNIMPLEMENTED`].
+//! Synchronous stdio JSON-RPC, one request at a time, because this binary
+//! also answers a `PreToolUse` hook on every edit. Estigia holds the tools,
+//! not the authority — every tool reaches the tracker through the transport,
+//! and the answer is the tracker's, translated. What this protocol subset
+//! does not implement is in [`UNIMPLEMENTED`].
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, VecDeque};
 use std::io::{BufRead, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, mpsc};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
 use super::{GateContext, session, tracker};
-use messaging::Elicit as _;
 use crate::outcome::{Refusal, Resolution};
 
 pub(crate) mod address;
@@ -51,6 +48,11 @@ pub const UNIMPLEMENTED: &[(&str, &str)] = &[
     (
         "notifications beyond initialized",
         "the tool list is a compile-time constant, so there is never a list-changed to send",
+    ),
+    (
+        "concurrent requests",
+        "requests are served one at a time in arrival order; a slow tracker read blocks the next \
+         call rather than interleaving with it",
     ),
 ];
 
@@ -113,53 +115,15 @@ impl Server {
     }
 }
 
-#[derive(Default)]
-struct Waiting {
-    entries: BTreeMap<String, mpsc::Sender<String>>,
-    early: BTreeMap<String, String>,
-    closed: bool,
-}
-
-/// Puts a request to the client on the same pipe and reads its answer, routed back by the id it
-/// minted, while every other line goes wherever its own id names.
+/// Puts a request to the client on the same pipe and reads its answer, holding every other
+/// line that arrives meanwhile.
 struct Wire<'a, W: Write> {
-    output: &'a Mutex<W>,
-    waiting: &'a Mutex<Waiting>,
+    lines: &'a Lines,
+    output: &'a mut W,
+    pending: &'a mut VecDeque<String>,
     wait: Duration,
-    asked: &'a AtomicU64,
+    asked: &'a mut u64,
     token: Option<Value>,
-}
-
-impl<W: Write> Wire<'_, W> {
-    fn write(&self, message: &Value) -> std::io::Result<()> {
-        let mut output = self
-            .output
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        writeln!(output, "{message}")?;
-        output.flush()
-    }
-
-    fn release(&self, id: &str) {
-        self.waiting
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .entries
-            .remove(id);
-    }
-
-    fn answered(line: &str) -> Result<Value, messaging::Unasked> {
-        let parsed: Option<Value> = serde_json::from_str(line).ok();
-        let value = parsed.ok_or_else(|| {
-            messaging::Unasked::Unreachable("the answer was not JSON".to_owned())
-        })?;
-        if value.get("method").is_some() {
-            return Err(messaging::Unasked::Unreachable(
-                "the answer carried a method".to_owned(),
-            ));
-        }
-        Ok(value.get("result").cloned().unwrap_or(Value::Null))
-    }
 }
 
 impl<W: Write> messaging::Elicit for Wire<'_, W> {
@@ -180,14 +144,12 @@ impl<W: Write> messaging::Elicit for Wire<'_, W> {
             "method": "notifications/progress",
             "params": { "progressToken": token, "progress": count, "message": message },
         });
-        let _ = self.write(&notification);
+        let _ = writeln!(self.output, "{notification}").and_then(|()| self.output.flush());
     }
 
     fn elicit(&mut self, message: &str, schema: Value) -> Result<Value, messaging::Unasked> {
-        let id = format!(
-            "estigia-elicit-{}",
-            self.asked.fetch_add(1, Ordering::Relaxed) + 1
-        );
+        *self.asked += 1;
+        let id = format!("estigia-elicit-{}", self.asked);
         let request = json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -196,59 +158,31 @@ impl<W: Write> messaging::Elicit for Wire<'_, W> {
         });
         let unreachable =
             |error: &dyn std::fmt::Display| messaging::Unasked::Unreachable(error.to_string());
-        let (sender, answer) = mpsc::channel();
-        let (early, was_closed) = {
-            let mut waiting = self
-                .waiting
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            match waiting.early.remove(&id) {
-                Some(line) => (Some(line), false),
-                None if waiting.closed => (None, true),
-                None => {
-                    waiting.entries.insert(id.clone(), sender);
-                    (None, false)
-                }
-            }
-        };
-        let written = self.write(&request);
-        if let Some(line) = early {
-            return match written {
-                Ok(()) => Self::answered(&line),
-                Err(error) => Err(unreachable(&error)),
-            };
-        }
-        if let Err(error) = written {
-            self.release(&id);
-            return Err(unreachable(&error));
-        }
-        if was_closed {
-            return Err(unreachable(&"the client closed its input"));
-        }
+        writeln!(self.output, "{request}").map_err(|error| unreachable(&error))?;
+        self.output.flush().map_err(|error| unreachable(&error))?;
         let deadline = Instant::now() + self.wait;
-        let outcome = loop {
+        loop {
             let left = deadline.saturating_duration_since(Instant::now());
-            match answer.recv_timeout(left) {
-                Ok(line) => {
-                    let parsed: Option<Value> = serde_json::from_str(&line).ok();
-                    let answers_us = parsed.as_ref().is_some_and(|value| {
-                        value.get("id").and_then(Value::as_str) == Some(id.as_str())
-                            && value.get("method").is_none()
-                    });
-                    if answers_us {
-                        break Ok(parsed
-                            .and_then(|value| value.get("result").cloned())
-                            .unwrap_or(Value::Null));
-                    }
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => break Err(messaging::Unasked::Unanswered),
+            let line = match self.lines.recv_timeout(left) {
+                Ok(Ok(line)) => line,
+                Ok(Err(error)) => return Err(unreachable(&error)),
+                Err(mpsc::RecvTimeoutError::Timeout) => return Err(messaging::Unasked::Unanswered),
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    break Err(unreachable(&"the client closed its input"));
+                    return Err(unreachable(&"the client closed its input"));
                 }
+            };
+            let parsed: Option<Value> = serde_json::from_str(&line).ok();
+            let answers_us = parsed.as_ref().is_some_and(|value| {
+                value.get("id").and_then(Value::as_str) == Some(id.as_str())
+                    && value.get("method").is_none()
+            });
+            if answers_us {
+                return Ok(parsed
+                    .and_then(|value| value.get("result").cloned())
+                    .unwrap_or(Value::Null));
             }
-        };
-        self.release(&id);
-        outcome
+            self.pending.push_back(line);
+        }
     }
 }
 
@@ -265,7 +199,7 @@ impl messaging::Elicit for Silent {
 /// Serves stdio until the client closes it.
 pub fn serve(
     input: impl BufRead + Send + 'static,
-    output: impl Write + Send,
+    output: impl Write,
     context: Result<GateContext, Refusal>,
 ) -> std::io::Result<()> {
     let (sender, lines) = mpsc::channel();
@@ -280,166 +214,44 @@ pub fn serve(
     serve_lines(&lines, output, context, ELICITATION_WAIT)
 }
 
-fn close(waiting: &Mutex<Waiting>) {
-    let mut waiting = waiting
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    waiting.closed = true;
-    waiting.entries.clear();
-}
-
-fn serve_lines<W: Write + Send>(
+fn serve_lines(
     lines: &Lines,
-    output: W,
+    mut output: impl Write,
     context: Result<GateContext, Refusal>,
     wait: Duration,
 ) -> std::io::Result<()> {
-    let output = Mutex::new(output);
-    let server = Mutex::new(Server::default());
-    let waiting: Mutex<Waiting> = Mutex::new(Waiting::default());
-    let asked = AtomicU64::new(0);
-    let broken: Mutex<Option<std::io::Error>> = Mutex::new(None);
-
-    let served = std::thread::scope(|scope| {
-        loop {
-            let line = match lines.recv() {
-                Ok(Ok(line)) => line,
-                Ok(Err(error)) => {
-                    close(&waiting);
-                    return Err(error);
-                }
-                Err(_) => {
-                    close(&waiting);
-                    return Ok(());
-                }
-            };
-            if line.trim().is_empty() {
-                continue;
-            }
-            let parsed: Option<Value> = serde_json::from_str(&line).ok();
-            if let Some(value) = parsed.as_ref()
-                && value.get("method").is_none()
-                && value.get("id").is_some()
-            {
-                if let Some(id) = value.get("id").and_then(Value::as_str) {
-                    let mut waiting = waiting
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    match waiting.entries.get(id).cloned() {
-                        Some(sender) => {
-                            let _ = sender.send(line);
-                        }
-                        None if id.starts_with("estigia-elicit-") => {
-                            waiting.early.insert(id.to_owned(), line);
-                        }
-                        None => {}
-                    }
-                }
-                continue;
-            }
-            let is_call = parsed
-                .as_ref()
-                .and_then(|value| value.get("method"))
-                .and_then(Value::as_str)
-                == Some("tools/call");
-            if is_call {
-                let Some(id) = parsed
-                    .as_ref()
-                    .and_then(|value| value.get("id"))
-                    .cloned()
-                else {
-                    continue;
-                };
-                let params = parsed
-                    .as_ref()
-                    .and_then(|value| value.get("params"))
-                    .cloned()
-                    .unwrap_or(json!({}));
-                let token = params.pointer("/_meta/progressToken").cloned();
-                let output = &output;
-                let waiting = &waiting;
-                let asked = &asked;
-                let server = &server;
-                let broken = &broken;
-                let context = &context;
-                scope.spawn(move || {
-                    let mut wire = Wire {
-                        output,
-                        waiting,
-                        wait,
-                        asked,
-                        token: None,
-                    };
-                    wire.announce(token);
-                    let response = answer_call(id, &params, context.as_ref(), server, &mut wire);
-                    if let Some(response) = response
-                        && let Err(error) = wire.write(&response)
-                    {
-                        let mut broken = broken
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        if broken.is_none() {
-                            *broken = Some(error);
-                        }
-                    }
-                });
-                continue;
-            }
-            let response = {
-                let mut server = server
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                handle(&line, context.as_ref(), &mut server, &mut Silent)
-            };
-            let Some(response) = response else {
-                // A notification: JSON-RPC says answer nothing.
-                continue;
-            };
-            let mut out = output
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if let Err(error) = writeln!(out, "{response}").and_then(|()| out.flush()) {
-                drop(out);
-                return Err(error);
-            }
+    let mut server = Server::default();
+    let mut pending: VecDeque<String> = VecDeque::new();
+    let mut asked = 0;
+    loop {
+        let line = match pending.pop_front() {
+            Some(line) => line,
+            None => match lines.recv() {
+                Ok(line) => line?,
+                Err(_) => return Ok(()),
+            },
+        };
+        if line.trim().is_empty() {
+            continue;
         }
-    });
-    match served {
-        Err(error) => Err(error),
-        Ok(()) => match broken
-            .into_inner()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-        {
-            Some(error) => Err(error),
-            None => Ok(()),
-        },
+        let response = {
+            let mut wire = Wire {
+                lines,
+                output: &mut output,
+                pending: &mut pending,
+                wait,
+                asked: &mut asked,
+                token: None,
+            };
+            handle(&line, context.as_ref(), &mut server, &mut wire)
+        };
+        let Some(response) = response else {
+            // A notification: JSON-RPC says answer nothing.
+            continue;
+        };
+        writeln!(output, "{response}")?;
+        output.flush()?;
     }
-}
-
-fn answer_call(
-    id: Value,
-    params: &Value,
-    context: Result<&GateContext, &Refusal>,
-    server: &Mutex<Server>,
-    client: &mut dyn messaging::Elicit,
-) -> Option<Value> {
-    let raises_a_question = matches!(
-        params.get("name").and_then(Value::as_str),
-        Some("send_message" | "inbox")
-    );
-    let answered = if raises_a_question {
-        let mut server = server
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut consent = server.consent(client);
-        call(params, context, Some(&mut consent))
-    } else {
-        call(params, context, None)
-    };
-    Some(match answered {
-        Ok(result) => success(id, result),
-        Err(message) => error_response(id, code::INVALID_PARAMS, &message),
-    })
 }
 
 /// Answers one line, or nothing when it was a notification. It has no client to put a question

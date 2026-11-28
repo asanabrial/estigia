@@ -8561,7 +8561,7 @@ mod send_message {
     }
 
     #[test]
-    fn a_request_that_arrives_while_the_person_is_asked_is_answered_without_waiting() {
+    fn a_line_that_arrives_while_the_person_is_asked_is_served_afterwards() {
         let rig = Rig::new();
         let output = rig.serve(&[
             initialize(asks()),
@@ -8570,96 +8570,16 @@ mod send_message {
             choose(1, "allow_once"),
             json!({"jsonrpc": "2.0", "id": 8, "method": "ping"}),
         ]);
-        let at = |id: u64| {
-            output
-                .iter()
-                .position(|message| message["id"] == id)
-                .unwrap_or_else(|| panic!("no answer to {id} in {output:?}"))
-        };
-        assert!(at(7) < at(2), "{output:?}");
+        let order: Vec<String> = output
+            .iter()
+            .map(|message| {
+                message["method"]
+                    .as_str()
+                    .map_or_else(|| message["id"].to_string(), str::to_owned)
+            })
+            .collect();
+        assert_eq!(order, ["1", "elicitation/create", "2", "7", "8"]);
         assert_eq!(rig.rows_to(RECIPIENT), 1);
-    }
-
-    struct SharedWriter(std::sync::Arc<Mutex<Vec<u8>>>);
-
-    impl Write for SharedWriter {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn a_call_that_waits_does_not_hold_review_status() {
-        let rig = Rig::new();
-        let (sender, lines) = std::sync::mpsc::channel();
-        let written = std::sync::Arc::new(Mutex::new(Vec::new()));
-        let seen = written.clone();
-        let sink = written.clone();
-        let context = rig.context();
-        std::thread::scope(|scope| {
-            let serving = scope.spawn(move || {
-                serve_lines(
-                    &lines,
-                    SharedWriter(sink),
-                    Ok(context),
-                    ELICITATION_WAIT,
-                )
-            });
-            for line in [initialize(asks()), send(2, RECIPIENT, "hello")] {
-                sender.send(Ok(line.to_string())).expect("queued");
-            }
-            let wait_for = |needle: &str| {
-                for _ in 0..1000 {
-                    let text = String::from_utf8(
-                        seen.lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .clone(),
-                    )
-                    .expect("utf-8");
-                    if text.contains(needle) {
-                        return;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                panic!("the server never wrote {needle}");
-            };
-            wait_for("elicitation/create");
-            sender
-                .send(Ok(json!({
-                    "jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                    "params": { "name": "review_status", "arguments": { "issue": 1 } }
-                })
-                .to_string()))
-                .expect("queued");
-            wait_for("\"id\":3");
-            drop(sender);
-            serving.join().expect("the server joins").expect("served");
-        });
-        let output: Vec<Value> = String::from_utf8(
-            written
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clone(),
-        )
-        .expect("utf-8")
-        .lines()
-        .map(|line| serde_json::from_str(line).expect("one JSON message per line"))
-        .collect();
-        let at = |id: u64| {
-            output
-                .iter()
-                .position(|message| message["id"] == id)
-                .unwrap_or_else(|| panic!("no answer to {id} in {output:?}"))
-        };
-        assert!(at(3) < at(2), "{output:?}");
     }
 
     #[test]
@@ -10041,14 +9961,16 @@ mod send_message {
 
     #[test]
     fn a_consent_prompt_never_outlasts_the_ask_that_raised_it() {
-        let output = Mutex::new(Vec::new());
-        let waiting = Mutex::new(Waiting::default());
-        let asked = AtomicU64::new(0);
+        let (_sender, lines) = std::sync::mpsc::channel();
+        let mut output = Vec::new();
+        let mut pending = VecDeque::new();
+        let mut asked = 0;
         let mut wire = Wire {
-            output: &output,
-            waiting: &waiting,
+            lines: &lines,
+            output: &mut output,
+            pending: &mut pending,
             wait: std::time::Duration::from_secs(3600),
-            asked: &asked,
+            asked: &mut asked,
             token: None,
         };
         messaging::Elicit::bound(&mut wire, std::time::Duration::from_millis(100));
@@ -10060,21 +9982,22 @@ mod send_message {
 
     #[test]
     fn a_heartbeat_is_a_progress_notification_on_the_token_the_call_carried() {
-        let output = Mutex::new(Vec::new());
-        let waiting = Mutex::new(Waiting::default());
-        let asked = AtomicU64::new(0);
+        let (_sender, lines) = std::sync::mpsc::channel();
+        let mut output = Vec::new();
+        let mut pending = VecDeque::new();
+        let mut asked = 0;
         {
             let mut wire = Wire {
-                output: &output,
-                waiting: &waiting,
+                lines: &lines,
+                output: &mut output,
+                pending: &mut pending,
                 wait: std::time::Duration::from_secs(1),
-                asked: &asked,
+                asked: &mut asked,
                 token: Some(json!("tok-1")),
             };
             messaging::Elicit::beat(&mut wire, 3, "still waiting");
         }
-        let written: Value = serde_json::from_slice(&output.into_inner().expect("the writer"))
-            .expect("one JSON line");
+        let written: Value = serde_json::from_slice(&output).expect("one JSON line");
         assert_eq!(written["method"], "notifications/progress");
         assert_eq!(written["params"]["progressToken"], "tok-1");
         assert_eq!(written["params"]["progress"], 3);
