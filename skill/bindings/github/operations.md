@@ -38,6 +38,9 @@ transition's own refusals follow; omitting the flag claims without moving, which
 the same call. A refused claim creates no checkout; a failed checkout is reported under
 `start_branch` while the claim stands.
 
+Beside `takeover`, `claim` refuses `transition_to`, `branch`, `base`, `worktree_root` and `no_link`.
+Without `takeover`, `worktree_root` and `no_link` are refused when no `branch` is given.
+
 A run holds one active claim and a second is refused. The MCP tool's `park: true`
 is the exception, and it is the server's bookkeeping, never a transport flag. While the git operation
 window is closed it sets the held issue aside on the run's pointer, still claimed in the store
@@ -116,9 +119,8 @@ materialises the payload without the ceiling, because no lens reads it; one that
 `--inline-payload` keeps the refusal, since the text would have to travel in the answer. The refusal carries
 `manifested` (moves, deletions, bytes saved) and `options` naming the split and verbatim-move routes
 with the call for each. `next` names only the sequence that follows — transition to `review`, the
-verdicts, `release_ci` with this receipt — and offers no second place to fetch the text: a republish
-mints a new epoch and invalidates every verdict recorded against the first, so `--inline-payload` is
-asked for at publication time or not at all. **It then starts the publication lane set**: every
+verdicts, `release_ci` with this receipt — and offers no second place to fetch the text, so
+`--inline-payload` is asked for at publication time or not at all. **It then starts the publication lane set**: every
 active workflow under `.github/workflows/` is a candidate (minus the optional
 `Publication lanes exclude` row, or an explicit `Publication lanes` list that replaces discovery;
 both are settings, `estigia config set` writes them and a repository's own file may answer them),
@@ -213,8 +215,7 @@ to a base that did not advance past the parent's. A first publication is never b
 only `budget-candidate-tree` is written for it.
 
 `--with-review` adds the review tier and the first `review_status` to the answer. A
-failed read is reported under `review_reads_unavailable`, not refused: a second
-publication mints a new epoch. `--start-review` implies it, moves the issue to `review` and launches
+failed read is reported under `review_reads_unavailable`, not refused. `--start-review` implies it, moves the issue to `review` and launches
 every `launch_review_input` input unless the lane is `red` or unreadable; the outcome is
 `review_start`. `--record-verdict` on `collect_review_input` records the computed verdict only when
 nothing runs and `review_status` finds the verdict computable; else it returns that status.
@@ -315,7 +316,7 @@ timeline is read from the tracker's — `gh api repos/{owner}/{repo}/collaborato
 without a `role_name` the permission must be `admin`. `recover-not-a-maintainer` names what the login
 holds, and an answer that failed or names neither is `recover-permission-unreadable`, never clearance.
 The record, of kind review-recovery, is **local**: it keeps the receipt, login, role, reason, and the
-tier and lens focus the successor inherits. Nothing is posted to GitHub. Repeating it reads back.
+tier and lens focus the successor inherits. Repeating it reads back.
 
 It releases nothing. The next publication on the pull request over the recovered receipt is the root of
 a **successor lineage**: its `published` marker carries a recovered-from field, it is neither a correction
@@ -375,15 +376,14 @@ unrecordable by the only context that can record it. Records **one** batch again
 receipt: `--dispositions` is a JSON array of
 `{"id": <finding id>, "disposition": "acted-on"\|"filed"\|"declined", "reason": <text>}` objects,
 with `"filed_as": <issue number>` on every `filed` entry, rendered whole into the marker attribute
-so `markers::render`'s own percent-encoding keeps an id carrying a comma or a colon from corrupting
-a neighbouring entry. A word outside the three is refused as `invalid-disposition-word`; a blank or
+as a refutation batch is. A word outside the three is refused as `invalid-disposition-word`; a blank or
 filler reason as `blank-disposition-reason`; a `filed` entry naming no issue as
 `disposition-filed-issue-missing`, and `filed_as` on any other word as
 `disposition-unexpected-filed-issue`; the same id twice as `disposition-batch-duplicate-finding`; an
 id naming no finding this receipt recorded as `disposition-unknown-finding`; an id whose every
 recording is `severe` as `disposition-includes-severe-finding` — such an identity is adjudicated by
 the verdict and never by a disposition, while one also recorded as a `warning` or `suggestion` is
-answered for that non-severe recording. The call is **optional**: a `warning` or a `suggestion` is
+answered for that non-severe recording. A `warning` or a `suggestion` is
 informational and blocks nothing, so no finding owes an answer and a batch may answer a subset of
 the receipt's findings. The operation's identity is the set of findings it answers: the same set
 answered again reads back the first batch rather than minting a second event; the answers themselves
@@ -426,7 +426,7 @@ reviewer starts before that. The receipt is the one the
 `collect` names. The reviewer is handed the diff rebuilt from that receipt, which must hash to the
 `payload-digest` the publication recorded (`payload-digest-unavailable` when the marker carries none),
 and the issue's body as the criteria. It is the first installed `claude` or `codex` CLI (the relay on an OpenCode run with its plugin installed, launched as the answer's `launch` prescribes), run with no
-tools, run by a detached job under a 15 minute deadline; the launch answers `{job, deadline_at}` and records nothing. A slot a running job holds is refused `capture-already-running`. `collect_review_input` records the answer and lists what it recorded (`findings`: id, class, blocking, lens, location; `release_ci` lists the receipt's findings the same way), and only for the run that launched the job (`capture-job-other-run`; `capture-job-missing` when no job holds the slot). It reads `review_status` again and discards the job as `capture-result-stale` only when the review has moved past that job's receipt. `review_status` annotates each input it offers: `launch_review_input` when no job holds the slot, `collect_review_input` with the `job` when the job has finished, its runner died or it is a minute past its deadline, and `capture: null` with `running {job, deadline_at}` while it runs, in which case a collect is refused and the answer is to ask `review_status` again (`next.ask_after` is the earliest `deadline_at` when every input is running). A job still running is refused `capture-running` with its `deadline_at`, unless `--wait-seconds` is given: the call then waits that many seconds (at most 900, and never past the point the job would be abandoned, its `deadline_at` plus a minute) for the job to finish before refusing, so a caller need not poll with `review_status`; one a minute past it is killed and refused `reviewer-deadline`; a runner that died is `capture-runner-lost`. `reviewer-cli-missing` names neither being on `PATH`, and arrives from the job's result. Every finding in the answer is checked as
+tools, run by a detached job under a 15 minute deadline; the launch answers `{job, deadline_at}` and records nothing. `collect_review_input` records the answer and lists what it recorded (`findings`: id, class, blocking, lens, location; `release_ci` lists the receipt's findings the same way), and only for the run that launched the job (`capture-job-other-run`; `capture-job-missing` when no job holds the slot). It reads `review_status` again and discards the job as `capture-result-stale` only when the review has moved past that job's receipt. `review_status` annotates each input it offers: `launch_review_input` when no job holds the slot, `collect_review_input` with the `job` when the job has finished, its runner died or it is a minute past its deadline, and `capture: null` with `running {job, deadline_at}` while it runs, in which case a collect is refused and the answer is to ask `review_status` again (`next.ask_after` is the earliest `deadline_at` when every input is running). A job still running is refused `capture-running` with its `deadline_at`, unless `--wait-seconds` is given: the call then waits that many seconds (at most 900, and never past the point the job would be abandoned, its `deadline_at` plus a minute) for the job to finish before refusing, so a caller need not poll with `review_status`; one a minute past it is killed and refused `reviewer-deadline`; a runner that died is `capture-runner-lost`. `reviewer-cli-missing` names neither being on `PATH`, and arrives from the job's result. Every finding in the answer is checked as
 `record_review_finding` checks it before any is written, so one finding outside the change rejects the
 whole answer as `reviewer-result-malformed` and leaves the timeline as it was. Otherwise each finding
 is recorded under the operation id `record_review_finding` mints for it, with the lens role as both
@@ -620,13 +620,14 @@ tier's own `lenses`; so does the whole-change fallback, whichever reason it name
 
 ## Releasing an issue
 
-`unassign` puts the issue down. Discovery is read-only, writes nothing whatever the call
-carries, and answers the epoch to name; `--target-operation` authorises only that epoch. A run
-holding the issue — as its active claim or as a parked one — names none: the tool fills it from
-that claim's own record, so a release of a parked issue writes in one call, and after a takeover
-the old epoch is refused `target-operation-mismatch` before any write. The release
-converges the assignee, drops any `dev:` and, once the close is the registered delivery and nothing is
-unpublished, puts the isolated checkout down.
+`unassign` puts the issue down. Discovery is read-only, writes nothing whatever the call carries,
+and answers the epoch to name; `--target-operation` authorises only that epoch. With no live claim
+of its own and no `--target-operation`, `--evidence-file` and `--spend` are refused: discovery has
+no epoch for them to close. A run holding the issue — as its active claim or as a parked one —
+names none: the tool fills it from that claim's own record, so a release of a parked issue writes in
+one call, and after a takeover the old epoch is refused `target-operation-mismatch` before any
+write. The release converges the assignee, drops any `dev:` and, once the close is the registered
+delivery and nothing is unpublished, puts the isolated checkout down.
 
 `--evidence-file <f>` and `--spend <json>` (one object with `record_spend`'s fields, or an array)
 fold the close in. A held run may omit a record's receipt fields; the tool fills them from the
