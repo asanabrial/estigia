@@ -1009,8 +1009,8 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "create",
         contract_name: "create",
-        description: "File a finding. Creates every label before attaching it, then projects the \
-                      initial state onto every project the issue belongs to.",
+        description: "File a finding. Creates the labels a filing reports missing, then \
+                      projects the initial state onto every project it belongs to.",
         operation: "create",
         arguments: &[
             Argument::required(
