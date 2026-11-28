@@ -1630,28 +1630,40 @@ fn same_call(one: &str, other: &str) -> bool {
     }
 }
 
-fn names_a_replacement(line: &str, replacement: &str) -> bool {
-    backticked(line).into_iter().any(|(_, _, span)| {
-        backticked(replacement)
-            .into_iter()
-            .any(|(_, _, call)| same_call(span, call))
+fn script_calls(line: &str) -> impl Iterator<Item = &str> {
+    line.match_indices("SCRIPT ")
+        .map(move |(at, marker)| {
+            let rest = &line[at + marker.len()..];
+            let end = rest
+                .find(|c: char| {
+                    !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+                })
+                .unwrap_or(rest.len());
+            &rest[..end]
+        })
+        .filter(|name| !name.is_empty())
+}
+
+fn names_an_argument_of(line: &str, name: &str) -> bool {
+    every_row().any(|tool| {
+        tool.arguments.iter().any(|argument| argument.name == name)
+            && backticked(line).iter().any(|(_, _, span)| {
+                same_call(span, tool.name) || same_call(span, tool.contract_name)
+            })
     })
 }
 
-fn script_call(line: &str) -> Option<&str> {
-    let rest = line.split_once("SCRIPT ")?.1;
-    let end = rest
-        .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-'))
-        .unwrap_or(rest.len());
-    Some(&rest[..end])
-}
-
-fn names_an_argument(name: &str) -> bool {
-    every_row().any(|tool| tool.arguments.iter().any(|argument| argument.name == name))
+fn retired_or_unrun(name: &str) -> Option<&'static str> {
+    tools::retired(name).or_else(|| {
+        NOT_RUN
+            .iter()
+            .find(|(word, _)| spelling(word) == spelling(name))
+            .map(|(_, why)| *why)
+    })
 }
 
 #[test]
-fn no_shipped_skill_file_writes_a_retired_name_as_the_call() {
+fn no_shipped_skill_file_names_a_retired_tool_outside_a_mapping() {
     let mut stale: Vec<String> = Vec::new();
     let mut scanned = 0;
     for file in crate::skill::FILES {
@@ -1671,11 +1683,7 @@ fn no_shipped_skill_file_writes_a_retired_name_as_the_call() {
             } else if !line.trim().is_empty() {
                 operations_table = false;
             }
-            let retired = script_call(line).filter(|name| {
-                tools::retired(&spelling(name)).is_some()
-                    || NOT_RUN.iter().any(|(word, _)| *word == *name)
-            });
-            if let Some(name) = retired {
+            for name in script_calls(line).filter(|name| retired_or_unrun(name).is_some()) {
                 stale.push(format!("{}:{}: `SCRIPT {name}`", file.path, index + 1));
             }
             let prose = if operations_table && line.starts_with('|') {
@@ -1688,19 +1696,13 @@ fn no_shipped_skill_file_writes_a_retired_name_as_the_call() {
                 {
                     continue;
                 }
-                if names_an_argument(span) {
-                    continue;
-                }
-                let replacement = tools::retired(span).or_else(|| {
-                    NOT_RUN
-                        .iter()
-                        .find(|(word, _)| *word == span)
-                        .map(|(_, why)| *why)
-                });
-                let Some(replacement) = replacement else {
+                let Some(replacement) = retired_or_unrun(span) else {
                     continue;
                 };
-                if names_a_replacement(prose, replacement) {
+                if names_an_argument_of(prose, span) {
+                    continue;
+                }
+                if line.starts_with("- ") && line.contains('→') {
                     continue;
                 }
                 stale.push(format!(
@@ -10306,6 +10308,15 @@ fn the_schemas_every_turn_pays_for_stay_under_their_ceiling() {
         bytes <= ALWAYS_LOADED_CEILING,
         "the always-loaded schemas are {bytes} bytes against a ceiling of \
          {ALWAYS_LOADED_CEILING}: every turn pays them, so trim one or raise this in a reviewed edit"
+    );
+}
+
+#[test]
+fn the_documented_always_loaded_bound_is_the_ceiling_this_suite_holds() {
+    let doc = include_str!("../../../docs/review-cost.md").replace(',', "");
+    assert!(
+        doc.contains(&format!("bounds them at {ALWAYS_LOADED_CEILING} bytes")),
+        "docs/review-cost.md does not state the {ALWAYS_LOADED_CEILING}-byte bound this suite holds"
     );
 }
 

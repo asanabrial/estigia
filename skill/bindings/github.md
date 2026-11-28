@@ -86,7 +86,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused on retry.
 | `record_spend` | passed as `spend` to `release` or `deliver` |
 | `review_status` | `SCRIPT review-status` |
 | `review_read` | `SCRIPT review-read` |
-| `target` | the `target` view of `review_read` answers it |
+| `target` | the target view of `review_read` answers it |
 | `release_ci` | the `release-ci` operation is `deliver` with `until: ci` |
 | `deliver` | `deliver`, which calls the merge gate itself |
 | `run_checks` | the `run-checks` operation is `collect_review_input` with `checks: true` |
