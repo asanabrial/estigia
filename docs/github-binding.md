@@ -117,7 +117,8 @@ The MCP server is hand-written rather than built on `rmcp`. The same binary answ
 hook on **every edit**, so a `tokio` runtime spun up per process is a cost paid thousands of times to
 move a few lines of JSON across a pipe. Keeping the crate synchronous is what keeps the gate cheap.
 What that costs is in `UNIMPLEMENTED`: no resources, no prompts, no sampling, no elicitation beyond
-`send_message`'s one question, no notifications beyond `initialized`, and one request at a time. A name
+`send_message`'s one question, no notifications beyond `initialized`, and no more than one call
+that changes the store or the tracker at a time; a read answers while another call waits. A name
 the contract requires and no tool performs is declared in `NOT_EXPOSED` with the reason and the
 section of `bindings/` that carries it; it is not advertised, so the surface never offers a call
 nothing answers, and a seam test holds the two lists together: an operation that is neither exposed
