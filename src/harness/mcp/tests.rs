@@ -8561,7 +8561,7 @@ mod send_message {
     }
 
     #[test]
-    fn a_line_that_arrives_while_the_person_is_asked_is_served_afterwards() {
+    fn a_request_that_arrives_while_the_person_is_asked_is_answered_without_waiting() {
         let rig = Rig::new();
         let output = rig.serve(&[
             initialize(asks()),
@@ -8570,16 +8570,57 @@ mod send_message {
             choose(1, "allow_once"),
             json!({"jsonrpc": "2.0", "id": 8, "method": "ping"}),
         ]);
-        let order: Vec<String> = output
-            .iter()
-            .map(|message| {
-                message["method"]
-                    .as_str()
-                    .map_or_else(|| message["id"].to_string(), str::to_owned)
-            })
-            .collect();
-        assert_eq!(order, ["1", "elicitation/create", "2", "7", "8"]);
+        let at = |id: u64| {
+            output
+                .iter()
+                .position(|message| message["id"] == id)
+                .unwrap_or_else(|| panic!("no answer to {id} in {output:?}"))
+        };
+        assert!(at(7) < at(2), "{output:?}");
         assert_eq!(rig.rows_to(RECIPIENT), 1);
+    }
+
+    #[test]
+    fn a_call_that_waits_does_not_hold_review_status() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                "name": "inbox",
+                "arguments": {
+                    "run_id": RECIPIENT,
+                    "wait": true,
+                    "timeout_seconds": 1,
+                },
+            }}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+                "name": "review_status",
+                "arguments": { "issue": 1 },
+            }}),
+        ]);
+        let at = |id: u64| {
+            output
+                .iter()
+                .position(|message| message["id"] == id)
+                .unwrap_or_else(|| panic!("no answer to {id} in {output:?}"))
+        };
+        assert!(at(3) < at(2), "{output:?}");
+    }
+
+    #[test]
+    fn an_answer_that_arrives_before_its_ask_is_kept_for_it() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "first"),
+            send(3, RECIPIENT, "second"),
+            choose(2, "allow_once"),
+            choose(1, "allow_once"),
+        ]);
+        assert_eq!(rig.rows_to(RECIPIENT), 2);
+        assert_eq!(questions(&output).len(), 2);
+        assert_eq!(reply(&output, 2)["result"]["isError"], false);
+        assert_eq!(reply(&output, 3)["result"]["isError"], false);
     }
 
     #[test]
@@ -9961,16 +10002,14 @@ mod send_message {
 
     #[test]
     fn a_consent_prompt_never_outlasts_the_ask_that_raised_it() {
-        let (_sender, lines) = std::sync::mpsc::channel();
-        let mut output = Vec::new();
-        let mut pending = VecDeque::new();
-        let mut asked = 0;
+        let output = Mutex::new(Vec::new());
+        let waiting = Mutex::new(Waiting::default());
+        let asked = AtomicU64::new(0);
         let mut wire = Wire {
-            lines: &lines,
-            output: &mut output,
-            pending: &mut pending,
+            output: &output,
+            waiting: &waiting,
             wait: std::time::Duration::from_secs(3600),
-            asked: &mut asked,
+            asked: &asked,
             token: None,
         };
         messaging::Elicit::bound(&mut wire, std::time::Duration::from_millis(100));
@@ -9982,22 +10021,21 @@ mod send_message {
 
     #[test]
     fn a_heartbeat_is_a_progress_notification_on_the_token_the_call_carried() {
-        let (_sender, lines) = std::sync::mpsc::channel();
-        let mut output = Vec::new();
-        let mut pending = VecDeque::new();
-        let mut asked = 0;
+        let output = Mutex::new(Vec::new());
+        let waiting = Mutex::new(Waiting::default());
+        let asked = AtomicU64::new(0);
         {
             let mut wire = Wire {
-                lines: &lines,
-                output: &mut output,
-                pending: &mut pending,
+                output: &output,
+                waiting: &waiting,
                 wait: std::time::Duration::from_secs(1),
-                asked: &mut asked,
+                asked: &asked,
                 token: Some(json!("tok-1")),
             };
             messaging::Elicit::beat(&mut wire, 3, "still waiting");
         }
-        let written: Value = serde_json::from_slice(&output).expect("one JSON line");
+        let written: Value = serde_json::from_slice(&output.into_inner().expect("the writer"))
+            .expect("one JSON line");
         assert_eq!(written["method"], "notifications/progress");
         assert_eq!(written["params"]["progressToken"], "tok-1");
         assert_eq!(written["params"]["progress"], 3);
